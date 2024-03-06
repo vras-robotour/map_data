@@ -3,9 +3,9 @@
 import path_planner as pa
 import sys
 
-import map_data as md
-
 import rospy
+
+import map_data as md
 
 
 def main():
@@ -20,7 +20,7 @@ def main():
     map_data = md.MapData(path + "/../data/buchlovice_1.gpx")
     map_data.run_queries()
     map_data.run_parse()
-
+    map_data.save_to_pickle()
 
     while not rospy.is_shutdown():
         pass

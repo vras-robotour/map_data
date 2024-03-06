@@ -38,6 +38,7 @@ class MapData:
         if coords_type == "file":
             gpx_f = open(coords, 'r')
             gpx_object = gpxparse(gpx_f)
+            self.coords_file = coords
             self.waypoints = np.array([[point.latitude, point.longitude] for point in gpx_object.waypoints])
             self.waypoints, self.zone_number, self.zone_letter = self.waypoints_to_utm(self.waypoints)
         elif coords_type == "array":
@@ -403,9 +404,13 @@ class MapData:
         '''
         Save map data to a pickle file.
         '''
-        fn = self.coords if self.coords_type == "file" else filename
+        fn = self.coords_file if self.coords_type == "file" else filename
         if fn is None:
             rospy.logerr("No filename given.")
             return
-        with open(fn[:-4]+'.mapdata', 'wb') as handle:
-            pickle.dump(self, handle, protocol=2)
+        try:
+            with open(fn[:-4]+'.mapdata', 'wb') as fh:
+                pickle.dump(self, fh, protocol=2)
+            rospy.loginfo("Map data saved to {}".format(fn[:-4]+'.mapdata'))
+        except Exception as e:
+            rospy.logerr("Error while saving map data: {}".format(e))
