@@ -10,7 +10,7 @@ import numpy as np
 
 PATH = sys.path[0]
 COORDS_FILE = PATH + "/../data/buchlovice_1.gpx"
-PATH_NAME = PATH + "/../"
+PATH_NAME = PATH + "/../paths/"
 
 # ///////////////////////
 # / Plotting functions. /

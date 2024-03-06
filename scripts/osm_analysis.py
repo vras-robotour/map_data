@@ -429,7 +429,6 @@ class PathAnalysis:
         way.line = polygon
         way.is_area = True
         return way
-
     
     def separate_ways(self):
         """ Separate ways (dict) into roads, footways and barriers (lists). """
