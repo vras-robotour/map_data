@@ -30,6 +30,25 @@ from way import Way
 OBSTACLE_RADIUS = 2
 
 
+class CoordsData:
+    def __init__(self, min_long, max_long, min_lat, max_lat):
+        self.min_long = min_long
+        self.max_long = max_long
+        self.min_lat = min_lat
+        self.max_lat = max_lat
+        self.x_margin, self.y_margin = self.get_margin()
+
+    def get_margin(self):
+        y_margin = (self.max_lat-self.min_lat) * 0.1
+        x_margin = (self.max_long-self.min_long) * 0.1
+
+        if y_margin < x_margin:
+            y_margin = x_margin
+        else:
+            x_margin = y_margin
+
+        return x_margin, y_margin
+
 class MapData:
     def __init__(self, coords, coords_type="file", current_robot_position=None, flip=False):
         self.api = overpy.Overpass(url="https://overpass.kumi.systems/api/interpreter")
@@ -68,6 +87,8 @@ class MapData:
         self.max_long = utm.to_latlon(self.max_x + OSM_RECTANGLE_MARGIN, self.max_y + OSM_RECTANGLE_MARGIN, self.zone_number, self.zone_letter)[1]
         self.min_lat = utm.to_latlon(self.min_x - OSM_RECTANGLE_MARGIN, self.min_y - OSM_RECTANGLE_MARGIN, self.zone_number, self.zone_letter)[0]
         self.min_long = utm.to_latlon(self.min_x - OSM_RECTANGLE_MARGIN, self.min_y - OSM_RECTANGLE_MARGIN, self.zone_number, self.zone_letter)[1]
+
+        self.coords_data = CoordsData(self.min_long, self.max_long, self.min_lat, self.max_lat)
 
         self.points = list(map(geometry.Point, zip(self.waypoints[:,0], self.waypoints[:,1])))
 

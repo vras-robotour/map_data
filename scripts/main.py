@@ -10,7 +10,7 @@ import numpy as np
 
 PATH = sys.path[0]
 COORDS_FILE = PATH + "/../data/buchlovice_1.gpx"
-PATH_NAME = PATH + "/../paths/"
+PATH_NAME = PATH + "/../data/"
 
 # ///////////////////////
 # / Plotting functions. /
@@ -55,7 +55,7 @@ def plot_background_map(ax, image):
 
 # Run the graph search. Save generated path to a .gpx file.
 path_analysis = path_planner.PathAnalysis(COORDS_FILE)
-path_analysis.run_standalone(PATH_NAME + "path.gpx")
+path_analysis.run_standalone(PATH_NAME + "coords.gpx")
 
 # Extract variables.
 roads =                 np.array(list(path_analysis.roads))
