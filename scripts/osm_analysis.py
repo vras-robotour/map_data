@@ -1339,7 +1339,7 @@ class PathAnalysis:
         start_t = time.time()
         self.graph_search_path()
         rospy.loginfo("Path took: %.5f" % (time.time()-start_t))
-        self.save_path_as_gpx(gpx_fn)
+        self.save_path_as_gpx()
     
     def run_queries(self):
         """ Obtain data from OSM through their API. """

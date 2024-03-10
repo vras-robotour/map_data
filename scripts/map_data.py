@@ -77,7 +77,7 @@ class MapData:
             self.waypoints = np.concatenate([current_robot_position, self.waypoints])
         else:
             self.robot_position_first_point = False
-        
+
         self.max_x = np.max(self.waypoints[:,0]) + RESERVE
         self.min_x = np.min(self.waypoints[:,0]) - RESERVE
         self.max_y = np.max(self.waypoints[:,1]) + RESERVE
@@ -94,7 +94,7 @@ class MapData:
 
         self.points_information = []
         self.way_node_ids = set() 
-        
+
         self.roads = set()
         self.footways = set()
         self.barriers = set()
@@ -148,10 +148,10 @@ class MapData:
 
     def get_way_query(self):
         return "(way({}, {}, {}, {}); >; ); out;".format(self.min_lat, self.min_long, self.max_lat, self.max_long)
-    
+
     def get_rel_query(self):
         return "(way({}, {}, {}, {}); <; ); out;".format(self.min_lat, self.min_long, self.max_lat, self.max_long)
-    
+
     def get_node_query(self):
         return "(node({}, {}, {}, {}); ); out;".format(self.min_lat, self.min_long, self.max_lat, self.max_long)
 
@@ -246,7 +246,7 @@ class MapData:
                             new_way.id = int(-10**15*np.random.random())
                         # TODO: tady zlobi ten update, podivat se na prirazovani id
                         new_way.nodes = ways[i].nodes + ways[j].nodes[1:] 
-                        
+
                         if ways[i].tags is None:
                             ways[i].tags = dict()
                         if ways[j].tags is None:
@@ -267,7 +267,7 @@ class MapData:
                         break
                 j += 1
             i += 1
-        
+
         return ids
 
     def parse_ways(self):
@@ -289,13 +289,13 @@ class MapData:
             if self.way_node_ids is None:
                 self.way_node_ids = dict()
             self.way_node_ids.update(ids)              
-            
+
             # Distinguish areas and non-areas (we use a single class for both cases).
             if coords[0] == coords[-1]:
                 way_to_store.is_area = True
             else:
                 way_to_store.is_area = False
-            
+
             way_to_store.id = way.id
             way_to_store.nodes = way.nodes
             way_to_store.tags = way.tags
@@ -307,7 +307,7 @@ class MapData:
                 way_to_store.line = geometry.Polygon(coords)
             else:
                 way_to_store.line = geometry.LineString(coords)
-            
+
             self.ways[way.id] = way_to_store
 
     def parse_rels(self):
@@ -335,7 +335,7 @@ class MapData:
             for id in outer_ids:
                 way = self.ways[id]
                 way.in_out = "outer"
-                
+
                 if way.tags is None:
                     way.tags = dict()
                 if rel.tags is None:
@@ -381,7 +381,7 @@ class MapData:
         way.line = way.line.buffer(width/2)
         way.is_area = True
         return way
-    
+
     def separate_ways(self):
         '''
         Separate ways (dict) into roads, footways and barriers (lists).
@@ -390,7 +390,7 @@ class MapData:
             if way.is_road():
                 way = self.line_to_polygon(way, width=7)
                 self.roads.add(way)
-            
+
             elif way.is_footway():
                 way = self.line_to_polygon(way, width=3)
                 self.footways.add(way)
