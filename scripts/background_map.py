@@ -11,7 +11,7 @@ def get_url(w, h, corners):
     url = URL_PREF
     w_url = f'&width={w}'
     h_url = f'&height={h}'
-    area_url = f'&area=rect:{corners[0]}, {corners[1]}, {corners[2]}, {corners[3]}'
+    area_url = f'&area=rect:{corners[0]},{corners[1]},{corners[2]},{corners[3]}'
     api_url = f'&apiKey={API_KEY}'
     
     url = url + w_url + h_url + area_url + api_url
