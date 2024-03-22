@@ -95,6 +95,10 @@ class MapData:
         self.points_information = []
         self.way_node_ids = set() 
 
+        self.osm_ways_data = None
+        self.osm_rels_data = None
+        self.osm_nodes_data = None       
+
         self.roads = set()
         self.footways = set()
         self.barriers = set()
@@ -412,15 +416,36 @@ class MapData:
         '''
         Parse OSM data into their respective categories.
         '''
+        end = False
         rospy.loginfo("Running analysis.")
-        self.parse_ways()
-        self.parse_rels()
-        self.parse_nodes()
+        if self.osm_ways_data is not None:
+            self.parse_ways()
+            rospy.loginfo("Ways parsed.")
+        else:
+            rospy.logwarn("No ways data.")
+            end = True
+        if self.osm_rels_data is not None:
+            self.parse_rels()
+            rospy.loginfo("Rels parsed.")
+        else:
+            rospy.logwarn("No rels data.")
+            end = True
+        if self.osm_nodes_data is not None:
+            self.parse_nodes()
+            rospy.loginfo("Nodes parsed.")
+        else:
+            rospy.logwarn("No nodes data.")
+            end = True
+
+        if end:
+            rospy.logerr("Analysis failed.")
+            return 1
 
         self.separate_ways()
         self.sets_to_lists()
         rospy.loginfo("Analysis finished.")
-
+        return 0
+    
     def save_to_pickle(self, filename=None):
         '''
         Save map data to a pickle file.

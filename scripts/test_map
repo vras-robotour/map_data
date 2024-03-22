@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+
+import sys
+import pickle
+
+import rospy
+
+import map_data as md
+
+
+def main():
+    rospy.init_node('tester_node')
+
+    path = sys.path[0]
+
+    download = False
+    file_name = "buchlovice_1.gpx"
+    if len(sys.argv) > 1:
+        if "-d" in sys.argv:
+            download = True
+        if "-f" in sys.argv:
+            file_name = sys.argv[sys.argv.index("-f") + 1]
+
+    if download:
+        map_data = md.MapData(path + "/../data/" + file_name)
+        map_data.run_queries()
+        parse_ok = map_data.run_parse()
+        if parse_ok:
+            return 1
+        map_data.save_to_pickle()
+    else:
+        with open(path + "/../data/buchlovice_1.mapdata", "rb") as fh:
+            map_data = pickle.load(fh)
+        map_data.run_parse()
+        map_data.save_to_pickle()
+
+    while not rospy.is_shutdown():
+        pass
+
+if __name__ == "__main__":
+    main()

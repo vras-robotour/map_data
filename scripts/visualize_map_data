@@ -67,20 +67,32 @@ def plot_map(map_data):
     ax.set_xlabel('Easting (m)')
     ax.set_ylabel('Northing (m)')
 
+def plot_footways_plan(map_data):
+    _, ax = plt.subplots(figsize=(12, 12), dpi=400)
+
+    coords_data = map_data.coords_data
+    bgd_map = get_background_image(coords_data.min_long, coords_data.max_long, coords_data.min_lat,\
+                                   coords_data.max_lat, coords_data.x_margin, coords_data.y_margin)
+
+    plot_background_map(ax, bgd_map, coords_data)
+
+    plot_footways(ax, np.array(map_data.footways_list))
+
 
 if __name__ == "__main__":
-    # TODO: remove way nodes far from the map -- imprecise alignment of background map and map data
-    # for example, rivers
     path = sys.path[0]
 
+    file_name = "coords.mapdata"
     if len(sys.argv) > 1:
-        file_name = sys.argv[1]
-    else:
-        file_name = "/../data/buchlovice_1.mapdata"
+        if "-f" in sys.argv:
+            file_name = sys.argv[sys.argv.index("-f") + 1]
 
-    with open(path + file_name, "rb") as fh:
+    with open(path + "/../data/" + file_name, "rb") as fh:
         map_data = pickle.load(fh)
 
     plot_map(map_data)
     save_map(path + "/../data/map.png")
+    plt.show()
+
+    plot_footways_plan(map_data)
     plt.show()
