@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 try:
     import cPickle as pickle
 except ImportError:
@@ -372,6 +370,28 @@ class MapData:
 
                     self.barriers.add(obstacle)
 
+    def get_points(self, z=0):
+        '''
+        Return all nodes as dictionary of id:utm coords.
+        '''
+        points = {}
+        for node in self.osm_nodes_data.nodes:
+            id, lat, lon = node.id, float(node.lat), float(node.lon)
+            easting, northing, _, _ = utm.from_latlon(lat, lon)
+            points[id] = np.array([easting, northing, z]).reshape(3, 1)
+        for way in self.osm_ways_data.ways:
+            for node in way.nodes:
+                id, lat, lon = node.id, float(node.lat), float(node.lon)
+                easting, northing, _, _ = utm.from_latlon(lat, lon)
+                points[id] = np.array([easting, northing, z]).reshape(3, 1)
+        return points
+
+    def get_ways(self):
+        '''
+        Return all ways as dictionary of type:way.
+        '''
+        return {'roads': self.roads_list, 'footways': self.footways_list, 'barriers': self.barriers_list}
+
     def point_to_polygon(self, point, r=1):
         '''
         Convert a node (= a point) to a circle area, with a given radius in meters.
@@ -445,6 +465,21 @@ class MapData:
         self.sets_to_lists()
         rospy.loginfo("Analysis finished.")
         return 0
+
+    def run_all(self, save=True):
+        '''
+        Run all queries and parsing in one go.
+
+        Parameters:
+        -----------
+        save : bool
+            Whether to save the data to a pickle file.
+        '''
+        self.run_queries()
+        if self.run_parse():
+            return
+        if save:
+            self.save_to_pickle()
     
     def save_to_pickle(self, filename=None):
         '''

@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import numpy as np
 from shapely.geometry import Point, MultiPoint, LineString
 from shapely.prepared import prep

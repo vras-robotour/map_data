@@ -82,7 +82,7 @@ def plot_footways_plan(map_data):
 if __name__ == "__main__":
     path = sys.path[0]
 
-    file_name = "coords.mapdata"
+    file_name = "buchlovice_1.mapdata"
     if len(sys.argv) > 1:
         if "-f" in sys.argv:
             file_name = sys.argv[sys.argv.index("-f") + 1]

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 import sys
 import pickle
@@ -24,14 +24,14 @@ def main():
     if download:
         map_data = md.MapData(path + "/../data/" + file_name)
         map_data.run_queries()
-        parse_ok = map_data.run_parse()
-        if parse_ok:
-            return 1
+        if map_data.run_parse():
+            exit(1)
         map_data.save_to_pickle()
     else:
         with open(path + "/../data/buchlovice_1.mapdata", "rb") as fh:
             map_data = pickle.load(fh)
-        map_data.run_parse()
+        if map_data.run_parse():
+            exit(1)
         map_data.save_to_pickle()
 
     while not rospy.is_shutdown():
