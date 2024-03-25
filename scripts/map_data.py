@@ -81,7 +81,7 @@ class MapData:
         self.max_y = np.max(self.waypoints[:,1]) + RESERVE
         self.min_y = np.min(self.waypoints[:,1]) - RESERVE
 
-        self.max_lat = utm.to_latlon(self.max_x + OSM_RECTANGLE_MARGIN, self.max_y + OSM_RECTANGLE_MARGIN, self.zone_number, self.zone_letter)[0]
+        self.max_lat = utm.toLatLon(self.max_x + OSM_RECTANGLE_MARGIN, self.max_y + OSM_RECTANGLE_MARGIN, self.zone_number, self.zone_letter)[0]
         self.max_long = utm.to_latlon(self.max_x + OSM_RECTANGLE_MARGIN, self.max_y + OSM_RECTANGLE_MARGIN, self.zone_number, self.zone_letter)[1]
         self.min_lat = utm.to_latlon(self.min_x - OSM_RECTANGLE_MARGIN, self.min_y - OSM_RECTANGLE_MARGIN, self.zone_number, self.zone_letter)[0]
         self.min_long = utm.to_latlon(self.min_x - OSM_RECTANGLE_MARGIN, self.min_y - OSM_RECTANGLE_MARGIN, self.zone_number, self.zone_letter)[1]
@@ -143,7 +143,7 @@ class MapData:
             UTM zone letter.
         '''
         utm_arr = utm.from_latlon(waypoints[:,0], waypoints[:,1])
-        utm_coords = np.concatenate((utm_arr[0].reshape(-1,1), utm_arr[1].reshape(-1,1)),axis=1)
+        utm_coords = np.concatenate((utm_arr[0].reshape(-1,1), utm_arr[1].reshape(-1,1)), axis=1)
         zone_number = utm_arr[2]
         zone_letter = utm_arr[3]
         return utm_coords, zone_number, zone_letter

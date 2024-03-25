@@ -17,6 +17,7 @@
 
   <depend>geometry_msgs</depend>
   <depend>std_msgs</depend>
+  <depend>geodesy</depend>
 
   <exec_depend>ros_numpy</exec_depend>
   <exec_depend>rospy</exec_depend>
@@ -28,6 +29,7 @@
   <exec_depend condition="$ROS_DISTRO != noetic">python-shapely</exec_depend>
   <exec_depend condition="$ROS_DISTRO != noetic">python-utm-pip</exec_depend>
   <exec_depend condition="$ROS_DISTRO != noetic">python-numpy</exec_depend>
+  <exec_depend condition="$ROS_DISTRO != noetic">python-scipy</exec_depend>
   <exec_depend condition="$ROS_DISTRO != noetic">python-matplotlib</exec_depend>
   <exec_depend condition="$ROS_DISTRO != noetic">python-tqdm</exec_depend>
 
@@ -37,6 +39,7 @@
   <exec_depend condition="$ROS_DISTRO == noetic">python3-shapely</exec_depend>
   <exec_depend condition="$ROS_DISTRO == noetic">python3-utm</exec_depend>
   <exec_depend condition="$ROS_DISTRO == noetic">python3-numpy</exec_depend>
+  <exec_depend condition="$ROS_DISTRO != noetic">python3-scipy</exec_depend>
   <exec_depend condition="$ROS_DISTRO == noetic">python3-matplotlib</exec_depend>
   <exec_depend condition="$ROS_DISTRO == noetic">python3-tqdm</exec_depend>
 
