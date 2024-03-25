@@ -140,26 +140,25 @@ def transform_points(points, transform, z=None):
 
 def chop_ways(points, ways, max_dist=0.25):
     waypoints = []
-    for type in ways.keys():
-        for way in ways[type]:
-            for i, (n0, n1) in enumerate(zip(way.nodes, way.nodes[1:])):
-                point0 = points[n0.id].ravel()[:2]
-                point1 = points[n1.id].ravel()[:2]
+    for way in ways["footways"]:
+        for i, (n0, n1) in enumerate(zip(way.nodes, way.nodes[1:])):
+            point0 = points[n0.id].ravel()[:2]
+            point1 = points[n1.id].ravel()[:2]
 
-                if i == 0:
-                    waypoints.append(point0)
+            if i == 0:
+                waypoints.append(point0)
 
-                dist = np.linalg.norm(point1 - point0)
+            dist = np.linalg.norm(point1 - point0)
 
-                if dist <= 1e-3:
-                    waypoints.append(point1)
-                    continue
+            if dist <= 1e-3:
+                waypoints.append(point1)
+                continue
 
-                vec = (point1 - point0) / dist
-                num = int(np.ceil(dist / max_dist))
-                step = dist / num
-                for j in range(num):
-                    waypoints.append(point0 + (j + 1) * step * vec)
+            vec = (point1 - point0) / dist
+            num = int(np.ceil(dist / max_dist))
+            step = dist / num
+            for j in range(num):
+                waypoints.append(point0 + (j + 1) * step * vec)
 
     return np.array(waypoints)
 
