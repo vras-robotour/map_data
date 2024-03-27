@@ -20,8 +20,8 @@ class OSMCloud:
     def __init__(self):
         self.utm_frame = rospy.get_param('~utm_frame', 'utm')
         self.local_frame = rospy.get_param('~local_frame', 'map')
-        self.utm_to_local = rospy.get_param('~utm_to_local', np.eye(4).tolist())
-        self.map_data_file = rospy.get_param('~map_data_file', '/home/vlkjan6/robotour_ws/src/map_data/data/buchlovice_1.mapdata')
+        self.utm_to_local = rospy.get_param('~utm_to_local', None)
+        self.map_data_file = rospy.get_param('~map_data_file', None)
         self.gpx_file = rospy.get_param('~gpx_file', None)
         self.save_map_data = rospy.get_param('~save_map_data', False)
         self.max_path_dist = rospy.get_param('~max_path_dist', 1)
@@ -45,10 +45,11 @@ class OSMCloud:
             rospy.logerr('No map data or gpx file provided')
             exit(1)
 
-        if self.utm_to_local is not None:
-            self.utm_to_local = np.array(self.utm_to_local)
-        else:
+        if not self.utm_to_local:
             self.get_utm_to_local()
+        else:
+            self.utm_to_local = np.array(self.utm_to_local)
+        rospy.loginfo(f'Using UTM to local transform: {self.utm_to_local}')
 
         self.grid_cloud = self.get_cloud()
         self.pub_timer = rospy.Timer(rospy.Duration(10), self.publish_cb)
