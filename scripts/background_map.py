@@ -8,6 +8,23 @@ API_KEY = "8f3be3c0c8484eceb15b0f50218c8c02"
 
     
 def get_url(w, h, corners):
+    '''
+    Get url for the background map.
+
+    Parameters:
+    -----------
+    w : int
+        Width of the image.
+    h : int
+        Height of the image.
+    corners : list
+        Corners of the area to get the map of.
+
+    Returns:
+    --------
+    url : str
+        Url for the background map.
+    '''
     url = URL_PREF
     w_url = f'&width={w}'
     h_url = f'&height={h}'
@@ -19,6 +36,29 @@ def get_url(w, h, corners):
     return url
 
 def get_background_image(min_long, max_long, min_lat, max_lat, x_margin, y_margin):
+    '''
+    Get background image of the area.
+
+    Parameters:
+    -----------
+    min_long : float
+        Minimum longitude.
+    max_long : float
+        Maximum longitude.
+    min_lat : float
+        Minimum latitude.
+    max_lat : float
+        Maximum latitude.
+    x_margin : float
+        Margin in x direction.
+    y_margin : float
+        Margin in y direction.
+
+    Returns:
+    --------
+    bg_map : PIL.Image
+        Background map.
+    '''
     width_m = geodesic((max_lat + y_margin, max_long + x_margin), (min_lat - y_margin, max_long + x_margin))
     height_m = geodesic((max_lat + y_margin, max_long + x_margin), (max_lat + y_margin, min_long - x_margin))
     ratio = width_m / height_m

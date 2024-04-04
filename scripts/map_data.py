@@ -37,6 +37,16 @@ class CoordsData:
         self.x_margin, self.y_margin = self.get_margin()
 
     def get_margin(self):
+        '''
+        Get the margin for the map.
+
+        Returns:
+        --------
+        x_margin : float
+            Margin in the x direction.
+        y_margin : float
+            Margin in the y direction.
+        '''
         y_margin = (self.max_lat-self.min_lat) * 0.1
         x_margin = (self.max_long-self.min_long) * 0.1
 
@@ -115,6 +125,19 @@ class MapData:
         self.NOT_OBSTACLE_TAGS = self.csv_to_dict(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'parameters/not_obstacle_tags.csv'))
 
     def csv_to_dict(self, f):
+        '''
+        Convert a csv file to a dictionary.
+
+        Parameters:
+        -----------
+        f : str
+            Path to the csv file.
+
+        Returns:
+        --------
+        dic : dict
+            Dictionary of the csv file.
+        '''
         arr = np.genfromtxt(f, dtype=str, delimiter=',')
         dic = dict()
         for row in arr:
@@ -149,12 +172,36 @@ class MapData:
         return utm_coords, zone_number, zone_letter
 
     def get_way_query(self):
+        '''
+        Get query for ways from OSM API.
+
+        Returns:
+        --------
+        str
+            Query for ways.
+        '''
         return "(way({}, {}, {}, {}); >; ); out;".format(self.min_lat, self.min_long, self.max_lat, self.max_long)
 
     def get_rel_query(self):
+        '''
+        Get query for relations from OSM API.
+
+        Returns:
+        --------
+        str
+            Query for relations.
+        '''
         return "(way({}, {}, {}, {}); <; ); out;".format(self.min_lat, self.min_long, self.max_lat, self.max_long)
 
     def get_node_query(self):
+        '''
+        Get query for nodes from OSM API.
+
+        Returns:
+        --------
+        str
+            Query for nodes.
+        '''
         return "(node({}, {}, {}, {}); ); out;".format(self.min_lat, self.min_long, self.max_lat, self.max_long)
 
     def run_queries(self):
@@ -225,6 +272,16 @@ class MapData:
     def combine_ways(self, ids):
         '''
         Combine ways that share a node.
+        
+        Parameters:
+        -----------
+        ids : list
+            List of way ids.
+
+        Returns:
+        --------
+        ids : list
+            List of combined way ids.
         '''
         ways = []
         for id in ids:
@@ -373,6 +430,16 @@ class MapData:
     def get_points(self, z=0):
         '''
         Return all nodes as dictionary of id:utm coords.
+
+        Parameters:
+        -----------
+        z : float
+            Altitude of the points.
+
+        Returns:
+        --------
+        points : dict
+            Dictionary of id:utm coords.
         '''
         points = {}
         for node in self.osm_nodes_data.nodes:
@@ -388,19 +455,38 @@ class MapData:
 
     def get_ways(self):
         '''
-        Return all ways as dictionary of type:way.
+        Return all ways as dictionary of type:list.
+
+        Returns:
+        --------
+        ways : dict
+            Dictionary of type:list.
         '''
         return {'roads': self.roads_list, 'footways': self.footways_list, 'barriers': self.barriers_list}
 
     def point_to_polygon(self, point, r=1):
         '''
         Convert a node (= a point) to a circle area, with a given radius in meters.
+
+        Parameters:
+        -----------
+        point : shapely.geometry.Point
+            Point to convert.
+        r : float
+            Radius of the circle.
         '''
         return point.buffer(r)
 
     def line_to_polygon(self, way, width=4):
         '''
         The width of the buffer should depend on, the type of way (river x fence, highway x path)...
+
+        Parameters:
+        -----------
+        way : Way
+            Way to convert.
+        width : float
+            Width of the buffer.
         '''
         way.line = way.line.buffer(width/2)
         way.is_area = True
@@ -435,6 +521,11 @@ class MapData:
     def run_parse(self):
         '''
         Parse OSM data into their respective categories.
+
+        Returns:
+        --------
+        int
+            0 if successful, 1 if failed.
         '''
         end = False
         rospy.loginfo("Running analysis.")
@@ -484,6 +575,11 @@ class MapData:
     def save_to_pickle(self, filename=None):
         '''
         Save map data to a pickle file.
+
+        Parameters:
+        -----------
+        filename : str
+            Path and name to the file.
         '''
         fn = self.coords_file if self.coords_type == "file" else filename
         if fn is None:

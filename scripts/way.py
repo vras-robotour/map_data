@@ -21,19 +21,67 @@ class Way():
         self.pcd_points = None
     
     def is_road(self):
+        '''
+        Check if the way is a road.
+
+        Returns:
+        --------
+        bool
+            Whether the way is a road or not.
+        '''
         if self.tags.get('highway', None) and not self.tags.get('highway', None) in FOOTWAY_VALUES:
             return True
 
     def is_footway(self):
+        '''
+        Check if the way is a footway.
+
+        Returns:
+        --------
+        bool
+            Whether the way is a footway or not.
+        '''
         if self.tags.get('highway', None) and self.tags.get('highway', None) in FOOTWAY_VALUES:
             return True
         
     def is_barrier(self, yes_tags, not_tags, anti_tags):
+        '''
+        Check if the way is a barrier.
+
+        Parameters:
+        -----------
+        yes_tags : dict
+            Dictionary of tags that signify barrier.
+        not_tags : dict
+            Dictionary of tags that signify not barrier.
+        anti_tags : dict
+            Dictionary of tags that signify automaticaly disqualify from being a barrier.
+
+        Returns:
+        --------
+        bool
+            Whether the way is a barrier or not.
+        '''
         if any(key in yes_tags and (self.tags[key] in yes_tags[key] or ('*' in yes_tags[key] and not self.tags[key] in not_tags.get(key,[])))\
                for key in self.tags) and not any(key in anti_tags and (self.tags[key] in anti_tags[key]) for key in self.tags):
             return True
 
     def to_pcd_points(self, density=2, filled=True):
+        '''
+        Create a point cloud from the way using a meshgrid.
+
+        Parameters:
+        -----------
+        density : int
+            Density of the meshgrid.
+        filled : bool
+            Whether the point cloud should be filled or not.
+
+        Returns:
+        --------
+        pcd_points : np.array
+            Point cloud of the way.
+        '''
         # https://stackoverflow.com/questions/44399749/get-all-lattice-points-lying-inside-a-shapely-polygon
         
         if self.pcd_points is None:
@@ -68,6 +116,21 @@ class Way():
         return self.pcd_points
     
     def mask_points(self, points, polygon):
+        '''
+        Mask points with a polygon.
+
+        Parameters:
+        -----------
+        points : shapely.geometry.MultiPoint
+            List of points.
+        polygon : shapely.geometry.Polygon
+            Polygon to mask the points with.
+
+        Returns:
+        --------
+        list
+            Masked points.
+        '''
         polygon = prep(polygon)
         contains = lambda p: polygon.contains(p)
 
