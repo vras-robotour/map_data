@@ -10,7 +10,7 @@ def main():
     path = sys.path[0]
 
     download = False
-    file_name = "buchlovice_1.gpx"
+    file_name = "buchlovice.gpx"
     if len(sys.argv) > 1:
         if "-d" in sys.argv:
             download = True
@@ -24,7 +24,7 @@ def main():
             exit(1)
         map_data.save_to_pickle()
     else:
-        with open(path + "/../data/buchlovice_1.mapdata", "rb") as fh:
+        with open(path + "/../data/" + file_name, "rb") as fh:
             map_data = pickle.load(fh)
         if map_data.run_parse():
             exit(1)

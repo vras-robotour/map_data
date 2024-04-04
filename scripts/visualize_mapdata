@@ -10,23 +10,27 @@ from vis_utils import plot_map, save_map, plot_footways_plan
 if __name__ == "__main__":
     path = sys.path[0]
 
-    file_name = "buchlovice_1.mapdata"
-    save_map_data = False
-    save_bgd = False
+    file_name = "buchlovice.mapdata"
+    image_file = None
+    bgd_file = None
     if len(sys.argv) > 1:
         if "-f" in sys.argv:
             file_name = sys.argv[sys.argv.index("-f") + 1]
         if "-sm" in sys.argv:
-            save_map_data = True
+            image_file = "map.png"
+            if "-if" in sys.argv:
+                image_file = sys.argv[sys.argv.index("-if") + 1]
         if "-sb" in sys.argv:
-            save_bgd = True
+            bgd_file = "bgd_map.png"
+            if "-bf" in sys.argv:
+                bgd_file = sys.argv[sys.argv.index("-bf") + 1]
 
     with open(path + "/../data/" + file_name, "rb") as fh:
         map_data = pickle.load(fh)
 
-    plot_map(map_data, save_bgd)
-    if save_map_data:
-        save_map(path + "/../data/map.png")
+    plot_map(map_data, bgd_file)
+    if image_file is not None:
+        save_map(path + "/../data/" + image_file)
     plt.show()
 
     plot_footways_plan(map_data)

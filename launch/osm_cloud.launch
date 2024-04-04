@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <launch>
-    <arg name="map_data_file" default="$(find map_data)/data/buchlovice_1.mapdata"
+    <arg name="mapdata_file" default="$(find map_data)/data/buchlovice.mapdata"
          doc="File with preprocessed OSM map data."/>
-    <arg name="gpx_file" default="$(find map_data)/data/buchlovice_1.gpx"
+    <arg name="gpx_file" default="$(find map_data)/data/buchlovice.gpx"
          doc="File with gpx coords denoting area to be processed."/>
     <arg name="grid_topic" default="osm_grid"
          doc="Name of the topic to which the grid will be published."/>
@@ -14,14 +14,14 @@
             utm_frame: utm
             local_frame: local_utm
             utm_to_local: []
-            map_data_file: $(arg map_data_file)
+            mapdata_file: $(arg mapdata_file)
             gpx_file: $(arg gpx_file)
-            save_map_data: false
+            save_mapdata: false
             max_path_dist: 2.5
-            grid_min: [-250.0, -250.0]
-            grid_max: [250.0, 250.0]
-            grid_res: 0.4
             path_neighbor_cost: linear  # zero, linear, quadratic
+            grid_res: 0.4
+            grid_max: [250.0, 250.0]
+            grid_min: [-250.0, -250.0]
         </rosparam>
 
         <remap from="grid" to="$(arg grid_topic)"/>

@@ -1,9 +1,8 @@
 import sys
 import matplotlib.pyplot as plt
 import numpy as np
-import utm
 
-import rospy
+from geodesy import utm
 
 from background_map import get_background_image
 
@@ -27,7 +26,7 @@ def plot_background_map(ax, image, coords_data):
 
     ax.set_ylim([min_utm.northing, max_utm.northing])
     ax.set_xlim([min_utm.easting, max_utm.easting])
-    rospy.loginfo("Background map plotted")
+    print("Background map plotted")
 
 def plot_path(ax, path):
     '''
@@ -42,7 +41,7 @@ def plot_path(ax, path):
     '''
     ax.scatter(path[:,0], path[:,1], color='#000000', alpha=0.8, s=3, marker='o', zorder = 18000)
     ax.scatter(path[:,0], path[:,1], color='#50C2F6', alpha=0.8, s=2, marker='o', zorder = 20000)
-    rospy.loginfo("Path plotted")
+    print("Path plotted")
 
 def plot_barrier_areas(ax, barrier_areas):
     '''
@@ -61,7 +60,7 @@ def plot_barrier_areas(ax, barrier_areas):
         
         if area.in_out != "inner":
             ax.fill(x, y, c='#BF0009', alpha=0.4, zorder = 5)
-    rospy.loginfo("Barrier areas plotted")
+    print("Barrier areas plotted")
 
 def plot_footways(ax, footways):
     '''
@@ -78,7 +77,7 @@ def plot_footways(ax, footways):
         x,y = footway.line.exterior.xy
         ax.plot(x, y, c='#FFD700', linewidth=0.5, zorder = 6)
         ax.fill(x, y, c='#FFD700', alpha=0.4, zorder = 4)
-    rospy.loginfo("Footways plotted")
+    print("Footways plotted")
 
 def plot_roads(ax, roads):
     '''
@@ -95,7 +94,7 @@ def plot_roads(ax, roads):
         x,y = road.line.exterior.xy
         ax.plot(x, y, c='#000000', linewidth=1, zorder = 6)
         ax.fill(x, y, c='#000000', alpha=0.8, zorder = 5)
-    rospy.loginfo("Roads plotted")
+    print("Roads plotted")
 
 def save_map(file_name):
     '''
@@ -107,9 +106,26 @@ def save_map(file_name):
         Path and name of the file.
     '''
     plt.savefig(file_name)
-    rospy.loginfo(f"Map saved to {file_name}")
+    print(f"Map saved to {file_name}")
 
-def plot_map(map_data, save_bgd = False):
+def save_bgd_map(bgd_map, bgd_file = None):
+    '''
+    Save the background image to file.
+
+    Parameters:
+    -----------
+    bgd_map : PIL.Image
+        Background image.
+    bgd_file : str
+        Name of the file.
+    '''
+    if bgd_file is not None:
+        path = sys.path[0]
+        file_name = path + "/../data/" + bgd_file
+        bgd_map.save(file_name)
+        print(f"Background image saved to {file_name}")
+
+def plot_map(map_data, bgd_file = None):
     '''
     Plot map from map_data.
 
@@ -128,10 +144,8 @@ def plot_map(map_data, save_bgd = False):
 
     plot_background_map(ax, bgd_map, coords_data)
 
-    if save_bgd:
-        path = sys.path[0]
-        bgd_map.save(path + "/../data/bgd_map.png")
-    
+    save_bgd_map(bgd_map, bgd_file)
+
     plot_barrier_areas(ax, np.array(map_data.barriers_list))
     plot_footways(ax, np.array(map_data.footways_list))
     plot_roads(ax, np.array(map_data.roads_list))
@@ -140,7 +154,7 @@ def plot_map(map_data, save_bgd = False):
     ax.set_xlabel('Easting (m)')
     ax.set_ylabel('Northing (m)')
 
-def plot_footways_plan(map_data, save_bgd = False):
+def plot_footways_plan(map_data, bgd_file = None):
     '''
     Plot only footways from map_data.
 
@@ -159,8 +173,6 @@ def plot_footways_plan(map_data, save_bgd = False):
 
     plot_background_map(ax, bgd_map, coords_data)
 
-    if save_bgd:
-        path = sys.path[0]
-        bgd_map.save(path + "/../data/bgd_map.png")
+    save_bgd_map(bgd_map, bgd_file)
 
     plot_footways(ax, np.array(map_data.footways_list))

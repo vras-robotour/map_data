@@ -21,9 +21,9 @@ class OSMCloud:
         self.utm_frame = rospy.get_param('~utm_frame', 'utm')
         self.local_frame = rospy.get_param('~local_frame', 'map')
         self.utm_to_local = rospy.get_param('~utm_to_local', None)
-        self.map_data_file = rospy.get_param('~map_data_file', None)
+        self.mapdata_file = rospy.get_param('~mapdata_file', None)
         self.gpx_file = rospy.get_param('~gpx_file', None)
-        self.save_map_data = rospy.get_param('~save_map_data', False)
+        self.save_mapdata = rospy.get_param('~save_mapdata', False)
         self.max_path_dist = rospy.get_param('~max_path_dist', 1)
         self.neighbor_cost = rospy.get_param('~neighbor_cost', 'linear')
         self.grid_res = rospy.get_param('~grid_res', 0.25)
@@ -35,12 +35,12 @@ class OSMCloud:
         self.tf = Buffer()
         self.tf_sub = TransformListener(self.tf)
 
-        if self.map_data_file is not None:
-            with open(self.map_data_file, 'rb') as fh:
+        if self.mapdata_file is not None:
+            with open(self.mapdata_file, 'rb') as fh:
                 self.map_data = pickle.load(fh)
         elif self.gpx_file is not None:
             self.map_data = md.MapData(self.gpx_file)
-            self.map_data.run_all(self.save_map_data)
+            self.map_data.run_all(self.save_mapdata)
         else:
             rospy.logerr('No map data or gpx file provided')
             exit(1)
