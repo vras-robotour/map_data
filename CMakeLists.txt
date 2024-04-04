@@ -4,6 +4,5 @@ project(map_data)
 find_package(catkin REQUIRED COMPONENTS rospy geodesy)
 
 catkin_package(CATKIN_DEPENDS
-  message_runtime
   geodesy
 )

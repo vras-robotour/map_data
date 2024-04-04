@@ -13,16 +13,11 @@
 
   <buildtool_depend>catkin</buildtool_depend>
 
-  <build_depend>message_generation</build_depend>
-  <exec_depend>message_runtime</exec_depend>
-
-  <depend>geometry_msgs</depend>
-  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
   <depend>geodesy</depend>
 
   <exec_depend>ros_numpy</exec_depend>
   <exec_depend>rospy</exec_depend>
-  <exec_depend>rostopic</exec_depend>
 
   <exec_depend condition="$ROS_DISTRO != noetic">python-rospkg</exec_depend>
   <exec_depend condition="$ROS_DISTRO != noetic">python-gpxpy</exec_depend>
