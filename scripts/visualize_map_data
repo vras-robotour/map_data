@@ -36,21 +36,21 @@ def plot_footways(ax, footways):
     for footway in footways:
         x,y = footway.line.exterior.xy
         ax.plot(x, y, c='#FFD700', linewidth=0.5, zorder = 6)
-        ax.fill(x,y,c='#FFD700', alpha=0.4, zorder = 4)
+        ax.fill(x, y, c='#FFD700', alpha=0.4, zorder = 4)
     print("Footways plotted")
 
 def plot_roads(ax, roads):
     for road in roads:
         x,y = road.line.exterior.xy
         ax.plot(x, y, c='#000000', linewidth=1, zorder = 6)
-        ax.fill(x,y,c='#000000', alpha=0.8, zorder = 5)
+        ax.fill(x, y, c='#000000', alpha=0.8, zorder = 5)
     print("Roads plotted")
 
 def save_map(file_name):
     plt.savefig(file_name)
     print(f"Map saved to {file_name}")
 
-def plot_map(map_data):
+def plot_map(map_data, save_bgd = False):
     _, ax = plt.subplots(figsize=(12, 12), dpi=400)
 
     coords_data = map_data.coords_data
@@ -58,6 +58,10 @@ def plot_map(map_data):
                                    coords_data.max_lat, coords_data.x_margin, coords_data.y_margin)
 
     plot_background_map(ax, bgd_map, coords_data)
+
+    if save_bgd:
+        path = sys.path[0]
+        bgd_map.save(path + "/../data/bgd_map.png")
     
     plot_barrier_areas(ax, np.array(map_data.barriers_list))
     plot_footways(ax, np.array(map_data.footways_list))
@@ -67,7 +71,7 @@ def plot_map(map_data):
     ax.set_xlabel('Easting (m)')
     ax.set_ylabel('Northing (m)')
 
-def plot_footways_plan(map_data):
+def plot_footways_plan(map_data, save_bgd = False):
     _, ax = plt.subplots(figsize=(12, 12), dpi=400)
 
     coords_data = map_data.coords_data
@@ -76,6 +80,10 @@ def plot_footways_plan(map_data):
 
     plot_background_map(ax, bgd_map, coords_data)
 
+    if save_bgd:
+        path = sys.path[0]
+        bgd_map.save(path + "/../data/bgd_map.png")
+
     plot_footways(ax, np.array(map_data.footways_list))
 
 
@@ -83,15 +91,22 @@ if __name__ == "__main__":
     path = sys.path[0]
 
     file_name = "buchlovice_1.mapdata"
+    save_map_data = False
+    save_bgd = False
     if len(sys.argv) > 1:
         if "-f" in sys.argv:
             file_name = sys.argv[sys.argv.index("-f") + 1]
+        if "-sm" in sys.argv:
+            save_map_data = True
+        if "-sb" in sys.argv:
+            save_bgd = True
 
     with open(path + "/../data/" + file_name, "rb") as fh:
         map_data = pickle.load(fh)
 
-    plot_map(map_data)
-    save_map(path + "/../data/map.png")
+    plot_map(map_data, save_bgd)
+    if save_map_data:
+        save_map(path + "/../data/map.png")
     plt.show()
 
     plot_footways_plan(map_data)

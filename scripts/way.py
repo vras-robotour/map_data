@@ -5,7 +5,8 @@ from shapely.prepared import prep
 from points_to_graph_points import get_point_line
 
 
-FOOTWAY_VALUES = ['living_street','pedestrian','footway','bridleway','corridor','track','steps', 'cycleway', 'path'] # living_street,pedestrian,track,crossing can be accessed by cars
+# living_street, pedestrian, track, crossing can be accessed by cars
+FOOTWAY_VALUES = ['living_street', 'pedestrian', 'footway', 'bridleway', 'corridor', 'track', 'steps', 'cycleway', 'path']
 
 
 class Way():
@@ -28,7 +29,8 @@ class Way():
             return True
         
     def is_barrier(self, yes_tags, not_tags, anti_tags):
-        if any(key in yes_tags and (self.tags[key] in yes_tags[key] or ('*' in yes_tags[key] and not self.tags[key] in not_tags.get(key,[]))) for key in self.tags) and not any(key in anti_tags and (self.tags[key] in anti_tags[key]) for key in self.tags):
+        if any(key in yes_tags and (self.tags[key] in yes_tags[key] or ('*' in yes_tags[key] and not self.tags[key] in not_tags.get(key,[])))\
+               for key in self.tags) and not any(key in anti_tags and (self.tags[key] in anti_tags[key]) for key in self.tags):
             return True
 
     def to_pcd_points(self, density=2, filled=True):
