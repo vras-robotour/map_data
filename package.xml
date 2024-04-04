@@ -1,8 +1,9 @@
-<?xml version="1.0"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <package format="3">
   <name>map_data</name>
   <version>1.0.0</version>
   <description>Representation of OSM data for further work with ROS.</description>
+  <url type="website">https://github.com/vras-robotour/map_data</url>
 
   <author email="herolada@fel.cvut.cz">Adam Herold</author>
   <author email="vlkjan6@fel.cvut.cz">Jan Vlk</author>
