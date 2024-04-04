@@ -19,7 +19,7 @@ if __name__ == "__main__":
         if "-sm" in sys.argv:
             image_file = "map.png"
             if "-if" in sys.argv:
-                image_file = sys.argv[sys.argv.index("-if") + 1]
+                image_file = sys.argv[sys.argv.index("-mf") + 1]
         if "-sb" in sys.argv:
             bgd_file = "bgd_map.png"
             if "-bf" in sys.argv:

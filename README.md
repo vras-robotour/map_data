@@ -41,8 +41,8 @@ This will load the `coords.mapdata` file from the `./data/` directory and parse 
 ### Visualizing the parsed data
 The script `visualize_mapdata` is used to visualize the parsed data from a .mapdata file. It will show two images, first one with all parsed data (barriers, footways and roads), while the second one will only containt the footways. There are multiple flags that can be used:
 - `-f` - this flag is used to specify the .mapdata file to read from, it should be followed by the filename, and the file should be in the `./data/` directory
-- `-sm` - this flag is used to specify if the first image should be saved, it may be followed by a `-if` flag and a filename to save the image to, if the `-if` flag is not used the image will be saved as `map.png`
-- `-sb` - this flag is used to specify if the background should be saved, it may be followed by a `-bf` flag and a filename to save the image to, if the `-if` flag is not used the image will be saved as `bgd_map.png`
+- `-sm` - this flag is used to specify if the first image should be saved, it may be followed by a `-mf` flag and a filename to save the image to, if the `-mf` flag is not used the image will be saved as `map.png`
+- `-sb` - this flag is used to specify if the background should be saved, it may be followed by a `-bf` flag and a filename to save the image to, if the `-bf` flag is not used the image will be saved as `bgd_map.png`
 
 All saved images will be located in the `./data/` directory.
 
