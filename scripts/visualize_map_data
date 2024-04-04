@@ -29,7 +29,7 @@ def plot_barrier_areas(ax, barrier_areas):
         ax.plot(x, y, c='#BF0009', linewidth=1, zorder = 7)
         
         if area.in_out != "inner":
-            ax.fill(x,y,c='#BF0009', alpha=0.4, zorder = 5)
+            ax.fill(x, y, c='#BF0009', alpha=0.4, zorder = 5)
     print("Barrier areas plotted")
 
 def plot_footways(ax, footways):

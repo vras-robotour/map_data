@@ -3,14 +3,10 @@
 import sys
 import pickle
 
-import rospy
-
 import map_data as md
 
 
 def main():
-    rospy.init_node('tester_node')
-
     path = sys.path[0]
 
     download = False
@@ -34,8 +30,6 @@ def main():
             exit(1)
         map_data.save_to_pickle()
 
-    while not rospy.is_shutdown():
-        pass
 
 if __name__ == "__main__":
     main()
