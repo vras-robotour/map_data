@@ -4,7 +4,7 @@ import numpy as np
 
 from geodesy import utm
 
-from background_map import get_background_image
+from map_data.background_map import get_background_image
 
 def plot_background_map(ax, image, coords_data):
     '''

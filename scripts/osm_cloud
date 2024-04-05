@@ -13,7 +13,7 @@ try:
 except ImportError:
     import pickle
 
-import map_data as md
+import map_data.map_data as md
 
 
 class OSMCloud:

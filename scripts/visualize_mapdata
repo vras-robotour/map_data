@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pickle
 import sys
 
-from vis_utils import plot_map, save_map, plot_footways_plan
+from map_data.vis_utils import plot_map, save_map, plot_footways_plan
 
 
 if __name__ == "__main__":

@@ -21,8 +21,8 @@ except ImportError:
 
 from gpxpy import parse as gpxparse
 
-from graph_search_params import *
-from way import Way
+from map_data.graph_search_params import *
+from map_data.way import Way
 
 
 OBSTACLE_RADIUS = 2
@@ -117,12 +117,13 @@ class MapData:
 
         self.ways = dict()
 
-        self.BARRIER_TAGS = self.csv_to_dict(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'parameters/barrier_tags.csv'))
-        self.NOT_BARRIER_TAGS = self.csv_to_dict(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'parameters/not_barrier_tags.csv'))
-        self.ANTI_BARRIER_TAGS = self.csv_to_dict(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'parameters/anti_barrier_tags.csv'))
+        self._path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        self.BARRIER_TAGS = self.csv_to_dict(os.path.join(self._path, 'parameters/barrier_tags.csv'))
+        self.NOT_BARRIER_TAGS = self.csv_to_dict(os.path.join(self._path, 'parameters/not_barrier_tags.csv'))
+        self.ANTI_BARRIER_TAGS = self.csv_to_dict(os.path.join(self._path, 'parameters/anti_barrier_tags.csv'))
 
-        self.OBSTACLE_TAGS = self.csv_to_dict(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'parameters/obstacle_tags.csv'))
-        self.NOT_OBSTACLE_TAGS = self.csv_to_dict(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'parameters/not_obstacle_tags.csv'))
+        self.OBSTACLE_TAGS = self.csv_to_dict(os.path.join(self._path, 'parameters/obstacle_tags.csv'))
+        self.NOT_OBSTACLE_TAGS = self.csv_to_dict(os.path.join(self._path, 'parameters/not_obstacle_tags.csv'))
 
     def csv_to_dict(self, f):
         '''
@@ -234,7 +235,7 @@ class MapData:
                 self.osm_ways_data = make_overpy_result_picklable(osm_ways_data)
                 break
             except Exception as e:
-                rospy.loginfo(e)
+                rospy.logwarn(e)
                 rospy.loginfo("--------------\nQuery failed.\nRerunning the query after {} s.".format(break_time))
                 rospy.sleep(break_time)
                 tries += 1
@@ -248,7 +249,7 @@ class MapData:
                 self.osm_rels_data = make_overpy_result_picklable(osm_rels_data)
                 break
             except Exception as e:
-                rospy.loginfo(e)
+                rospy.logwarn(e)
                 rospy.loginfo("--------------\nQuery failed.\nRerunning the query after {} s.".format(break_time))
                 rospy.sleep(break_time)
                 tries += 1
@@ -262,7 +263,7 @@ class MapData:
                 self.osm_nodes_data = make_overpy_result_picklable(osm_nodes_data)
                 break
             except Exception as e:
-                rospy.loginfo(e)
+                rospy.logwarn(e)
                 rospy.loginfo("--------------\nQuery failed.\nRerunning the query after {} s.".format(break_time))
                 rospy.sleep(break_time)
                 tries += 1

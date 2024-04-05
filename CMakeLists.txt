@@ -3,6 +3,8 @@ project(map_data)
 
 find_package(catkin REQUIRED COMPONENTS rospy geodesy)
 
+catkin_python_setup()
+
 catkin_package(CATKIN_DEPENDS
   geodesy
 )
