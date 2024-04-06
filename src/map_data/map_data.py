@@ -21,11 +21,12 @@ except ImportError:
 
 from gpxpy import parse as gpxparse
 
-from map_data.graph_search_params import *
 from map_data.way import Way
 
 
-OBSTACLE_RADIUS = 2
+OBSTACLE_RADIUS = 2 # meters, radius of the circle around the obstacle
+OSM_RECTANGLE_MARGIN = 100 # meters, margin around the map
+RESERVE = 50 # meters, reserve around the waypoints
 
 
 class CoordsData:
