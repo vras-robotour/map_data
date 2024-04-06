@@ -79,6 +79,46 @@ The script can be run either with the `rosrun` command or by running it as an ex
 - `gpx_file` - the absolute path for the .gpx file to read from
 - `grid_topic` - the topic on which the point cloud is published
 
+Using `rosrun` and publishing a point cloud of footways:
+```bash
+rosrun map_data osm_cloud
+```
+
+Using a launch file and publishing a point cloud of footways:
+```bash
+roslaunch map_data osm_cloud.launch mapdata_file:=/path/to/coords.mapdata grid_topic:=/osm_cloud
+```
+
+## Importing as python package
+You can import the python classes from the `map_data` package. The classes are located in the `./src/map_data/` directory.
+
+To import the `map_data` package you need to have it in your `package.xml` and `CMakeLists.txt` files (when working in ROS) or in your `PYTHONPATH` (when working in a python environment).
+
+### Files
+The package contains the following files:
+- `background_map.py` - file containing the functions to create a background map for the visualization
+- `map_data.py` - contains the main class `MapData` that parses the .gpx file and creates a .mapdata file
+- `points_to_graph_points.py` - file containing the functions to convert points to lines of equidistant points
+- `vis_utils.py` - file that contains functions to visualize the parsed data
+- `way.py` - file containing the `Way` class that codes our representation of a way from OSM
+
+### Examples
+To import the `MapData` class you can use the following code:
+```python
+from map_data.map_data import MapData
+```
+To plot the parsed data you can use the following code:
+```python
+import pickle
+from map_data.vis_utils import plot_map
+
+file_name = "coords.mapdata"
+with open(file_name, "rb") as fh:
+    map_data = pickle.load(fh)
+
+plot_map(map_data, bgd_file)
+```
+
 ## License
 
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://github.com/vras-robotour/map_data/blob/master/LICENSE)
