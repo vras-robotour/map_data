@@ -14,7 +14,6 @@
   <buildtool_depend>catkin</buildtool_depend>
 
   <depend>sensor_msgs</depend>
-  <depend>geodesy</depend>
 
   <exec_depend>ros_numpy</exec_depend>
   <exec_depend>rospy</exec_depend>

@@ -2,7 +2,7 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 
-from geodesy import utm
+import utm
 
 from map_data.background_map import get_background_image
 
@@ -19,13 +19,13 @@ def plot_background_map(ax, image, coords_data):
     coords_data : map_data.CoordsData
         Coordinates data.
     '''
-    min_utm = utm.fromLatLong(coords_data.min_lat - coords_data.y_margin, coords_data.min_long - coords_data.x_margin)
-    max_utm = utm.fromLatLong(coords_data.max_lat + coords_data.y_margin, coords_data.max_long + coords_data.x_margin)
-    ax.imshow(image, extent = [min_utm.easting, max_utm.easting,\
-                               min_utm.northing, max_utm.northing], alpha = 1, zorder = 0)
+    min_utm = utm.from_latlon(coords_data.min_lat - coords_data.y_margin, coords_data.min_long - coords_data.x_margin)
+    max_utm = utm.from_latlon(coords_data.max_lat + coords_data.y_margin, coords_data.max_long + coords_data.x_margin)
+    ax.imshow(image, extent = [min_utm[0], max_utm[0],\
+                               min_utm[1], max_utm[1]], alpha = 1, zorder = 0)
 
-    ax.set_ylim([min_utm.northing, max_utm.northing])
-    ax.set_xlim([min_utm.easting, max_utm.easting])
+    ax.set_ylim([min_utm[1], max_utm[1]])
+    ax.set_xlim([min_utm[0], max_utm[0]])
     print("Background map plotted")
 
 def plot_path(ax, path):
