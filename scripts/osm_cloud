@@ -63,20 +63,15 @@ class OSMCloud:
         self.pub_grid.publish(self.grid_cloud)
         rospy.loginfo('Published grid cloud')
 
-    def find_utm_to_local(self):
-        '''
-        Find the UTM to local transform.
-        '''
-        self.utm_to_local = numpify(self.tf.lookup_transform(self.local_frame, self.utm_frame, rospy.Time(0)))
-        rospy.loginfo(f'Got UTM to local transform: {self.utm_to_local}')
-
     def get_utm_to_local(self):
         '''
         While rospy is not shutdown, try to get the UTM to local transform every second or until successful.
         '''
         while not rospy.is_shutdown():
             try:
-                self.find_utm_to_local()
+                utm_to_local = self.tf.lookup_transform(self.local_frame, self.utm_frame, rospy.Time(0), rospy.Duration(60))
+                self.utm_to_local = numpify(utm_to_local.transform)
+                rospy.loginfo(f'Got UTM to local transform: {self.utm_to_local}')
                 break
             except Exception as e:
                 rospy.logwarn(f'Failed to get UTM to local transform: {e}')
