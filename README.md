@@ -1,6 +1,16 @@
 # map_data
 ROS tools to work with OSM data.
 
+- [Overview](#overview)
+- [How to use](#how-to-use)
+  - [Parsing and creating files](#parsing-and-creating-files)
+  - [Visualizing the parsed data](#visualizing-the-parsed-data)
+  - [Publishing a point cloud of footways](#publishing-a-point-cloud-of-footways)
+- [Importing as python package](#importing-as-python-package)
+  - [Files](#files)
+  - [Examples](#examples)
+- [License](#license)
+
 ## Overview
 This is a ROS package that parses a .gpx file with GPS coordinats into a python class, which is later serialized and saved as a .mapdata file.
 
@@ -16,7 +26,7 @@ There are two .gpx files in the `./data/` directory that can be used to test the
 The package was developed and tested on Ubuntu 20.04 with ROS Noetic. However, it should be fully compatible with ROS Melodic.
 
 ## How to use
-### Parsing a .gpx file and creating a .mapdata file
+### Parsing and creating files
 The script `create_mapdata` is used to create a .mapdata file from a .gpx file or to parse a .mapdata file which was created earlier.
 There are two flags that can be used:
 - `-d` - this signals that no prior .mapdata file exists and the script should parse a .gpx file and download data from OSM
@@ -122,5 +132,3 @@ plot_map(map_data, bgd_file)
 ## License
 
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://github.com/vras-robotour/map_data/blob/master/LICENSE)
-
-## TODO
