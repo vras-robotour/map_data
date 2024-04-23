@@ -89,8 +89,10 @@ class OSMCloud:
         points = transform_points(self.map_data.get_points(), self.utm_to_local, 0)
         grid = np.pad(create_grid(self.grid_min, self.grid_max, self.grid_res), ((0, 0), (0, 1)))
         waypoints = np.pad(split_ways(points, self.map_data.get_ways(), self.grid_res), ((0, 0), (0, 1)))
+        rospy.loginfo(f'Created {waypoints.shape[0]} waypoints')
 
         grid = points_near_ref(grid, waypoints, self.max_path_dist)
+        rospy.loginfo(f'Found {grid.shape[0]} points near waypoints')
         if self.neighbor_cost == 'linear':
             pass
         elif self.neighbor_cost == 'quadratic':
@@ -215,7 +217,7 @@ def transform_points(points, transform, z=None):
         assert isinstance(point, np.ndarray)
         assert isinstance(transform, np.ndarray)
 
-        point = np.dot(transform[:3, :3], point) + transform[:3, 3]
+        point = np.dot(transform[:3, :3], point) + transform[:3, 3:]
         return point
 
     transformed = {}
