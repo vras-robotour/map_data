@@ -102,6 +102,7 @@ class OSMCloud:
         else:
             rospy.logwarn(f'Unknown neighbor cost: {self.neighbor_cost}')
 
+        grid[:, 3] /= self.max_path_dist ** 2 if self.neighbor_cost == 'quadratic' else 1
         cloud = create_cloud(grid)
         cloud.header.frame_id = self.local_frame
         cloud.header.stamp = rospy.Time.now()
