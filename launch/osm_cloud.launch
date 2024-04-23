@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <launch>
-    <arg name="mapdata_file" default="$(find map_data)/data/buchlovice.mapdata"
+    <arg name="mapdata_path" default="$(find map_data)/data/"
+         doc="Path to the directory with map data."/>
+    <arg name="mapdata_file" default="buchlovice.mapdata"
          doc="File with preprocessed OSM map data."/>
-    <arg name="gpx_file" default="$(find map_data)/data/buchlovice.gpx"
+    <arg name="gpx_file" default="buchlovice.gpx"
          doc="File with gpx coords denoting area to be processed."/>
     <arg name="grid_topic" default="osm_grid"
          doc="Name of the topic to which the grid will be published."/>
@@ -14,8 +16,8 @@
             utm_frame: utm
             local_frame: local_utm
             utm_to_local: []
-            mapdata_file: $(arg mapdata_file)
-            gpx_file: $(arg gpx_file)
+            mapdata_file: $(arg mapdata_path)$(arg mapdata_file)
+            gpx_file: $(arg mapdata_path)$(arg gpx_file)
             save_mapdata: false
             max_path_dist: 2.5
             path_neighbor_cost: linear  # zero, linear, quadratic
