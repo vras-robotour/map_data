@@ -126,9 +126,8 @@ file_name = "coords.mapdata"
 with open(file_name, "rb") as fh:
     map_data = pickle.load(fh)
 
-plot_map(map_data, bgd_file)
+plot_map(map_data)
 ```
 
 ## License
-
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://github.com/vras-robotour/map_data/blob/master/LICENSE)
