@@ -82,6 +82,40 @@ def generate_launch_description():
         ],
     )
 
+    map_node = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="map_transform",
+        output="screen",
+        arguments=[
+            "0.0",
+            "0.0",
+            "0.0",
+            "0.0",
+            "0.0",
+            "0.0",
+            "map",
+            "local_utm",
+        ],
+    )
+
+    base_link_node = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="base_link_transform",
+        output="screen",
+        arguments=[
+            "0.0",
+            "0.0",
+            "0.0",
+            "0.0",
+            "0.0",
+            "0.0",
+            "map",
+            "base_link",
+        ],
+    )
+
     return LaunchDescription(
         [
             mapdata_path,
@@ -90,5 +124,7 @@ def generate_launch_description():
             grid_topic,
             osm_cloud_node,
             local_utm_node,
+            map_node,
+            base_link_node,
         ]
     )
