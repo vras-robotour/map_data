@@ -55,7 +55,7 @@ class MapData:
     def __init__(
         self, coords, coords_type="file", current_robot_position=None, flip=False
     ):
-        self.api = overpy.Overpass(url="https://overpass.kumi.systems/api/interpreter")
+        self.api = overpy.Overpass(url="https://overpass-api.de/api/interpreter")
         self.logger = rclpy.logging.get_logger("MapData")
 
         self.coords_type = coords_type
