@@ -1,132 +1,215 @@
 # map_data
-ROS tools to work with OSM data.
+ROS2 tools to work with OSM data.
 
 - [Overview](#overview)
 - [How to use](#how-to-use)
   - [Parsing and creating files](#parsing-and-creating-files)
+  - [Interactive viewer](#interactive-viewer)
   - [Visualizing the parsed data](#visualizing-the-parsed-data)
   - [Publishing a point cloud of footways](#publishing-a-point-cloud-of-footways)
-- [Importing as python package](#importing-as-python-package)
+- [Importing as a Python package](#importing-as-a-python-package)
   - [Files](#files)
   - [Examples](#examples)
 - [License](#license)
 
 ## Overview
-This is a ROS package that parses a .gpx file with GPS coordinats into a python class, which is later serialized and saved as a .mapdata file.
+This package parses a `.gpx` file with GPS waypoints into a Python class, queries
+[OpenStreetMap](https://www.openstreetmap.org) for map features within the area, and
+serializes the result as a `.mapdata` file.
 
-The class uses OSM as a source of data and parses it into a few cathegories:
-- barriers - obstacles that we assume to be untraversable
-- footways - paths designed for humans
-- roads - areas designed for vehicles
+Parsed features are classified into three categories:
+- **barriers** — obstacles assumed to be untraversable (walls, buildings, fences, water…)
+- **footways** — paths intended for pedestrians
+- **roads** — areas intended for vehicles
 
-We also provide a ROS node that uses the parsed map data and publishes a point cloud of footways. This may be used as one of the inputs for path-planning nodes.
+Additional tools let you visualize the data, annotate it interactively, and publish a
+cost-aware footway point cloud for use in path-planning nodes.
 
-There are two .gpx files in the `./data/` directory that can be used to test the package.
+The `MapData` class and the interactive viewer work **standalone** — no running ROS2
+context is required for data parsing or annotation. ROS2 is only needed for the
+`osm_cloud` publisher and the `create_mapdata` / `visualize_mapdata` CLI nodes.
 
-The package was developed and tested on Ubuntu 20.04 with ROS Noetic. However, it should be fully compatible with ROS Melodic.
+The package targets **ROS2 Humble** or later on Ubuntu 22.04.
+
+Sample `.gpx` files are provided in `./data/`.
 
 ## How to use
+
 ### Parsing and creating files
-The script `create_mapdata` is used to create a .mapdata file from a .gpx file or to parse a .mapdata file which was created earlier.
-There are two flags that can be used:
-- `-d` - this signals that no prior .mapdata file exists and the script should parse a .gpx file and download data from OSM
-- `-f` - this flags allows the user to either specify a .gpx file to parse or a .mapdata file to read from, depending on the `-d` flag, the filename should be a second argument after the flag
+`create_mapdata` creates a `.mapdata` file from a `.gpx` file, or re-parses an existing
+`.mapdata` with the current tag configuration.
 
-In both cases the script will create a .mapdata file in the `./data/` directory and taking the .gpx file there as well. The name of the .mapdata file will be the same as the .gpx file.
+| Flag | Description |
+|------|-------------|
+| `-d` | Download fresh OSM data from the `.gpx` bounds and parse it |
+| `-f <filename>` | `.gpx` file to parse (with `-d`), or `.mapdata` file to re-parse (without `-d`) |
 
-The script can be run either with the `rosrun` command or by running it as an executable.
+Default input file when `-f` is omitted: `buchlovice.gpx`.
 
-Using `rosrun` and creating a .mapdata file from a .gpx file:
+Download and parse OSM data for a GPX file:
 ```bash
-rosrun map_data create_mapdata -d -f coords.gpx
+ros2 run map_data create_mapdata -d -f coords.gpx
 ```
-This will create a `coords.mapdata` file in the `./data/` directory, downloading and parsing data from OSM.
+This creates `coords.mapdata` in the package data directory.
 
-Running as an executable and parsing a .mapdata file:
+Re-parse an existing `.mapdata` file (e.g. after editing tag CSVs):
 ```bash
-./scripts/create_mapdata -f coords.mapdata
+ros2 run map_data create_mapdata -f coords.mapdata
 ```
-This will load the `coords.mapdata` file from the `./data/` directory and parse it, saving it back to the same file.
+
+### Interactive viewer
+`map_data_viewer` launches a local Flask web server with a Leaflet-based map UI.
+It lets you inspect parsed features, view their OSM tags, and draw manual obstacle
+annotations — without needing ROS2.
+
+```bash
+# After colcon build and sourcing the workspace:
+map_data_viewer
+
+# Explicit data directory and port:
+map_data_viewer --data-dir /path/to/data --port 8080
+
+# Standalone (outside a colcon workspace):
+python -m map_data.viewer.app --data-dir ./data
+```
+
+Then open `http://127.0.0.1:5000` in a browser.
+
+**Modes** (toolbar at the top):
+
+| Mode | Action |
+|------|--------|
+| View | Click any feature to see its OSM tags in the sidebar |
+| + Obstacle | Draw a polygon, rectangle, or circle to add a manual obstacle |
+| ✕ Delete | Click an annotation to remove it |
+
+Layer visibility (roads, footways, barriers, waypoints, annotations) can be toggled
+independently in the sidebar.
+
+Annotations are saved automatically to a sidecar `.annotations.json` file alongside
+the `.mapdata` file, so they survive re-parsing.
 
 ### Visualizing the parsed data
-The script `visualize_mapdata` is used to visualize the parsed data from a .mapdata file. It will show two images, first one with all parsed data (barriers, footways and roads), while the second one will only containt the footways. There are multiple flags that can be used:
-- `-f` - this flag is used to specify the .mapdata file to read from, it should be followed by the filename, and the file should be in the `./data/` directory
-- `-sm` - this flag is used to specify if the first image should be saved, it may be followed by a `-mf` flag and a filename to save the image to, if the `-mf` flag is not used the image will be saved as `map.png`
-- `-sb` - this flag is used to specify if the background should be saved, it may be followed by a `-bf` flag and a filename to save the image to, if the `-bf` flag is not used the image will be saved as `bgd_map.png`
+`visualize_mapdata` generates static matplotlib plots from a `.mapdata` file.
+It shows two figures: one with all parsed features (barriers, footways, roads) and
+one with footways only.
 
-All saved images will be located in the `./data/` directory.
+| Flag | Description |
+|------|-------------|
+| `-f <filename>` | `.mapdata` file to visualize (default: `buchlovice.mapdata`) |
+| `-sm` | Save the main map plot (default filename: `map.png`) |
+| `-if <filename>` | Custom filename for the main plot (requires `-sm`) |
+| `-sb` | Save the background tile image (default filename: `bgd_map.png`) |
+| `-bf <filename>` | Custom filename for the background image (requires `-sb`) |
 
-The script can be run either with the `rosrun` command or by running it as an executable.
+All saved images are written to the `./data/` directory.
 
-Using `rosrun` and visualizing the parsed data:
+Visualize and display interactively:
 ```bash
-rosrun map_data visualize_mapdata -f coords.mapdata
+ros2 run map_data visualize_mapdata -f coords.mapdata
 ```
 
-Running as an executable and visualizing the parsed data and saving the images:
+Visualize and save both images:
 ```bash
-./scripts/visualize_mapdata -f coords.mapdata -sm -sb
+ros2 run map_data visualize_mapdata -f coords.mapdata -sm -sb
 ```
 
 ### Publishing a point cloud of footways
-The script `osm_cloud` is used to publish a point cloud of footways. The point cloud is published as a `sensor_msgs/PointCloud2` message on the `/osm_cloud` topic. The point cloud is published on the `grid` topic.
+`osm_cloud` is a ROS2 node that publishes a `sensor_msgs/PointCloud2` on the `grid`
+topic. Each point carries a `cost` field: `0.0` means on a footway, `1.0` means at
+the maximum configured distance from any footway.
 
-The script takes several parameters from the ROS parameter server:
-- `~utm_frame` - the UTM frame of the map data, default is `utm`
-- `~local_frame` - the local frame of the robot, default is `map`
-- `~utm_to_local` - the transformation from UTM to local frame, if set as an empty list the script will lookup for the transformation, default is `None`
-- `~mapdata_file` - absolute path for the .mapdata file to read from, default is `None`
-- `~gpx_file` - absolute path for the .gpx file to read from, the script will create and parse mapdata, if the .mapdata file is not provided, default is `None`
-- `~save_mapdata` - if set to `true` the script will save the parsed mapdata from the .gpx file, if the .mapdata file is not provided, default is `false`
-- `~max_path_dist` - the maximum distance a point in the grid can be from a footway, default is `1.0`
-- `~neighbor_cost` - in what way to calculate the cost - linear or quadratic or zero, default is `linear`
-- `~grid_res` - the resolution of the grid, default is `0.25`
-- `~grid_max` - the maximal value of the grid, default is `[250, 250]`
-- `~grid_min` - the minimal value of the grid, default is `[-250, -250]`
+**ROS2 parameters:**
 
-The script can be run either with the `rosrun` command or by running it as an executable. However we would recommend launching it with a provided launch file. The launch file will set the parameters for the script and launch the node. With the launch file you can also change the topic on which the point cloud is published. The launch file is located in the `./launch/` directory. The launch file has three arguments:
-- `mapdata_file` - the absolute path for the .mapdata file to read from
-- `gpx_file` - the absolute path for the .gpx file to read from
-- `grid_topic` - the topic on which the point cloud is published
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `utm_frame` | `"utm"` | TF frame name for UTM coordinates |
+| `local_frame` | `"map"` | TF frame name for the local robot frame |
+| `utm_to_local` | `None` | 4×4 transform matrix; looked up from TF if not set |
+| `mapdata_file` | `None` | Absolute path to a `.mapdata` file |
+| `gpx_file` | `None` | Absolute path to a `.gpx` file (used if no `.mapdata`) |
+| `save_mapdata` | `false` | Save generated mapdata when loading from a `.gpx` |
+| `max_path_dist` | `1.0` | Max distance (m) at which a grid point receives a cost |
+| `neighbor_cost` | `"linear"` | Cost function: `linear`, `quadratic`, or `zero` |
+| `grid_res` | `0.25` | Grid point spacing (m) |
+| `grid_max` | `[250, 250]` | Upper bounds of the local-frame grid (m) |
+| `grid_min` | `[-250, -250]` | Lower bounds of the local-frame grid (m) |
 
-Using `rosrun` and publishing a point cloud of footways:
+The recommended way to run the node is via the provided launch file, which also sets
+up the required static transforms:
+
 ```bash
-rosrun map_data osm_cloud
+ros2 launch map_data osm_cloud.launch.py \
+    mapdata_file:=/path/to/coords.mapdata \
+    grid_topic:=osm_cloud
 ```
 
-Using a launch file and publishing a point cloud of footways:
-```bash
-roslaunch map_data osm_cloud.launch mapdata_file:=/path/to/coords.mapdata grid_topic:=/osm_cloud
-```
+Launch file arguments:
 
-## Importing as python package
-You can import the python classes from the `map_data` package. The classes are located in the `./src/map_data/` directory.
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `mapdata_path` | package share/data | Directory containing the map file |
+| `mapdata_file` | `buchlovice.mapdata` | Map data filename |
+| `gpx_file` | `buchlovice.gpx` | GPX fallback filename |
+| `grid_topic` | `osm_grid` | Topic name for the published point cloud |
 
-To import the `map_data` package you need to have it in your `package.xml` and `CMakeLists.txt` files (when working in ROS) or in your `PYTHONPATH` (when working in a python environment).
+## Importing as a Python package
+
+`MapData` and `Way` can be used directly in Python without a running ROS2 node.
+The only requirement is that the package is installed (e.g. via `pip install -e .`
+or a `colcon build`) so the `parameters/` CSV files are accessible.
 
 ### Files
-The package contains the following files:
-- `background_map.py` - file containing the functions to create a background map for the visualization
-- `map_data.py` - contains the main class `MapData` that parses the .gpx file and creates a .mapdata file
-- `points_to_graph_points.py` - file containing the functions to convert points to lines of equidistant points
-- `vis_utils.py` - file that contains functions to visualize the parsed data
-- `way.py` - file containing the `Way` class that codes our representation of a way from OSM
+
+```
+map_data/
+├── map_data.py              # MapData class — parses GPX + OSM into roads/footways/barriers
+├── way.py                   # Way class — represents a single OSM feature with geometry
+├── background_map.py        # Fetches raster map tiles from Geoapify for visualizations
+├── vis_utils.py             # matplotlib helpers for plotting parsed map data
+├── points_to_graph_points.py# Utility: equidistant point interpolation along lines
+├── create_mapdata.py        # ROS2 node / CLI: download and parse OSM data
+├── visualize_mapdata.py     # ROS2 node / CLI: static matplotlib plots
+├── osm_cloud.py             # ROS2 node: publishes footway cost point cloud
+└── viewer/
+    ├── app.py               # Flask backend — REST API + GeoJSON conversion
+    └── templates/
+        └── index.html       # Leaflet frontend — interactive map viewer
+```
 
 ### Examples
-To import the `MapData` class you can use the following code:
+
+Parse a GPX file and save a `.mapdata` file:
 ```python
 from map_data.map_data import MapData
+
+md = MapData("./data/coords.gpx")
+md.run_all(save=True)  # queries OSM, parses, saves coords.mapdata
 ```
-To plot the parsed data you can use the following code:
+
+Load an existing `.mapdata` file and access parsed features:
+```python
+import pickle
+
+with open("coords.mapdata", "rb") as fh:
+    md = pickle.load(fh)
+
+print(len(md.roads_list))    # list of Way objects
+print(len(md.footways_list))
+print(len(md.barriers_list))
+```
+
+Plot the parsed data:
 ```python
 import pickle
 from map_data.vis_utils import plot_map
+import matplotlib.pyplot as plt
 
-file_name = "coords.mapdata"
-with open(file_name, "rb") as fh:
-    map_data = pickle.load(fh)
+with open("coords.mapdata", "rb") as fh:
+    md = pickle.load(fh)
 
-plot_map(map_data)
+plot_map(md)
+plt.show()
 ```
 
 ## License
