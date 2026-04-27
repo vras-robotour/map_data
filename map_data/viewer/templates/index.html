@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Map Data Viewer</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; font-size: 14px; }
+    #app { display: flex; flex-direction: column; height: 100vh; }
+    #topbar { flex-shrink: 0; background: #1a1a2e; border-bottom: 1px solid #333; padding: 6px 12px; }
+    #main { display: flex; flex: 1; overflow: hidden; }
+    #sidebar {
+      width: 280px; min-width: 280px; overflow-y: auto;
+      background: #16213e; color: #cdd3de; border-right: 1px solid #333;
+      display: flex; flex-direction: column; gap: 0;
+    }
+    #map { flex: 1; }
+
+    .panel { padding: 12px 14px; border-bottom: 1px solid #2a2a4a; }
+    .panel-title {
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 1.5px;
+      text-transform: uppercase; color: #6c7a9c; margin-bottom: 8px;
+    }
+
+    .layer-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; }
+    .layer-row:hover { color: #fff; }
+    .layer-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+
+    #props-content { font-size: 0.8rem; }
+    #props-content table { width: 100%; border-collapse: collapse; }
+    #props-content td { padding: 2px 4px; vertical-align: top; }
+    #props-content td:first-child { color: #6c7a9c; white-space: nowrap; padding-right: 8px; }
+    #props-content tr:hover td { background: #1e2d50; }
+
+    .ann-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 4px 0; border-bottom: 1px solid #2a2a4a; font-size: 0.78rem;
+    }
+    .ann-item:last-child { border-bottom: none; }
+    .ann-id { color: #6c7a9c; font-size: 0.68rem; }
+
+    .mode-btn { font-size: 0.78rem; }
+    .mode-btn.active { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+
+    #status { font-size: 0.75rem; }
+
+    /* Override Leaflet draw toolbar z-index so it doesn't overlap sidebar */
+    .leaflet-draw { z-index: 500; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Top bar -->
+  <div id="topbar" class="d-flex align-items-center gap-2 flex-wrap">
+    <span class="fw-bold text-light me-2" style="font-size:0.9rem;">Map Data Viewer</span>
+
+    <select id="file-select" class="form-select form-select-sm bg-dark text-light border-secondary" style="width:200px;">
+      <option value="">Select .mapdata file…</option>
+    </select>
+    <button id="load-btn" class="btn btn-primary btn-sm">Load</button>
+
+    <div class="vr mx-1 bg-secondary" style="height:20px;"></div>
+
+    <div class="btn-group btn-group-sm">
+      <button class="btn btn-outline-light mode-btn active" data-mode="view" title="View and inspect features">
+        &#128065; View
+      </button>
+      <button class="btn btn-outline-warning mode-btn" data-mode="add" title="Draw a new obstacle polygon">
+        &#43; Obstacle
+      </button>
+      <button class="btn btn-outline-danger mode-btn" data-mode="delete" title="Click an annotation to delete it">
+        &#10005; Delete
+      </button>
+    </div>
+
+    <span id="status" class="text-secondary ms-auto"></span>
+  </div>
+
+  <div id="main">
+
+    <!-- Sidebar -->
+    <div id="sidebar">
+
+      <!-- Layers -->
+      <div class="panel">
+        <div class="panel-title">Layers</div>
+        <label class="layer-row">
+          <input type="checkbox" class="form-check-input m-0" data-layer="road" checked>
+          <span class="layer-swatch" style="background:#444;border:1px solid #888;"></span>
+          <span>Roads</span>
+        </label>
+        <label class="layer-row">
+          <input type="checkbox" class="form-check-input m-0" data-layer="footway" checked>
+          <span class="layer-swatch" style="background:#FFD700;opacity:0.85;"></span>
+          <span>Footways</span>
+        </label>
+        <label class="layer-row">
+          <input type="checkbox" class="form-check-input m-0" data-layer="barrier" checked>
+          <span class="layer-swatch" style="background:#BF0009;opacity:0.85;"></span>
+          <span>Barriers</span>
+        </label>
+        <label class="layer-row">
+          <input type="checkbox" class="form-check-input m-0" data-layer="waypoint" checked>
+          <span class="layer-swatch" style="background:#50C2F6;border-radius:50%;"></span>
+          <span>Waypoints</span>
+        </label>
+        <label class="layer-row">
+          <input type="checkbox" class="form-check-input m-0" data-layer="annotation" checked>
+          <span class="layer-swatch" style="background:#ff8c00;opacity:0.85;"></span>
+          <span>Annotations</span>
+        </label>
+      </div>
+
+      <!-- Feature properties -->
+      <div class="panel" style="flex:1;">
+        <div class="panel-title">Feature Properties</div>
+        <div id="props-content">
+          <span class="text-secondary" style="font-size:0.8rem;font-style:italic;">
+            Click a feature to inspect
+          </span>
+        </div>
+      </div>
+
+      <!-- Annotations -->
+      <div class="panel">
+        <div class="panel-title">
+          Annotations
+          <span id="ann-count" class="text-secondary fw-normal ms-1"></span>
+        </div>
+        <div id="ann-list">
+          <span class="text-secondary" style="font-size:0.78rem;font-style:italic;">None</span>
+        </div>
+      </div>
+
+    </div><!-- /sidebar -->
+
+    <div id="map"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ─── Map setup ───────────────────────────────────────────────────────────────
+const map = L.map('map', { preferCanvas: true }).setView([50.08, 14.42], 5);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  maxZoom: 19,
+}).addTo(map);
+
+// ─── State ───────────────────────────────────────────────────────────────────
+let currentFile = null;
+let currentMode = 'view';
+let annotations  = [];
+
+const geoLayers = { road: null, footway: null, barrier: null, waypoint: null, annotation: null };
+
+let drawLayer   = null;
+let drawControl = null;
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+const STYLES = {
+  road:       { color: '#555', weight: 0.8, fillColor: '#333', fillOpacity: 0.75 },
+  footway:    { color: '#b89900', weight: 0.5, fillColor: '#FFD700', fillOpacity: 0.45 },
+  barrier:    { color: '#8b0000', weight: 1,   fillColor: '#BF0009', fillOpacity: 0.45 },
+  annotation: { color: '#cc5500', weight: 2,   fillColor: '#ff8c00', fillOpacity: 0.45 },
+};
+
+// ─── Status helper ───────────────────────────────────────────────────────────
+function setStatus(msg, cls = 'text-secondary') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = cls + ' ms-auto';
+}
+
+// ─── File loading ─────────────────────────────────────────────────────────────
+async function loadFileList() {
+  const res = await fetch('/api/files');
+  const data = await res.json();
+  const sel = document.getElementById('file-select');
+  data.mapdata.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = f;
+    sel.appendChild(opt);
+  });
+}
+
+async function loadMapData(filename) {
+  setStatus('Loading…', 'text-warning');
+
+  // Clear previous layers
+  Object.values(geoLayers).forEach(l => l && map.removeLayer(l));
+  Object.keys(geoLayers).forEach(k => geoLayers[k] = null);
+
+  try {
+    const [geoRes, annRes] = await Promise.all([
+      fetch(`/api/mapdata?file=${encodeURIComponent(filename)}`),
+      fetch(`/api/annotations?file=${encodeURIComponent(filename)}`),
+    ]);
+    if (!geoRes.ok) throw new Error(await geoRes.text());
+
+    const geojson = await geoRes.json();
+    const annData = await annRes.json();
+
+    // Partition by category
+    const byCategory = { road: [], footway: [], barrier: [], waypoint: [] };
+    geojson.features.forEach(f => {
+      const cat = f.properties.category;
+      if (cat in byCategory) byCategory[cat].push(f);
+    });
+
+    // Polygon / LineString layers
+    ['road', 'footway', 'barrier'].forEach(cat => {
+      geoLayers[cat] = L.geoJSON(
+        { type: 'FeatureCollection', features: byCategory[cat] },
+        {
+          style: () => STYLES[cat],
+          onEachFeature: (feature, layer) => {
+            layer.on('click', e => {
+              L.DomEvent.stopPropagation(e);
+              if (currentMode === 'view') showProps(feature.properties);
+            });
+          },
+        }
+      );
+      if (layerCheckbox(cat).checked) geoLayers[cat].addTo(map);
+    });
+
+    // Waypoints as circle markers
+    geoLayers.waypoint = L.geoJSON(
+      { type: 'FeatureCollection', features: byCategory.waypoint },
+      {
+        pointToLayer: (_, latlng) =>
+          L.circleMarker(latlng, {
+            radius: 5, color: '#000', weight: 1, fillColor: '#50C2F6', fillOpacity: 0.9,
+          }),
+        onEachFeature: (feature, layer) => {
+          layer.on('click', e => {
+            L.DomEvent.stopPropagation(e);
+            if (currentMode === 'view') showProps(feature.properties);
+          });
+        },
+      }
+    );
+    if (layerCheckbox('waypoint').checked) geoLayers.waypoint.addTo(map);
+
+    // Fit bounds
+    const allFeatures = [...byCategory.road, ...byCategory.footway, ...byCategory.waypoint];
+    if (allFeatures.length > 0) {
+      map.fitBounds(
+        L.geoJSON({ type: 'FeatureCollection', features: allFeatures }).getBounds(),
+        { padding: [20, 20] }
+      );
+    }
+
+    annotations = annData.annotations || [];
+    renderAnnotationLayer();
+    renderAnnotationList();
+
+    currentFile = filename;
+    setStatus(`Loaded: ${filename}`, 'text-success');
+  } catch (err) {
+    setStatus(`Error: ${err.message}`, 'text-danger');
+    console.error(err);
+  }
+}
+
+// ─── Feature properties panel ────────────────────────────────────────────────
+function showProps(props) {
+  const tags = props.tags || {};
+  const meta = [
+    ['Category', `<span class="badge bg-secondary">${props.category}</span>`],
+    ['OSM ID',   props.id ?? '—'],
+    ['Role',     props.in_out || '—'],
+  ];
+
+  const rows = [
+    ...meta.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`),
+    Object.keys(tags).length
+      ? Object.entries(tags).map(([k, v]) =>
+          `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`
+        ).join('')
+      : '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No tags</td></tr>',
+  ].join('');
+
+  document.getElementById('props-content').innerHTML =
+    `<table><tbody>${rows}</tbody></table>`;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─── Annotations ─────────────────────────────────────────────────────────────
+function renderAnnotationLayer() {
+  if (geoLayers.annotation) {
+    map.removeLayer(geoLayers.annotation);
+    geoLayers.annotation = null;
+  }
+  if (!annotations.length) return;
+
+  geoLayers.annotation = L.geoJSON(
+    {
+      type: 'FeatureCollection',
+      features: annotations.map(a => ({
+        type: 'Feature',
+        id: a.id,
+        geometry: a.geometry,
+        properties: { ...a.properties, category: 'annotation', id: a.id, annType: a.type },
+      })),
+    },
+    {
+      style: () => STYLES.annotation,
+      onEachFeature: (feature, layer) => {
+        layer.on('click', e => {
+          L.DomEvent.stopPropagation(e);
+          if (currentMode === 'view') {
+            showProps({ category: 'annotation', id: feature.id, tags: feature.properties });
+          } else if (currentMode === 'delete') {
+            removeAnnotation(feature.id);
+          }
+        });
+      },
+    }
+  );
+  if (layerCheckbox('annotation').checked) geoLayers.annotation.addTo(map);
+}
+
+function renderAnnotationList() {
+  const el = document.getElementById('ann-list');
+  const count = document.getElementById('ann-count');
+  count.textContent = annotations.length ? `(${annotations.length})` : '';
+
+  if (!annotations.length) {
+    el.innerHTML = '<span class="text-secondary" style="font-size:0.78rem;font-style:italic;">None</span>';
+    return;
+  }
+  el.innerHTML = annotations.map(a => `
+    <div class="ann-item">
+      <div>
+        <span>${escHtml(a.type)}</span>
+        <br><span class="ann-id">${a.id.slice(0,8)}…</span>
+      </div>
+      <button class="btn btn-sm btn-outline-danger py-0 px-1"
+              style="font-size:0.7rem;"
+              onclick="removeAnnotation('${a.id}')">&#10005;</button>
+    </div>
+  `).join('');
+}
+
+async function removeAnnotation(id) {
+  if (!currentFile) return;
+  const res = await fetch(
+    `/api/annotations/${id}?file=${encodeURIComponent(currentFile)}`,
+    { method: 'DELETE' }
+  );
+  if (res.ok) {
+    annotations = annotations.filter(a => a.id !== id);
+    renderAnnotationLayer();
+    renderAnnotationList();
+  }
+}
+
+// ─── Drawing ─────────────────────────────────────────────────────────────────
+function initDrawLayer() {
+  if (drawLayer) map.removeLayer(drawLayer);
+  drawLayer = new L.FeatureGroup().addTo(map);
+
+  if (drawControl) map.removeControl(drawControl);
+  drawControl = new L.Control.Draw({
+    draw: {
+      polyline:    false,
+      rectangle:   { shapeOptions: STYLES.annotation },
+      polygon:     { allowIntersection: false, shapeOptions: STYLES.annotation },
+      circle:      { shapeOptions: STYLES.annotation },
+      circlemarker: false,
+      marker:      false,
+    },
+    edit: { featureGroup: drawLayer, edit: false, remove: false },
+  });
+}
+
+map.on(L.Draw.Event.CREATED, async e => {
+  if (currentMode !== 'add' || !currentFile) return;
+
+  const layer = e.layer;
+  let geom;
+  if (e.layerType === 'circle') {
+    geom = circleToPolygon(layer.getLatLng(), layer.getRadius(), 48);
+  } else {
+    geom = layer.toGeoJSON().geometry;
+  }
+
+  const res = await fetch(
+    `/api/annotations?file=${encodeURIComponent(currentFile)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'obstacle', geometry: geom, properties: {} }),
+    }
+  );
+  if (res.ok) {
+    const ann = await res.json();
+    annotations.push(ann);
+    renderAnnotationLayer();
+    renderAnnotationList();
+  }
+  drawLayer.clearLayers();
+});
+
+function circleToPolygon(center, radiusM, numPts) {
+  const R = 6371000;
+  const dLat = (radiusM / R) * (180 / Math.PI);
+  const dLon = dLat / Math.cos(center.lat * Math.PI / 180);
+  const coords = [];
+  for (let i = 0; i <= numPts; i++) {
+    const a = (i * 2 * Math.PI) / numPts;
+    coords.push([center.lng + dLon * Math.cos(a), center.lat + dLat * Math.sin(a)]);
+  }
+  return { type: 'Polygon', coordinates: [coords] };
+}
+
+// ─── Mode switching ───────────────────────────────────────────────────────────
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+
+  const cursor = { view: '', add: 'crosshair', delete: 'not-allowed' }[mode] ?? '';
+  map.getContainer().style.cursor = cursor;
+
+  if (mode === 'add') {
+    if (!drawControl) initDrawLayer();
+    drawControl.addTo(map);
+  } else if (drawControl) {
+    try { map.removeControl(drawControl); } catch (_) {}
+  }
+}
+
+// ─── Layer toggles ────────────────────────────────────────────────────────────
+function layerCheckbox(cat) {
+  return document.querySelector(`[data-layer="${cat}"]`);
+}
+
+document.querySelectorAll('[data-layer]').forEach(cb => {
+  cb.addEventListener('change', () => {
+    const layer = geoLayers[cb.dataset.layer];
+    if (!layer) return;
+    cb.checked ? layer.addTo(map) : map.removeLayer(layer);
+  });
+});
+
+// ─── Map click: deselect props ────────────────────────────────────────────────
+map.on('click', () => {
+  if (currentMode === 'view') {
+    document.getElementById('props-content').innerHTML =
+      '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+  }
+});
+
+// ─── Toolbar events ───────────────────────────────────────────────────────────
+document.getElementById('load-btn').addEventListener('click', () => {
+  const file = document.getElementById('file-select').value;
+  if (file) loadMapData(file);
+});
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => setMode(btn.dataset.mode));
+});
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+loadFileList();
+</script>
+</body>
+</html>
