@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import pickle
 import logging
@@ -20,15 +21,19 @@ def _get_data_dir():
         return app.config["DATA_DIR"]
     try:
         from ament_index_python.resources import get_resource
+
         _, pkg = get_resource("packages", "map_data")
         return os.path.join(pkg, "share", "map_data", "data")
     except Exception:
-        return os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", "data"))
+        return os.path.realpath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "data")
+        )
 
 
 # ------------------------------------------------------------------
 # GeoJSON conversion helpers
 # ------------------------------------------------------------------
+
 
 def _ring_to_latlon(coords, zone_number, zone_letter):
     result = []
@@ -42,17 +47,25 @@ def _geom_to_geojson(geom, zone_number, zone_letter):
     gtype = geom.geom_type
     if gtype == "Polygon":
         exterior = _ring_to_latlon(geom.exterior.coords, zone_number, zone_letter)
-        interiors = [_ring_to_latlon(r.coords, zone_number, zone_letter) for r in geom.interiors]
+        interiors = [
+            _ring_to_latlon(r.coords, zone_number, zone_letter) for r in geom.interiors
+        ]
         return {"type": "Polygon", "coordinates": [exterior] + interiors}
     if gtype == "MultiPolygon":
         polygons = []
         for poly in geom.geoms:
             exterior = _ring_to_latlon(poly.exterior.coords, zone_number, zone_letter)
-            interiors = [_ring_to_latlon(r.coords, zone_number, zone_letter) for r in poly.interiors]
+            interiors = [
+                _ring_to_latlon(r.coords, zone_number, zone_letter)
+                for r in poly.interiors
+            ]
             polygons.append([exterior] + interiors)
         return {"type": "MultiPolygon", "coordinates": polygons}
     if gtype == "LineString":
-        return {"type": "LineString", "coordinates": _ring_to_latlon(geom.coords, zone_number, zone_letter)}
+        return {
+            "type": "LineString",
+            "coordinates": _ring_to_latlon(geom.coords, zone_number, zone_letter),
+        }
     return None
 
 
@@ -68,17 +81,19 @@ def _mapdata_to_geojson(map_data):
                 continue
             if geom is None:
                 continue
-            features.append({
-                "type": "Feature",
-                "id": str(way.id),
-                "geometry": geom,
-                "properties": {
-                    "id": way.id,
-                    "category": category,
-                    "tags": way.tags or {},
-                    "in_out": way.in_out,
-                },
-            })
+            features.append(
+                {
+                    "type": "Feature",
+                    "id": str(way.id),
+                    "geometry": geom,
+                    "properties": {
+                        "id": way.id,
+                        "category": category,
+                        "tags": way.tags or {},
+                        "in_out": way.in_out,
+                    },
+                }
+            )
 
     add_ways(map_data.roads_list, "road")
     add_ways(map_data.footways_list, "footway")
@@ -86,12 +101,14 @@ def _mapdata_to_geojson(map_data):
 
     for i, (x, y) in enumerate(map_data.waypoints):
         lat, lon = utm.to_latlon(x, y, zn, zl)
-        features.append({
-            "type": "Feature",
-            "id": f"wp_{i}",
-            "geometry": {"type": "Point", "coordinates": [lon, lat]},
-            "properties": {"category": "waypoint", "index": i},
-        })
+        features.append(
+            {
+                "type": "Feature",
+                "id": f"wp_{i}",
+                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "properties": {"category": "waypoint", "index": i},
+            }
+        )
 
     return {"type": "FeatureCollection", "features": features}
 
@@ -99,6 +116,7 @@ def _mapdata_to_geojson(map_data):
 # ------------------------------------------------------------------
 # Annotation helpers
 # ------------------------------------------------------------------
+
 
 def _annotation_path(filename):
     base = filename.rsplit(".", 1)[0]
@@ -120,6 +138,7 @@ def _save_annotations(path, data):
 # ------------------------------------------------------------------
 # Routes
 # ------------------------------------------------------------------
+
 
 @app.route("/")
 def index():
@@ -182,6 +201,28 @@ def add_annotation():
     return jsonify(ann), 201
 
 
+@app.route("/api/annotations/<ann_id>", methods=["PUT"])
+def update_annotation(ann_id):
+    filename = request.args.get("file")
+    if not filename:
+        abort(400, "Missing 'file' query parameter")
+    body = request.get_json(force=True)
+    if not body or "geometry" not in body:
+        abort(400, "Request body must include 'geometry'")
+    ann_path = _annotation_path(filename)
+    store = _load_annotations(ann_path)
+    ann = next((a for a in store["annotations"] if a["id"] == ann_id), None)
+    if ann is None:
+        abort(404, "Annotation not found")
+    ann["geometry"] = body["geometry"]
+    if "type" in body:
+        ann["type"] = body["type"]
+    if "properties" in body:
+        ann["properties"] = body["properties"]
+    _save_annotations(ann_path, store)
+    return jsonify(ann)
+
+
 @app.route("/api/annotations/<ann_id>", methods=["DELETE"])
 def delete_annotation(ann_id):
     filename = request.args.get("file")
@@ -197,12 +238,57 @@ def delete_annotation(ann_id):
     return "", 204
 
 
+@app.route("/api/fetch_area", methods=["POST"])
+def fetch_area():
+    body = request.get_json(force=True) or {}
+    for field in ("min_lat", "min_lon", "max_lat", "max_lon", "name"):
+        if field not in body:
+            abort(400, f"Missing field: {field}")
+
+    name = re.sub(r"[^a-zA-Z0-9_\-]", "_", str(body["name"]).strip())
+    if not name:
+        abort(400, "name is empty after sanitizing")
+
+    data_dir = _get_data_dir()
+    os.makedirs(data_dir, exist_ok=True)
+    out_path = os.path.join(data_dir, f"{name}.mapdata")
+
+    corners = np.array([
+        [body["min_lat"], body["min_lon"]],
+        [body["min_lat"], body["max_lon"]],
+        [body["max_lat"], body["min_lon"]],
+        [body["max_lat"], body["max_lon"]],
+    ])
+    easting, northing, zone_number, zone_letter = utm.from_latlon(corners[:, 0], corners[:, 1])
+    waypoints = np.column_stack([easting, northing])
+
+    md = MapData([waypoints, zone_number, zone_letter], coords_type="array")
+    md.run_queries()
+    if any(d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)):
+        abort(503, "Overpass API unavailable — try again later")
+
+    if md.run_parse() != 0:
+        abort(500, "Parsing failed")
+
+    with open(out_path, "wb") as fh:
+        pickle.dump(md, fh, protocol=2)
+
+    return jsonify({
+        "filename": f"{name}.mapdata",
+        "roads": len(md.roads_list),
+        "footways": len(md.footways_list),
+        "barriers": len(md.barriers_list),
+    })
+
+
 # ------------------------------------------------------------------
 # Entry point
 # ------------------------------------------------------------------
 
+
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="Interactive map data viewer")
     parser.add_argument("--data-dir", help="Directory containing .mapdata files")
     parser.add_argument("--host", default="127.0.0.1")

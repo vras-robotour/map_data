@@ -46,8 +46,6 @@
     .mode-btn.active { background: #0d6efd; border-color: #0d6efd; color: #fff; }
 
     #status { font-size: 0.75rem; }
-
-    /* Override Leaflet draw toolbar z-index so it doesn't overlap sidebar */
     .leaflet-draw { z-index: 500; }
   </style>
 </head>
@@ -69,11 +67,17 @@
       <button class="btn btn-outline-light mode-btn active" data-mode="view" title="View and inspect features">
         &#128065; View
       </button>
+      <button class="btn btn-outline-info mode-btn" data-mode="edit" title="Move and reshape annotations">
+        &#9998; Edit
+      </button>
       <button class="btn btn-outline-warning mode-btn" data-mode="add" title="Draw a new obstacle polygon">
         &#43; Obstacle
       </button>
-      <button class="btn btn-outline-danger mode-btn" data-mode="delete" title="Click an annotation to delete it">
+      <button class="btn btn-outline-danger mode-btn" data-mode="delete" title="Select annotations to delete">
         &#10005; Delete
+      </button>
+      <button class="btn btn-outline-success mode-btn" data-mode="fetch" title="Select area to fetch and parse OSM data">
+        &#8659; Fetch Area
       </button>
     </div>
 
@@ -85,7 +89,6 @@
     <!-- Sidebar -->
     <div id="sidebar">
 
-      <!-- Layers -->
       <div class="panel">
         <div class="panel-title">Layers</div>
         <label class="layer-row">
@@ -115,17 +118,13 @@
         </label>
       </div>
 
-      <!-- Feature properties -->
       <div class="panel" style="flex:1;">
         <div class="panel-title">Feature Properties</div>
         <div id="props-content">
-          <span class="text-secondary" style="font-size:0.8rem;font-style:italic;">
-            Click a feature to inspect
-          </span>
+          <span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>
         </div>
       </div>
 
-      <!-- Annotations -->
       <div class="panel">
         <div class="panel-title">
           Annotations
@@ -136,9 +135,33 @@
         </div>
       </div>
 
-    </div><!-- /sidebar -->
+    </div>
 
     <div id="map"></div>
+  </div>
+</div>
+
+<!-- Fetch area name modal -->
+<div class="modal fade" id="fetch-area-modal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border-secondary">
+      <div class="modal-header border-secondary py-2">
+        <h6 class="modal-title">Name this area</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body py-2">
+        <input id="area-name-input" type="text"
+               class="form-control form-control-sm bg-dark text-light border-secondary"
+               placeholder="e.g. stromovka_north" autocomplete="off">
+        <div class="form-text text-secondary" style="font-size:0.72rem;">
+          Saved as &lt;name&gt;.mapdata in the data directory.
+        </div>
+      </div>
+      <div class="modal-footer border-secondary py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" id="fetch-area-submit" class="btn btn-success btn-sm">Fetch &amp; Parse</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -146,7 +169,7 @@
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-// ─── Map setup ───────────────────────────────────────────────────────────────
+// ── Map setup ────────────────────────────────────────────────────────────────
 const map = L.map('map', { preferCanvas: true }).setView([50.08, 14.42], 5);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -154,17 +177,45 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
 }).addTo(map);
 
-// ─── State ───────────────────────────────────────────────────────────────────
+// ── State ────────────────────────────────────────────────────────────────────
 let currentFile = null;
 let currentMode = 'view';
-let annotations  = [];
+let annotations = [];
+let pendingBbox  = null;
 
-const geoLayers = { road: null, footway: null, barrier: null, waypoint: null, annotation: null };
+// ── Layers ───────────────────────────────────────────────────────────────────
+const geoLayers = { road: null, footway: null, barrier: null, waypoint: null };
 
-let drawLayer   = null;
-let drawControl = null;
+// drawnItems holds all annotation polygons so Leaflet.draw can edit/delete them
+const drawnItems = new L.FeatureGroup().addTo(map);
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
+// ── Draw controls / handlers ─────────────────────────────────────────────────
+let drawControl    = null;
+let editHandler    = null;
+let deleteHandler  = null;
+let fetchRectDraw  = null;
+
+function initHandlers() {
+  editHandler   = new L.EditToolbar.Edit(map,   { featureGroup: drawnItems });
+  deleteHandler = new L.EditToolbar.Delete(map, { featureGroup: drawnItems });
+}
+
+function initDrawControl() {
+  if (drawControl) return;
+  drawControl = new L.Control.Draw({
+    draw: {
+      polyline:     false,
+      rectangle:    { shapeOptions: STYLES.annotation },
+      polygon:      { allowIntersection: false, shapeOptions: STYLES.annotation },
+      circle:       { shapeOptions: STYLES.annotation },
+      circlemarker: false,
+      marker:       false,
+    },
+    edit: { featureGroup: drawnItems, edit: false, remove: false },
+  });
+}
+
+// ── Styles ───────────────────────────────────────────────────────────────────
 const STYLES = {
   road:       { color: '#555', weight: 0.8, fillColor: '#333', fillOpacity: 0.75 },
   footway:    { color: '#b89900', weight: 0.5, fillColor: '#FFD700', fillOpacity: 0.45 },
@@ -172,31 +223,31 @@ const STYLES = {
   annotation: { color: '#cc5500', weight: 2,   fillColor: '#ff8c00', fillOpacity: 0.45 },
 };
 
-// ─── Status helper ───────────────────────────────────────────────────────────
+// ── Status ───────────────────────────────────────────────────────────────────
 function setStatus(msg, cls = 'text-secondary') {
   const el = document.getElementById('status');
   el.textContent = msg;
   el.className = cls + ' ms-auto';
 }
 
-// ─── File loading ─────────────────────────────────────────────────────────────
+// ── File loading ─────────────────────────────────────────────────────────────
 async function loadFileList() {
   const res = await fetch('/api/files');
   const data = await res.json();
   const sel = document.getElementById('file-select');
   data.mapdata.forEach(f => {
-    const opt = document.createElement('option');
-    opt.value = opt.textContent = f;
-    sel.appendChild(opt);
+    if (![...sel.options].some(o => o.value === f)) {
+      sel.appendChild(new Option(f, f));
+    }
   });
 }
 
 async function loadMapData(filename) {
   setStatus('Loading…', 'text-warning');
 
-  // Clear previous layers
   Object.values(geoLayers).forEach(l => l && map.removeLayer(l));
   Object.keys(geoLayers).forEach(k => geoLayers[k] = null);
+  drawnItems.clearLayers();
 
   try {
     const [geoRes, annRes] = await Promise.all([
@@ -206,16 +257,14 @@ async function loadMapData(filename) {
     if (!geoRes.ok) throw new Error(await geoRes.text());
 
     const geojson = await geoRes.json();
-    const annData = await annRes.json();
+    const annData = annRes.ok ? await annRes.json() : { annotations: [] };
 
-    // Partition by category
     const byCategory = { road: [], footway: [], barrier: [], waypoint: [] };
     geojson.features.forEach(f => {
       const cat = f.properties.category;
       if (cat in byCategory) byCategory[cat].push(f);
     });
 
-    // Polygon / LineString layers
     ['road', 'footway', 'barrier'].forEach(cat => {
       geoLayers[cat] = L.geoJSON(
         { type: 'FeatureCollection', features: byCategory[cat] },
@@ -232,7 +281,6 @@ async function loadMapData(filename) {
       if (layerCheckbox(cat).checked) geoLayers[cat].addTo(map);
     });
 
-    // Waypoints as circle markers
     geoLayers.waypoint = L.geoJSON(
       { type: 'FeatureCollection', features: byCategory.waypoint },
       {
@@ -250,7 +298,6 @@ async function loadMapData(filename) {
     );
     if (layerCheckbox('waypoint').checked) geoLayers.waypoint.addTo(map);
 
-    // Fit bounds
     const allFeatures = [...byCategory.road, ...byCategory.footway, ...byCategory.waypoint];
     if (allFeatures.length > 0) {
       map.fitBounds(
@@ -271,7 +318,7 @@ async function loadMapData(filename) {
   }
 }
 
-// ─── Feature properties panel ────────────────────────────────────────────────
+// ── Feature properties panel ─────────────────────────────────────────────────
 function showProps(props) {
   const tags = props.tags || {};
   const meta = [
@@ -279,7 +326,6 @@ function showProps(props) {
     ['OSM ID',   props.id ?? '—'],
     ['Role',     props.in_out || '—'],
   ];
-
   const rows = [
     ...meta.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`),
     Object.keys(tags).length
@@ -288,7 +334,6 @@ function showProps(props) {
         ).join('')
       : '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No tags</td></tr>',
   ].join('');
-
   document.getElementById('props-content').innerHTML =
     `<table><tbody>${rows}</tbody></table>`;
 }
@@ -297,46 +342,31 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// ─── Annotations ─────────────────────────────────────────────────────────────
-function renderAnnotationLayer() {
-  if (geoLayers.annotation) {
-    map.removeLayer(geoLayers.annotation);
-    geoLayers.annotation = null;
-  }
-  if (!annotations.length) return;
+// ── Annotation layer helpers ──────────────────────────────────────────────────
+function addAnnotationToLayer(ann) {
+  L.geoJSON(ann.geometry, { style: STYLES.annotation }).eachLayer(layer => {
+    layer.options._ann_id = ann.id;
+    layer.on('click', e => {
+      L.DomEvent.stopPropagation(e);
+      if (currentMode === 'view') {
+        showProps({ category: 'annotation', id: ann.id, tags: ann.properties || {} });
+      }
+    });
+    drawnItems.addLayer(layer);
+  });
+}
 
-  geoLayers.annotation = L.geoJSON(
-    {
-      type: 'FeatureCollection',
-      features: annotations.map(a => ({
-        type: 'Feature',
-        id: a.id,
-        geometry: a.geometry,
-        properties: { ...a.properties, category: 'annotation', id: a.id, annType: a.type },
-      })),
-    },
-    {
-      style: () => STYLES.annotation,
-      onEachFeature: (feature, layer) => {
-        layer.on('click', e => {
-          L.DomEvent.stopPropagation(e);
-          if (currentMode === 'view') {
-            showProps({ category: 'annotation', id: feature.id, tags: feature.properties });
-          } else if (currentMode === 'delete') {
-            removeAnnotation(feature.id);
-          }
-        });
-      },
-    }
-  );
-  if (layerCheckbox('annotation').checked) geoLayers.annotation.addTo(map);
+function renderAnnotationLayer() {
+  drawnItems.clearLayers();
+  annotations.forEach(addAnnotationToLayer);
+  if (!layerCheckbox('annotation').checked) map.removeLayer(drawnItems);
+  else if (!map.hasLayer(drawnItems)) drawnItems.addTo(map);
 }
 
 function renderAnnotationList() {
-  const el = document.getElementById('ann-list');
+  const el    = document.getElementById('ann-list');
   const count = document.getElementById('ann-count');
   count.textContent = annotations.length ? `(${annotations.length})` : '';
-
   if (!annotations.length) {
     el.innerHTML = '<span class="text-secondary" style="font-size:0.78rem;font-style:italic;">None</span>';
     return;
@@ -349,12 +379,12 @@ function renderAnnotationList() {
       </div>
       <button class="btn btn-sm btn-outline-danger py-0 px-1"
               style="font-size:0.7rem;"
-              onclick="removeAnnotation('${a.id}')">&#10005;</button>
+              onclick="removeAnnotationById('${a.id}')">&#10005;</button>
     </div>
   `).join('');
 }
 
-async function removeAnnotation(id) {
+async function removeAnnotationById(id) {
   if (!currentFile) return;
   const res = await fetch(
     `/api/annotations/${id}?file=${encodeURIComponent(currentFile)}`,
@@ -367,34 +397,28 @@ async function removeAnnotation(id) {
   }
 }
 
-// ─── Drawing ─────────────────────────────────────────────────────────────────
-function initDrawLayer() {
-  if (drawLayer) map.removeLayer(drawLayer);
-  drawLayer = new L.FeatureGroup().addTo(map);
-
-  if (drawControl) map.removeControl(drawControl);
-  drawControl = new L.Control.Draw({
-    draw: {
-      polyline:    false,
-      rectangle:   { shapeOptions: STYLES.annotation },
-      polygon:     { allowIntersection: false, shapeOptions: STYLES.annotation },
-      circle:      { shapeOptions: STYLES.annotation },
-      circlemarker: false,
-      marker:      false,
-    },
-    edit: { featureGroup: drawLayer, edit: false, remove: false },
-  });
-}
-
+// ── Draw events ───────────────────────────────────────────────────────────────
 map.on(L.Draw.Event.CREATED, async e => {
+  // Fetch-area rectangle
+  if (currentMode === 'fetch') {
+    const bounds = e.layer.getBounds();
+    pendingBbox = {
+      min_lat: bounds.getSouth(), max_lat: bounds.getNorth(),
+      min_lon: bounds.getWest(),  max_lon: bounds.getEast(),
+    };
+    document.getElementById('area-name-input').value = '';
+    new bootstrap.Modal(document.getElementById('fetch-area-modal')).show();
+    setMode('view', false);
+    return;
+  }
+
   if (currentMode !== 'add' || !currentFile) return;
 
-  const layer = e.layer;
   let geom;
   if (e.layerType === 'circle') {
-    geom = circleToPolygon(layer.getLatLng(), layer.getRadius(), 48);
+    geom = circleToPolygon(e.layer.getLatLng(), e.layer.getRadius(), 48);
   } else {
-    geom = layer.toGeoJSON().geometry;
+    geom = e.layer.toGeoJSON().geometry;
   }
 
   const res = await fetch(
@@ -408,12 +432,187 @@ map.on(L.Draw.Event.CREATED, async e => {
   if (res.ok) {
     const ann = await res.json();
     annotations.push(ann);
-    renderAnnotationLayer();
+    addAnnotationToLayer(ann);
     renderAnnotationList();
+    setStatus('Annotation added', 'text-success');
   }
-  drawLayer.clearLayers();
 });
 
+map.on(L.Draw.Event.EDITED, e => {
+  const updates = [];
+  e.layers.eachLayer(layer => {
+    const annId = layer.options._ann_id;
+    if (!annId || !currentFile) return;
+    const geom = layer.toGeoJSON().geometry;
+    updates.push(
+      fetch(`/api/annotations/${annId}?file=${encodeURIComponent(currentFile)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ geometry: geom }),
+      }).then(() => {
+        const ann = annotations.find(a => a.id === annId);
+        if (ann) ann.geometry = geom;
+      })
+    );
+  });
+  Promise.all(updates).then(() => setStatus('Annotations saved', 'text-success'));
+});
+
+map.on(L.Draw.Event.DELETED, e => {
+  const toDelete = [];
+  e.layers.eachLayer(layer => {
+    const annId = layer.options._ann_id;
+    if (annId) toDelete.push(annId);
+  });
+  Promise.all(
+    toDelete.map(id =>
+      fetch(`/api/annotations/${id}?file=${encodeURIComponent(currentFile)}`, { method: 'DELETE' })
+    )
+  ).then(() => {
+    annotations = annotations.filter(a => !toDelete.includes(a.id));
+    renderAnnotationList();
+    setStatus(`Deleted ${toDelete.length} annotation(s)`, 'text-success');
+  });
+});
+
+// Switch back to view if user cancels edit/delete via Escape
+map.on(L.Draw.Event.EDITSTOP,   () => { if (currentMode === 'edit')   _exitMode(); });
+map.on(L.Draw.Event.DELETESTOP, () => { if (currentMode === 'delete') _exitMode(); });
+
+function _exitMode() {
+  currentMode = 'view';
+  document.querySelectorAll('.mode-btn').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.mode === 'view')
+  );
+  map.getContainer().style.cursor = '';
+}
+
+// ── Mode switching ────────────────────────────────────────────────────────────
+function setMode(newMode, commit = true) {
+  const prev = currentMode;
+  currentMode = newMode;
+
+  // Commit / disable previous mode
+  if (commit) {
+    if (prev === 'edit' && editHandler) {
+      try { editHandler.save(); editHandler.disable(); } catch (_) {}
+    }
+    if (prev === 'delete' && deleteHandler) {
+      try { deleteHandler.save(); deleteHandler.disable(); } catch (_) {}
+    }
+  }
+  if (prev === 'add' && drawControl) {
+    try { map.removeControl(drawControl); } catch (_) {}
+  }
+  if (prev === 'fetch' && fetchRectDraw) {
+    try { fetchRectDraw.disable(); } catch (_) {}
+  }
+
+  // Update button highlight
+  document.querySelectorAll('.mode-btn').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.mode === newMode)
+  );
+
+  // Cursor feedback
+  const cursors = { view: '', edit: 'move', add: 'crosshair', delete: 'pointer', fetch: 'crosshair' };
+  map.getContainer().style.cursor = cursors[newMode] ?? '';
+
+  // Activate new mode
+  if (newMode === 'add') {
+    initDrawControl();
+    drawControl.addTo(map);
+  } else if (newMode === 'edit') {
+    if (!editHandler) initHandlers();
+    editHandler.enable();
+  } else if (newMode === 'delete') {
+    if (!deleteHandler) initHandlers();
+    deleteHandler.enable();
+  } else if (newMode === 'fetch') {
+    if (!fetchRectDraw) {
+      fetchRectDraw = new L.Draw.Rectangle(map, {
+        shapeOptions: { color: '#00aaff', fillColor: '#00aaff', fillOpacity: 0.1 },
+      });
+    }
+    fetchRectDraw.enable();
+    setStatus('Draw a bounding box on the map to fetch OSM data…', 'text-info');
+  }
+}
+
+// ── Fetch area submit ─────────────────────────────────────────────────────────
+document.getElementById('fetch-area-submit').addEventListener('click', async () => {
+  const name = document.getElementById('area-name-input').value.trim();
+  if (!name) {
+    document.getElementById('area-name-input').focus();
+    return;
+  }
+  bootstrap.Modal.getInstance(document.getElementById('fetch-area-modal')).hide();
+  setStatus('Fetching & parsing OSM data… (may take 1–2 min)', 'text-warning');
+
+  try {
+    const res = await fetch('/api/fetch_area', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...pendingBbox, name }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    setStatus(
+      `Fetched: ${data.roads} roads, ${data.footways} footways, ${data.barriers} barriers`,
+      'text-success'
+    );
+    // Add to dropdown and auto-load
+    const sel = document.getElementById('file-select');
+    if (![...sel.options].some(o => o.value === data.filename)) {
+      sel.appendChild(new Option(data.filename, data.filename));
+    }
+    sel.value = data.filename;
+    await loadMapData(data.filename);
+  } catch (err) {
+    setStatus(`Fetch failed: ${err.message}`, 'text-danger');
+  }
+});
+
+// Press Enter in name field submits
+document.getElementById('area-name-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('fetch-area-submit').click();
+});
+
+// ── Layer toggles ─────────────────────────────────────────────────────────────
+function layerCheckbox(cat) {
+  return document.querySelector(`[data-layer="${cat}"]`);
+}
+
+document.querySelectorAll('[data-layer]').forEach(cb => {
+  cb.addEventListener('change', () => {
+    if (cb.dataset.layer === 'annotation') {
+      cb.checked ? drawnItems.addTo(map) : map.removeLayer(drawnItems);
+      return;
+    }
+    const layer = geoLayers[cb.dataset.layer];
+    if (!layer) return;
+    cb.checked ? layer.addTo(map) : map.removeLayer(layer);
+  });
+});
+
+// ── Map click: clear props ────────────────────────────────────────────────────
+map.on('click', () => {
+  if (currentMode === 'view') {
+    document.getElementById('props-content').innerHTML =
+      '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+  }
+});
+
+// ── Toolbar button events ─────────────────────────────────────────────────────
+document.getElementById('load-btn').addEventListener('click', () => {
+  const file = document.getElementById('file-select').value;
+  if (file) loadMapData(file);
+});
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => setMode(btn.dataset.mode));
+});
+
+// ── Geometry helpers ──────────────────────────────────────────────────────────
 function circleToPolygon(center, radiusM, numPts) {
   const R = 6371000;
   const dLat = (radiusM / R) * (180 / Math.PI);
@@ -426,56 +625,8 @@ function circleToPolygon(center, radiusM, numPts) {
   return { type: 'Polygon', coordinates: [coords] };
 }
 
-// ─── Mode switching ───────────────────────────────────────────────────────────
-function setMode(mode) {
-  currentMode = mode;
-  document.querySelectorAll('.mode-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.mode === mode);
-  });
-
-  const cursor = { view: '', add: 'crosshair', delete: 'not-allowed' }[mode] ?? '';
-  map.getContainer().style.cursor = cursor;
-
-  if (mode === 'add') {
-    if (!drawControl) initDrawLayer();
-    drawControl.addTo(map);
-  } else if (drawControl) {
-    try { map.removeControl(drawControl); } catch (_) {}
-  }
-}
-
-// ─── Layer toggles ────────────────────────────────────────────────────────────
-function layerCheckbox(cat) {
-  return document.querySelector(`[data-layer="${cat}"]`);
-}
-
-document.querySelectorAll('[data-layer]').forEach(cb => {
-  cb.addEventListener('change', () => {
-    const layer = geoLayers[cb.dataset.layer];
-    if (!layer) return;
-    cb.checked ? layer.addTo(map) : map.removeLayer(layer);
-  });
-});
-
-// ─── Map click: deselect props ────────────────────────────────────────────────
-map.on('click', () => {
-  if (currentMode === 'view') {
-    document.getElementById('props-content').innerHTML =
-      '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
-  }
-});
-
-// ─── Toolbar events ───────────────────────────────────────────────────────────
-document.getElementById('load-btn').addEventListener('click', () => {
-  const file = document.getElementById('file-select').value;
-  if (file) loadMapData(file);
-});
-
-document.querySelectorAll('.mode-btn').forEach(btn => {
-  btn.addEventListener('click', () => setMode(btn.dataset.mode));
-});
-
-// ─── Init ────────────────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────────────────
+initHandlers();
 loadFileList();
 </script>
 </body>
