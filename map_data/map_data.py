@@ -1,10 +1,15 @@
 import os
+import re
+import json
 import logging
 import time
 import pickle
+import urllib.error
+import urllib.parse
+import urllib.request
 
-import utm
 import overpy
+import utm
 import numpy as np
 from tqdm import tqdm
 import shapely.geometry as geometry
@@ -20,6 +25,35 @@ OBSTACLE_RADIUS = 2        # meters, radius of the circle around isolated obstac
 OSM_RECTANGLE_MARGIN = 100 # meters, expansion margin for OSM bounding box query
 RESERVE = 50               # meters, safety margin added to waypoint bounds
 
+# Tried in order on failure; overpass-api.de is checked via /api/status before
+# each attempt so we sleep until a free slot is available.
+OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+    "https://overpass.openstreetmap.ru/api/interpreter",
+]
+
+
+def _fetch_overpass(url: str, query: str, timeout: int = 180) -> dict:
+    """POST a query to the Overpass API and return the parsed JSON dict.
+
+    Sends the query as a form-encoded 'data' parameter (correct Overpass format).
+    The result is passed to overpy for parsing into native result objects.
+    """
+    body = urllib.parse.urlencode({"data": query}).encode()
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "map_data/1.0 (https://github.com/map_data)",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode())
+
+
+# ------------------------------------------------------------------
 
 class CoordsData:
     def __init__(self, min_long, max_long, min_lat, max_lat):
@@ -39,7 +73,7 @@ class CoordsData:
 
 class MapData:
     def __init__(self, coords, coords_type="file", current_robot_position=None, flip=False):
-        self.api = overpy.Overpass(url="https://overpass-api.de/api/interpreter")
+        self._endpoint_index = 0
 
         self.coords_type = coords_type
         if coords_type == "file":
@@ -142,17 +176,17 @@ class MapData:
     # ------------------------------------------------------------------
 
     def get_way_query(self):
-        return "(way({}, {}, {}, {}); >; ); out;".format(
+        return "[out:json]; (way({}, {}, {}, {}); >; ); out;".format(
             self.min_lat, self.min_long, self.max_lat, self.max_long
         )
 
     def get_rel_query(self):
-        return "(way({}, {}, {}, {}); <; ); out;".format(
+        return "[out:json]; (way({}, {}, {}, {}); <; ); out;".format(
             self.min_lat, self.min_long, self.max_lat, self.max_long
         )
 
     def get_node_query(self):
-        return "(node({}, {}, {}, {}); ); out;".format(
+        return "[out:json]; (node({}, {}, {}, {}); ); out;".format(
             self.min_lat, self.min_long, self.max_lat, self.max_long
         )
 
@@ -168,31 +202,50 @@ class MapData:
         logger.info("All OSM queries finished.")
 
     def _run_query(self, name, query_str, retries=3, wait=5):
+        _api = overpy.Overpass()
         for attempt in range(1, retries + 1):
-            logger.info(f"OSM query '{name}' (attempt {attempt}/{retries})")
+            endpoint = OVERPASS_ENDPOINTS[self._endpoint_index % len(OVERPASS_ENDPOINTS)]
+            self._wait_for_slot(endpoint)
+            logger.info(f"OSM query '{name}' via {endpoint} (attempt {attempt}/{retries})")
             try:
-                result = self.api.query(query_str)
-                return self._make_picklable(result)
+                data = _fetch_overpass(endpoint, query_str)
+                return _api.parse_json(json.dumps(data))
+            except urllib.error.HTTPError as e:
+                if e.code in (406, 429):
+                    logger.warning(
+                        f"Overpass rate limited (HTTP {e.code}) on {endpoint}, "
+                        f"waiting 60s then trying next endpoint..."
+                    )
+                    time.sleep(60)
+                else:
+                    logger.warning(f"Query '{name}' HTTP {e.code} on {endpoint}: {e}")
+                self._endpoint_index += 1
             except Exception as e:
-                logger.warning(f"Query '{name}' failed: {e}")
+                logger.warning(f"Query '{name}' failed on {endpoint}: {e}")
+                self._endpoint_index += 1
                 if attempt < retries:
-                    logger.info(f"Retrying in {wait}s...")
                     time.sleep(wait)
         logger.error(f"OSM query '{name}' failed after {retries} attempts.")
         return None
 
     @staticmethod
-    def _make_picklable(data):
-        def strip(obj):
-            if hasattr(obj, "_attribute_modifiers"):
-                obj._attribute_modifiers = None
-            return obj
-
-        strip(data)
-        for collection in (data.nodes, data.ways, data.areas, data.relations):
-            for i in range(len(collection)):
-                collection[i] = strip(collection[i])
-        return data
+    def _wait_for_slot(endpoint, max_wait=300):
+        """For overpass-api.de: parse /api/status and sleep until a slot is free."""
+        if "overpass-api.de" not in endpoint:
+            return
+        status_url = endpoint.replace("/api/interpreter", "/api/status")
+        try:
+            with urllib.request.urlopen(status_url, timeout=10) as resp:
+                text = resp.read().decode()
+            m_slots = re.search(r"(\d+) slots available now", text)
+            if m_slots and int(m_slots.group(1)) > 0:
+                return
+            m_wait = re.search(r"in (\d+) seconds", text)
+            wait_secs = min(int(m_wait.group(1)) + 2 if m_wait else 60, max_wait)
+            logger.info(f"Overpass rate limit active — waiting {wait_secs}s for a free slot...")
+            time.sleep(wait_secs)
+        except Exception as e:
+            logger.debug(f"Could not read Overpass status: {e}")
 
     # ------------------------------------------------------------------
     # Parsing
@@ -269,7 +322,6 @@ class MapData:
             j = 0
             while j < len(ways):
                 if i != j and not ways[i].is_area and not ways[j].is_area:
-                    # Orient ways so that tail of i meets head of j.
                     if ways[i].nodes[0].id == ways[j].nodes[0].id:
                         ways[i].nodes.reverse()
                     elif ways[i].nodes[-1].id == ways[j].nodes[-1].id:
@@ -361,6 +413,15 @@ class MapData:
             return
         if save:
             self.save_to_pickle()
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # Raw overpy Result objects are not reliably picklable; clear them.
+        # All useful data has already been extracted into roads/footways/barriers.
+        state["osm_ways_data"] = None
+        state["osm_rels_data"] = None
+        state["osm_nodes_data"] = None
+        return state
 
     def save_to_pickle(self, filename=None):
         fn = getattr(self, "coords_file", None) if self.coords_type == "file" else filename

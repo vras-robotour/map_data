@@ -15,7 +15,7 @@ setup(
         (os.path.join("share", package_name, "data"), glob("data/*.gpx")),
         (os.path.join("share", package_name, "parameters"), glob("parameters/*.csv")),
     ],
-    install_requires=["setuptools", "flask"],
+    install_requires=["setuptools", "flask", "gpxpy", "numpy", "overpy", "shapely", "utm", "tqdm"],
     package_data={"map_data": ["viewer/templates/*.html"]},
     zip_safe=False,
     maintainer="vlkjan6",
