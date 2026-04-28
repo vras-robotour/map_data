@@ -14,6 +14,7 @@
     #main { display: flex; flex: 1; overflow: hidden; }
     #sidebar {
       width: 280px; min-width: 280px; overflow-y: auto;
+      scrollbar-gutter: stable;
       background: #16213e; color: #cdd3de; border-right: 1px solid #333;
       display: flex; flex-direction: column; gap: 0;
     }
@@ -47,6 +48,33 @@
 
     #status { font-size: 0.75rem; }
     .leaflet-draw { z-index: 500; }
+
+    .subtype-btn { background: none; border: none; color: #6c7a9c; font-size: 0.7rem;
+                   padding: 0 2px; cursor: pointer; line-height: 1; margin-left: auto; }
+    .subtype-btn:hover { color: #cdd3de; }
+    .subtype-panel { display: none; padding: 1px 4px 4px 22px; }
+    .subtype-row { display: flex; align-items: center; gap: 6px; padding: 2px 0;
+                   font-size: 0.78rem; cursor: pointer; min-height: 20px; }
+    .subtype-row:hover { color: #fff; }
+    .st-check {
+      appearance: none; -webkit-appearance: none;
+      width: 14px; height: 14px; flex-shrink: 0;
+      border: 1.5px solid #6c7a9c; border-radius: 2px;
+      background: transparent; cursor: pointer;
+      position: relative; display: inline-block; vertical-align: middle;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .st-check:checked {
+      background: #0d6efd; border-color: #0d6efd;
+    }
+    .st-check:checked::after {
+      content: '';
+      position: absolute; left: 3px; top: 0px;
+      width: 5px; height: 9px;
+      border: 2px solid #fff; border-top: none; border-left: none;
+      transform: rotate(45deg);
+    }
+    .subtype-cnt { color: #6c7a9c; font-size: 0.68rem; margin-left: auto; }
   </style>
 </head>
 <body>
@@ -65,19 +93,19 @@
 
     <div class="btn-group btn-group-sm">
       <button class="btn btn-outline-light mode-btn active" data-mode="view" title="View and inspect features">
-        &#128065; View
+        &#128065; View [V]
       </button>
       <button class="btn btn-outline-info mode-btn" data-mode="edit" title="Move and reshape annotations">
-        &#9998; Edit
+        &#9998; Edit [E]
       </button>
       <button class="btn btn-outline-warning mode-btn" data-mode="add" title="Draw a new obstacle polygon">
-        &#43; Obstacle
+        &#43; Obstacle [A]
       </button>
       <button class="btn btn-outline-danger mode-btn" data-mode="delete" title="Select annotations to delete">
-        &#10005; Delete
+        &#10005; Delete [D]
       </button>
       <button class="btn btn-outline-success mode-btn" data-mode="fetch" title="Select area to fetch and parse OSM data">
-        &#8659; Fetch Area
+        &#8659; Fetch Area [F]
       </button>
     </div>
 
@@ -91,21 +119,39 @@
 
       <div class="panel">
         <div class="panel-title">Layers</div>
-        <label class="layer-row">
-          <input type="checkbox" class="form-check-input m-0" data-layer="road" checked>
-          <span class="layer-swatch" style="background:#444;border:1px solid #888;"></span>
-          <span>Roads</span>
-        </label>
-        <label class="layer-row">
-          <input type="checkbox" class="form-check-input m-0" data-layer="footway" checked>
-          <span class="layer-swatch" style="background:#FFD700;opacity:0.85;"></span>
-          <span>Footways</span>
-        </label>
-        <label class="layer-row">
-          <input type="checkbox" class="form-check-input m-0" data-layer="barrier" checked>
-          <span class="layer-swatch" style="background:#BF0009;opacity:0.85;"></span>
-          <span>Barriers</span>
-        </label>
+        <div>
+          <div style="display:flex;align-items:center;">
+            <label class="layer-row" style="flex:1;margin:0;">
+              <input type="checkbox" class="form-check-input m-0" data-layer="road" checked>
+              <span class="layer-swatch" style="background:#444;border:1px solid #888;"></span>
+              <span>Roads</span>
+            </label>
+            <button class="subtype-btn" data-subtype-toggle="road" title="Filter subtypes">&#9660;</button>
+          </div>
+          <div class="subtype-panel" id="subfilter-road"></div>
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;">
+            <label class="layer-row" style="flex:1;margin:0;">
+              <input type="checkbox" class="form-check-input m-0" data-layer="footway" checked>
+              <span class="layer-swatch" style="background:#FFD700;opacity:0.85;"></span>
+              <span>Footways</span>
+            </label>
+            <button class="subtype-btn" data-subtype-toggle="footway" title="Filter subtypes">&#9660;</button>
+          </div>
+          <div class="subtype-panel" id="subfilter-footway"></div>
+        </div>
+        <div>
+          <div style="display:flex;align-items:center;">
+            <label class="layer-row" style="flex:1;margin:0;">
+              <input type="checkbox" class="form-check-input m-0" data-layer="barrier" checked>
+              <span class="layer-swatch" style="background:#BF0009;opacity:0.85;"></span>
+              <span>Barriers</span>
+            </label>
+            <button class="subtype-btn" data-subtype-toggle="barrier" title="Filter subtypes">&#9660;</button>
+          </div>
+          <div class="subtype-panel" id="subfilter-barrier"></div>
+        </div>
         <label class="layer-row">
           <input type="checkbox" class="form-check-input m-0" data-layer="waypoint" checked>
           <span class="layer-swatch" style="background:#50C2F6;border-radius:50%;"></span>
@@ -182,9 +228,17 @@ let currentFile = null;
 let currentMode = 'view';
 let annotations = [];
 let pendingBbox  = null;
+let nodeLayer    = null;        // L.LayerGroup of node circle markers
+let currentClickedFeature = null; // last GeoJSON feature clicked in view mode
+let editSelectedLayer = null;   // annotation layer selected in edit mode
 
 // ── Layers ───────────────────────────────────────────────────────────────────
 const geoLayers = { road: null, footway: null, barrier: null, waypoint: null };
+
+// subtypeLayers[cat][subtype] = array of individual L.Path layers inside geoLayers[cat]
+const subtypeLayers  = { road: {}, footway: {}, barrier: {} };
+// subtypeFilters[cat][subtype] = boolean (true = visible)
+const subtypeFilters = { road: {}, footway: {}, barrier: {} };
 
 // drawnItems holds all annotation polygons so Leaflet.draw can edit/delete them
 const drawnItems = new L.FeatureGroup().addTo(map);
@@ -226,6 +280,12 @@ function _applyDeltaInPlace(lls, orig, dlat, dlng) {
 
 function _onEditDragDown(e) {
   L.DomEvent.stopPropagation(e);
+  // Selection highlight
+  if (editSelectedLayer && editSelectedLayer !== e.target && editSelectedLayer.setStyle)
+    editSelectedLayer.setStyle({ ...STYLES.annotation, cursor: 'move' });
+  editSelectedLayer = e.target;
+  if (e.target.setStyle)
+    e.target.setStyle({ ...STYLES.annotation, color: '#ff4400', weight: 3, cursor: 'grabbing' });
   editDrag.active      = true;
   editDrag.layer       = e.target;
   editDrag.startLatLng = e.latlng;
@@ -281,6 +341,7 @@ function disableAnnotationEditMode() {
   map.off('mousemove', _onEditDragMove);
   map.off('mouseup',   _onEditDragUp);
   if (editDrag.active) { editDrag.active = false; map.dragging.enable(); }
+  editSelectedLayer = null;
   drawnItems.eachLayer(layer => {
     if (layer.editing) layer.editing.disable();
     layer.off('mousedown', _onEditDragDown);
@@ -319,6 +380,47 @@ function setStatus(msg, cls = 'text-secondary') {
   el.className = cls + ' ms-auto';
 }
 
+// ── Subtype filter helpers ───────────────────────────────────────────────────
+function getSubtype(feature, cat) {
+  const tags = feature.properties.tags || {};
+  if (cat === 'road' || cat === 'footway') return tags.highway || 'other';
+  if (cat === 'barrier') return tags.barrier || 'other';
+  return 'other';
+}
+
+function setSubtypeVisible(cat, subtype, visible) {
+  subtypeFilters[cat][subtype] = visible;
+  const catLayer = geoLayers[cat];
+  if (!catLayer) return;
+  (subtypeLayers[cat][subtype] || []).forEach(layer => {
+    if (visible) { if (!catLayer.hasLayer(layer)) catLayer.addLayer(layer); }
+    else         { catLayer.removeLayer(layer); }
+  });
+}
+
+function renderSubtypeFilters(cat) {
+  const panel = document.getElementById(`subfilter-${cat}`);
+  if (!panel) return;
+  const subtypes = Object.keys(subtypeLayers[cat]).sort();
+  if (!subtypes.length) { panel.innerHTML = ''; return; }
+  panel.innerHTML = subtypes.map(st => {
+    const count   = (subtypeLayers[cat][st] || []).length;
+    const checked = subtypeFilters[cat][st] !== false;
+    return `<label class="subtype-row">
+      <input type="checkbox" class="st-check"
+             data-subtype-cat="${cat}" data-subtype-val="${escHtml(st)}"
+             ${checked ? 'checked' : ''}>
+      <span>${escHtml(st)}</span>
+      <span class="subtype-cnt">${count}</span>
+    </label>`;
+  }).join('');
+  panel.querySelectorAll('[data-subtype-cat]').forEach(cb => {
+    cb.addEventListener('change', () =>
+      setSubtypeVisible(cb.dataset.subtypeCat, cb.dataset.subtypeVal, cb.checked)
+    );
+  });
+}
+
 // ── File loading ─────────────────────────────────────────────────────────────
 async function loadFileList() {
   const res = await fetch('/api/files');
@@ -354,20 +456,30 @@ async function loadMapData(filename) {
       if (cat in byCategory) byCategory[cat].push(f);
     });
 
+    // Reset subtype state for fresh load
+    ['road', 'footway', 'barrier'].forEach(cat => {
+      subtypeLayers[cat]  = {};
+      subtypeFilters[cat] = {};
+    });
+
     ['road', 'footway', 'barrier'].forEach(cat => {
       geoLayers[cat] = L.geoJSON(
         { type: 'FeatureCollection', features: byCategory[cat] },
         {
           style: () => STYLES[cat],
           onEachFeature: (feature, layer) => {
+            const st = getSubtype(feature, cat);
+            if (!subtypeLayers[cat][st]) { subtypeLayers[cat][st] = []; subtypeFilters[cat][st] = true; }
+            subtypeLayers[cat][st].push(layer);
             layer.on('click', e => {
               L.DomEvent.stopPropagation(e);
-              if (currentMode === 'view') showProps(feature.properties);
+              if (currentMode === 'view') showProps(feature.properties, feature);
             });
           },
         }
       );
       if (layerCheckbox(cat).checked) geoLayers[cat].addTo(map);
+      renderSubtypeFilters(cat);
     });
 
     geoLayers.waypoint = L.geoJSON(
@@ -408,7 +520,11 @@ async function loadMapData(filename) {
 }
 
 // ── Feature properties panel ─────────────────────────────────────────────────
-function showProps(props) {
+function showProps(props, feature = null) {
+  if (feature !== currentClickedFeature) {
+    clearNodes();
+    currentClickedFeature = feature;
+  }
   const tags = props.tags || {};
   const meta = [
     ['Category', `<span class="badge bg-secondary">${props.category}</span>`],
@@ -423,12 +539,63 @@ function showProps(props) {
         ).join('')
       : '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No tags</td></tr>',
   ].join('');
-  document.getElementById('props-content').innerHTML =
-    `<table><tbody>${rows}</tbody></table>`;
+  const el = document.getElementById('props-content');
+  el.innerHTML = `<table><tbody>${rows}</tbody></table>`;
+  if (feature && ['road', 'footway', 'barrier'].includes(props.category)) {
+    const n = _wayCoords(feature.geometry).length;
+    const label = nodeLayer ? 'Hide Nodes' : `Show Nodes (${n})`;
+    el.innerHTML += `<button class="btn btn-sm btn-outline-info mt-2"
+                             style="font-size:0.72rem;width:100%;"
+                             onclick="toggleNodes()">${label}</button>`;
+  }
 }
 
 function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Node visualisation ────────────────────────────────────────────────────────
+function _wayCoords(geometry) {
+  if (geometry.type === 'LineString')    return geometry.coordinates;
+  if (geometry.type === 'Polygon')       return geometry.coordinates[0];
+  if (geometry.type === 'MultiPolygon')  return geometry.coordinates.flatMap(p => p[0]);
+  return [];
+}
+
+function clearNodes() {
+  if (nodeLayer) { map.removeLayer(nodeLayer); nodeLayer = null; }
+}
+
+function showNodeProps(index, lon, lat, total) {
+  document.getElementById('props-content').innerHTML = `
+    <table><tbody>
+      <tr><td>Type</td><td><span class="badge bg-secondary">node</span></td></tr>
+      <tr><td>Index</td><td>${index + 1} / ${total}</td></tr>
+      <tr><td>Lat</td><td>${lat.toFixed(7)}</td></tr>
+      <tr><td>Lon</td><td>${lon.toFixed(7)}</td></tr>
+    </tbody></table>
+    <button class="btn btn-sm btn-outline-secondary mt-2"
+            style="font-size:0.72rem;width:100%;"
+            onclick="showProps(currentClickedFeature.properties, currentClickedFeature)">
+      ← Back to Way
+    </button>`;
+}
+
+function toggleNodes() {
+  const feature = currentClickedFeature;
+  if (!feature) return;
+  if (nodeLayer) { clearNodes(); showProps(feature.properties, feature); return; }
+  const coords = _wayCoords(feature.geometry);
+  nodeLayer = L.layerGroup().addTo(map);
+  coords.forEach(([lon, lat], i) => {
+    L.circleMarker([lat, lon], {
+      radius: 4, color: '#fff', weight: 1.5, fillColor: '#f0a500', fillOpacity: 0.9,
+    }).on('click', e => {
+      L.DomEvent.stopPropagation(e);
+      if (currentMode === 'view') showNodeProps(i, lon, lat, coords.length);
+    }).addTo(nodeLayer);
+  });
+  showProps(feature.properties, feature);  // refresh button label
 }
 
 // ── Annotation layer helpers ──────────────────────────────────────────────────
@@ -471,6 +638,24 @@ function renderAnnotationList() {
               onclick="removeAnnotationById('${a.id}')">&#10005;</button>
     </div>
   `).join('');
+}
+
+async function deleteSelectedAnnotation() {
+  if (!editSelectedLayer || !currentFile) return;
+  const annId = editSelectedLayer.options._ann_id;
+  if (!annId) return;
+  const res = await fetch(
+    `/api/annotations/${annId}?file=${encodeURIComponent(currentFile)}`,
+    { method: 'DELETE' }
+  );
+  if (res.ok) {
+    if (editSelectedLayer.editing) editSelectedLayer.editing.disable();
+    drawnItems.removeLayer(editSelectedLayer);
+    annotations = annotations.filter(a => a.id !== annId);
+    editSelectedLayer = null;
+    renderAnnotationList();
+    setStatus('Annotation deleted', 'text-success');
+  }
 }
 
 async function removeAnnotationById(id) {
@@ -559,6 +744,9 @@ map.on(L.Draw.Event.DELETESTOP, () => {
 function setMode(newMode, commit = true) {
   const prev = currentMode;
   currentMode = newMode;
+
+  clearNodes();
+  currentClickedFeature = null;
 
   // Commit / disable previous mode
   if (commit) {
@@ -662,6 +850,8 @@ document.querySelectorAll('[data-layer]').forEach(cb => {
 // ── Map click: clear props ────────────────────────────────────────────────────
 map.on('click', () => {
   if (currentMode === 'view') {
+    clearNodes();
+    currentClickedFeature = null;
     document.getElementById('props-content').innerHTML =
       '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
   }
@@ -690,9 +880,47 @@ function circleToPolygon(center, radiusM, numPts) {
   return { type: 'Polygon', coordinates: [coords] };
 }
 
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  // Don't fire while the user is typing
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+  if (e.target.isContentEditable) return;
+
+  switch (e.key) {
+    case 'v': case 'V':      setMode('view');   break;
+    case 'e': case 'E':      setMode('edit');   break;
+    case 'a': case 'A':      setMode('add');    break;
+    case 'd': case 'D':      setMode('delete'); break;
+    case 'f': case 'F':      setMode('fetch');  break;
+    case 'n': case 'N':
+      if (currentMode === 'view') toggleNodes();
+      break;
+    case 'Escape':
+      // Let Leaflet.draw cancel its own draw first, then fall back to view
+      if (currentMode !== 'add' && currentMode !== 'fetch') setMode('view');
+      break;
+    case 'Delete':
+    case 'Backspace':
+      if (currentMode === 'edit') { e.preventDefault(); deleteSelectedAnnotation(); }
+      break;
+  }
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 initHandlers();
 loadFileList();
+
+document.querySelectorAll('[data-subtype-toggle]').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const cat   = btn.dataset.subtypeToggle;
+    const panel = document.getElementById(`subfilter-${cat}`);
+    const open  = panel.style.display !== 'block';
+    panel.style.display = open ? 'block' : 'none';
+    btn.textContent     = open ? '▲' : '▼';
+  });
+});
 </script>
 </body>
 </html>
