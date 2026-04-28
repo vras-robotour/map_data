@@ -221,8 +221,6 @@ function _onEditDragDown(e) {
   editDrag.layer       = e.target;
   editDrag.startLatLng = e.latlng;
   editDrag.origLatLngs = _cloneLatLngs(e.target.getLatLngs());
-  // Temporarily hide vertex handles so they don't appear in stale positions mid-drag
-  if (e.target.editing) e.target.editing.disable();
   map.dragging.disable();
   map.getContainer().style.cursor = 'grabbing';
 }
@@ -232,6 +230,9 @@ function _onEditDragMove(e) {
   const dlat = e.latlng.lat - editDrag.startLatLng.lat;
   const dlng = e.latlng.lng - editDrag.startLatLng.lng;
   editDrag.layer.setLatLngs(_shiftLatLngs(editDrag.origLatLngs, dlat, dlng));
+  // Keep vertex handles in sync with the polygon's new position
+  const ed = editDrag.layer.editing;
+  if (ed && ed._enabled && ed._markerGroup) ed._updateMarkers();
 }
 
 function _onEditDragUp() {
@@ -241,10 +242,7 @@ function _onEditDragUp() {
   map.getContainer().style.cursor = currentMode === 'edit' ? 'move' : '';
   const layer = editDrag.layer;
   editDrag.layer = null;
-  if (!layer) return;
-  // Re-enable vertex handles at the new positions
-  if (layer.editing) layer.editing.enable();
-  _saveAnnotationGeometry(layer);
+  if (layer) _saveAnnotationGeometry(layer);
 }
 
 async function _saveAnnotationGeometry(layer) {
