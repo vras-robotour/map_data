@@ -11,24 +11,35 @@ import numpy as np
 from numpy.lib.recfunctions import unstructured_to_structured
 from scipy.spatial import cKDTree
 import pickle
+from typing import Dict, List, Optional, Tuple, Any
 
 import map_data.map_data as md
 
 
 class OSMCloud(Node):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__("osm_cloud")
-        self.utm_frame = self.declare_parameter("utm_frame", "utm").value
-        self.local_frame = self.declare_parameter("local_frame", "map").value
-        self.utm_to_local = self.declare_parameter("utm_to_local", None).value
-        self.mapdata_file = self.declare_parameter("mapdata_file", None).value
-        self.gpx_file = self.declare_parameter("gpx_file", None).value
-        self.save_mapdata = self.declare_parameter("save_mapdata", False).value
-        self.max_path_dist = self.declare_parameter("max_path_dist", 1.0).value
-        self.neighbor_cost = self.declare_parameter("neighbor_cost", "linear").value
-        self.grid_res = self.declare_parameter("grid_res", 0.25).value
-        self.grid_max = self.declare_parameter("grid_max", [250.0, 250.0]).value
-        self.grid_min = self.declare_parameter("grid_min", [-250.0, -250.0]).value
+        self.utm_frame: str = self.declare_parameter("utm_frame", "utm").value
+        self.local_frame: str = self.declare_parameter("local_frame", "map").value
+        self.utm_to_local_param: Optional[List[float]] = self.declare_parameter(
+            "utm_to_local", None
+        ).value
+        self.mapdata_file: Optional[str] = self.declare_parameter(
+            "mapdata_file", None
+        ).value
+        self.gpx_file: Optional[str] = self.declare_parameter("gpx_file", None).value
+        self.save_mapdata: bool = self.declare_parameter("save_mapdata", False).value
+        self.max_path_dist: float = self.declare_parameter("max_path_dist", 1.0).value
+        self.neighbor_cost: str = self.declare_parameter(
+            "neighbor_cost", "linear"
+        ).value
+        self.grid_res: float = self.declare_parameter("grid_res", 0.25).value
+        self.grid_max: List[float] = self.declare_parameter(
+            "grid_max", [250.0, 250.0]
+        ).value
+        self.grid_min: List[float] = self.declare_parameter(
+            "grid_min", [-250.0, -250.0]
+        ).value
 
         qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self.pub_grid = self.create_publisher(PointCloud2, "grid", qos)
@@ -36,9 +47,11 @@ class OSMCloud(Node):
         self.tf = Buffer()
         self.tf_sub = TransformListener(self.tf, self)
 
+        self.utm_to_local: Optional[np.ndarray] = None
+
         if self.mapdata_file is not None:
             with open(self.mapdata_file, "rb") as fh:
-                self.map_data = pickle.load(fh)
+                self.map_data: md.MapData = pickle.load(fh)
         elif self.gpx_file is not None:
             self.map_data = md.MapData(self.gpx_file)
             self.map_data.run_all(self.save_mapdata)
@@ -46,17 +59,17 @@ class OSMCloud(Node):
             self.get_logger().error("No map data or gpx file provided")
             exit(1)
 
-        if not self.utm_to_local:
+        if self.utm_to_local_param is None:
             self.get_utm_to_local()
         else:
-            self.utm_to_local = np.array(self.utm_to_local)
+            self.utm_to_local = np.array(self.utm_to_local_param)
         self.get_logger().info(f"Using UTM to local transform: {self.utm_to_local}")
 
-        self.grid_cloud = self.get_cloud()
+        self.grid_cloud: PointCloud2 = self.get_cloud()
         self.create_timer(10.0, self.publish_cb)
         self.get_logger().info("Initialized OSM cloud")
 
-    def publish_cb(self):
+    def publish_cb(self) -> None:
         """
         Timer callback to publish the grid cloud.
         """
@@ -64,9 +77,9 @@ class OSMCloud(Node):
         self.pub_grid.publish(self.grid_cloud)
         self.get_logger().info("Published grid cloud")
 
-    def get_utm_to_local(self):
+    def get_utm_to_local(self) -> None:
         """
-        While rospy is not shutdown, try to get the UTM to local transform every second or until successful.
+        While rclpy is not shutdown, try to get the UTM to local transform every second or until successful.
         """
         while rclpy.ok():
             try:
@@ -85,7 +98,7 @@ class OSMCloud(Node):
                 self.get_logger().warn(f"Failed to get UTM to local transform: {e}")
                 rclpy.spin_once(self, timeout_sec=1.0)
 
-    def get_cloud(self):
+    def get_cloud(self) -> PointCloud2:
         """
         Return a point cloud from the map data.
 
@@ -94,9 +107,10 @@ class OSMCloud(Node):
         cloud : sensor_msgs.PointCloud2
             Created point cloud.
         """
-        points = transform_points(self.map_data.get_points(), self.utm_to_local, 0)
+        points = transform_points(self.map_data.get_points(), self.utm_to_local, 0.0)
         grid = np.pad(
-            create_grid(self.grid_min, self.grid_max, self.grid_res), ((0, 0), (0, 1))
+            create_grid(tuple(self.grid_min), tuple(self.grid_max), self.grid_res),
+            ((0, 0), (0, 1)),
         )
         waypoints = np.pad(
             split_ways(points, self.map_data.get_ways(), self.grid_res),
@@ -109,19 +123,23 @@ class OSMCloud(Node):
         elif self.neighbor_cost == "quadratic":
             grid[:, 3] = grid[:, 3] ** 2
         elif self.neighbor_cost == "zero":
-            grid[:, 3] = 0
+            grid[:, 3] = 0.0
         else:
-            self.logger.warn(f"Unknown neighbor cost: {self.neighbor_cost}")
+            self.get_logger().warn(f"Unknown neighbor cost: {self.neighbor_cost}")
 
-        grid[:, 3] /= self.max_path_dist**2 if self.neighbor_cost == "quadratic" else 1
+        grid[:, 3] /= (
+            self.max_path_dist**2 if self.neighbor_cost == "quadratic" else 1.0
+        )
         cloud = create_cloud(grid)
         cloud.header.frame_id = self.local_frame
-        cloud.header.stamp = rclpy.time.Time().to_msg()
+        cloud.header.stamp = self.get_clock().now().to_msg()
 
         return cloud
 
 
-def create_grid(low, high, cell_size=0.25):
+def create_grid(
+    low: Tuple[float, ...], high: Tuple[float, ...], cell_size: float = 0.25
+) -> np.ndarray:
     """
     Create a grid of points.
 
@@ -139,19 +157,23 @@ def create_grid(low, high, cell_size=0.25):
     grid : np.array
         Grid of points.
     """
-    low = np.round(low)
-    high = np.round(high)
+    low_arr = np.round(low)
+    high_arr = np.round(high)
     xs = np.linspace(
-        int(low[0]), int(high[0]), int(np.ceil((high[0] - low[0]) / cell_size))
+        int(low_arr[0]),
+        int(high_arr[0]),
+        int(np.ceil((high_arr[0] - low_arr[0]) / cell_size)),
     )
     ys = np.linspace(
-        int(low[1]), int(high[1]), int(np.ceil((high[1] - low[1]) / cell_size))
+        int(low_arr[1]),
+        int(high_arr[1]),
+        int(np.ceil((high_arr[1] - low_arr[1]) / cell_size)),
     )
     grid = np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2)
     return grid
 
 
-def create_cloud(points):
+def create_cloud(points: np.ndarray) -> PointCloud2:
     """
     Create a point cloud from points.
 
@@ -165,14 +187,17 @@ def create_cloud(points):
     assert points.ndim == 2
     assert points.shape[1] == 4
 
-    points = points.astype(np.float32)
-    cloud = msgify(
-        PointCloud2, unstructured_to_structured(points, names=["x", "y", "z", "cost"])
+    points_f32 = points.astype(np.float32)
+    cloud: PointCloud2 = msgify(
+        PointCloud2,
+        unstructured_to_structured(points_f32, names=["x", "y", "z", "cost"]),
     )
     return cloud
 
 
-def points_near_ref(points, reference, max_dist=1):
+def points_near_ref(
+    points: np.ndarray, reference: np.ndarray, max_dist: float = 1.0
+) -> np.ndarray:
     """
     Get points near reference points and set linear distance as cost.
 
@@ -196,14 +221,18 @@ def points_near_ref(points, reference, max_dist=1):
         reference = np.array(reference)
 
     tree = cKDTree(reference, compact_nodes=False, balanced_tree=False)
-    dists, _ = np.array(tree.query(points, distance_upper_bound=max_dist))
-    points = points[dists < max_dist]
-    dists = dists[dists < max_dist]
-    points = np.hstack([points, (dists / max_dist).reshape(-1, 1)])
-    return points
+    dists, _ = tree.query(points, distance_upper_bound=max_dist)
+    mask = dists < max_dist
+    filtered_points = points[mask]
+    filtered_dists = dists[mask]
+
+    result = np.hstack([filtered_points, (filtered_dists / max_dist).reshape(-1, 1)])
+    return result
 
 
-def transform_points(points, transform, z=None):
+def transform_points(
+    points: Dict[int, np.ndarray], transform: np.ndarray, z: Optional[float] = None
+) -> Dict[int, np.ndarray]:
     """
     Transform points.
 
@@ -222,7 +251,7 @@ def transform_points(points, transform, z=None):
         Dictionary id: transformed point.
     """
 
-    def transform_point(point, transform):
+    def transform_point(point: np.ndarray, transform_mat: np.ndarray) -> np.ndarray:
         """
         Transform a point with a transformation matrix.
 
@@ -230,7 +259,7 @@ def transform_points(points, transform, z=None):
         -----------
         point : np.array
             Point to transform.
-        transform : np.array
+        transform_mat : np.array
             Transformation matrix.
 
         Returns:
@@ -239,20 +268,22 @@ def transform_points(points, transform, z=None):
             Transformed point.
         """
         assert isinstance(point, np.ndarray)
-        assert isinstance(transform, np.ndarray)
+        assert isinstance(transform_mat, np.ndarray)
 
-        point = np.dot(transform[:3, :3], point) + transform[:3, 3:]
-        return point
+        res = np.dot(transform_mat[:3, :3], point) + transform_mat[:3, 3:]
+        return res
 
     transformed = {}
-    for id, point in points.items():
-        transformed[id] = transform_point(point, transform)
+    for pid, point in points.items():
+        transformed[pid] = transform_point(point, transform)
         if z is not None:
-            transformed[id][2] = z
+            transformed[pid][2] = z
     return transformed
 
 
-def split_ways(points, ways, max_dist=0.25):
+def split_ways(
+    points: Dict[int, np.ndarray], ways: Dict[str, List[Any]], max_dist: float = 0.25
+) -> np.ndarray:
     """
     Equidistantly split ways into points with a maximal step size. Also only use footways from map data,
     as we are not allowed to leave the footways.
@@ -272,7 +303,7 @@ def split_ways(points, ways, max_dist=0.25):
         Waypoints created from the ways.
     """
     waypoints = []
-    for way in ways["footways"]:
+    for way in ways.get("footways", []):
         for i, (n0, n1) in enumerate(zip(way.nodes, way.nodes[1:])):
             point0 = points[n0.id].ravel()[:2]
             point1 = points[n1.id].ravel()[:2]
@@ -280,7 +311,7 @@ def split_ways(points, ways, max_dist=0.25):
             if i == 0:
                 waypoints.append(point0)
 
-            dist = np.linalg.norm(point1 - point0)
+            dist = float(np.linalg.norm(point1 - point0))
 
             if dist <= 1e-3:
                 waypoints.append(point1)
@@ -292,10 +323,10 @@ def split_ways(points, ways, max_dist=0.25):
             for j in range(num):
                 waypoints.append(point0 + (j + 1) * step * vec)
 
-    return np.array(waypoints)
+    return np.array(waypoints) if waypoints else np.empty((0, 2))
 
 
-def main():
+def main() -> None:
     rclpy.init()
     osm_cloud = OSMCloud()
     rclpy.spin(osm_cloud)

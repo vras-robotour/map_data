@@ -5,14 +5,25 @@ from shapely.geometry import Point, MultiPoint, LineString
 from map_data.points_to_graph_points import get_point_line
 
 
-FOOTWAY_VALUES = frozenset([
-    "living_street", "pedestrian", "footway", "bridleway",
-    "corridor", "track", "steps", "cycleway", "path",
-])
+FOOTWAY_VALUES = frozenset(
+    [
+        "living_street",
+        "pedestrian",
+        "footway",
+        "bridleway",
+        "corridor",
+        "track",
+        "steps",
+        "cycleway",
+        "path",
+    ]
+)
 
 
 class Way:
-    def __init__(self, id=-1, is_area=False, nodes=None, tags=None, line=None, in_out=""):
+    def __init__(
+        self, id=-1, is_area=False, nodes=None, tags=None, line=None, in_out=""
+    ):
         self.id = id
         self.is_area = is_area
         self.nodes = nodes if nodes is not None else []
@@ -34,7 +45,9 @@ class Way:
             key in yes_tags
             and (
                 self.tags[key] in yes_tags[key]
-                or ("*" in yes_tags[key] and self.tags[key] not in not_tags.get(key, []))
+                or (
+                    "*" in yes_tags[key] and self.tags[key] not in not_tags.get(key, [])
+                )
             )
             for key in self.tags
         )

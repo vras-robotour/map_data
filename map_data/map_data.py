@@ -21,9 +21,9 @@ from map_data.way import Way
 
 logger = logging.getLogger(__name__)
 
-OBSTACLE_RADIUS = 2        # meters, radius of the circle around isolated obstacle nodes
-OSM_RECTANGLE_MARGIN = 100 # meters, expansion margin for OSM bounding box query
-RESERVE = 50               # meters, safety margin added to waypoint bounds
+OBSTACLE_RADIUS = 2  # meters, radius of the circle around isolated obstacle nodes
+OSM_RECTANGLE_MARGIN = 100  # meters, expansion margin for OSM bounding box query
+RESERVE = 50  # meters, safety margin added to waypoint bounds
 
 # Tried in order on failure; overpass-api.de is checked via /api/status before
 # each attempt so we sleep until a free slot is available.
@@ -55,6 +55,7 @@ def _fetch_overpass(url: str, query: str, timeout: int = 180) -> dict:
 
 # ------------------------------------------------------------------
 
+
 class CoordsData:
     def __init__(self, min_long, max_long, min_lat, max_lat):
         self.min_long = min_long
@@ -72,7 +73,9 @@ class CoordsData:
 
 
 class MapData:
-    def __init__(self, coords, coords_type="file", current_robot_position=None, flip=False):
+    def __init__(
+        self, coords, coords_type="file", current_robot_position=None, flip=False
+    ):
         self._endpoint_index = 0
 
         self.coords_type = coords_type
@@ -81,7 +84,9 @@ class MapData:
                 gpx_object = gpxparse(f)
             self.coords_file = coords
             latlon = np.array([[p.latitude, p.longitude] for p in gpx_object.waypoints])
-            self.waypoints, self.zone_number, self.zone_letter = self._latlon_to_utm(latlon)
+            self.waypoints, self.zone_number, self.zone_letter = self._latlon_to_utm(
+                latlon
+            )
         elif coords_type == "array":
             self.waypoints = np.array(coords[0])
             self.zone_number = coords[1]
@@ -117,7 +122,9 @@ class MapData:
             self.zone_letter,
         )
 
-        self.coords_data = CoordsData(self.min_long, self.max_long, self.min_lat, self.max_lat)
+        self.coords_data = CoordsData(
+            self.min_long, self.max_long, self.min_lat, self.max_lat
+        )
         self.points = [
             geometry.Point(x, y)
             for x, y in zip(self.waypoints[:, 0], self.waypoints[:, 1])
@@ -145,6 +152,7 @@ class MapData:
     def _load_tag_configs(self):
         try:
             from ament_index_python.resources import get_resource
+
             _, package_path = get_resource("packages", "map_data")
             params_path = os.path.join(package_path, "share", "map_data", "parameters")
         except Exception:
@@ -152,11 +160,21 @@ class MapData:
                 os.path.join(os.path.dirname(__file__), "..", "parameters")
             )
 
-        self.BARRIER_TAGS = self._csv_to_dict(os.path.join(params_path, "barrier_tags.csv"))
-        self.NOT_BARRIER_TAGS = self._csv_to_dict(os.path.join(params_path, "not_barrier_tags.csv"))
-        self.ANTI_BARRIER_TAGS = self._csv_to_dict(os.path.join(params_path, "anti_barrier_tags.csv"))
-        self.OBSTACLE_TAGS = self._csv_to_dict(os.path.join(params_path, "obstacle_tags.csv"))
-        self.NOT_OBSTACLE_TAGS = self._csv_to_dict(os.path.join(params_path, "not_obstacle_tags.csv"))
+        self.BARRIER_TAGS = self._csv_to_dict(
+            os.path.join(params_path, "barrier_tags.csv")
+        )
+        self.NOT_BARRIER_TAGS = self._csv_to_dict(
+            os.path.join(params_path, "not_barrier_tags.csv")
+        )
+        self.ANTI_BARRIER_TAGS = self._csv_to_dict(
+            os.path.join(params_path, "anti_barrier_tags.csv")
+        )
+        self.OBSTACLE_TAGS = self._csv_to_dict(
+            os.path.join(params_path, "obstacle_tags.csv")
+        )
+        self.NOT_OBSTACLE_TAGS = self._csv_to_dict(
+            os.path.join(params_path, "not_obstacle_tags.csv")
+        )
 
     @staticmethod
     def _csv_to_dict(path):
@@ -168,7 +186,9 @@ class MapData:
 
     @staticmethod
     def _latlon_to_utm(latlon):
-        easting, northing, zone_number, zone_letter = utm.from_latlon(latlon[:, 0], latlon[:, 1])
+        easting, northing, zone_number, zone_letter = utm.from_latlon(
+            latlon[:, 0], latlon[:, 1]
+        )
         return np.column_stack([easting, northing]), zone_number, zone_letter
 
     # ------------------------------------------------------------------
@@ -204,9 +224,13 @@ class MapData:
     def _run_query(self, name, query_str, retries=3, wait=5):
         _api = overpy.Overpass()
         for attempt in range(1, retries + 1):
-            endpoint = OVERPASS_ENDPOINTS[self._endpoint_index % len(OVERPASS_ENDPOINTS)]
+            endpoint = OVERPASS_ENDPOINTS[
+                self._endpoint_index % len(OVERPASS_ENDPOINTS)
+            ]
             self._wait_for_slot(endpoint)
-            logger.info(f"OSM query '{name}' via {endpoint} (attempt {attempt}/{retries})")
+            logger.info(
+                f"OSM query '{name}' via {endpoint} (attempt {attempt}/{retries})"
+            )
             try:
                 data = _fetch_overpass(endpoint, query_str)
                 return _api.parse_json(json.dumps(data))
@@ -242,7 +266,9 @@ class MapData:
                 return
             m_wait = re.search(r"in (\d+) seconds", text)
             wait_secs = min(int(m_wait.group(1)) + 2 if m_wait else 60, max_wait)
-            logger.info(f"Overpass rate limit active — waiting {wait_secs}s for a free slot...")
+            logger.info(
+                f"Overpass rate limit active — waiting {wait_secs}s for a free slot..."
+            )
             time.sleep(wait_secs)
         except Exception as e:
             logger.debug(f"Could not read Overpass status: {e}")
@@ -267,7 +293,9 @@ class MapData:
                 is_area=is_area,
                 nodes=way.nodes,
                 tags=way.tags or {},
-                line=geometry.Polygon(coords) if is_area else geometry.LineString(coords),
+                line=geometry.Polygon(coords)
+                if is_area
+                else geometry.LineString(coords),
             )
 
     def parse_rels(self):
@@ -278,7 +306,9 @@ class MapData:
 
             for member in rel.members:
                 if member._type_value == "way" and int(member.ref) in keys:
-                    (outer_ids if member.role == "outer" else inner_ids).append(int(member.ref))
+                    (outer_ids if member.role == "outer" else inner_ids).append(
+                        int(member.ref)
+                    )
 
             outer_ids = self.combine_ways(outer_ids)
             rel_tags = rel.tags or {}
@@ -306,55 +336,123 @@ class MapData:
                 )
                 for key in node.tags
             ):
-                easting, northing, _, _ = utm.from_latlon(float(node.lat), float(node.lon))
-                self.barriers.add(Way(
-                    id=node.id,
-                    is_area=True,
-                    tags=node.tags,
-                    line=geometry.Point(easting, northing).buffer(OBSTACLE_RADIUS),
-                ))
+                easting, northing, _, _ = utm.from_latlon(
+                    float(node.lat), float(node.lon)
+                )
+                self.barriers.add(
+                    Way(
+                        id=node.id,
+                        is_area=True,
+                        tags=node.tags,
+                        line=geometry.Point(easting, northing).buffer(OBSTACLE_RADIUS),
+                    )
+                )
 
     def combine_ways(self, ids):
         """Merge ways that share endpoint nodes into longer continuous ways."""
-        ways = [self.ways[id] for id in ids]
-        i = 0
-        while i < len(ways):
-            j = 0
-            while j < len(ways):
-                if i != j and not ways[i].is_area and not ways[j].is_area:
-                    if ways[i].nodes[0].id == ways[j].nodes[0].id:
-                        ways[i].nodes.reverse()
-                    elif ways[i].nodes[-1].id == ways[j].nodes[-1].id:
-                        ways[j].nodes.reverse()
+        if not ids:
+            return ids
 
-                    if ways[i].nodes[-1].id == ways[j].nodes[0].id:
-                        new_nodes = ways[i].nodes + ways[j].nodes[1:]
-                        new_tags = {**(ways[i].tags or {}), **(ways[j].tags or {})}
-                        new_line = linemerge([ways[i].line, ways[j].line])
-                        is_area = new_nodes[0].id == new_nodes[-1].id
+        ways_to_merge = [
+            self.ways[wid]
+            for wid in ids
+            if wid in self.ways and not self.ways[wid].is_area
+        ]
+        area_ids = [wid for wid in ids if wid in self.ways and self.ways[wid].is_area]
 
-                        new_id = int(-(10**15) * np.random.random())
-                        while new_id in self.ways:
-                            new_id = int(-(10**15) * np.random.random())
+        if not ways_to_merge:
+            return ids
 
-                        new_way = Way(
-                            id=new_id,
-                            is_area=is_area,
-                            nodes=new_nodes,
-                            tags=new_tags,
-                            line=geometry.Polygon(new_line.coords) if is_area else new_line,
-                        )
-                        self.ways[new_id] = new_way
-                        ways[j] = new_way
-                        ids[j] = new_id
-                        ids.pop(i)
-                        ways.pop(i)
-                        i -= 1
-                        j -= 1
+        # Map node ID to list of ways that have this node as an endpoint
+        endpoint_map = {}
+        for way in ways_to_merge:
+            endpoint_map.setdefault(way.nodes[0].id, []).append(way)
+            endpoint_map.setdefault(way.nodes[-1].id, []).append(way)
+
+        merged_ids = []
+        used_ways = set()
+
+        for start_way in ways_to_merge:
+            if start_way.id in used_ways:
+                continue
+
+            current_nodes = list(start_way.nodes)
+            current_tags = dict(start_way.tags or {})
+            current_lines = [start_way.line]
+            used_ways.add(start_way.id)
+
+            # Extend forward
+            while True:
+                last_node_id = current_nodes[-1].id
+                possible_next = [
+                    w
+                    for w in endpoint_map.get(last_node_id, [])
+                    if w.id not in used_ways
+                ]
+                if not possible_next:
+                    break
+                next_way = possible_next[0]
+                used_ways.add(next_way.id)
+
+                if next_way.nodes[0].id == last_node_id:
+                    current_nodes.extend(next_way.nodes[1:])
+                else:
+                    current_nodes.extend(reversed(next_way.nodes[:-1]))
+
+                current_tags.update(next_way.tags or {})
+                current_lines.append(next_way.line)
+
+                if current_nodes[0].id == current_nodes[-1].id:
+                    break  # Formed a loop
+
+            # Extend backward if not a loop
+            if current_nodes[0].id != current_nodes[-1].id:
+                while True:
+                    first_node_id = current_nodes[0].id
+                    possible_prev = [
+                        w
+                        for w in endpoint_map.get(first_node_id, [])
+                        if w.id not in used_ways
+                    ]
+                    if not possible_prev:
                         break
-                j += 1
-            i += 1
-        return ids
+                    prev_way = possible_prev[0]
+                    used_ways.add(prev_way.id)
+
+                    if prev_way.nodes[-1].id == first_node_id:
+                        current_nodes = list(prev_way.nodes[:-1]) + current_nodes
+                    else:
+                        current_nodes = (
+                            list(reversed(prev_way.nodes[1:])) + current_nodes
+                        )
+
+                    current_tags.update(prev_way.tags or {})
+                    current_lines.insert(0, prev_way.line)
+
+            # Create new way if merged, or keep original
+            if len(current_lines) > 1:
+                is_area = current_nodes[0].id == current_nodes[-1].id
+                merged_line = linemerge(current_lines)
+
+                new_id = int(-(10**15) * np.random.random())
+                while new_id in self.ways:
+                    new_id = int(-(10**15) * np.random.random())
+
+                new_way = Way(
+                    id=new_id,
+                    is_area=is_area,
+                    nodes=current_nodes,
+                    tags=current_tags,
+                    line=geometry.Polygon(merged_line.coords)
+                    if is_area
+                    else merged_line,
+                )
+                self.ways[new_id] = new_way
+                merged_ids.append(new_id)
+            else:
+                merged_ids.append(start_way.id)
+
+        return area_ids + merged_ids
 
     def separate_ways(self):
         """Classify ways into roads, footways, and barriers."""
@@ -363,7 +461,9 @@ class MapData:
                 self.roads.add(self._buffer_line(way, width=7))
             elif way.is_footway():
                 self.footways.add(self._buffer_line(way, width=3))
-            elif way.is_barrier(self.BARRIER_TAGS, self.NOT_BARRIER_TAGS, self.ANTI_BARRIER_TAGS):
+            elif way.is_barrier(
+                self.BARRIER_TAGS, self.NOT_BARRIER_TAGS, self.ANTI_BARRIER_TAGS
+            ):
                 if not way.is_area:
                     way = self._buffer_line(way, width=2)
                 self.barriers.add(way)
@@ -386,7 +486,8 @@ class MapData:
     def run_parse(self):
         """Parse downloaded OSM data into roads/footways/barriers. Returns 0 on success, 1 on failure."""
         missing = [
-            name for name, data in [
+            name
+            for name, data in [
                 ("ways", self.osm_ways_data),
                 ("relations", self.osm_rels_data),
                 ("nodes", self.osm_nodes_data),
@@ -424,7 +525,11 @@ class MapData:
         return state
 
     def save_to_pickle(self, filename=None):
-        fn = getattr(self, "coords_file", None) if self.coords_type == "file" else filename
+        fn = (
+            getattr(self, "coords_file", None)
+            if self.coords_type == "file"
+            else filename
+        )
         if fn is None:
             logger.error("No filename given.")
             return

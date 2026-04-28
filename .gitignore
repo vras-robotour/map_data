@@ -2,3 +2,4 @@
 *.png
 paths/*
 *.mapdata
+*.json

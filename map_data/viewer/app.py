@@ -253,13 +253,17 @@ def fetch_area():
     os.makedirs(data_dir, exist_ok=True)
     out_path = os.path.join(data_dir, f"{name}.mapdata")
 
-    corners = np.array([
-        [body["min_lat"], body["min_lon"]],
-        [body["min_lat"], body["max_lon"]],
-        [body["max_lat"], body["min_lon"]],
-        [body["max_lat"], body["max_lon"]],
-    ])
-    easting, northing, zone_number, zone_letter = utm.from_latlon(corners[:, 0], corners[:, 1])
+    corners = np.array(
+        [
+            [body["min_lat"], body["min_lon"]],
+            [body["min_lat"], body["max_lon"]],
+            [body["max_lat"], body["min_lon"]],
+            [body["max_lat"], body["max_lon"]],
+        ]
+    )
+    easting, northing, zone_number, zone_letter = utm.from_latlon(
+        corners[:, 0], corners[:, 1]
+    )
     waypoints = np.column_stack([easting, northing])
 
     md = MapData([waypoints, zone_number, zone_letter], coords_type="array")
@@ -273,12 +277,14 @@ def fetch_area():
     with open(out_path, "wb") as fh:
         pickle.dump(md, fh, protocol=2)
 
-    return jsonify({
-        "filename": f"{name}.mapdata",
-        "roads": len(md.roads_list),
-        "footways": len(md.footways_list),
-        "barriers": len(md.barriers_list),
-    })
+    return jsonify(
+        {
+            "filename": f"{name}.mapdata",
+            "roads": len(md.roads_list),
+            "footways": len(md.footways_list),
+            "barriers": len(md.barriers_list),
+        }
+    )
 
 
 # ------------------------------------------------------------------

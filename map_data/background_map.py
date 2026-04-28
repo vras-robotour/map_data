@@ -1,10 +1,10 @@
+import os
 import requests
 from PIL import Image
 from geopy.distance import geodesic
 
 
 URL_PREF = "https://maps.geoapify.com/v1/staticmap?style=osm-carto"
-API_KEY = "8f3be3c0c8484eceb15b0f50218c8c02"
 
 
 def get_url(w, h, corners):
@@ -25,11 +25,15 @@ def get_url(w, h, corners):
     url : str
         Url for the background map.
     """
+    api_key = os.environ.get("GEOAPIFY_API_KEY", "")
+    if not api_key:
+        api_key = "8f3be3c0c8484eceb15b0f50218c8c02"
+
     url = URL_PREF
     w_url = f"&width={w}"
     h_url = f"&height={h}"
     area_url = f"&area=rect:{corners[0]},{corners[1]},{corners[2]},{corners[3]}"
-    api_url = f"&apiKey={API_KEY}"
+    api_url = f"&apiKey={api_key}"
 
     url = url + w_url + h_url + area_url + api_url
 
