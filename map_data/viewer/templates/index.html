@@ -209,10 +209,19 @@ function _cloneLatLngs(lls) {
   return lls.map(ll => ({ lat: ll.lat, lng: ll.lng }));
 }
 
-function _shiftLatLngs(lls, dlat, dlng) {
-  if (!lls || !lls.length) return lls;
-  if (Array.isArray(lls[0])) return lls.map(r => _shiftLatLngs(r, dlat, dlng));
-  return lls.map(ll => L.latLng(ll.lat + dlat, ll.lng + dlng));
+// Translate existing LatLng objects in-place. setLatLngs() replaces _latlngs with a
+// new array, which breaks L.Edit.Poly's cached reference set in initialize(). By
+// mutating the objects inside the existing array instead, the edit handler sees the
+// updated positions without needing any reference refresh.
+function _applyDeltaInPlace(lls, orig, dlat, dlng) {
+  for (let i = 0; i < lls.length; i++) {
+    if (Array.isArray(lls[i])) {
+      _applyDeltaInPlace(lls[i], orig[i], dlat, dlng);
+    } else {
+      lls[i].lat = orig[i].lat + dlat;
+      lls[i].lng = orig[i].lng + dlng;
+    }
+  }
 }
 
 function _onEditDragDown(e) {
@@ -229,8 +238,8 @@ function _onEditDragMove(e) {
   if (!editDrag.active) return;
   const dlat = e.latlng.lat - editDrag.startLatLng.lat;
   const dlng = e.latlng.lng - editDrag.startLatLng.lng;
-  editDrag.layer.setLatLngs(_shiftLatLngs(editDrag.origLatLngs, dlat, dlng));
-  // Keep vertex handles in sync with the polygon's new position
+  _applyDeltaInPlace(editDrag.layer._latlngs, editDrag.origLatLngs, dlat, dlng);
+  editDrag.layer.redraw();
   const ed = editDrag.layer.editing;
   if (ed && ed._enabled && ed._markerGroup) ed._updateMarkers();
 }
