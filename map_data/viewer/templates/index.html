@@ -241,7 +241,7 @@ function _onEditDragMove(e) {
   _applyDeltaInPlace(editDrag.layer._latlngs, editDrag.origLatLngs, dlat, dlng);
   editDrag.layer.redraw();
   const ed = editDrag.layer.editing;
-  if (ed && ed._enabled && ed._markerGroup) ed._updateMarkers();
+  if (ed && ed._enabled) ed.updateMarkers();
 }
 
 function _onEditDragUp() {
