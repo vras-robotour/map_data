@@ -75,6 +75,20 @@
       transform: rotate(45deg);
     }
     .subtype-cnt { color: #6c7a9c; font-size: 0.68rem; margin-left: auto; }
+
+    .node-list { max-height: 200px; overflow-y: auto; margin-top: 4px; }
+    .node-list-item {
+      display: flex; align-items: baseline; gap: 5px;
+      padding: 2px 3px; font-size: 0.74rem; cursor: pointer;
+      border-bottom: 1px solid #1e2d50;
+    }
+    .node-list-item:hover { background: #1e2d50; color: #fff; }
+    .node-list-item:last-child { border-bottom: none; }
+    .node-list-item.sel { background: #1e2d50; color: #f0a500; }
+    .node-list-item.sel .node-idx { color: #f0a500; }
+    .node-idx { color: #6c7a9c; font-size: 0.68rem; flex-shrink: 0; min-width: 20px; }
+    .node-tag-hint { color: #6c7a9c; font-size: 0.68rem; margin-left: auto; white-space: nowrap;
+                     overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
   </style>
 </head>
 <body>
@@ -107,7 +121,15 @@
       <button class="btn btn-outline-success mode-btn" data-mode="fetch" title="Select area to fetch and parse OSM data">
         &#8659; Fetch Area [F]
       </button>
+      <button class="btn btn-outline-secondary mode-btn" data-mode="path" title="Draw a custom path / road">
+        &#9135; Path [P]
+      </button>
     </div>
+
+    <div class="vr mx-1 bg-secondary" style="height:20px;"></div>
+    <button id="export-btn" class="btn btn-outline-light btn-sm" disabled title="Download mapdata merged with annotations">
+      &#8681; Export
+    </button>
 
     <span id="status" class="text-secondary ms-auto"></span>
   </div>
@@ -153,7 +175,7 @@
           <div class="subtype-panel" id="subfilter-barrier"></div>
         </div>
         <label class="layer-row">
-          <input type="checkbox" class="form-check-input m-0" data-layer="waypoint" checked>
+          <input type="checkbox" class="form-check-input m-0" data-layer="waypoint">
           <span class="layer-swatch" style="background:#50C2F6;border-radius:50%;"></span>
           <span>Waypoints</span>
         </label>
@@ -211,6 +233,77 @@
   </div>
 </div>
 
+<!-- Annotation detail modal -->
+<div class="modal fade" id="ann-detail-modal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border-secondary">
+      <div class="modal-header border-secondary py-2">
+        <h6 class="modal-title" id="ann-detail-title">Annotation Details</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body py-2" style="font-size:0.82rem;">
+
+        <div class="mb-2">
+          <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">TYPE</label>
+          <select id="ann-type-sel" class="form-select form-select-sm bg-dark text-light border-secondary"
+                  onchange="updateAnnTypeFields()">
+            <option value="obstacle">Obstacle / barrier</option>
+            <option value="path">Path / road</option>
+          </select>
+        </div>
+
+        <div id="ann-obstacle-fields" class="mb-2">
+          <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">BARRIER TYPE</label>
+          <select id="ann-barrier-sel" class="form-select form-select-sm bg-dark text-light border-secondary">
+            <option value="wall">wall</option>
+            <option value="fence">fence</option>
+            <option value="hedge">hedge</option>
+            <option value="building">building</option>
+            <option value="bollard">bollard</option>
+            <option value="kerb">kerb</option>
+            <option value="door">door</option>
+            <option value="gate">gate</option>
+            <option value="lift_gate">lift_gate</option>
+            <option value="retaining_wall">retaining_wall</option>
+            <option value="block">block</option>
+          </select>
+        </div>
+
+        <div id="ann-path-fields" class="mb-2" style="display:none;">
+          <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">HIGHWAY TYPE</label>
+          <select id="ann-highway-sel" class="form-select form-select-sm bg-dark text-light border-secondary">
+            <option value="footway">footway</option>
+            <option value="path">path</option>
+            <option value="cycleway">cycleway</option>
+            <option value="steps">steps</option>
+            <option value="service">service</option>
+            <option value="track">track</option>
+            <option value="residential">residential</option>
+            <option value="tertiary">tertiary</option>
+          </select>
+          <label class="form-label text-secondary mb-1 mt-2" style="font-size:0.72rem;">WIDTH (m)</label>
+          <input id="ann-width-inp" type="number" min="0.1" step="0.1" value="1.5"
+                 class="form-control form-control-sm bg-dark text-light border-secondary">
+        </div>
+
+        <div>
+          <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">EXTRA PROPERTIES</label>
+          <div id="ann-extra-props"></div>
+          <button type="button" id="ann-add-prop-btn"
+                  class="btn btn-sm btn-outline-secondary mt-1" style="font-size:0.72rem;">
+            + Add property
+          </button>
+        </div>
+
+      </div>
+      <div class="modal-footer border-secondary py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" id="ann-detail-save" class="btn btn-warning btn-sm">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -228,9 +321,16 @@ let currentFile = null;
 let currentMode = 'view';
 let annotations = [];
 let pendingBbox  = null;
-let nodeLayer    = null;        // L.LayerGroup of node circle markers
+let nodeLayer         = null;   // L.LayerGroup of node circle markers
+let nodeCount         = 0;      // actual OSM node count from last fetch
+let currentNodes      = [];     // fetched OSM node objects for the active way
+let nodeMarkers       = [];     // L.CircleMarker refs, same order as currentNodes
+let selectedNodeIndex = -1;     // currently selected node index
 let currentClickedFeature = null; // last GeoJSON feature clicked in view mode
 let editSelectedLayer = null;   // annotation layer selected in edit mode
+let pathLineDraw  = null;       // L.Draw.Polyline handler for path mode
+let pendingAnnGeom = null;      // geometry waiting for the details modal
+let editingAnnId   = null;      // annotation ID being edited in the modal
 
 // ── Layers ───────────────────────────────────────────────────────────────────
 const geoLayers = { road: null, footway: null, barrier: null, waypoint: null };
@@ -282,10 +382,10 @@ function _onEditDragDown(e) {
   L.DomEvent.stopPropagation(e);
   // Selection highlight
   if (editSelectedLayer && editSelectedLayer !== e.target && editSelectedLayer.setStyle)
-    editSelectedLayer.setStyle({ ...STYLES.annotation, cursor: 'move' });
+    editSelectedLayer.setStyle({ ..._layerBaseStyle(editSelectedLayer), cursor: 'move' });
   editSelectedLayer = e.target;
   if (e.target.setStyle)
-    e.target.setStyle({ ...STYLES.annotation, color: '#ff4400', weight: 3, cursor: 'grabbing' });
+    e.target.setStyle({ ..._layerBaseStyle(e.target), color: '#ff4400', weight: 3, cursor: 'grabbing' });
   editDrag.active      = true;
   editDrag.layer       = e.target;
   editDrag.startLatLng = e.latlng;
@@ -327,13 +427,18 @@ async function _saveAnnotationGeometry(layer) {
   if (ann) ann.geometry = geom;
 }
 
+function _layerBaseStyle(layer) {
+  const ann = annotations.find(a => a.id === layer.options._ann_id);
+  return _annStyle(ann || {});
+}
+
 function enableAnnotationEditMode() {
   map.on('mousemove', _onEditDragMove);
   map.on('mouseup',   _onEditDragUp);
   drawnItems.eachLayer(layer => {
     if (layer.editing) layer.editing.enable();
     layer.on('mousedown', _onEditDragDown);
-    if (layer.setStyle)  layer.setStyle({ ...STYLES.annotation, cursor: 'move' });
+    if (layer.setStyle)  layer.setStyle({ ..._layerBaseStyle(layer), cursor: 'move' });
   });
 }
 
@@ -345,8 +450,8 @@ function disableAnnotationEditMode() {
   drawnItems.eachLayer(layer => {
     if (layer.editing) layer.editing.disable();
     layer.off('mousedown', _onEditDragDown);
-    if (layer.setStyle)  layer.setStyle(STYLES.annotation);
-    _saveAnnotationGeometry(layer);  // persist any vertex edits on mode exit
+    if (layer.setStyle)  layer.setStyle(_layerBaseStyle(layer));
+    _saveAnnotationGeometry(layer);
   });
 }
 
@@ -371,6 +476,7 @@ const STYLES = {
   footway:    { color: '#b89900', weight: 0.5, fillColor: '#FFD700', fillOpacity: 0.45 },
   barrier:    { color: '#8b0000', weight: 1,   fillColor: '#BF0009', fillOpacity: 0.45 },
   annotation: { color: '#cc5500', weight: 2,   fillColor: '#ff8c00', fillOpacity: 0.45 },
+  path:       { color: '#22c55e', weight: 3,   fillOpacity: 0, opacity: 0.9 },
 };
 
 // ── Status ───────────────────────────────────────────────────────────────────
@@ -512,6 +618,7 @@ async function loadMapData(filename) {
     renderAnnotationList();
 
     currentFile = filename;
+    document.getElementById('export-btn').disabled = false;
     setStatus(`Loaded: ${filename}`, 'text-success');
   } catch (err) {
     setStatus(`Error: ${err.message}`, 'text-danger');
@@ -542,11 +649,24 @@ function showProps(props, feature = null) {
   const el = document.getElementById('props-content');
   el.innerHTML = `<table><tbody>${rows}</tbody></table>`;
   if (feature && ['road', 'footway', 'barrier'].includes(props.category)) {
-    const n = _wayCoords(feature.geometry).length;
-    const label = nodeLayer ? 'Hide Nodes' : `Show Nodes (${n})`;
+    const label = nodeLayer ? 'Hide Nodes' : 'Show Nodes';
     el.innerHTML += `<button class="btn btn-sm btn-outline-info mt-2"
                              style="font-size:0.72rem;width:100%;"
                              onclick="toggleNodes()">${label}</button>`;
+    if (nodeLayer && currentNodes.length) {
+      const items = currentNodes.map((n, i) => {
+        const firstTag = Object.entries(n.tags || {})[0];
+        const hint = firstTag
+          ? `<span class="node-tag-hint">${escHtml(firstTag[0])}: ${escHtml(String(firstTag[1]))}</span>`
+          : '';
+        const sel = i === selectedNodeIndex ? ' sel' : '';
+        return `<div class="node-list-item${sel}" onclick="clickNode(${i})">
+          <span class="node-idx">${i + 1}</span>
+          <span>${n.id}</span>${hint}
+        </div>`;
+      }).join('');
+      el.innerHTML += `<div class="node-list">${items}</div>`;
+    }
   }
 }
 
@@ -564,15 +684,54 @@ function _wayCoords(geometry) {
 
 function clearNodes() {
   if (nodeLayer) { map.removeLayer(nodeLayer); nodeLayer = null; }
+  nodeCount         = 0;
+  currentNodes      = [];
+  nodeMarkers       = [];
+  selectedNodeIndex = -1;
 }
 
-function showNodeProps(index, lon, lat, total) {
+function clickNode(index) {
+  const node = currentNodes[index];
+  if (!node) return;
+
+  // Revert previous marker to default style
+  if (selectedNodeIndex >= 0 && nodeMarkers[selectedNodeIndex]) {
+    nodeMarkers[selectedNodeIndex].setStyle({
+      radius: 4, color: '#fff', weight: 1.5, fillColor: '#f0a500', fillOpacity: 0.9,
+    });
+  }
+
+  selectedNodeIndex = index;
+
+  // Highlight new marker
+  if (nodeMarkers[index]) {
+    nodeMarkers[index].setStyle({
+      radius: 6, color: '#fff', weight: 2.5, fillColor: '#ff3300', fillOpacity: 1,
+    });
+    nodeMarkers[index].bringToFront();
+  }
+
+  // Update sidebar list highlight without full re-render
+  document.querySelectorAll('.node-list-item').forEach((el, i) =>
+    el.classList.toggle('sel', i === index)
+  );
+
+  map.panTo([node.lat, node.lon]);
+  showOsmNodeProps(node, index, currentNodes.length);
+}
+
+function showOsmNodeProps(node, index, total) {
+  const tagRows = Object.entries(node.tags || {})
+    .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
+    .join('') || '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No tags</td></tr>';
   document.getElementById('props-content').innerHTML = `
     <table><tbody>
       <tr><td>Type</td><td><span class="badge bg-secondary">node</span></td></tr>
+      <tr><td>OSM ID</td><td>${node.id}</td></tr>
       <tr><td>Index</td><td>${index + 1} / ${total}</td></tr>
-      <tr><td>Lat</td><td>${lat.toFixed(7)}</td></tr>
-      <tr><td>Lon</td><td>${lon.toFixed(7)}</td></tr>
+      <tr><td>Lat</td><td>${parseFloat(node.lat).toFixed(7)}</td></tr>
+      <tr><td>Lon</td><td>${parseFloat(node.lon).toFixed(7)}</td></tr>
+      ${tagRows}
     </tbody></table>
     <button class="btn btn-sm btn-outline-secondary mt-2"
             style="font-size:0.72rem;width:100%;"
@@ -581,35 +740,68 @@ function showNodeProps(index, lon, lat, total) {
     </button>`;
 }
 
-function toggleNodes() {
+async function toggleNodes() {
   const feature = currentClickedFeature;
   if (!feature) return;
   if (nodeLayer) { clearNodes(); showProps(feature.properties, feature); return; }
-  const coords = _wayCoords(feature.geometry);
-  nodeLayer = L.layerGroup().addTo(map);
-  coords.forEach(([lon, lat], i) => {
-    L.circleMarker([lat, lon], {
-      radius: 4, color: '#fff', weight: 1.5, fillColor: '#f0a500', fillOpacity: 0.9,
-    }).on('click', e => {
-      L.DomEvent.stopPropagation(e);
-      if (currentMode === 'view') showNodeProps(i, lon, lat, coords.length);
-    }).addTo(nodeLayer);
-  });
-  showProps(feature.properties, feature);  // refresh button label
+
+  setStatus('Loading nodes…', 'text-secondary');
+  try {
+    const res = await fetch(
+      `/api/way_nodes?file=${encodeURIComponent(currentFile)}&way_id=${feature.properties.id}`
+    );
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+
+    currentNodes = data.nodes;
+    nodeCount    = data.nodes.length;
+    nodeMarkers  = [];
+    nodeLayer    = L.layerGroup().addTo(map);
+    data.nodes.forEach((node, i) => {
+      const marker = L.circleMarker([node.lat, node.lon], {
+        radius: 4, color: '#fff', weight: 1.5, fillColor: '#f0a500', fillOpacity: 0.9,
+      }).on('click', e => {
+        L.DomEvent.stopPropagation(e);
+        if (currentMode === 'view') clickNode(i);
+      }).addTo(nodeLayer);
+      nodeMarkers.push(marker);
+    });
+
+    setStatus('', 'text-secondary');
+    showProps(feature.properties, feature); // re-renders button as "Hide Nodes (N)"
+  } catch (err) {
+    setStatus(`Node load failed: ${err.message}`, 'text-danger');
+  }
 }
 
 // ── Annotation layer helpers ──────────────────────────────────────────────────
+function _annStyle(ann) {
+  return ann.type === 'path' ? STYLES.path : STYLES.annotation;
+}
+
 function addAnnotationToLayer(ann) {
-  L.geoJSON(ann.geometry, { style: STYLES.annotation }).eachLayer(layer => {
+  L.geoJSON(ann.geometry, { style: _annStyle(ann) }).eachLayer(layer => {
     layer.options._ann_id = ann.id;
     layer.on('click', e => {
       L.DomEvent.stopPropagation(e);
-      if (currentMode === 'view') {
-        showProps({ category: 'annotation', id: ann.id, tags: ann.properties || {} });
-      }
+      if (currentMode === 'view') showAnnProps(ann);
     });
     drawnItems.addLayer(layer);
   });
+}
+
+function showAnnProps(ann) {
+  const props = ann.properties || {};
+  const propRows = Object.entries(props)
+    .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
+    .join('') || '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No properties</td></tr>';
+  document.getElementById('props-content').innerHTML =
+    `<table><tbody>
+       <tr><td>Type</td><td><span class="badge bg-secondary">${escHtml(ann.type || 'obstacle')}</span></td></tr>
+       ${propRows}
+     </tbody></table>
+     <button class="btn btn-sm btn-outline-info mt-2" style="font-size:0.72rem;width:100%;"
+             onclick="openAnnEditModal('${ann.id}')">&#9998; Edit Properties</button>`;
 }
 
 function renderAnnotationLayer() {
@@ -633,9 +825,12 @@ function renderAnnotationList() {
         <span>${escHtml(a.type)}</span>
         <br><span class="ann-id">${a.id.slice(0,8)}…</span>
       </div>
-      <button class="btn btn-sm btn-outline-danger py-0 px-1"
-              style="font-size:0.7rem;"
-              onclick="removeAnnotationById('${a.id}')">&#10005;</button>
+      <div class="d-flex gap-1">
+        <button class="btn btn-sm btn-outline-info py-0 px-1" style="font-size:0.7rem;"
+                onclick="openAnnEditModal('${a.id}')">&#9998;</button>
+        <button class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size:0.7rem;"
+                onclick="removeAnnotationById('${a.id}')">&#10005;</button>
+      </div>
     </div>
   `).join('');
 }
@@ -686,7 +881,7 @@ map.on(L.Draw.Event.CREATED, async e => {
     return;
   }
 
-  if (currentMode !== 'add' || !currentFile) return;
+  if ((currentMode !== 'add' && currentMode !== 'path') || !currentFile) return;
 
   let geom;
   if (e.layerType === 'circle') {
@@ -695,21 +890,11 @@ map.on(L.Draw.Event.CREATED, async e => {
     geom = e.layer.toGeoJSON().geometry;
   }
 
-  const res = await fetch(
-    `/api/annotations?file=${encodeURIComponent(currentFile)}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'obstacle', geometry: geom, properties: {} }),
-    }
-  );
-  if (res.ok) {
-    const ann = await res.json();
-    annotations.push(ann);
-    addAnnotationToLayer(ann);
-    renderAnnotationList();
-    setStatus('Annotation added', 'text-success');
-  }
+  openAnnDetailModal(geom, currentMode);
+
+  // Re-arm the path draw tool for the next segment
+  if (currentMode === 'path' && pathLineDraw)
+    setTimeout(() => { if (currentMode === 'path') pathLineDraw.enable(); }, 50);
 });
 
 map.on(L.Draw.Event.DELETED, e => {
@@ -761,6 +946,9 @@ function setMode(newMode, commit = true) {
   if (prev === 'fetch' && fetchRectDraw) {
     try { fetchRectDraw.disable(); } catch (_) {}
   }
+  if (prev === 'path' && pathLineDraw) {
+    try { pathLineDraw.disable(); } catch (_) {}
+  }
 
   // Update button highlight
   document.querySelectorAll('.mode-btn').forEach(btn =>
@@ -788,6 +976,15 @@ function setMode(newMode, commit = true) {
     }
     fetchRectDraw.enable();
     setStatus('Draw a bounding box on the map to fetch OSM data…', 'text-info');
+  } else if (newMode === 'path') {
+    if (!pathLineDraw) {
+      pathLineDraw = new L.Draw.Polyline(map, {
+        shapeOptions: { ...STYLES.path },
+        showLength: true,
+      });
+    }
+    pathLineDraw.enable();
+    setStatus('Click to place path nodes — double-click to finish', 'text-info');
   }
 }
 
@@ -867,6 +1064,11 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
   btn.addEventListener('click', () => setMode(btn.dataset.mode));
 });
 
+document.getElementById('export-btn').addEventListener('click', () => {
+  if (currentFile)
+    window.location = `/api/export?file=${encodeURIComponent(currentFile)}`;
+});
+
 // ── Geometry helpers ──────────────────────────────────────────────────────────
 function circleToPolygon(center, radiusM, numPts) {
   const R = 6371000;
@@ -880,6 +1082,128 @@ function circleToPolygon(center, radiusM, numPts) {
   return { type: 'Polygon', coordinates: [coords] };
 }
 
+// ── Annotation detail modal ───────────────────────────────────────────────────
+function updateAnnTypeFields() {
+  const t = document.getElementById('ann-type-sel').value;
+  document.getElementById('ann-obstacle-fields').style.display = t === 'obstacle' ? '' : 'none';
+  document.getElementById('ann-path-fields').style.display    = t === 'path'     ? '' : 'none';
+}
+
+function _renderExtraProps(obj) {
+  document.getElementById('ann-extra-props').innerHTML =
+    Object.entries(obj).map(([k, v]) => `
+      <div class="d-flex gap-1 mb-1">
+        <input class="form-control form-control-sm bg-dark text-light border-secondary ep-key"
+               placeholder="key" value="${escHtml(k)}" style="flex:1;font-size:0.75rem;">
+        <input class="form-control form-control-sm bg-dark text-light border-secondary ep-val"
+               placeholder="value" value="${escHtml(String(v))}" style="flex:1;font-size:0.75rem;">
+        <button type="button" class="btn btn-sm btn-outline-danger px-1"
+                onclick="this.closest('.d-flex').remove()">×</button>
+      </div>`).join('');
+}
+
+function _collectAnnForm() {
+  const type = document.getElementById('ann-type-sel').value;
+  const props = {};
+  if (type === 'path') {
+    props.highway = document.getElementById('ann-highway-sel').value;
+    const w = parseFloat(document.getElementById('ann-width-inp').value);
+    if (!isNaN(w) && w > 0) props.width = w;
+  } else {
+    props.barrier = document.getElementById('ann-barrier-sel').value;
+  }
+  document.querySelectorAll('#ann-extra-props .d-flex').forEach(row => {
+    const k = row.querySelector('.ep-key').value.trim();
+    const v = row.querySelector('.ep-val').value.trim();
+    if (k) props[k] = v;
+  });
+  return { type, props };
+}
+
+function openAnnDetailModal(geometry, mode) {
+  pendingAnnGeom = geometry;
+  editingAnnId   = null;
+  document.getElementById('ann-detail-title').textContent = 'New Annotation';
+  document.getElementById('ann-type-sel').value    = mode === 'path' ? 'path' : 'obstacle';
+  document.getElementById('ann-type-sel').disabled = false;
+  document.getElementById('ann-barrier-sel').value = 'wall';
+  document.getElementById('ann-highway-sel').value = 'footway';
+  document.getElementById('ann-width-inp').value   = '1.5';
+  _renderExtraProps({});
+  updateAnnTypeFields();
+  new bootstrap.Modal(document.getElementById('ann-detail-modal')).show();
+}
+
+function openAnnEditModal(annId) {
+  const ann = annotations.find(a => a.id === annId);
+  if (!ann) return;
+  editingAnnId   = annId;
+  pendingAnnGeom = null;
+  document.getElementById('ann-detail-title').textContent = 'Edit Annotation';
+  const type = ann.type || 'obstacle';
+  document.getElementById('ann-type-sel').value    = type;
+  document.getElementById('ann-type-sel').disabled = false;
+  const props = ann.properties || {};
+  if (type === 'path') {
+    document.getElementById('ann-highway-sel').value = props.highway || 'footway';
+    document.getElementById('ann-width-inp').value   = props.width   || '1.5';
+  } else {
+    document.getElementById('ann-barrier-sel').value = props.barrier || 'wall';
+  }
+  const exclude = type === 'path' ? ['highway', 'width'] : ['barrier'];
+  _renderExtraProps(Object.fromEntries(Object.entries(props).filter(([k]) => !exclude.includes(k))));
+  updateAnnTypeFields();
+  new bootstrap.Modal(document.getElementById('ann-detail-modal')).show();
+}
+
+document.getElementById('ann-add-prop-btn').addEventListener('click', () => {
+  const div = document.createElement('div');
+  div.className = 'd-flex gap-1 mb-1';
+  div.innerHTML = `
+    <input class="form-control form-control-sm bg-dark text-light border-secondary ep-key"
+           placeholder="key" style="flex:1;font-size:0.75rem;">
+    <input class="form-control form-control-sm bg-dark text-light border-secondary ep-val"
+           placeholder="value" style="flex:1;font-size:0.75rem;">
+    <button type="button" class="btn btn-sm btn-outline-danger px-1"
+            onclick="this.closest('.d-flex').remove()">×</button>`;
+  document.getElementById('ann-extra-props').appendChild(div);
+});
+
+document.getElementById('ann-detail-save').addEventListener('click', async () => {
+  const { type, props } = _collectAnnForm();
+  bootstrap.Modal.getInstance(document.getElementById('ann-detail-modal')).hide();
+
+  if (editingAnnId) {
+    const ann = annotations.find(a => a.id === editingAnnId);
+    if (!ann) return;
+    const res = await fetch(
+      `/api/annotations/${editingAnnId}?file=${encodeURIComponent(currentFile)}`,
+      { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ geometry: ann.geometry, type, properties: props }) }
+    );
+    if (res.ok) {
+      Object.assign(ann, await res.json());
+      renderAnnotationLayer();
+      renderAnnotationList();
+      setStatus('Annotation updated', 'text-success');
+    }
+  } else {
+    const res = await fetch(
+      `/api/annotations?file=${encodeURIComponent(currentFile)}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, geometry: pendingAnnGeom, properties: props }) }
+    );
+    if (res.ok) {
+      const ann = await res.json();
+      annotations.push(ann);
+      addAnnotationToLayer(ann);
+      renderAnnotationList();
+      setStatus('Annotation added', 'text-success');
+    }
+    pendingAnnGeom = null;
+  }
+});
+
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   // Don't fire while the user is typing
@@ -892,6 +1216,7 @@ document.addEventListener('keydown', e => {
     case 'a': case 'A':      setMode('add');    break;
     case 'd': case 'D':      setMode('delete'); break;
     case 'f': case 'F':      setMode('fetch');  break;
+    case 'p': case 'P':      setMode('path');   break;
     case 'n': case 'N':
       if (currentMode === 'view') toggleNodes();
       break;

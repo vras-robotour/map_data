@@ -134,6 +134,9 @@ class MapData:
         self.osm_ways_data = None
         self.osm_rels_data = None
         self.osm_nodes_data = None
+        # Plain-Python node lookup: node_id → {lat, lon, tags}. Populated during
+        # parse_ways so it survives pickling even after osm_*_data are cleared.
+        self.nodes_cache: dict = {}
 
         self.roads = set()
         self.footways = set()
@@ -286,6 +289,14 @@ class MapData:
             coords = list(zip(easting, northing))
 
             self.way_node_ids.update(n.id for n in way.nodes)
+
+            for n in way.nodes:
+                if n.id not in self.nodes_cache:
+                    self.nodes_cache[n.id] = {
+                        "lat": float(n.lat),
+                        "lon": float(n.lon),
+                        "tags": dict(n.tags) if n.tags else {},
+                    }
 
             is_area = coords[0] == coords[-1]
             self.ways[way.id] = Way(

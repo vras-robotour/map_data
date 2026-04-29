@@ -1,3 +1,5 @@
+import copy
+import io
 import os
 import re
 import json
@@ -7,9 +9,11 @@ import uuid
 
 import utm
 import numpy as np
-from flask import Flask, jsonify, request, render_template, abort
+from flask import Flask, jsonify, request, render_template, abort, send_file
+from shapely.geometry import LineString as _SLS, Polygon as _SPoly, MultiPolygon as _SMPoly
 
 from map_data.map_data import MapData  # noqa: F401 – ensures MapData class is resolvable on pickle load
+from map_data.way import Way           # noqa: F401 – needed for export reconstruction
 
 
 app = Flask(__name__)
@@ -133,6 +137,36 @@ def _load_annotations(path):
 def _save_annotations(path, data):
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
+
+
+# ------------------------------------------------------------------
+# Export helpers
+# ------------------------------------------------------------------
+
+
+def _geojson_geom_to_utm(geometry, zone_number, zone_letter):
+    """GeoJSON geometry (lon/lat) → Shapely geometry (UTM, same zone as mapdata)."""
+    def pt(c):
+        e, n, _, _ = utm.from_latlon(
+            c[1], c[0],
+            force_zone_number=zone_number,
+            force_zone_letter=zone_letter,
+        )
+        return (e, n)
+
+    gtype = geometry.get("type")
+    if gtype == "LineString":
+        return _SLS([pt(c) for c in geometry["coordinates"]])
+    if gtype == "Polygon":
+        rings = [[pt(c) for c in ring] for ring in geometry["coordinates"]]
+        return _SPoly(rings[0], rings[1:])
+    if gtype == "MultiPolygon":
+        polys = [
+            _SPoly([pt(c) for c in pc[0]], [[pt(c) for c in r] for r in pc[1:]])
+            for pc in geometry["coordinates"]
+        ]
+        return _SMPoly(polys)
+    return None
 
 
 # ------------------------------------------------------------------
@@ -284,6 +318,114 @@ def fetch_area():
             "footways": len(md.footways_list),
             "barriers": len(md.barriers_list),
         }
+    )
+
+
+@app.route("/api/way_nodes")
+def get_way_nodes():
+    filename = request.args.get("file")
+    way_id   = request.args.get("way_id")
+    if not filename or way_id is None:
+        abort(400, "Missing 'file' or 'way_id' query parameter")
+    path = os.path.join(_get_data_dir(), filename)
+    if not os.path.isfile(path):
+        abort(404, f"File not found: {filename}")
+
+    with open(path, "rb") as f:
+        md = pickle.load(f)
+
+    try:
+        wid = int(way_id)
+    except (ValueError, TypeError):
+        abort(400, "way_id must be an integer")
+
+    way = next(
+        (w for lst in (md.roads_list, md.footways_list, md.barriers_list)
+         for w in lst if w.id == wid),
+        None,
+    )
+    if way is None:
+        abort(404, f"Way {wid} not found")
+
+    nodes_cache = getattr(md, "nodes_cache", {})
+    zn, zl = md.zone_number, md.zone_letter
+
+    # Lazy fallback: derive lat/lon from geometry coords when cache misses
+    geom_latlon = None
+    nodes = []
+    for i, node_or_id in enumerate(way.nodes):
+        nid = getattr(node_or_id, "id", node_or_id)
+        if nid in nodes_cache:
+            nd = nodes_cache[nid]
+            nodes.append({"id": nid, "lat": nd["lat"], "lon": nd["lon"], "tags": nd["tags"]})
+        else:
+            if geom_latlon is None:
+                geom = way.line
+                raw = list(geom.exterior.coords if hasattr(geom, "exterior") else geom.coords)
+                geom_latlon = [utm.to_latlon(e, n, zn, zl) for e, n in raw]
+            if i < len(geom_latlon):
+                lat, lon = geom_latlon[i]
+                nodes.append({"id": nid, "lat": lat, "lon": lon, "tags": {}})
+
+    return jsonify({"way_id": wid, "nodes": nodes})
+
+
+@app.route("/api/export")
+def export_mapdata():
+    filename = request.args.get("file")
+    if not filename:
+        abort(400, "Missing 'file' query parameter")
+    path = os.path.join(_get_data_dir(), filename)
+    if not os.path.isfile(path):
+        abort(404, f"File not found: {filename}")
+
+    with open(path, "rb") as f:
+        md = pickle.load(f)
+
+    store = _load_annotations(_annotation_path(filename))
+    md = copy.deepcopy(md)
+    zn, zl = md.zone_number, md.zone_letter
+    ann_id = -1
+
+    for ann in store.get("annotations", []):
+        geom = _geojson_geom_to_utm(ann["geometry"], zn, zl)
+        if geom is None:
+            continue
+        props = ann.get("properties", {})
+        ann_type = ann.get("type", "obstacle")
+
+        w = Way()
+        w.id = ann_id
+        ann_id -= 1
+        w.line = geom
+        w.nodes = []
+        w.in_out = ""
+
+        if ann_type == "path":
+            hw = props.get("highway", "path")
+            w.tags = {"highway": hw}
+            if "width" in props:
+                w.tags["width"] = str(props["width"])
+            for k, v in props.items():
+                if k not in ("highway", "width"):
+                    w.tags[k] = str(v)
+            (md.roads_list if w.is_road() else md.footways_list).append(w)
+        else:
+            w.tags = {"barrier": props.get("barrier", "wall")}
+            for k, v in props.items():
+                if k != "barrier":
+                    w.tags[k] = str(v)
+            md.barriers_list.append(w)
+
+    buf = io.BytesIO()
+    pickle.dump(md, buf, protocol=2)
+    buf.seek(0)
+    base = filename.rsplit(".", 1)[0]
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=f"{base}.exported.mapdata",
+        mimetype="application/octet-stream",
     )
 
 
