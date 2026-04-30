@@ -7,306 +7,197 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
-  <style>
-    html, body { height: 100%; margin: 0; overflow: hidden; font-size: 14px; }
-    #app { display: flex; flex-direction: column; height: 100vh; }
-    #topbar { flex-shrink: 0; background: #1a1a2e; border-bottom: 1px solid #333; padding: 6px 12px; }
-    #main { display: flex; flex: 1; overflow: hidden; }
-    #sidebar {
-      width: 280px; min-width: 280px; overflow-y: auto;
-      scrollbar-gutter: stable;
-      background: #16213e; color: #cdd3de; border-right: 1px solid #333;
-      display: flex; flex-direction: column; gap: 0;
-    }
-    #map { flex: 1; }
-
-    .panel { padding: 12px 14px; border-bottom: 1px solid #2a2a4a; }
-    .panel-title {
-      font-size: 0.65rem; font-weight: 700; letter-spacing: 1.5px;
-      text-transform: uppercase; color: #6c7a9c; margin-bottom: 8px;
-    }
-
-    .layer-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; }
-    .layer-row:hover { color: #fff; }
-    .layer-swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
-
-    #props-content { font-size: 0.8rem; }
-    #props-content table { width: 100%; border-collapse: collapse; }
-    #props-content td { padding: 2px 4px; vertical-align: top; }
-    #props-content td:first-child { color: #6c7a9c; white-space: nowrap; padding-right: 8px; }
-    #props-content tr:hover td { background: #1e2d50; }
-
-    .ann-item {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 4px 0; border-bottom: 1px solid #2a2a4a; font-size: 0.78rem;
-    }
-    .ann-item:last-child { border-bottom: none; }
-    .ann-id { color: #6c7a9c; font-size: 0.68rem; }
-
-    .mode-btn { font-size: 0.78rem; }
-    .mode-btn.active { background: #0d6efd; border-color: #0d6efd; color: #fff; }
-
-    #status { font-size: 0.75rem; }
-    .leaflet-draw { z-index: 500; }
-
-    .subtype-btn { background: none; border: none; color: #6c7a9c; font-size: 0.7rem;
-                   padding: 0 2px; cursor: pointer; line-height: 1; margin-left: auto; }
-    .subtype-btn:hover { color: #cdd3de; }
-    .subtype-panel { display: none; padding: 1px 4px 4px 22px; }
-    .subtype-row { display: flex; align-items: center; gap: 6px; padding: 2px 0;
-                   font-size: 0.78rem; cursor: pointer; min-height: 20px; }
-    .subtype-row:hover { color: #fff; }
-    .st-check {
-      appearance: none; -webkit-appearance: none;
-      width: 14px; height: 14px; flex-shrink: 0;
-      border: 1.5px solid #6c7a9c; border-radius: 2px;
-      background: transparent; cursor: pointer;
-      position: relative; display: inline-block; vertical-align: middle;
-      transition: background 0.1s, border-color 0.1s;
-    }
-    .st-check:checked {
-      background: #0d6efd; border-color: #0d6efd;
-    }
-    .st-check:checked::after {
-      content: '';
-      position: absolute; left: 3px; top: 0px;
-      width: 5px; height: 9px;
-      border: 2px solid #fff; border-top: none; border-left: none;
-      transform: rotate(45deg);
-    }
-    .subtype-cnt { color: #6c7a9c; font-size: 0.68rem; margin-left: auto; }
-
-    .node-list { max-height: 200px; overflow-y: auto; margin-top: 4px; }
-    .node-list-item {
-      display: flex; align-items: baseline; gap: 5px;
-      padding: 2px 3px; font-size: 0.74rem; cursor: pointer;
-      border-bottom: 1px solid #1e2d50;
-    }
-    .node-list-item:hover { background: #1e2d50; color: #fff; }
-    .node-list-item:last-child { border-bottom: none; }
-    .node-list-item.sel { background: #1e2d50; color: #f0a500; }
-    .node-list-item.sel .node-idx { color: #f0a500; }
-    .node-idx { color: #6c7a9c; font-size: 0.68rem; flex-shrink: 0; min-width: 20px; }
-    .node-tag-hint { color: #6c7a9c; font-size: 0.68rem; margin-left: auto; white-space: nowrap;
-                     overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
-
-    .change-item {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 4px 0; border-bottom: 1px solid #2a2a4a; font-size: 0.78rem;
-    }
-    .change-item:last-child { border-bottom: none; }
-    .change-id { color: #6c7a9c; font-size: 0.68rem; }
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
 </head>
 <body>
 <div id="app">
 
   <!-- Top bar -->
-  <div id="topbar" class="d-flex align-items-center gap-2 flex-wrap">
-    <span class="fw-bold text-light me-2" style="font-size:0.9rem;">Map Data Viewer</span>
+  <div id="topbar" class="d-flex align-items-center gap-2 flex-nowrap overflow-hidden">
+    <span class="fw-bold text-light me-2" style="font-size:0.9rem; white-space:nowrap;">Map Data Viewer</span>
 
-    <select id="file-select" class="form-select form-select-sm bg-dark text-light border-secondary" style="width:200px;">
+    <select id="file-select" class="form-select form-select-sm bg-dark text-light border-secondary" style="width:180px; flex-shrink:0;">
       <option value="">Select .mapdata file…</option>
     </select>
-    <button id="load-btn" class="btn btn-primary btn-sm">Load</button>
+    <button id="load-btn" class="btn btn-primary btn-sm" style="flex-shrink:0;">Load</button>
 
-    <div class="vr mx-1 bg-secondary" style="height:20px;"></div>
+    <div class="vr mx-1 bg-secondary" style="height:20px; flex-shrink:0;"></div>
 
-    <div class="btn-group btn-group-sm">
+    <div class="btn-group btn-group-sm" style="flex-shrink:0;">
       <button class="btn btn-outline-light mode-btn active" data-mode="view" title="View and inspect features">
-        &#128065; View [V]
+        <span class="d-none d-sm-inline">VIEW (V)</span><span class="d-sm-none">V</span>
       </button>
-      <button class="btn btn-outline-info mode-btn" data-mode="edit" title="Move and reshape annotations">
-        &#9998; Edit [E]
+      <button class="btn btn-outline-light mode-btn" data-mode="edit" title="Edit annotation shapes">
+        <span class="d-none d-sm-inline">EDIT (E)</span><span class="d-sm-none">E</span>
       </button>
-      <button class="btn btn-outline-warning mode-btn" data-mode="add" title="Draw a new obstacle polygon">
-        &#43; Obstacle [A]
+      <button class="btn btn-outline-light mode-btn" data-mode="add" title="Add obstacle/barrier annotation">
+        <span class="d-none d-sm-inline">+ OBS (A)</span><span class="d-sm-none">+O</span>
       </button>
-      <button class="btn btn-outline-danger mode-btn" data-mode="delete" title="Select annotations to delete">
-        &#10005; Delete [D]
+      <button class="btn btn-outline-light mode-btn" data-mode="path" title="Add path annotation">
+        <span class="d-none d-sm-inline">+ PATH (P)</span><span class="d-sm-none">+P</span>
       </button>
-      <button class="btn btn-outline-success mode-btn" data-mode="fetch" title="Select area to fetch and parse OSM data">
-        &#8659; Fetch Area [F]
-      </button>
-      <button class="btn btn-outline-secondary mode-btn" data-mode="path" title="Draw a custom path / road">
-        &#9135; Path [P]
+      <button class="btn btn-outline-light mode-btn" data-mode="delete" title="Delete annotations">
+        <span class="d-none d-sm-inline">DEL (D)</span><span class="d-sm-none">D</span>
       </button>
     </div>
 
-    <div class="vr mx-1 bg-secondary" style="height:20px;"></div>
-    <button id="export-btn" class="btn btn-outline-light btn-sm" disabled title="Download mapdata merged with annotations">
-      &#8681; Export
+    <div class="vr mx-1 bg-secondary" style="height:20px; flex-shrink:0;"></div>
+
+    <button class="btn btn-outline-info btn-sm mode-btn" data-mode="fetch" title="Fetch area from OSM Overpass" style="flex-shrink:0;">
+      <span class="d-none d-sm-inline">FETCH (F)</span><span class="d-sm-none">F</span>
     </button>
 
-    <span id="status" class="text-secondary ms-auto"></span>
+    <div class="vr mx-1 bg-secondary" style="height:20px; flex-shrink:0;"></div>
+
+    <button id="export-btn" class="btn btn-warning btn-sm" style="flex-shrink:0;" disabled>Export</button>
+
+    <div id="status" class="text-secondary ms-auto px-2" style="font-size:0.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
   </div>
 
+  <!-- Main layout -->
   <div id="main">
 
     <!-- Sidebar -->
     <div id="sidebar">
 
+      <!-- Layers panel -->
       <div class="panel">
-        <div class="panel-title">Layers</div>
-        <div>
-          <div style="display:flex;align-items:center;">
-            <label class="layer-row" style="flex:1;margin:0;">
-              <input type="checkbox" class="form-check-input m-0" data-layer="road" checked>
-              <span class="layer-swatch" style="background:#444;border:1px solid #888;"></span>
-              <span>Roads</span>
-            </label>
-            <button class="subtype-btn" data-subtype-toggle="road" title="Filter subtypes">&#9660;</button>
-          </div>
-          <div class="subtype-panel" id="subfilter-road"></div>
+        <div class="panel-title">LAYERS</div>
+
+        <!-- Road -->
+        <div class="layer-row">
+          <input type="checkbox" class="st-check" data-layer="road" checked>
+          <div class="layer-swatch" style="background:#333; border:1px solid #555;"></div>
+          <span>Roads</span>
+          <button class="subtype-btn" data-subtype-toggle="road">▼</button>
         </div>
-        <div>
-          <div style="display:flex;align-items:center;">
-            <label class="layer-row" style="flex:1;margin:0;">
-              <input type="checkbox" class="form-check-input m-0" data-layer="footway" checked>
-              <span class="layer-swatch" style="background:#FFD700;opacity:0.85;"></span>
-              <span>Footways</span>
-            </label>
-            <button class="subtype-btn" data-subtype-toggle="footway" title="Filter subtypes">&#9660;</button>
-          </div>
-          <div class="subtype-panel" id="subfilter-footway"></div>
+        <div id="subfilter-road" class="subtype-panel"></div>
+
+        <!-- Footway -->
+        <div class="layer-row">
+          <input type="checkbox" class="st-check" data-layer="footway" checked>
+          <div class="layer-swatch" style="background:#FFD700; border:1px solid #b89900;"></div>
+          <span>Footways</span>
+          <button class="subtype-btn" data-subtype-toggle="footway">▼</button>
         </div>
-        <div>
-          <div style="display:flex;align-items:center;">
-            <label class="layer-row" style="flex:1;margin:0;">
-              <input type="checkbox" class="form-check-input m-0" data-layer="barrier" checked>
-              <span class="layer-swatch" style="background:#BF0009;opacity:0.85;"></span>
-              <span>Barriers</span>
-            </label>
-            <button class="subtype-btn" data-subtype-toggle="barrier" title="Filter subtypes">&#9660;</button>
-          </div>
-          <div class="subtype-panel" id="subfilter-barrier"></div>
+        <div id="subfilter-footway" class="subtype-panel"></div>
+
+        <!-- Barrier -->
+        <div class="layer-row">
+          <input type="checkbox" class="st-check" data-layer="barrier" checked>
+          <div class="layer-swatch" style="background:#BF0009; border:1px solid #8b0000;"></div>
+          <span>Barriers</span>
+          <button class="subtype-btn" data-subtype-toggle="barrier">▼</button>
         </div>
-        <label class="layer-row">
-          <input type="checkbox" class="form-check-input m-0" data-layer="waypoint">
-          <span class="layer-swatch" style="background:#50C2F6;border-radius:50%;"></span>
-          <span>Waypoints</span>
-        </label>
-        <label class="layer-row">
-          <input type="checkbox" class="form-check-input m-0" data-layer="annotation" checked>
-          <span class="layer-swatch" style="background:#ff8c00;opacity:0.85;"></span>
+        <div id="subfilter-barrier" class="subtype-panel"></div>
+
+        <!-- Annotation -->
+        <div class="layer-row">
+          <input type="checkbox" class="st-check" data-layer="annotation" checked>
+          <div class="layer-swatch" style="background:#ff8c00; border:1px solid #cc5500;"></div>
           <span>Annotations</span>
-        </label>
-      </div>
+        </div>
 
-      <div class="panel" style="flex:1;">
-        <div class="panel-title">Feature Properties</div>
-        <div id="props-content">
-          <span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>
+        <!-- Waypoints -->
+        <div class="layer-row">
+          <input type="checkbox" class="st-check" data-layer="waypoint">
+          <div class="layer-swatch" style="background:#50C2F6; border:1px solid #000;"></div>
+          <span>Waypoints</span>
         </div>
       </div>
 
-      <div class="panel" id="ann-panel" style="display:none;">
-        <div class="panel-title" style="display:flex;align-items:center;cursor:pointer;" onclick="togglePanel('ann')">
-          <span style="flex:1;">Annotations <span id="ann-count" class="text-secondary fw-normal ms-1"></span></span>
-          <span id="ann-toggle" style="font-size:0.7rem;">&#9650;</span>
+      <!-- Properties panel -->
+      <div class="panel" style="flex: 1; border-bottom: none;">
+        <div class="panel-title">PROPERTIES</div>
+        <div id="props-content" class="text-secondary" style="font-style:italic;">
+          Click a feature to inspect
         </div>
-        <div id="ann-body">
+
+        <div id="ann-panel" style="display:none; margin-top:16px;">
+          <div class="panel-title">ANNOTATIONS <span id="ann-count"></span></div>
           <div id="ann-list"></div>
         </div>
-      </div>
 
-      <div class="panel" id="changes-panel" style="display:none;">
-        <div class="panel-title" style="display:flex;align-items:center;cursor:pointer;" onclick="togglePanel('changes')">
-          <span style="flex:1;">Changes <span id="changes-count" class="text-secondary fw-normal ms-1"></span></span>
-          <span id="changes-toggle" style="font-size:0.7rem;">&#9650;</span>
-        </div>
-        <div id="changes-body">
+        <div id="changes-panel" style="display:none; margin-top:16px;">
+          <div class="panel-title">CHANGES <span id="changes-count"></span></div>
           <div id="changes-list"></div>
         </div>
-      </div>
 
-      <div class="panel" id="hidden-panel" style="display:none;">
-        <div class="panel-title" style="display:flex;align-items:center;cursor:pointer;" onclick="togglePanel('hidden')">
-          <span style="flex:1;">Hidden <span id="hidden-count" class="text-secondary fw-normal ms-1"></span></span>
-          <span id="hidden-toggle" style="font-size:0.7rem;">&#9650;</span>
-        </div>
-        <div id="hidden-body">
+        <div id="hidden-panel" style="display:none; margin-top:16px;">
+          <div class="panel-title">HIDDEN <span id="hidden-count"></span></div>
           <div id="hidden-list"></div>
         </div>
       </div>
 
     </div>
 
+    <!-- Map -->
     <div id="map"></div>
   </div>
 </div>
 
-<!-- Fetch area name modal -->
+<!-- Fetch Area Modal -->
 <div class="modal fade" id="fetch-area-modal" tabindex="-1">
   <div class="modal-dialog modal-sm modal-dialog-centered">
     <div class="modal-content bg-dark text-light border-secondary">
       <div class="modal-header border-secondary py-2">
-        <h6 class="modal-title">Name this area</h6>
+        <h6 class="modal-title">Fetch OSM Area</h6>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body py-2">
-        <input id="area-name-input" type="text"
-               class="form-control form-control-sm bg-dark text-light border-secondary"
-               placeholder="e.g. stromovka_north" autocomplete="off">
-        <div class="form-text text-secondary" style="font-size:0.72rem;">
-          Saved as &lt;name&gt;.mapdata in the data directory.
+        <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">NAME</label>
+        <input id="area-name-input" type="text" placeholder="e.g. prague_center"
+               class="form-control form-control-sm bg-dark text-light border-secondary">
+        <div class="form-text text-secondary mt-1" style="font-size:0.65rem;">
+          The area will be saved as <code>NAME.mapdata</code>.
         </div>
       </div>
       <div class="modal-footer border-secondary py-2">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" id="fetch-area-submit" class="btn btn-success btn-sm">Fetch &amp; Parse</button>
+        <button type="button" id="fetch-area-submit" class="btn btn-primary btn-sm">Fetch & Parse</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Annotation detail modal -->
+<!-- Annotation Detail Modal -->
 <div class="modal fade" id="ann-detail-modal" tabindex="-1">
   <div class="modal-dialog modal-sm modal-dialog-centered">
     <div class="modal-content bg-dark text-light border-secondary">
       <div class="modal-header border-secondary py-2">
-        <h6 class="modal-title" id="ann-detail-title">Annotation Details</h6>
+        <h6 class="modal-title" id="ann-detail-title">New Annotation</h6>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body py-2" style="font-size:0.82rem;">
-
-        <div class="mb-2">
+      <div class="modal-body py-2" style="max-height:400px;overflow-y:auto;">
+        <div class="mb-3">
           <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">TYPE</label>
           <select id="ann-type-sel" class="form-select form-select-sm bg-dark text-light border-secondary"
                   onchange="updateAnnTypeFields()">
-            <option value="obstacle">Obstacle / barrier</option>
-            <option value="path">Path / road</option>
+            <option value="obstacle">Obstacle (Area)</option>
+            <option value="path">Path (LineString)</option>
           </select>
         </div>
 
-        <div id="ann-obstacle-fields" class="mb-2">
+        <div id="ann-obstacle-fields">
           <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">BARRIER TYPE</label>
           <select id="ann-barrier-sel" class="form-select form-select-sm bg-dark text-light border-secondary">
-            <option value="wall">wall</option>
-            <option value="fence">fence</option>
-            <option value="hedge">hedge</option>
-            <option value="building">building</option>
-            <option value="bollard">bollard</option>
-            <option value="kerb">kerb</option>
-            <option value="door">door</option>
-            <option value="gate">gate</option>
-            <option value="lift_gate">lift_gate</option>
-            <option value="retaining_wall">retaining_wall</option>
-            <option value="block">block</option>
+            <option value="wall">Wall</option>
+            <option value="fence">Fence</option>
+            <option value="hedge">Hedge</option>
+            <option value="bollard">Bollard</option>
+            <option value="gate">Gate</option>
+            <option value="other">Other</option>
           </select>
         </div>
 
-        <div id="ann-path-fields" class="mb-2" style="display:none;">
+        <div id="ann-path-fields" style="display:none;">
           <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">HIGHWAY TYPE</label>
           <select id="ann-highway-sel" class="form-select form-select-sm bg-dark text-light border-secondary">
-            <option value="footway">footway</option>
-            <option value="path">path</option>
-            <option value="cycleway">cycleway</option>
-            <option value="steps">steps</option>
-            <option value="service">service</option>
-            <option value="track">track</option>
-            <option value="residential">residential</option>
-            <option value="tertiary">tertiary</option>
+            <option value="footway">Footway</option>
+            <option value="path">Path</option>
+            <option value="pedestrian">Pedestrian</option>
+            <option value="cycleway">Cycleway</option>
+            <option value="service">Service</option>
           </select>
           <label class="form-label text-secondary mb-1 mt-2" style="font-size:0.72rem;">WIDTH (m)</label>
           <input id="ann-width-inp" type="number" min="0.1" step="0.1" value="1.5"
@@ -357,1380 +248,15 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-// ── Map setup ────────────────────────────────────────────────────────────────
-const map = L.map('map', { preferCanvas: true }).setView([50.08, 14.42], 5);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  maxZoom: 19,
-}).addTo(map);
+<!-- Custom JS modules -->
+<script src="{{ url_for('static', filename='js/state.js') }}"></script>
+<script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ui_handlers.js') }}"></script>
+<script src="{{ url_for('static', filename='js/layers.js') }}"></script>
+<script src="{{ url_for('static', filename='js/draw_handlers.js') }}"></script>
+<script src="{{ url_for('static', filename='js/map_setup.js') }}"></script>
 
-
-// ── State ────────────────────────────────────────────────────────────────────
-let currentFile = null;
-let currentMode = 'view';
-let annotations = [];
-let pendingBbox  = null;
-let nodeLayer         = null;   // L.LayerGroup of node circle markers
-let nodeCount         = 0;      // actual OSM node count from last fetch
-let currentNodes      = [];     // fetched OSM node objects for the active way
-let nodeMarkers       = [];     // L.CircleMarker refs, same order as currentNodes
-let selectedNodeIndex = -1;     // currently selected node index
-let currentClickedFeature = null; // last GeoJSON feature clicked in view mode
-let currentClickedLayer  = null;  // Leaflet layer for the selected OSM feature
-let deletedWays  = [];            // [{id, category, label}, ...] from annotations store
-let deletedNodes = [];            // [{way_id, node_id}, ...]        from annotations store
-let tagOverrides = [];            // [{id, category, label, tags}, ...] from annotations store
-let hiddenWays   = [];            // [{id, category, label}, ...] from annotations store
-let hiddenWayIds = new Set();     // Set<number> for O(1) lookup
-let editSelectedLayer = null;   // annotation layer selected in edit mode
-let pathLineDraw  = null;       // L.Draw.Polyline handler for path mode
-let pendingAnnGeom = null;      // geometry waiting for the details modal
-let editingAnnId   = null;      // annotation ID being edited in the modal
-let editingWayId   = null;      // OSM way ID being edited in the way-edit modal
-
-// ── Layers ───────────────────────────────────────────────────────────────────
-const geoLayers = { road: null, footway: null, barrier: null, waypoint: null };
-
-// subtypeLayers[cat][subtype] = array of individual L.Path layers inside geoLayers[cat]
-const subtypeLayers  = { road: {}, footway: {}, barrier: {} };
-// subtypeFilters[cat][subtype] = boolean (true = visible)
-const subtypeFilters = { road: {}, footway: {}, barrier: {} };
-
-// drawnItems holds all annotation polygons so Leaflet.draw can edit/delete them
-const drawnItems = new L.FeatureGroup().addTo(map);
-
-// ── Draw controls / handlers ─────────────────────────────────────────────────
-let drawControl   = null;
-let deleteHandler = null;
-let fetchRectDraw = null;
-
-function initHandlers() {
-  deleteHandler = new L.EditToolbar.Delete(map, { featureGroup: drawnItems });
-}
-
-// ── Edit-mode drag-to-move ────────────────────────────────────────────────────
-// L.EditToolbar.Edit gives vertex handles (reshape) but not whole-polygon drag.
-// We implement drag ourselves: mousedown on fill → translate all latlngs.
-const editDrag = { active: false, layer: null, startLatLng: null, origLatLngs: null };
-
-function _cloneLatLngs(lls) {
-  if (!lls || !lls.length) return lls;
-  if (Array.isArray(lls[0])) return lls.map(_cloneLatLngs);
-  return lls.map(ll => ({ lat: ll.lat, lng: ll.lng }));
-}
-
-// Translate existing LatLng objects in-place. setLatLngs() replaces _latlngs with a
-// new array, which breaks L.Edit.Poly's cached reference set in initialize(). By
-// mutating the objects inside the existing array instead, the edit handler sees the
-// updated positions without needing any reference refresh.
-function _applyDeltaInPlace(lls, orig, dlat, dlng) {
-  for (let i = 0; i < lls.length; i++) {
-    if (Array.isArray(lls[i])) {
-      _applyDeltaInPlace(lls[i], orig[i], dlat, dlng);
-    } else {
-      lls[i].lat = orig[i].lat + dlat;
-      lls[i].lng = orig[i].lng + dlng;
-    }
-  }
-}
-
-function _onEditDragDown(e) {
-  L.DomEvent.stopPropagation(e);
-  // Selection highlight
-  if (editSelectedLayer && editSelectedLayer !== e.target && editSelectedLayer.setStyle)
-    editSelectedLayer.setStyle({ ..._layerBaseStyle(editSelectedLayer), cursor: 'move' });
-  editSelectedLayer = e.target;
-  if (e.target.setStyle)
-    e.target.setStyle({ ..._layerBaseStyle(e.target), color: '#ff4400', weight: 3, cursor: 'grabbing' });
-  editDrag.active      = true;
-  editDrag.layer       = e.target;
-  editDrag.startLatLng = e.latlng;
-  editDrag.origLatLngs = _cloneLatLngs(e.target.getLatLngs());
-  map.dragging.disable();
-  map.getContainer().style.cursor = 'grabbing';
-}
-
-function _onEditDragMove(e) {
-  if (!editDrag.active) return;
-  const dlat = e.latlng.lat - editDrag.startLatLng.lat;
-  const dlng = e.latlng.lng - editDrag.startLatLng.lng;
-  _applyDeltaInPlace(editDrag.layer._latlngs, editDrag.origLatLngs, dlat, dlng);
-  editDrag.layer.redraw();
-  const ed = editDrag.layer.editing;
-  if (ed && ed._enabled) ed.updateMarkers();
-}
-
-function _onEditDragUp() {
-  if (!editDrag.active) return;
-  editDrag.active = false;
-  map.dragging.enable();
-  map.getContainer().style.cursor = currentMode === 'edit' ? 'move' : '';
-  const layer = editDrag.layer;
-  editDrag.layer = null;
-  if (layer) _saveAnnotationGeometry(layer);
-}
-
-async function _saveAnnotationGeometry(layer) {
-  const annId = layer.options._ann_id;
-  if (!annId || !currentFile) return;
-  const geom = layer.toGeoJSON().geometry;
-  await fetch(`/api/annotations/${annId}?file=${encodeURIComponent(currentFile)}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ geometry: geom }),
-  });
-  const ann = annotations.find(a => a.id === annId);
-  if (ann) ann.geometry = geom;
-}
-
-function _layerBaseStyle(layer) {
-  const ann = annotations.find(a => a.id === layer.options._ann_id);
-  return _annStyle(ann || {});
-}
-
-function enableAnnotationEditMode() {
-  map.on('mousemove', _onEditDragMove);
-  map.on('mouseup',   _onEditDragUp);
-  drawnItems.eachLayer(layer => {
-    if (layer.editing) layer.editing.enable();
-    layer.on('mousedown', _onEditDragDown);
-    if (layer.setStyle)  layer.setStyle({ ..._layerBaseStyle(layer), cursor: 'move' });
-  });
-}
-
-function disableAnnotationEditMode() {
-  map.off('mousemove', _onEditDragMove);
-  map.off('mouseup',   _onEditDragUp);
-  if (editDrag.active) { editDrag.active = false; map.dragging.enable(); }
-  editSelectedLayer = null;
-  drawnItems.eachLayer(layer => {
-    if (layer.editing) layer.editing.disable();
-    layer.off('mousedown', _onEditDragDown);
-    if (layer.setStyle)  layer.setStyle(_layerBaseStyle(layer));
-    _saveAnnotationGeometry(layer);
-  });
-}
-
-function initDrawControl() {
-  if (drawControl) return;
-  drawControl = new L.Control.Draw({
-    draw: {
-      polyline:     false,
-      rectangle:    { shapeOptions: STYLES.annotation },
-      polygon:      { allowIntersection: false, shapeOptions: STYLES.annotation },
-      circle:       { shapeOptions: STYLES.annotation },
-      circlemarker: false,
-      marker:       false,
-    },
-    edit: { featureGroup: drawnItems, edit: false, remove: false },
-  });
-}
-
-// ── Styles ───────────────────────────────────────────────────────────────────
-const STYLES = {
-  road:       { color: '#555', weight: 0.8, fillColor: '#333', fillOpacity: 0.75 },
-  footway:    { color: '#b89900', weight: 0.5, fillColor: '#FFD700', fillOpacity: 0.45 },
-  barrier:    { color: '#8b0000', weight: 1,   fillColor: '#BF0009', fillOpacity: 0.45 },
-  annotation: { color: '#cc5500', weight: 2,   fillColor: '#ff8c00', fillOpacity: 0.45 },
-  path:       { color: '#22c55e', weight: 3,   fillOpacity: 0, opacity: 0.9 },
-};
-const HIGHLIGHT_STYLES = {
-  road:    { color: '#aaa', weight: 2.5, fillColor: '#555', fillOpacity: 0.9 },
-  footway: { color: '#ffe033', weight: 2, fillColor: '#FFD700', fillOpacity: 0.65 },
-  barrier: { color: '#ff2020', weight: 2.5, fillColor: '#cc0000', fillOpacity: 0.65 },
-};
-
-// ── Status ───────────────────────────────────────────────────────────────────
-function setStatus(msg, cls = 'text-secondary') {
-  const el = document.getElementById('status');
-  el.textContent = msg;
-  el.className = cls + ' ms-auto';
-}
-
-// ── Subtype filter helpers ───────────────────────────────────────────────────
-function getSubtype(feature, cat) {
-  const tags = feature.properties.tags || {};
-  if (cat === 'road' || cat === 'footway') return tags.highway || 'other';
-  if (cat === 'barrier') return tags.barrier || 'other';
-  return 'other';
-}
-
-function setSubtypeVisible(cat, subtype, visible) {
-  subtypeFilters[cat][subtype] = visible;
-  const catLayer = geoLayers[cat];
-  if (!catLayer) return;
-  (subtypeLayers[cat][subtype] || []).forEach(layer => {
-    if (visible) {
-      if (!catLayer.hasLayer(layer) && !hiddenWayIds.has(layer._featureId))
-        catLayer.addLayer(layer);
-    } else {
-      catLayer.removeLayer(layer);
-    }
-  });
-}
-
-function renderSubtypeFilters(cat) {
-  const panel = document.getElementById(`subfilter-${cat}`);
-  if (!panel) return;
-  const subtypes = Object.keys(subtypeLayers[cat]).sort();
-  if (!subtypes.length) { panel.innerHTML = ''; return; }
-  panel.innerHTML = subtypes.map(st => {
-    const count   = (subtypeLayers[cat][st] || []).length;
-    const checked = subtypeFilters[cat][st] !== false;
-    return `<label class="subtype-row">
-      <input type="checkbox" class="st-check"
-             data-subtype-cat="${cat}" data-subtype-val="${escHtml(st)}"
-             ${checked ? 'checked' : ''}>
-      <span>${escHtml(st)}</span>
-      <span class="subtype-cnt">${count}</span>
-    </label>`;
-  }).join('');
-  panel.querySelectorAll('[data-subtype-cat]').forEach(cb => {
-    cb.addEventListener('change', () =>
-      setSubtypeVisible(cb.dataset.subtypeCat, cb.dataset.subtypeVal, cb.checked)
-    );
-  });
-}
-
-// ── File loading ─────────────────────────────────────────────────────────────
-async function loadFileList() {
-  const res = await fetch('/api/files');
-  const data = await res.json();
-  const sel = document.getElementById('file-select');
-  data.mapdata.forEach(f => {
-    if (![...sel.options].some(o => o.value === f)) {
-      sel.appendChild(new Option(f, f));
-    }
-  });
-}
-
-async function loadMapData(filename, { preserveView = false } = {}) {
-  setStatus('Loading…', 'text-warning');
-
-  currentClickedLayer  = null;
-  currentClickedFeature = null;
-  Object.values(geoLayers).forEach(l => l && map.removeLayer(l));
-  Object.keys(geoLayers).forEach(k => geoLayers[k] = null);
-  drawnItems.clearLayers();
-
-  try {
-    const [geoRes, annRes] = await Promise.all([
-      fetch(`/api/mapdata?file=${encodeURIComponent(filename)}`),
-      fetch(`/api/annotations?file=${encodeURIComponent(filename)}`),
-    ]);
-    if (!geoRes.ok) throw new Error(await geoRes.text());
-
-    const geojson = await geoRes.json();
-    const annData = annRes.ok ? await annRes.json() : { annotations: [] };
-
-    const byCategory = { road: [], footway: [], barrier: [], waypoint: [] };
-    geojson.features.forEach(f => {
-      const cat = f.properties.category;
-      if (cat in byCategory) byCategory[cat].push(f);
-    });
-
-    // Pre-compute hidden way IDs before building layers
-    const _loadHiddenMeta = (annData.hidden_ways || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
-    const _loadHiddenIds  = new Set(_loadHiddenMeta.map(d => d.id));
-
-    // Reset subtype state for fresh load
-    ['road', 'footway', 'barrier'].forEach(cat => {
-      subtypeLayers[cat]  = {};
-      subtypeFilters[cat] = {};
-    });
-
-    ['road', 'footway', 'barrier'].forEach(cat => {
-      // For barriers: sort so way-barriers come first and node obstacles come last.
-      // Node obstacles have higher canvas IDs and win click priority over enclosing
-      // barrier polygons.
-      const features = cat === 'barrier'
-        ? [
-            ...byCategory[cat].filter(f => !f.properties.is_node),
-            ...byCategory[cat].filter(f =>  f.properties.is_node),
-          ]
-        : byCategory[cat];
-
-      const layerOpts = {
-        style: () => STYLES[cat],
-        onEachFeature: (feature, layer) => {
-          const st = getSubtype(feature, cat);
-          if (!subtypeLayers[cat][st]) { subtypeLayers[cat][st] = []; subtypeFilters[cat][st] = true; }
-          subtypeLayers[cat][st].push(layer);
-          layer._featureId  = feature.properties.id;
-          layer._featureRef = feature;
-          layer.on('click', e => {
-            L.DomEvent.stopPropagation(e);
-            if (currentMode === 'view') {
-              if (currentClickedLayer && currentClickedLayer !== layer) {
-                currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
-              }
-              layer._osmCat = cat;
-              currentClickedLayer = layer;
-              layer.setStyle(HIGHLIGHT_STYLES[cat]);
-              showProps(feature.properties, feature);
-            }
-          });
-        },
-      };
-
-      geoLayers[cat] = L.geoJSON({ type: 'FeatureCollection', features }, layerOpts);
-      if (_loadHiddenIds.size > 0) {
-        const _toHide = [];
-        geoLayers[cat].eachLayer(l => { if (_loadHiddenIds.has(l._featureId)) _toHide.push(l); });
-        _toHide.forEach(l => geoLayers[cat].removeLayer(l));
-      }
-      if (layerCheckbox(cat).checked) geoLayers[cat].addTo(map);
-      renderSubtypeFilters(cat);
-    });
-
-    geoLayers.waypoint = L.geoJSON(
-      { type: 'FeatureCollection', features: byCategory.waypoint },
-      {
-        pointToLayer: (_, latlng) =>
-          L.circleMarker(latlng, {
-            radius: 5, color: '#000', weight: 1, fillColor: '#50C2F6', fillOpacity: 0.9,
-          }),
-        onEachFeature: (feature, layer) => {
-          layer.on('click', e => {
-            L.DomEvent.stopPropagation(e);
-            if (currentMode === 'view') showProps(feature.properties);
-          });
-        },
-      }
-    );
-    if (layerCheckbox('waypoint').checked) geoLayers.waypoint.addTo(map);
-
-    if (!preserveView) {
-      const allFeatures = [...byCategory.road, ...byCategory.footway, ...byCategory.waypoint];
-      if (allFeatures.length > 0) {
-        map.fitBounds(
-          L.geoJSON({ type: 'FeatureCollection', features: allFeatures }).getBounds(),
-          { padding: [20, 20] }
-        );
-      }
-    }
-
-    annotations  = annData.annotations  || [];
-    deletedWays  = (annData.deleted_ways  || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
-    deletedNodes = (() => {
-      const dn = annData.deleted_nodes || [];
-      if (Array.isArray(dn)) return dn;
-      // old dict format: {way_id: [node_id, ...]}
-      return Object.entries(dn).flatMap(([wid, nids]) => nids.map(nid => ({ way_id: +wid, node_id: nid })));
-    })();
-    const tagOvMap  = annData.tag_overrides      || {};
-    const tagOvMeta = annData.tag_override_meta  || {};
-    tagOverrides = Object.entries(tagOvMap).map(([sid, tags]) => ({
-      id:       +sid,
-      category: tagOvMeta[sid]?.category || 'unknown',
-      label:    tagOvMeta[sid]?.label    || '',
-      tags,
-    }));
-    hiddenWays   = _loadHiddenMeta;
-    hiddenWayIds = _loadHiddenIds;
-    renderAnnotationLayer();
-    renderAnnotationList();
-    renderChangesPanel();
-    renderHiddenPanel();
-
-    currentFile = filename;
-    document.getElementById('export-btn').disabled = false;
-    setStatus(`Loaded: ${filename}`, 'text-success');
-  } catch (err) {
-    setStatus(`Error: ${err.message}`, 'text-danger');
-    console.error(err);
-  }
-}
-
-// ── Re-select a feature after reload ─────────────────────────────────────────
-function _reselectFeature(wayId) {
-  for (const cat of ['road', 'footway', 'barrier']) {
-    const catLayer = geoLayers[cat];
-    if (!catLayer) continue;
-    let found = null;
-    catLayer.eachLayer(layer => { if (layer._featureId === wayId) found = layer; });
-    if (found) {
-      if (currentClickedLayer && currentClickedLayer !== found)
-        currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
-      found._osmCat = cat;
-      currentClickedLayer = found;
-      found.setStyle(HIGHLIGHT_STYLES[cat]);
-      currentClickedFeature = found._featureRef;
-      showProps(found._featureRef.properties, found._featureRef);
-      return true;
-    }
-  }
-  return false;
-}
-
-// ── Incremental way reload (avoids full map rebuild) ─────────────────────────
-async function _refreshAnnotationsState() {
-  const annRes = await fetch(`/api/annotations?file=${encodeURIComponent(currentFile)}`);
-  if (!annRes.ok) return;
-  const annData = await annRes.json();
-  deletedWays  = (annData.deleted_ways || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
-  deletedNodes = (() => {
-    const dn = annData.deleted_nodes || [];
-    if (Array.isArray(dn)) return dn;
-    return Object.entries(dn).flatMap(([wid, nids]) => nids.map(nid => ({ way_id: +wid, node_id: nid })));
-  })();
-  const tagOvMap  = annData.tag_overrides     || {};
-  const tagOvMeta = annData.tag_override_meta || {};
-  tagOverrides = Object.entries(tagOvMap).map(([sid, tags]) => ({
-    id: +sid, category: tagOvMeta[sid]?.category || 'unknown',
-    label: tagOvMeta[sid]?.label || '', tags,
-  }));
-  hiddenWays   = (annData.hidden_ways || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
-  hiddenWayIds = new Set(hiddenWays.map(d => d.id));
-  renderChangesPanel();
-  renderHiddenPanel();
-}
-
-async function _reloadWay(wayId) {
-  if (!currentFile) return;
-
-  // Remove all existing layers for this way (across categories, visible and subtype-hidden)
-  const affectedCats = new Set();
-  for (const cat of ['road', 'footway', 'barrier']) {
-    for (const st of Object.keys(subtypeLayers[cat])) {
-      const before = subtypeLayers[cat][st];
-      const toRemove = before.filter(l => l._featureId === wayId);
-      if (!toRemove.length) continue;
-      affectedCats.add(cat);
-      toRemove.forEach(l => geoLayers[cat]?.removeLayer(l));
-      subtypeLayers[cat][st] = before.filter(l => l._featureId !== wayId);
-    }
-  }
-
-  // Fetch updated feature from server (404 = fully deleted)
-  const res = await fetch(`/api/ways/${wayId}?file=${encodeURIComponent(currentFile)}`);
-  if (res.ok) {
-    const feature = await res.json();
-    const newCat  = feature.properties.category;
-    const catLayer = geoLayers[newCat];
-    if (catLayer) {
-      const tmpGeo  = L.geoJSON(feature, {
-        style: () => STYLES[newCat],
-      });
-      const newLayer = tmpGeo.getLayers()[0];
-      if (newLayer) {
-        tmpGeo.removeLayer(newLayer);
-        const st = getSubtype(feature, newCat);
-        if (!subtypeLayers[newCat][st]) { subtypeLayers[newCat][st] = []; subtypeFilters[newCat][st] = true; }
-        subtypeLayers[newCat][st].push(newLayer);
-        newLayer._featureId  = feature.properties.id;
-        newLayer._featureRef = feature;
-        newLayer.on('click', e => {
-          L.DomEvent.stopPropagation(e);
-          if (currentMode === 'view') {
-            if (currentClickedLayer && currentClickedLayer !== newLayer)
-              currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
-            newLayer._osmCat    = newCat;
-            currentClickedLayer = newLayer;
-            newLayer.setStyle(HIGHLIGHT_STYLES[newCat]);
-            showProps(feature.properties, feature);
-          }
-        });
-        if (subtypeFilters[newCat][st] !== false && !hiddenWayIds.has(feature.properties.id))
-          catLayer.addLayer(newLayer);
-        affectedCats.add(newCat);
-      }
-    }
-  }
-
-  affectedCats.forEach(c => renderSubtypeFilters(c));
-  clearNodes();
-  await _refreshAnnotationsState();
-  if (!_reselectFeature(wayId)) {
-    currentClickedLayer = null; currentClickedFeature = null;
-    document.getElementById('props-content').innerHTML =
-      '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
-  }
-}
-
-// ── Feature properties panel ─────────────────────────────────────────────────
-function showProps(props, feature = null) {
-  if (feature !== currentClickedFeature) {
-    clearNodes();
-    currentClickedFeature = feature;
-  }
-  const tags = props.tags || {};
-  const meta = [
-    ['Category', `<span class="badge bg-secondary">${props.category}</span>`],
-    ['OSM ID',   props.id ?? '—'],
-    ['Role',     props.in_out || '—'],
-  ];
-  const rows = [
-    ...meta.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`),
-    Object.keys(tags).length
-      ? Object.entries(tags).map(([k, v]) =>
-          `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`
-        ).join('')
-      : '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No tags</td></tr>',
-  ].join('');
-  const el = document.getElementById('props-content');
-  el.innerHTML = `<table><tbody>${rows}</tbody></table>`;
-  if (feature && ['road', 'footway', 'barrier'].includes(props.category)) {
-    if (feature.geometry.type !== 'Point') {
-      const label = nodeLayer ? 'Hide Nodes' : 'Show Nodes';
-      el.innerHTML += `<button class="btn btn-sm btn-outline-info mt-2"
-                               style="font-size:0.72rem;width:100%;"
-                               onclick="toggleNodes()">${label}</button>`;
-    }
-    if (nodeLayer && currentNodes.length) {
-      const items = currentNodes.map((n, i) => {
-        const firstTag = Object.entries(n.tags || {})[0];
-        const hint = firstTag
-          ? `<span class="node-tag-hint">${escHtml(firstTag[0])}: ${escHtml(String(firstTag[1]))}</span>`
-          : '';
-        const sel = i === selectedNodeIndex ? ' sel' : '';
-        return `<div class="node-list-item${sel}" onclick="clickNode(${i})">
-          <span class="node-idx">${i + 1}</span>
-          <span>${n.id}</span>${hint}
-        </div>`;
-      }).join('');
-      el.innerHTML += `<div class="node-list">${items}</div>`;
-    }
-    el.innerHTML += `<button class="btn btn-sm btn-outline-secondary mt-1"
-                             style="font-size:0.72rem;width:100%;"
-                             onclick="openWayEditModal()">&#9998; Edit Properties</button>`;
-    el.innerHTML += `<button class="btn btn-sm btn-outline-secondary mt-1"
-                             style="font-size:0.72rem;width:100%;"
-                             onclick="hideCurrentWay()">&#128065; Hide Object</button>`;
-    el.innerHTML += `<button class="btn btn-sm btn-outline-danger mt-1"
-                             style="font-size:0.72rem;width:100%;"
-                             onclick="deleteCurrentWay()">&#128465; Delete Way</button>`;
-  }
-}
-
-function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-// ── Node visualisation ────────────────────────────────────────────────────────
-function _wayCoords(geometry) {
-  if (geometry.type === 'LineString')    return geometry.coordinates;
-  if (geometry.type === 'Polygon')       return geometry.coordinates[0];
-  if (geometry.type === 'MultiPolygon')  return geometry.coordinates.flatMap(p => p[0]);
-  return [];
-}
-
-function clearNodes() {
-  if (nodeLayer) { map.removeLayer(nodeLayer); nodeLayer = null; }
-  nodeCount         = 0;
-  currentNodes      = [];
-  nodeMarkers       = [];
-  selectedNodeIndex = -1;
-}
-
-function clickNode(index) {
-  const node = currentNodes[index];
-  if (!node) return;
-
-  // Revert previous marker to default style
-  if (selectedNodeIndex >= 0 && nodeMarkers[selectedNodeIndex]) {
-    nodeMarkers[selectedNodeIndex].setStyle({
-      radius: 4, color: '#fff', weight: 1.5, fillColor: '#f0a500', fillOpacity: 0.9,
-    });
-  }
-
-  selectedNodeIndex = index;
-
-  // Highlight new marker
-  if (nodeMarkers[index]) {
-    nodeMarkers[index].setStyle({
-      radius: 6, color: '#fff', weight: 2.5, fillColor: '#ff3300', fillOpacity: 1,
-    });
-    nodeMarkers[index].bringToFront();
-  }
-
-  // Update sidebar list highlight without full re-render
-  document.querySelectorAll('.node-list-item').forEach((el, i) =>
-    el.classList.toggle('sel', i === index)
-  );
-
-  map.panTo([node.lat, node.lon]);
-  showOsmNodeProps(node, index, currentNodes.length);
-}
-
-function showOsmNodeProps(node, index, total) {
-  const tagRows = Object.entries(node.tags || {})
-    .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
-    .join('') || '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No tags</td></tr>';
-  document.getElementById('props-content').innerHTML = `
-    <table><tbody>
-      <tr><td>Type</td><td><span class="badge bg-secondary">node</span></td></tr>
-      <tr><td>OSM ID</td><td>${node.id}</td></tr>
-      <tr><td>Index</td><td>${index + 1} / ${total}</td></tr>
-      <tr><td>Lat</td><td>${parseFloat(node.lat).toFixed(7)}</td></tr>
-      <tr><td>Lon</td><td>${parseFloat(node.lon).toFixed(7)}</td></tr>
-      ${tagRows}
-    </tbody></table>
-    <div class="d-flex gap-1 mt-2">
-      <button class="btn btn-sm btn-outline-secondary" style="font-size:0.72rem;flex:1;"
-              onclick="showProps(currentClickedFeature.properties, currentClickedFeature)">
-        ← Back to Way
-      </button>
-      <button class="btn btn-sm btn-outline-danger" style="font-size:0.72rem;"
-              onclick="deleteCurrentNode(currentClickedFeature.properties.id, ${node.id})">
-        &#128465;
-      </button>
-    </div>`;
-}
-
-async function toggleNodes() {
-  const feature = currentClickedFeature;
-  if (!feature) return;
-  if (nodeLayer) { clearNodes(); showProps(feature.properties, feature); return; }
-
-  setStatus('Loading nodes…', 'text-secondary');
-  try {
-    const res = await fetch(
-      `/api/way_nodes?file=${encodeURIComponent(currentFile)}&way_id=${feature.properties.id}`
-    );
-    if (!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-
-    currentNodes = data.nodes;
-    nodeCount    = data.nodes.length;
-    nodeMarkers  = [];
-    nodeLayer    = L.layerGroup().addTo(map);
-    data.nodes.forEach((node, i) => {
-      const marker = L.circleMarker([node.lat, node.lon], {
-        radius: 4, color: '#fff', weight: 1.5, fillColor: '#f0a500', fillOpacity: 0.9,
-      }).on('click', e => {
-        L.DomEvent.stopPropagation(e);
-        if (currentMode === 'view') clickNode(i);
-      }).addTo(nodeLayer);
-      nodeMarkers.push(marker);
-    });
-
-    setStatus('', 'text-secondary');
-    showProps(feature.properties, feature); // re-renders button as "Hide Nodes (N)"
-  } catch (err) {
-    setStatus(`Node load failed: ${err.message}`, 'text-danger');
-  }
-}
-
-// ── Way property editing ──────────────────────────────────────────────────────
-function openWayEditModal() {
-  const feature = currentClickedFeature;
-  if (!feature) return;
-  editingWayId = feature.properties.id;
-  document.getElementById('way-edit-title').textContent = `Edit Way #${editingWayId}`;
-  _renderWayEditProps(feature.properties.tags || {});
-  new bootstrap.Modal(document.getElementById('way-edit-modal')).show();
-}
-
-function _renderWayEditProps(obj) {
-  document.getElementById('way-edit-props').innerHTML =
-    Object.entries(obj).map(([k, v]) => `
-      <div class="d-flex gap-1 mb-1">
-        <input class="form-control form-control-sm bg-dark text-light border-secondary we-key"
-               placeholder="key" value="${escHtml(k)}" style="flex:1;font-size:0.75rem;">
-        <input class="form-control form-control-sm bg-dark text-light border-secondary we-val"
-               placeholder="value" value="${escHtml(String(v))}" style="flex:1;font-size:0.75rem;">
-        <button type="button" class="btn btn-sm btn-outline-danger px-1"
-                onclick="this.closest('.d-flex').remove()">×</button>
-      </div>`).join('');
-}
-
-document.getElementById('way-edit-add-prop-btn').addEventListener('click', () => {
-  const div = document.createElement('div');
-  div.className = 'd-flex gap-1 mb-1';
-  div.innerHTML = `
-    <input class="form-control form-control-sm bg-dark text-light border-secondary we-key"
-           placeholder="key" style="flex:1;font-size:0.75rem;">
-    <input class="form-control form-control-sm bg-dark text-light border-secondary we-val"
-           placeholder="value" style="flex:1;font-size:0.75rem;">
-    <button type="button" class="btn btn-sm btn-outline-danger px-1"
-            onclick="this.closest('.d-flex').remove()">×</button>`;
-  document.getElementById('way-edit-props').appendChild(div);
-});
-
-document.getElementById('way-edit-save').addEventListener('click', async () => {
-  if (!editingWayId || !currentFile) return;
-  const tags = {};
-  document.querySelectorAll('#way-edit-props .d-flex').forEach(row => {
-    const k = row.querySelector('.we-key').value.trim();
-    const v = row.querySelector('.we-val').value.trim();
-    if (k) tags[k] = v;
-  });
-  const savedWayId = editingWayId;
-  const cat = currentClickedFeature?.properties?.category || 'unknown';
-  const lbl = currentClickedFeature?.properties?.tags?.highway
-           || currentClickedFeature?.properties?.tags?.barrier || '';
-  bootstrap.Modal.getInstance(document.getElementById('way-edit-modal')).hide();
-  const res = await fetch(
-    `/api/ways/${savedWayId}/tags?file=${encodeURIComponent(currentFile)}`,
-    { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tags, category: cat, label: lbl }) }
-  );
-  if (res.ok) {
-    setStatus('Properties updated', 'text-success');
-    await _reloadWay(savedWayId);
-  } else {
-    setStatus('Save failed', 'text-danger');
-  }
-});
-
-// ── OSM deletion helpers ──────────────────────────────────────────────────────
-async function deleteCurrentWay() {
-  const feature = currentClickedFeature;
-  if (!feature || !currentFile) return;
-  const wayId = feature.properties.id;
-  const cat   = feature.properties.category;
-  const tags  = feature.properties.tags || {};
-  const label = tags.highway || tags.barrier || '';
-  const res = await fetch(
-    `/api/ways/${wayId}?file=${encodeURIComponent(currentFile)}`,
-    { method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category: cat, label }) }
-  );
-  if (!res.ok) { setStatus('Delete failed', 'text-danger'); return; }
-  if (currentClickedLayer && geoLayers[cat]) {
-    geoLayers[cat].removeLayer(currentClickedLayer);
-  }
-  currentClickedLayer   = null;
-  currentClickedFeature = null;
-  clearNodes();
-  if (!deletedWays.some(d => d.id === wayId))
-    deletedWays.push({ id: wayId, category: cat, label });
-  renderChangesPanel();
-  renderHiddenPanel();
-  document.getElementById('props-content').innerHTML =
-    '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
-  setStatus(`Deleted way ${wayId}`, 'text-success');
-}
-
-async function deleteCurrentNode(wayId, nodeId) {
-  if (!currentFile) return;
-  const res = await fetch(
-    `/api/way_node?file=${encodeURIComponent(currentFile)}&way_id=${wayId}&node_id=${nodeId}`,
-    { method: 'DELETE' }
-  );
-  if (!res.ok) { setStatus('Delete failed', 'text-danger'); return; }
-  await _reloadWay(wayId);
-  setStatus('Node deleted', 'text-success');
-}
-
-async function hideCurrentWay() {
-  const feature = currentClickedFeature;
-  if (!feature || !currentFile) return;
-  const wayId = feature.properties.id;
-  const cat   = feature.properties.category;
-  const tags  = feature.properties.tags || {};
-  const label = tags.highway || tags.barrier || '';
-  const res = await fetch(
-    `/api/ways/${wayId}/hide?file=${encodeURIComponent(currentFile)}`,
-    { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category: cat, label }) }
-  );
-  if (!res.ok) { setStatus('Hide failed', 'text-danger'); return; }
-  if (currentClickedLayer && geoLayers[cat]) {
-    geoLayers[cat].removeLayer(currentClickedLayer);
-  }
-  currentClickedLayer   = null;
-  currentClickedFeature = null;
-  clearNodes();
-  if (!hiddenWays.some(d => d.id === wayId)) {
-    hiddenWays.push({ id: wayId, category: cat, label });
-    hiddenWayIds.add(wayId);
-  }
-  renderChangesPanel();
-  renderHiddenPanel();
-  document.getElementById('props-content').innerHTML =
-    '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
-  setStatus(`Hidden way ${wayId}`, 'text-success');
-}
-
-async function showWay(wayId) {
-  if (!currentFile) return;
-  const res = await fetch(
-    `/api/ways/${wayId}/show?file=${encodeURIComponent(currentFile)}`,
-    { method: 'PUT' }
-  );
-  if (res.ok) {
-    hiddenWays = hiddenWays.filter(d => d.id !== wayId);
-    hiddenWayIds.delete(wayId);
-    await _reloadWay(wayId);
-  }
-}
-
-function renderChangesPanel() {
-  const total = deletedWays.length + deletedNodes.length + tagOverrides.length;
-  const panel = document.getElementById('changes-panel');
-  const list  = document.getElementById('changes-list');
-  const count = document.getElementById('changes-count');
-  if (!total) { panel.style.display = 'none'; return; }
-  panel.style.display = '';
-  count.textContent = `(${total})`;
-  const wayItems = deletedWays.map(d => `
-    <div class="change-item">
-      <div>
-        <span>del ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
-        <br><span class="change-id">#${d.id}</span>
-      </div>
-      <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-              title="Undo deletion" onclick="undoWayDeletion(${d.id})">&#8617;</button>
-    </div>`).join('');
-  const nodeItems = deletedNodes.map(d => `
-    <div class="change-item">
-      <div>
-        <span>del node in way</span>
-        <br><span class="change-id">#${d.node_id} &rarr; #${d.way_id}</span>
-      </div>
-      <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-              title="Undo deletion" onclick="undoNodeDeletion(${d.way_id}, ${d.node_id})">&#8617;</button>
-    </div>`).join('');
-  const tagItems = tagOverrides.map(d => `
-    <div class="change-item">
-      <div>
-        <span>edit ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
-        <br><span class="change-id">#${d.id}</span>
-      </div>
-      <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-              title="Undo tag edit" onclick="undoTagOverride(${d.id})">&#8617;</button>
-    </div>`).join('');
-  list.innerHTML = wayItems + nodeItems + tagItems;
-}
-
-function renderHiddenPanel() {
-  const panel = document.getElementById('hidden-panel');
-  const list  = document.getElementById('hidden-list');
-  const count = document.getElementById('hidden-count');
-  if (!hiddenWays.length) { panel.style.display = 'none'; return; }
-  panel.style.display = '';
-  count.textContent = `(${hiddenWays.length})`;
-  list.innerHTML = hiddenWays.map(d => `
-    <div class="change-item">
-      <div>
-        <span>${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
-        <br><span class="change-id">#${d.id}</span>
-      </div>
-      <button class="btn btn-sm btn-outline-info py-0 px-1" style="font-size:0.7rem;"
-              title="Show object" onclick="showWay(${d.id})">&#128065;</button>
-    </div>`).join('');
-}
-
-async function undoWayDeletion(wayId) {
-  if (!currentFile) return;
-  const res = await fetch(
-    `/api/ways/${wayId}/restore?file=${encodeURIComponent(currentFile)}`,
-    { method: 'PUT' }
-  );
-  if (res.ok) await _reloadWay(wayId);
-}
-
-async function undoNodeDeletion(wayId, nodeId) {
-  if (!currentFile) return;
-  const res = await fetch(
-    `/api/way_node/restore?file=${encodeURIComponent(currentFile)}&way_id=${wayId}&node_id=${nodeId}`,
-    { method: 'PUT' }
-  );
-  if (res.ok) await _reloadWay(wayId);
-}
-
-async function undoTagOverride(wayId) {
-  if (!currentFile) return;
-  const res = await fetch(
-    `/api/ways/${wayId}/tags?file=${encodeURIComponent(currentFile)}`,
-    { method: 'DELETE' }
-  );
-  if (res.ok) await _reloadWay(wayId);
-}
-
-// ── Panel collapse ────────────────────────────────────────────────────────────
-function togglePanel(name) {
-  const body   = document.getElementById(`${name}-body`);
-  const toggle = document.getElementById(`${name}-toggle`);
-  if (!body) return;
-  const open = body.style.display !== 'none';
-  body.style.display = open ? 'none' : '';
-  if (toggle) toggle.textContent = open ? '▼' : '▲';
-}
-
-// ── Annotation layer helpers ──────────────────────────────────────────────────
-function _annStyle(ann) {
-  return ann.type === 'path' ? STYLES.path : STYLES.annotation;
-}
-
-function addAnnotationToLayer(ann) {
-  L.geoJSON(ann.geometry, { style: _annStyle(ann) }).eachLayer(layer => {
-    layer.options._ann_id = ann.id;
-    layer.on('click', e => {
-      L.DomEvent.stopPropagation(e);
-      if (currentMode === 'view') showAnnProps(ann);
-    });
-    drawnItems.addLayer(layer);
-  });
-}
-
-function showAnnProps(ann) {
-  const props = ann.properties || {};
-  const propRows = Object.entries(props)
-    .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
-    .join('') || '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No properties</td></tr>';
-  document.getElementById('props-content').innerHTML =
-    `<table><tbody>
-       <tr><td>Type</td><td><span class="badge bg-secondary">${escHtml(ann.type || 'obstacle')}</span></td></tr>
-       ${propRows}
-     </tbody></table>
-     <button class="btn btn-sm btn-outline-info mt-2" style="font-size:0.72rem;width:100%;"
-             onclick="openAnnEditModal('${ann.id}')">&#9998; Edit Properties</button>`;
-}
-
-function renderAnnotationLayer() {
-  drawnItems.clearLayers();
-  annotations.forEach(addAnnotationToLayer);
-  if (!layerCheckbox('annotation').checked) map.removeLayer(drawnItems);
-  else if (!map.hasLayer(drawnItems)) drawnItems.addTo(map);
-}
-
-function renderAnnotationList() {
-  const panel = document.getElementById('ann-panel');
-  const el    = document.getElementById('ann-list');
-  const count = document.getElementById('ann-count');
-  if (!annotations.length) { panel.style.display = 'none'; return; }
-  panel.style.display = '';
-  count.textContent = `(${annotations.length})`;
-  el.innerHTML = annotations.map(a => `
-    <div class="ann-item">
-      <div>
-        <span>${escHtml(a.type)}</span>
-        <br><span class="ann-id">${a.id.slice(0,8)}…</span>
-      </div>
-      <div class="d-flex gap-1">
-        <button class="btn btn-sm btn-outline-info py-0 px-1" style="font-size:0.7rem;"
-                onclick="openAnnEditModal('${a.id}')">&#9998;</button>
-        <button class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size:0.7rem;"
-                onclick="removeAnnotationById('${a.id}')">&#10005;</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-async function deleteSelectedAnnotation() {
-  if (!editSelectedLayer || !currentFile) return;
-  const annId = editSelectedLayer.options._ann_id;
-  if (!annId) return;
-  const res = await fetch(
-    `/api/annotations/${annId}?file=${encodeURIComponent(currentFile)}`,
-    { method: 'DELETE' }
-  );
-  if (res.ok) {
-    if (editSelectedLayer.editing) editSelectedLayer.editing.disable();
-    drawnItems.removeLayer(editSelectedLayer);
-    annotations = annotations.filter(a => a.id !== annId);
-    editSelectedLayer = null;
-    renderAnnotationList();
-    setStatus('Annotation deleted', 'text-success');
-  }
-}
-
-async function removeAnnotationById(id) {
-  if (!currentFile) return;
-  const res = await fetch(
-    `/api/annotations/${id}?file=${encodeURIComponent(currentFile)}`,
-    { method: 'DELETE' }
-  );
-  if (res.ok) {
-    annotations = annotations.filter(a => a.id !== id);
-    renderAnnotationLayer();
-    renderAnnotationList();
-  }
-}
-
-// ── Draw events ───────────────────────────────────────────────────────────────
-map.on(L.Draw.Event.CREATED, async e => {
-  // Fetch-area rectangle
-  if (currentMode === 'fetch') {
-    const bounds = e.layer.getBounds();
-    pendingBbox = {
-      min_lat: bounds.getSouth(), max_lat: bounds.getNorth(),
-      min_lon: bounds.getWest(),  max_lon: bounds.getEast(),
-    };
-    document.getElementById('area-name-input').value = '';
-    new bootstrap.Modal(document.getElementById('fetch-area-modal')).show();
-    setMode('view', false);
-    return;
-  }
-
-  if ((currentMode !== 'add' && currentMode !== 'path') || !currentFile) return;
-
-  let geom;
-  if (e.layerType === 'circle') {
-    geom = circleToPolygon(e.layer.getLatLng(), e.layer.getRadius(), 48);
-  } else {
-    geom = e.layer.toGeoJSON().geometry;
-  }
-
-  openAnnDetailModal(geom, currentMode);
-
-  // Re-arm the path draw tool for the next segment
-  if (currentMode === 'path' && pathLineDraw)
-    setTimeout(() => { if (currentMode === 'path') pathLineDraw.enable(); }, 50);
-});
-
-map.on(L.Draw.Event.DELETED, e => {
-  const toDelete = [];
-  e.layers.eachLayer(layer => {
-    const annId = layer.options._ann_id;
-    if (annId) toDelete.push(annId);
-  });
-  Promise.all(
-    toDelete.map(id =>
-      fetch(`/api/annotations/${id}?file=${encodeURIComponent(currentFile)}`, { method: 'DELETE' })
-    )
-  ).then(() => {
-    annotations = annotations.filter(a => !toDelete.includes(a.id));
-    renderAnnotationList();
-    setStatus(`Deleted ${toDelete.length} annotation(s)`, 'text-success');
-  });
-});
-
-// Switch back to view when user cancels delete via Escape
-map.on(L.Draw.Event.DELETESTOP, () => {
-  if (currentMode === 'delete') {
-    currentMode = 'view';
-    document.querySelectorAll('.mode-btn').forEach(btn =>
-      btn.classList.toggle('active', btn.dataset.mode === 'view')
-    );
-    map.getContainer().style.cursor = '';
-  }
-});
-
-// ── Mode switching ────────────────────────────────────────────────────────────
-function setMode(newMode, commit = true) {
-  const prev = currentMode;
-  currentMode = newMode;
-
-  clearNodes();
-  if (currentClickedLayer) {
-    currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
-    currentClickedLayer = null;
-  }
-  currentClickedFeature = null;
-
-  // Commit / disable previous mode
-  if (commit) {
-    if (prev === 'edit') disableAnnotationEditMode();
-    if (prev === 'delete' && deleteHandler) {
-      try { deleteHandler.save(); deleteHandler.disable(); } catch (_) {}
-    }
-  }
-  if (prev === 'add' && drawControl) {
-    try { map.removeControl(drawControl); } catch (_) {}
-  }
-  if (prev === 'fetch' && fetchRectDraw) {
-    try { fetchRectDraw.disable(); } catch (_) {}
-  }
-  if (prev === 'path' && pathLineDraw) {
-    try { pathLineDraw.disable(); } catch (_) {}
-  }
-
-  // Update button highlight
-  document.querySelectorAll('.mode-btn').forEach(btn =>
-    btn.classList.toggle('active', btn.dataset.mode === newMode)
-  );
-
-  // Cursor feedback
-  const cursors = { view: '', edit: 'move', add: 'crosshair', delete: 'pointer', fetch: 'crosshair' };
-  map.getContainer().style.cursor = cursors[newMode] ?? '';
-
-  // Activate new mode
-  if (newMode === 'add') {
-    initDrawControl();
-    drawControl.addTo(map);
-  } else if (newMode === 'edit') {
-    enableAnnotationEditMode();
-  } else if (newMode === 'delete') {
-    if (!deleteHandler) initHandlers();
-    deleteHandler.enable();
-  } else if (newMode === 'fetch') {
-    if (!fetchRectDraw) {
-      fetchRectDraw = new L.Draw.Rectangle(map, {
-        shapeOptions: { color: '#00aaff', fillColor: '#00aaff', fillOpacity: 0.1 },
-      });
-    }
-    fetchRectDraw.enable();
-    setStatus('Draw a bounding box on the map to fetch OSM data…', 'text-info');
-  } else if (newMode === 'path') {
-    if (!pathLineDraw) {
-      pathLineDraw = new L.Draw.Polyline(map, {
-        shapeOptions: { ...STYLES.path },
-        showLength: true,
-      });
-    }
-    pathLineDraw.enable();
-    setStatus('Click to place path nodes — double-click to finish', 'text-info');
-  }
-}
-
-// ── Fetch area submit ─────────────────────────────────────────────────────────
-document.getElementById('fetch-area-submit').addEventListener('click', async () => {
-  const name = document.getElementById('area-name-input').value.trim();
-  if (!name) {
-    document.getElementById('area-name-input').focus();
-    return;
-  }
-  bootstrap.Modal.getInstance(document.getElementById('fetch-area-modal')).hide();
-  setStatus('Fetching & parsing OSM data… (may take 1–2 min)', 'text-warning');
-
-  try {
-    const res = await fetch('/api/fetch_area', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...pendingBbox, name }),
-    });
-    if (!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-    setStatus(
-      `Fetched: ${data.roads} roads, ${data.footways} footways, ${data.barriers} barriers`,
-      'text-success'
-    );
-    // Add to dropdown and auto-load
-    const sel = document.getElementById('file-select');
-    if (![...sel.options].some(o => o.value === data.filename)) {
-      sel.appendChild(new Option(data.filename, data.filename));
-    }
-    sel.value = data.filename;
-    await loadMapData(data.filename);
-  } catch (err) {
-    setStatus(`Fetch failed: ${err.message}`, 'text-danger');
-  }
-});
-
-// Press Enter in name field submits
-document.getElementById('area-name-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') document.getElementById('fetch-area-submit').click();
-});
-
-// ── Layer toggles ─────────────────────────────────────────────────────────────
-function layerCheckbox(cat) {
-  return document.querySelector(`[data-layer="${cat}"]`);
-}
-
-document.querySelectorAll('[data-layer]').forEach(cb => {
-  cb.addEventListener('change', () => {
-    if (cb.dataset.layer === 'annotation') {
-      cb.checked ? drawnItems.addTo(map) : map.removeLayer(drawnItems);
-      return;
-    }
-    const layer = geoLayers[cb.dataset.layer];
-    if (!layer) return;
-    cb.checked ? layer.addTo(map) : map.removeLayer(layer);
-  });
-});
-
-// ── Map click: clear props ────────────────────────────────────────────────────
-map.on('click', () => {
-  if (currentMode === 'view') {
-    clearNodes();
-    if (currentClickedLayer) {
-      currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
-      currentClickedLayer = null;
-    }
-    currentClickedFeature = null;
-    document.getElementById('props-content').innerHTML =
-      '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
-  }
-});
-
-// ── Toolbar button events ─────────────────────────────────────────────────────
-document.getElementById('load-btn').addEventListener('click', () => {
-  const file = document.getElementById('file-select').value;
-  if (file) loadMapData(file);
-});
-
-document.querySelectorAll('.mode-btn').forEach(btn => {
-  btn.addEventListener('click', () => setMode(btn.dataset.mode));
-});
-
-document.getElementById('export-btn').addEventListener('click', () => {
-  if (currentFile)
-    window.location = `/api/export?file=${encodeURIComponent(currentFile)}`;
-});
-
-// ── Geometry helpers ──────────────────────────────────────────────────────────
-function circleToPolygon(center, radiusM, numPts) {
-  const R = 6371000;
-  const dLat = (radiusM / R) * (180 / Math.PI);
-  const dLon = dLat / Math.cos(center.lat * Math.PI / 180);
-  const coords = [];
-  for (let i = 0; i <= numPts; i++) {
-    const a = (i * 2 * Math.PI) / numPts;
-    coords.push([center.lng + dLon * Math.cos(a), center.lat + dLat * Math.sin(a)]);
-  }
-  return { type: 'Polygon', coordinates: [coords] };
-}
-
-// ── Annotation detail modal ───────────────────────────────────────────────────
-function updateAnnTypeFields() {
-  const t = document.getElementById('ann-type-sel').value;
-  document.getElementById('ann-obstacle-fields').style.display = t === 'obstacle' ? '' : 'none';
-  document.getElementById('ann-path-fields').style.display    = t === 'path'     ? '' : 'none';
-}
-
-function _renderExtraProps(obj) {
-  document.getElementById('ann-extra-props').innerHTML =
-    Object.entries(obj).map(([k, v]) => `
-      <div class="d-flex gap-1 mb-1">
-        <input class="form-control form-control-sm bg-dark text-light border-secondary ep-key"
-               placeholder="key" value="${escHtml(k)}" style="flex:1;font-size:0.75rem;">
-        <input class="form-control form-control-sm bg-dark text-light border-secondary ep-val"
-               placeholder="value" value="${escHtml(String(v))}" style="flex:1;font-size:0.75rem;">
-        <button type="button" class="btn btn-sm btn-outline-danger px-1"
-                onclick="this.closest('.d-flex').remove()">×</button>
-      </div>`).join('');
-}
-
-function _collectAnnForm() {
-  const type = document.getElementById('ann-type-sel').value;
-  const props = {};
-  if (type === 'path') {
-    props.highway = document.getElementById('ann-highway-sel').value;
-    const w = parseFloat(document.getElementById('ann-width-inp').value);
-    if (!isNaN(w) && w > 0) props.width = w;
-  } else {
-    props.barrier = document.getElementById('ann-barrier-sel').value;
-  }
-  document.querySelectorAll('#ann-extra-props .d-flex').forEach(row => {
-    const k = row.querySelector('.ep-key').value.trim();
-    const v = row.querySelector('.ep-val').value.trim();
-    if (k) props[k] = v;
-  });
-  return { type, props };
-}
-
-function openAnnDetailModal(geometry, mode) {
-  pendingAnnGeom = geometry;
-  editingAnnId   = null;
-  document.getElementById('ann-detail-title').textContent = 'New Annotation';
-  document.getElementById('ann-type-sel').value    = mode === 'path' ? 'path' : 'obstacle';
-  document.getElementById('ann-type-sel').disabled = false;
-  document.getElementById('ann-barrier-sel').value = 'wall';
-  document.getElementById('ann-highway-sel').value = 'footway';
-  document.getElementById('ann-width-inp').value   = '1.5';
-  _renderExtraProps({});
-  updateAnnTypeFields();
-  new bootstrap.Modal(document.getElementById('ann-detail-modal')).show();
-}
-
-function openAnnEditModal(annId) {
-  const ann = annotations.find(a => a.id === annId);
-  if (!ann) return;
-  editingAnnId   = annId;
-  pendingAnnGeom = null;
-  document.getElementById('ann-detail-title').textContent = 'Edit Annotation';
-  const type = ann.type || 'obstacle';
-  document.getElementById('ann-type-sel').value    = type;
-  document.getElementById('ann-type-sel').disabled = false;
-  const props = ann.properties || {};
-  if (type === 'path') {
-    document.getElementById('ann-highway-sel').value = props.highway || 'footway';
-    document.getElementById('ann-width-inp').value   = props.width   || '1.5';
-  } else {
-    document.getElementById('ann-barrier-sel').value = props.barrier || 'wall';
-  }
-  const exclude = type === 'path' ? ['highway', 'width'] : ['barrier'];
-  _renderExtraProps(Object.fromEntries(Object.entries(props).filter(([k]) => !exclude.includes(k))));
-  updateAnnTypeFields();
-  new bootstrap.Modal(document.getElementById('ann-detail-modal')).show();
-}
-
-document.getElementById('ann-add-prop-btn').addEventListener('click', () => {
-  const div = document.createElement('div');
-  div.className = 'd-flex gap-1 mb-1';
-  div.innerHTML = `
-    <input class="form-control form-control-sm bg-dark text-light border-secondary ep-key"
-           placeholder="key" style="flex:1;font-size:0.75rem;">
-    <input class="form-control form-control-sm bg-dark text-light border-secondary ep-val"
-           placeholder="value" style="flex:1;font-size:0.75rem;">
-    <button type="button" class="btn btn-sm btn-outline-danger px-1"
-            onclick="this.closest('.d-flex').remove()">×</button>`;
-  document.getElementById('ann-extra-props').appendChild(div);
-});
-
-document.getElementById('ann-detail-save').addEventListener('click', async () => {
-  const { type, props } = _collectAnnForm();
-  bootstrap.Modal.getInstance(document.getElementById('ann-detail-modal')).hide();
-
-  if (editingAnnId) {
-    const ann = annotations.find(a => a.id === editingAnnId);
-    if (!ann) return;
-    const res = await fetch(
-      `/api/annotations/${editingAnnId}?file=${encodeURIComponent(currentFile)}`,
-      { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ geometry: ann.geometry, type, properties: props }) }
-    );
-    if (res.ok) {
-      Object.assign(ann, await res.json());
-      renderAnnotationLayer();
-      renderAnnotationList();
-      setStatus('Annotation updated', 'text-success');
-    }
-  } else {
-    const res = await fetch(
-      `/api/annotations?file=${encodeURIComponent(currentFile)}`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, geometry: pendingAnnGeom, properties: props }) }
-    );
-    if (res.ok) {
-      const ann = await res.json();
-      annotations.push(ann);
-      addAnnotationToLayer(ann);
-      renderAnnotationList();
-      setStatus('Annotation added', 'text-success');
-    }
-    pendingAnnGeom = null;
-  }
-});
-
-// ── Keyboard shortcuts ────────────────────────────────────────────────────────
-document.addEventListener('keydown', e => {
-  // Don't fire while the user is typing
-  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-  if (e.target.isContentEditable) return;
-
-  switch (e.key) {
-    case 'v': case 'V':      setMode('view');   break;
-    case 'e': case 'E':      setMode('edit');   break;
-    case 'a': case 'A':      setMode('add');    break;
-    case 'd': case 'D':      setMode('delete'); break;
-    case 'f': case 'F':      setMode('fetch');  break;
-    case 'p': case 'P':      setMode('path');   break;
-    case 'n': case 'N':
-      if (currentMode === 'view') toggleNodes();
-      break;
-    case 'Escape':
-      // Let Leaflet.draw cancel its own draw first, then fall back to view
-      if (currentMode !== 'add' && currentMode !== 'fetch') setMode('view');
-      break;
-    case 'Delete':
-    case 'Backspace':
-      if (currentMode === 'edit') { e.preventDefault(); deleteSelectedAnnotation(); }
-      break;
-  }
-});
-
-// ── Init ──────────────────────────────────────────────────────────────────────
-initHandlers();
-loadFileList();
-
-document.querySelectorAll('[data-subtype-toggle]').forEach(btn => {
-  btn.addEventListener('click', e => {
-    e.preventDefault();
-    e.stopPropagation();
-    const cat   = btn.dataset.subtypeToggle;
-    const panel = document.getElementById(`subfilter-${cat}`);
-    const open  = panel.style.display !== 'block';
-    panel.style.display = open ? 'block' : 'none';
-    btn.textContent     = open ? '▲' : '▼';
-  });
-});
-</script>
 </body>
 </html>
