@@ -169,6 +169,34 @@ def _geojson_geom_to_utm(geometry, zone_number, zone_letter):
     return None
 
 
+def _rebuild_way_without_nodes(way, del_nids):
+    """Return a shallow copy of way with del_nids removed, or None if geometry becomes invalid."""
+    node_ids = [getattr(n, "id", n) for n in way.nodes]
+    keep = [i for i, nid in enumerate(node_ids) if nid not in del_nids]
+    if len(keep) < 2:
+        return None
+    w = copy.copy(way)
+    w.nodes = [way.nodes[i] for i in keep]
+    geom = way.line
+    if geom.geom_type == "LineString":
+        coords = list(geom.coords)
+        new_coords = [coords[i] for i in keep if i < len(coords)]
+        if len(new_coords) < 2:
+            return None
+        w.line = _SLS(new_coords)
+    elif geom.geom_type == "Polygon":
+        coords = list(geom.exterior.coords)
+        new_coords = [coords[i] for i in keep if i < len(coords)]
+        if len(new_coords) < 3:
+            return None
+        if new_coords[0] != new_coords[-1]:
+            new_coords.append(new_coords[0])
+        w.line = _SPoly(new_coords)
+    else:
+        return None  # MultiPolygon: not supported for partial node deletion
+    return w
+
+
 # ------------------------------------------------------------------
 # Routes
 # ------------------------------------------------------------------
@@ -203,7 +231,15 @@ def get_mapdata():
         abort(404, f"File not found: {filename}")
     with open(path, "rb") as f:
         map_data = pickle.load(f)
-    return jsonify(_mapdata_to_geojson(map_data))
+    geojson = _mapdata_to_geojson(map_data)
+    store = _load_annotations(_annotation_path(filename))
+    deleted_ways = set(store.get("deleted_ways", []))
+    if deleted_ways:
+        geojson["features"] = [
+            f for f in geojson["features"]
+            if f["properties"].get("id") not in deleted_ways
+        ]
+    return jsonify(geojson)
 
 
 @app.route("/api/annotations")
@@ -367,7 +403,47 @@ def get_way_nodes():
                 lat, lon = geom_latlon[i]
                 nodes.append({"id": nid, "lat": lat, "lon": lon, "tags": {}})
 
+    store = _load_annotations(_annotation_path(filename))
+    deleted_node_ids = set(store.get("deleted_nodes", {}).get(str(wid), []))
+    if deleted_node_ids:
+        nodes = [n for n in nodes if n["id"] not in deleted_node_ids]
+
     return jsonify({"way_id": wid, "nodes": nodes})
+
+
+@app.route("/api/ways/<int:way_id>", methods=["DELETE"])
+def delete_way(way_id):
+    filename = request.args.get("file")
+    if not filename:
+        abort(400, "Missing 'file' query parameter")
+    ann_path = _annotation_path(filename)
+    store = _load_annotations(ann_path)
+    deleted = store.setdefault("deleted_ways", [])
+    if way_id not in deleted:
+        deleted.append(way_id)
+    _save_annotations(ann_path, store)
+    return "", 204
+
+
+@app.route("/api/way_node", methods=["DELETE"])
+def delete_way_node():
+    filename = request.args.get("file")
+    way_id   = request.args.get("way_id")
+    node_id  = request.args.get("node_id")
+    if not filename or way_id is None or node_id is None:
+        abort(400, "Missing required query parameters")
+    try:
+        way_id  = int(way_id)
+        node_id = int(node_id)
+    except (ValueError, TypeError):
+        abort(400, "way_id and node_id must be integers")
+    ann_path = _annotation_path(filename)
+    store = _load_annotations(ann_path)
+    bucket = store.setdefault("deleted_nodes", {}).setdefault(str(way_id), [])
+    if node_id not in bucket:
+        bucket.append(node_id)
+    _save_annotations(ann_path, store)
+    return "", 204
 
 
 @app.route("/api/export")
@@ -385,6 +461,24 @@ def export_mapdata():
     store = _load_annotations(_annotation_path(filename))
     md = copy.deepcopy(md)
     zn, zl = md.zone_number, md.zone_letter
+
+    # Apply OSM deletions
+    deleted_ways     = set(store.get("deleted_ways", []))
+    deleted_nodes_map = store.get("deleted_nodes", {})  # {str(way_id): [node_id, ...]}
+    if deleted_ways or deleted_nodes_map:
+        for lst_name in ("roads_list", "footways_list", "barriers_list"):
+            new_lst = []
+            for w in getattr(md, lst_name):
+                if w.id in deleted_ways:
+                    continue
+                del_nids = set(deleted_nodes_map.get(str(w.id), []))
+                if del_nids:
+                    w = _rebuild_way_without_nodes(w, del_nids)
+                    if w is None:
+                        continue
+                new_lst.append(w)
+            setattr(md, lst_name, new_lst)
+
     ann_id = -1
 
     for ann in store.get("annotations", []):

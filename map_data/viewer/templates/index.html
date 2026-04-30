@@ -327,6 +327,7 @@ let currentNodes      = [];     // fetched OSM node objects for the active way
 let nodeMarkers       = [];     // L.CircleMarker refs, same order as currentNodes
 let selectedNodeIndex = -1;     // currently selected node index
 let currentClickedFeature = null; // last GeoJSON feature clicked in view mode
+let currentClickedLayer  = null;  // Leaflet layer for the selected OSM feature
 let editSelectedLayer = null;   // annotation layer selected in edit mode
 let pathLineDraw  = null;       // L.Draw.Polyline handler for path mode
 let pendingAnnGeom = null;      // geometry waiting for the details modal
@@ -478,6 +479,11 @@ const STYLES = {
   annotation: { color: '#cc5500', weight: 2,   fillColor: '#ff8c00', fillOpacity: 0.45 },
   path:       { color: '#22c55e', weight: 3,   fillOpacity: 0, opacity: 0.9 },
 };
+const HIGHLIGHT_STYLES = {
+  road:    { color: '#aaa', weight: 2.5, fillColor: '#555', fillOpacity: 0.9 },
+  footway: { color: '#ffe033', weight: 2, fillColor: '#FFD700', fillOpacity: 0.65 },
+  barrier: { color: '#ff2020', weight: 2.5, fillColor: '#cc0000', fillOpacity: 0.65 },
+};
 
 // ── Status ───────────────────────────────────────────────────────────────────
 function setStatus(msg, cls = 'text-secondary') {
@@ -542,6 +548,8 @@ async function loadFileList() {
 async function loadMapData(filename) {
   setStatus('Loading…', 'text-warning');
 
+  currentClickedLayer  = null;
+  currentClickedFeature = null;
   Object.values(geoLayers).forEach(l => l && map.removeLayer(l));
   Object.keys(geoLayers).forEach(k => geoLayers[k] = null);
   drawnItems.clearLayers();
@@ -579,7 +587,15 @@ async function loadMapData(filename) {
             subtypeLayers[cat][st].push(layer);
             layer.on('click', e => {
               L.DomEvent.stopPropagation(e);
-              if (currentMode === 'view') showProps(feature.properties, feature);
+              if (currentMode === 'view') {
+                if (currentClickedLayer && currentClickedLayer !== layer) {
+                  currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
+                }
+                layer._osmCat = cat;
+                currentClickedLayer = layer;
+                layer.setStyle(HIGHLIGHT_STYLES[cat]);
+                showProps(feature.properties, feature);
+              }
             });
           },
         }
@@ -649,10 +665,12 @@ function showProps(props, feature = null) {
   const el = document.getElementById('props-content');
   el.innerHTML = `<table><tbody>${rows}</tbody></table>`;
   if (feature && ['road', 'footway', 'barrier'].includes(props.category)) {
-    const label = nodeLayer ? 'Hide Nodes' : 'Show Nodes';
-    el.innerHTML += `<button class="btn btn-sm btn-outline-info mt-2"
-                             style="font-size:0.72rem;width:100%;"
-                             onclick="toggleNodes()">${label}</button>`;
+    if (feature.geometry.type !== 'Point') {
+      const label = nodeLayer ? 'Hide Nodes' : 'Show Nodes';
+      el.innerHTML += `<button class="btn btn-sm btn-outline-info mt-2"
+                               style="font-size:0.72rem;width:100%;"
+                               onclick="toggleNodes()">${label}</button>`;
+    }
     if (nodeLayer && currentNodes.length) {
       const items = currentNodes.map((n, i) => {
         const firstTag = Object.entries(n.tags || {})[0];
@@ -667,6 +685,9 @@ function showProps(props, feature = null) {
       }).join('');
       el.innerHTML += `<div class="node-list">${items}</div>`;
     }
+    el.innerHTML += `<button class="btn btn-sm btn-outline-danger mt-1"
+                             style="font-size:0.72rem;width:100%;"
+                             onclick="deleteCurrentWay()">&#128465; Delete Way</button>`;
   }
 }
 
@@ -733,11 +754,16 @@ function showOsmNodeProps(node, index, total) {
       <tr><td>Lon</td><td>${parseFloat(node.lon).toFixed(7)}</td></tr>
       ${tagRows}
     </tbody></table>
-    <button class="btn btn-sm btn-outline-secondary mt-2"
-            style="font-size:0.72rem;width:100%;"
-            onclick="showProps(currentClickedFeature.properties, currentClickedFeature)">
-      ← Back to Way
-    </button>`;
+    <div class="d-flex gap-1 mt-2">
+      <button class="btn btn-sm btn-outline-secondary" style="font-size:0.72rem;flex:1;"
+              onclick="showProps(currentClickedFeature.properties, currentClickedFeature)">
+        ← Back to Way
+      </button>
+      <button class="btn btn-sm btn-outline-danger" style="font-size:0.72rem;"
+              onclick="deleteCurrentNode(currentClickedFeature.properties.id, ${node.id}, ${index})">
+        &#128465;
+      </button>
+    </div>`;
 }
 
 async function toggleNodes() {
@@ -772,6 +798,52 @@ async function toggleNodes() {
   } catch (err) {
     setStatus(`Node load failed: ${err.message}`, 'text-danger');
   }
+}
+
+// ── OSM deletion helpers ──────────────────────────────────────────────────────
+async function deleteCurrentWay() {
+  const feature = currentClickedFeature;
+  if (!feature || !currentFile) return;
+  const wayId = feature.properties.id;
+  const cat   = feature.properties.category;
+  const res = await fetch(
+    `/api/ways/${wayId}?file=${encodeURIComponent(currentFile)}`,
+    { method: 'DELETE' }
+  );
+  if (!res.ok) { setStatus('Delete failed', 'text-danger'); return; }
+  if (currentClickedLayer && geoLayers[cat]) {
+    geoLayers[cat].removeLayer(currentClickedLayer);
+  }
+  currentClickedLayer  = null;
+  currentClickedFeature = null;
+  clearNodes();
+  document.getElementById('props-content').innerHTML =
+    '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+  setStatus(`Deleted way ${wayId}`, 'text-success');
+}
+
+async function deleteCurrentNode(wayId, nodeId, index) {
+  if (!currentFile) return;
+  const res = await fetch(
+    `/api/way_node?file=${encodeURIComponent(currentFile)}&way_id=${wayId}&node_id=${nodeId}`,
+    { method: 'DELETE' }
+  );
+  if (!res.ok) { setStatus('Delete failed', 'text-danger'); return; }
+  // Remove marker from map
+  if (nodeMarkers[index]) {
+    nodeLayer.removeLayer(nodeMarkers[index]);
+    nodeMarkers[index] = null;
+  }
+  currentNodes.splice(index, 1);
+  nodeMarkers.splice(index, 1);
+  if (selectedNodeIndex === index) selectedNodeIndex = -1;
+  else if (selectedNodeIndex > index) selectedNodeIndex--;
+  // Update way line to reflect removed node
+  if (currentClickedLayer && currentNodes.length >= 2) {
+    try { currentClickedLayer.setLatLngs(currentNodes.map(n => [n.lat, n.lon])); } catch (_) {}
+  }
+  showProps(currentClickedFeature.properties, currentClickedFeature);
+  setStatus('Node deleted', 'text-success');
 }
 
 // ── Annotation layer helpers ──────────────────────────────────────────────────
@@ -931,6 +1003,10 @@ function setMode(newMode, commit = true) {
   currentMode = newMode;
 
   clearNodes();
+  if (currentClickedLayer) {
+    currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
+    currentClickedLayer = null;
+  }
   currentClickedFeature = null;
 
   // Commit / disable previous mode
@@ -1048,6 +1124,10 @@ document.querySelectorAll('[data-layer]').forEach(cb => {
 map.on('click', () => {
   if (currentMode === 'view') {
     clearNodes();
+    if (currentClickedLayer) {
+      currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
+      currentClickedLayer = null;
+    }
     currentClickedFeature = null;
     document.getElementById('props-content').innerHTML =
       '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
