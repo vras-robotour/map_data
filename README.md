@@ -59,8 +59,8 @@ ros2 run map_data create_mapdata -f coords.mapdata
 
 ### Interactive viewer
 `map_data_viewer` launches a local Flask web server with a Leaflet-based map UI.
-It lets you inspect parsed features, view their OSM tags, and draw manual obstacle
-annotations — without needing ROS2.
+It lets you inspect parsed features, view their OSM tags, draw manual annotations,
+and even fetch new areas directly from the UI — without needing ROS2.
 
 ```bash
 # After colcon build and sourcing the workspace:
@@ -77,14 +77,20 @@ Then open `http://127.0.0.1:5000` in a browser.
 
 **Modes** (toolbar at the top):
 
-| Mode | Action |
-|------|--------|
-| View | Click any feature to see its OSM tags in the sidebar |
-| + Obstacle | Draw a polygon, rectangle, or circle to add a manual obstacle |
-| ✕ Delete | Click an annotation to remove it |
+| Mode | Shortcut | Action |
+|------|:---:|--------|
+| **View** | `v` | Inspect map features. Click any object to see its properties in the sidebar. |
+| **Edit** | `e` | Selection and reshaping of custom annotations. |
+| **+ Obs** | `a` | Draw rectangles, polygons, or circles to add manual obstacles. |
+| **+ Path** | `p` | Draw custom paths or footways. |
+| **Del** | `d` | Remove custom annotations. |
+| **Fetch** | `f` | Draw a bounding box to download and parse a new OSM area. |
 
-Layer visibility (roads, footways, barriers, waypoints, annotations) can be toggled
-independently in the sidebar.
+**UI Features:**
+- **Collapsible Management:** The Annotations, Changes (edits/deletions), and Hidden lists are stacked at the bottom of the sidebar and can be independently collapsed.
+- **Enhanced Selection:** Selected objects are highlighted with a bold white border, while other features are dimmed for better focus.
+- **Node Inspection:** Toggle OSM node visibility for a selected way using the `n` key to inspect individual coordinates and tags.
+- **Export:** Save all manual annotations and OSM modifications into a new `.mapdata` file for use in the ROS2 pipeline.
 
 Annotations are saved automatically to a sidecar `.annotations.json` file alongside
 the `.mapdata` file, so they survive re-parsing.
@@ -171,10 +177,13 @@ map_data/
 ├── create_mapdata.py        # ROS2 node / CLI: download and parse OSM data
 ├── visualize_mapdata.py     # ROS2 node / CLI: static matplotlib plots
 ├── osm_cloud.py             # ROS2 node: publishes footway cost point cloud
-└── viewer/
-    ├── app.py               # Flask backend — REST API + GeoJSON conversion
-    └── templates/
-        └── index.html       # Leaflet frontend — interactive map viewer
+└── viewer/                  # Modular interactive viewer (Flask + Leaflet)
+    ├── app.py               # App factory and server entry point
+    ├── routes.py            # REST API endpoints and GeoJSON conversion
+    ├── helpers.py           # Geometry and annotation utility functions
+    ├── cache.py             # MapData pickle caching
+    ├── templates/           # HTML templates
+    └── static/              # External CSS and Modular JS assets
 ```
 
 ### Examples
