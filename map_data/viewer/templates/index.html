@@ -107,24 +107,40 @@
       </div>
 
       <!-- Properties panel -->
-      <div class="panel" style="flex: 1; border-bottom: none;">
+      <div class="panel" style="flex: 1; border-bottom: none; overflow-y: auto;">
         <div class="panel-title">PROPERTIES</div>
         <div id="props-content" class="text-secondary" style="font-style:italic;">
           Click a feature to inspect
         </div>
+      </div>
 
-        <div id="ann-panel" style="display:none; margin-top:16px;">
-          <div class="panel-title">ANNOTATIONS <span id="ann-count"></span></div>
+      <!-- Bottom stacked collapsible panels -->
+      <div id="ann-panel" class="bottom-panel" style="display:none;">
+        <div class="bottom-panel-header" onclick="togglePanel('ann')">
+          <h6 class="bottom-panel-title">ANNOTATIONS <span id="ann-count"></span></h6>
+          <span id="ann-toggle" class="panel-toggle-icon">▲</span>
+        </div>
+        <div id="ann-body" class="bottom-panel-body">
           <div id="ann-list"></div>
         </div>
+      </div>
 
-        <div id="changes-panel" style="display:none; margin-top:16px;">
-          <div class="panel-title">CHANGES <span id="changes-count"></span></div>
+      <div id="changes-panel" class="bottom-panel" style="display:none;">
+        <div class="bottom-panel-header" onclick="togglePanel('changes')">
+          <h6 class="bottom-panel-title">CHANGES <span id="changes-count"></span></h6>
+          <span id="changes-toggle" class="panel-toggle-icon">▲</span>
+        </div>
+        <div id="changes-body" class="bottom-panel-body">
           <div id="changes-list"></div>
         </div>
+      </div>
 
-        <div id="hidden-panel" style="display:none; margin-top:16px;">
-          <div class="panel-title">HIDDEN <span id="hidden-count"></span></div>
+      <div id="hidden-panel" class="bottom-panel" style="display:none;">
+        <div class="bottom-panel-header" onclick="togglePanel('hidden')">
+          <h6 class="bottom-panel-title">HIDDEN <span id="hidden-count"></span></h6>
+          <span id="hidden-toggle" class="panel-toggle-icon">▲</span>
+        </div>
+        <div id="hidden-body" class="bottom-panel-body">
           <div id="hidden-list"></div>
         </div>
       </div>

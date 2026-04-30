@@ -38,15 +38,17 @@ let deleteHandler = null;
 let fetchRectDraw = null;
 
 const STYLES = {
-  road:       { color: '#555', weight: 0.8, fillColor: '#333', fillOpacity: 0.75 },
-  footway:    { color: '#b89900', weight: 0.5, fillColor: '#FFD700', fillOpacity: 0.45 },
-  barrier:    { color: '#8b0000', weight: 1,   fillColor: '#BF0009', fillOpacity: 0.45 },
-  annotation: { color: '#cc5500', weight: 2,   fillColor: '#ff8c00', fillOpacity: 0.45 },
-  path:       { color: '#22c55e', weight: 3,   fillOpacity: 0, opacity: 0.9 },
+  road:       { color: '#555', weight: 0.8, fillColor: '#333', fillOpacity: 0.5 },
+  footway:    { color: '#b89900', weight: 0.5, fillColor: '#FFD700', fillOpacity: 0.35 },
+  barrier:    { color: '#8b0000', weight: 1,   fillColor: '#BF0009', fillOpacity: 0.35 },
+  annotation: { color: '#cc5500', weight: 2,   fillColor: '#ff8c00', fillOpacity: 0.35 },
+  path:       { color: '#22c55e', weight: 3,   fillOpacity: 0, opacity: 0.7 },
 };
 
 const HIGHLIGHT_STYLES = {
-  road:    { color: '#aaa', weight: 2.5, fillColor: '#555', fillOpacity: 0.9 },
-  footway: { color: '#ffe033', weight: 2, fillColor: '#FFD700', fillOpacity: 0.65 },
-  barrier: { color: '#ff2020', weight: 2.5, fillColor: '#cc0000', fillOpacity: 0.65 },
+  road:       { color: '#fff', weight: 3,   fillColor: '#555', fillOpacity: 0.8 },
+  footway:    { color: '#fff', weight: 2.5, fillColor: '#FFD700', fillOpacity: 0.7 },
+  barrier:    { color: '#ff2020', weight: 3,   fillColor: '#cc0000', fillOpacity: 0.7 },
+  annotation: { color: '#fff', weight: 3.5, fillColor: '#ff8c00', fillOpacity: 0.7 },
+  path:       { color: '#fff', weight: 4.5, fillOpacity: 0, opacity: 1.0 },
 };

@@ -17,9 +17,19 @@ function setSubtypeVisible(cat, subtype, visible) {
 function addAnnotationToLayer(ann) {
   L.geoJSON(ann.geometry, { style: _annStyle(ann) }).eachLayer(layer => {
     layer.options._ann_id = ann.id;
+    const cat = ann.type === 'path' ? 'path' : 'annotation';
     layer.on('click', e => {
       L.DomEvent.stopPropagation(e);
-      if (currentMode === 'view') showAnnProps(ann);
+      if (currentMode === 'view') {
+        if (currentClickedLayer && currentClickedLayer !== layer) {
+          const oldCat = currentClickedLayer._osmCat;
+          currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
+        }
+        layer._osmCat = cat;
+        currentClickedLayer = layer;
+        layer.setStyle(HIGHLIGHT_STYLES[cat]);
+        showAnnProps(ann);
+      }
     });
     drawnItems.addLayer(layer);
   });
@@ -84,7 +94,8 @@ async function loadMapData(filename, { preserveView = false } = {}) {
             L.DomEvent.stopPropagation(e);
             if (currentMode === 'view') {
               if (currentClickedLayer && currentClickedLayer !== layer) {
-                currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
+                const oldCat = currentClickedLayer._osmCat;
+                currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
               }
               layer._osmCat = cat;
               currentClickedLayer = layer;
@@ -116,7 +127,15 @@ async function loadMapData(filename, { preserveView = false } = {}) {
         onEachFeature: (feature, layer) => {
           layer.on('click', e => {
             L.DomEvent.stopPropagation(e);
-            if (currentMode === 'view') showProps(feature.properties);
+            if (currentMode === 'view') {
+              if (currentClickedLayer && currentClickedLayer !== layer) {
+                const oldCat = currentClickedLayer._osmCat;
+                currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
+              }
+              currentClickedLayer = layer;
+              // Waypoints don't have a highlight style yet, but we store them
+              showProps(feature.properties);
+            }
           });
         },
       }
@@ -200,8 +219,10 @@ async function _reloadWay(wayId) {
         newLayer.on('click', e => {
           L.DomEvent.stopPropagation(e);
           if (currentMode === 'view') {
-            if (currentClickedLayer && currentClickedLayer !== newLayer)
-              currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
+            if (currentClickedLayer && currentClickedLayer !== newLayer) {
+              const oldCat = currentClickedLayer._osmCat;
+              currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
+            }
             newLayer._osmCat    = newCat;
             currentClickedLayer = newLayer;
             newLayer.setStyle(HIGHLIGHT_STYLES[newCat]);

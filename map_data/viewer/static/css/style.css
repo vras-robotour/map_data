@@ -3,7 +3,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; font-size: 14px; }
 #topbar { flex-shrink: 0; background: #1a1a2e; border-bottom: 1px solid #333; padding: 6px 12px; }
 #main { display: flex; flex: 1; overflow: hidden; }
 #sidebar {
-  width: 280px; min-width: 280px; overflow-y: auto;
+  width: 280px; min-width: 280px;
   scrollbar-gutter: stable;
   background: #16213e; color: #cdd3de; border-right: 1px solid #333;
   display: flex; flex-direction: column; gap: 0;
@@ -86,3 +86,17 @@ html, body { height: 100%; margin: 0; overflow: hidden; font-size: 14px; }
 }
 .change-item:last-child { border-bottom: none; }
 .change-id { color: #6c7a9c; font-size: 0.68rem; }
+
+/* Collapsible panels at the bottom of the sidebar */
+.bottom-panel { border-top: 1px solid #2a2a4a; }
+.bottom-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px; cursor: pointer; background: #1a2747;
+}
+.bottom-panel-header:hover { background: #1e2d50; }
+.bottom-panel-title {
+  font-size: 0.65rem; font-weight: 700; letter-spacing: 1.5px;
+  text-transform: uppercase; color: #6c7a9c; margin: 0;
+}
+.bottom-panel-body { padding: 4px 14px 12px 14px; background: #16213e; }
+.panel-toggle-icon { font-size: 0.6rem; color: #6c7a9c; }

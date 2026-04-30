@@ -150,7 +150,8 @@ async function initApp() {
     if (currentMode === 'view') {
       clearNodes();
       if (currentClickedLayer) {
-        currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
+        const oldCat = currentClickedLayer._osmCat;
+        currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
         currentClickedLayer = null;
       }
       currentClickedFeature = null;
