@@ -7,7 +7,15 @@ import pickle
 import logging
 import utm
 import numpy as np
-from flask import Blueprint, jsonify, request, abort, send_file, render_template, current_app
+from flask import (
+    Blueprint,
+    jsonify,
+    request,
+    abort,
+    send_file,
+    render_template,
+    current_app,
+)
 from map_data.map_data import MapData
 from map_data.way import Way, FOOTWAY_VALUES
 from .cache import load_mapdata_cached
@@ -19,7 +27,7 @@ from .helpers import (
     get_deleted_node_ids,
     rebuild_way_without_nodes,
     geom_to_geojson,
-    geojson_geom_to_utm
+    geojson_geom_to_utm,
 )
 
 bp = Blueprint("viewer", __name__)
@@ -73,9 +81,7 @@ def get_mapdata():
     path = os.path.join(_get_data_dir(), filename)
     if not os.path.isfile(path):
         abort(404, f"File not found: {filename}")
-    map_data = copy.copy(
-        load_mapdata_cached(path)
-    )
+    map_data = copy.copy(load_mapdata_cached(path))
     store = load_annotations(_annotation_path(filename))
     deleted_way_ids = get_deleted_way_ids(store)
     has_node_dels = bool(store.get("deleted_nodes"))
@@ -88,8 +94,10 @@ def get_mapdata():
                 del_nids = get_deleted_node_ids(store, w.id)
                 if del_nids:
                     w = rebuild_way_without_nodes(
-                        w, del_nids,
-                        map_data.zone_number, map_data.zone_letter,
+                        w,
+                        del_nids,
+                        map_data.zone_number,
+                        map_data.zone_letter,
                         getattr(map_data, "nodes_cache", {}),
                     )
                     if w is None:
@@ -420,11 +428,13 @@ def hide_way(way_id):
     hw = store.setdefault("hidden_ways", [])
     existing_ids = {(d["id"] if isinstance(d, dict) else d) for d in hw}
     if way_id not in existing_ids:
-        hw.append({
-            "id": way_id,
-            "category": body.get("category", "unknown"),
-            "label": body.get("label", ""),
-        })
+        hw.append(
+            {
+                "id": way_id,
+                "category": body.get("category", "unknown"),
+                "label": body.get("label", ""),
+            }
+        )
     save_annotations(ann_path, store)
     return "", 204
 

@@ -1,3 +1,6 @@
+import argparse
+import os
+
 import logging
 from flask import Flask
 from .routes import bp
@@ -15,9 +18,6 @@ def create_app(data_dir=None):
 
 
 def main():
-    import argparse
-    import os
-
     parser = argparse.ArgumentParser(description="Interactive map data viewer")
     parser.add_argument("--data-dir", help="Directory containing .mapdata files")
     parser.add_argument("--host", default="127.0.0.1")

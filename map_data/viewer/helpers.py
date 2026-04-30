@@ -8,11 +8,11 @@ from shapely.geometry import (
     Polygon as _SPoly,
     MultiPolygon as _SMPoly,
 )
-from map_data.way import FOOTWAY_VALUES
 
 # ------------------------------------------------------------------
 # GeoJSON conversion helpers
 # ------------------------------------------------------------------
+
 
 def ring_to_latlon(coords, zone_number, zone_letter):
     result = []
@@ -97,6 +97,7 @@ def mapdata_to_geojson(map_data):
 # Annotation helpers
 # ------------------------------------------------------------------
 
+
 def load_annotations(path):
     if os.path.isfile(path):
         with open(path) as f:
@@ -126,6 +127,7 @@ def get_deleted_node_ids(store, way_id):
 # ------------------------------------------------------------------
 # Export helpers
 # ------------------------------------------------------------------
+
 
 def geojson_geom_to_utm(geometry, zone_number, zone_letter):
     """GeoJSON geometry (lon/lat) → Shapely geometry (UTM, same zone as mapdata)."""
