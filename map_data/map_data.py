@@ -334,6 +334,13 @@ class MapData:
     def parse_nodes(self):
         """Convert standalone obstacle nodes to small circular barrier polygons."""
         for node in tqdm(self.osm_nodes_data.nodes, desc="Parse nodes"):
+            if node.id not in self.nodes_cache:
+                self.nodes_cache[node.id] = {
+                    "lat": float(node.lat),
+                    "lon": float(node.lon),
+                    "tags": dict(node.tags) if node.tags else {},
+                }
+
             if node.id in self.way_node_ids:
                 continue
             if any(
@@ -526,6 +533,24 @@ class MapData:
         if save:
             self.save_to_pickle()
 
+    def __str__(self):
+        source = f"File: {self.coords_file}" if self.coords_type == "file" else "Array"
+        status = (
+            "Parsed"
+            if self.roads_list or self.footways_list or self.barriers_list
+            else "Not Parsed"
+        )
+
+        return (
+            f"MapData Object\n"
+            f"  Source: {source}\n"
+            f"  Status: {status}\n"
+            f"  Waypoints: {len(self.waypoints)}\n"
+            f"  UTM Zone: {self.zone_number}{self.zone_letter}\n"
+            f"  Bounds: X[{self.min_x:.1f}, {self.max_x:.1f}], Y[{self.min_y:.1f}, {self.max_y:.1f}]\n"
+            f"  Features: {len(self.roads_list)} roads, {len(self.footways_list)} footways, {len(self.barriers_list)} barriers"
+        )
+
     def __getstate__(self):
         state = self.__dict__.copy()
         # Raw overpy Result objects are not reliably picklable; clear them.
@@ -559,13 +584,9 @@ class MapData:
     def get_points(self, z=0):
         """Return all OSM nodes as {id: utm_column_vector} dict."""
         points = {}
-        for node in self.osm_nodes_data.nodes:
-            e, n, _, _ = utm.from_latlon(float(node.lat), float(node.lon))
-            points[node.id] = np.array([e, n, z]).reshape(3, 1)
-        for way in self.osm_ways_data.ways:
-            for node in way.nodes:
-                e, n, _, _ = utm.from_latlon(float(node.lat), float(node.lon))
-                points[node.id] = np.array([e, n, z]).reshape(3, 1)
+        for node_id, data in self.nodes_cache.items():
+            e, n, _, _ = utm.from_latlon(data["lat"], data["lon"])
+            points[node_id] = np.array([e, n, z]).reshape(3, 1)
         return points
 
     def get_ways(self):

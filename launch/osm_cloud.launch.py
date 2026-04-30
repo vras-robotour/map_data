@@ -16,12 +16,12 @@ def generate_launch_description():
     )
     mapdata_file = DeclareLaunchArgument(
         "mapdata_file",
-        default_value="buchlovice.mapdata",
+        default_value="stromovka.mapdata",
         description="File with preprocessed OSM map data.",
     )
     gpx_file = DeclareLaunchArgument(
         "gpx_file",
-        default_value="buchlovice.gpx",
+        default_value="stromovka.gpx",
         description="File with gpx coords denoting area to be processed.",
     )
     grid_topic = DeclareLaunchArgument(
@@ -43,12 +43,12 @@ def generate_launch_description():
             {
                 "utm_frame": "utm",
                 "local_frame": "local_utm",
-                # "mapdata_file": PathJoinSubstitution(
-                #     [
-                #         LaunchConfiguration("mapdata_path"),
-                #         LaunchConfiguration("mapdata_file"),
-                #     ]
-                # ),
+                "mapdata_file": PathJoinSubstitution(
+                    [
+                        LaunchConfiguration("mapdata_path"),
+                        LaunchConfiguration("mapdata_file"),
+                    ]
+                ),
                 "gpx_file": PathJoinSubstitution(
                     [
                         LaunchConfiguration("mapdata_path"),

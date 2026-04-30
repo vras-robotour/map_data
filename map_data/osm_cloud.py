@@ -22,12 +22,14 @@ class OSMCloud(Node):
         self.utm_frame: str = self.declare_parameter("utm_frame", "utm").value
         self.local_frame: str = self.declare_parameter("local_frame", "map").value
         self.utm_to_local_param: Optional[List[float]] = self.declare_parameter(
-            "utm_to_local", None
+            "utm_to_local", rclpy.Parameter.Type.DOUBLE_ARRAY
         ).value
         self.mapdata_file: Optional[str] = self.declare_parameter(
-            "mapdata_file", None
+            "mapdata_file", rclpy.Parameter.Type.STRING
         ).value
-        self.gpx_file: Optional[str] = self.declare_parameter("gpx_file", None).value
+        self.gpx_file: Optional[str] = self.declare_parameter(
+            "gpx_file", rclpy.Parameter.Type.STRING
+        ).value
         self.save_mapdata: bool = self.declare_parameter("save_mapdata", False).value
         self.max_path_dist: float = self.declare_parameter("max_path_dist", 1.0).value
         self.neighbor_cost: str = self.declare_parameter(
@@ -58,6 +60,7 @@ class OSMCloud(Node):
         else:
             self.get_logger().error("No map data or gpx file provided")
             exit(1)
+        self.get_logger().info(str(self.map_data))
 
         if self.utm_to_local_param is None:
             self.get_utm_to_local()

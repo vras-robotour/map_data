@@ -13,9 +13,19 @@ setup(
         ("share/" + package_name, ["package.xml"]),
         (os.path.join("share", package_name, "launch"), glob("launch/*.launch.py")),
         (os.path.join("share", package_name, "data"), glob("data/*.gpx")),
+        (os.path.join("share", package_name, "data"), glob("data/*.mapdata")),
         (os.path.join("share", package_name, "parameters"), glob("parameters/*.csv")),
     ],
-    install_requires=["setuptools", "flask", "gpxpy", "numpy", "overpy", "shapely", "utm", "tqdm"],
+    install_requires=[
+        "setuptools",
+        "flask",
+        "gpxpy",
+        "numpy",
+        "overpy",
+        "shapely",
+        "utm",
+        "tqdm",
+    ],
     package_data={
         "map_data": [
             "viewer/templates/*.html",
