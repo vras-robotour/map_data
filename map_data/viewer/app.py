@@ -10,7 +10,11 @@ import uuid
 import utm
 import numpy as np
 from flask import Flask, jsonify, request, render_template, abort, send_file
-from shapely.geometry import LineString as _SLS, Polygon as _SPoly, MultiPolygon as _SMPoly
+from shapely.geometry import (
+    LineString as _SLS,
+    Polygon as _SPoly,
+    MultiPolygon as _SMPoly,
+)
 
 from map_data.map_data import MapData  # noqa: F401 – ensures MapData class is resolvable on pickle load
 from map_data.way import Way, FOOTWAY_VALUES  # noqa: F401 – Way needed for export reconstruction
@@ -146,9 +150,11 @@ def _save_annotations(path, data):
 
 def _geojson_geom_to_utm(geometry, zone_number, zone_letter):
     """GeoJSON geometry (lon/lat) → Shapely geometry (UTM, same zone as mapdata)."""
+
     def pt(c):
         e, n, _, _ = utm.from_latlon(
-            c[1], c[0],
+            c[1],
+            c[0],
             force_zone_number=zone_number,
             force_zone_letter=zone_letter,
         )
@@ -169,7 +175,9 @@ def _geojson_geom_to_utm(geometry, zone_number, zone_letter):
     return None
 
 
-def _rebuild_way_without_nodes(way, del_nids, zone_number=None, zone_letter=None, nodes_cache=None):
+def _rebuild_way_without_nodes(
+    way, del_nids, zone_number=None, zone_letter=None, nodes_cache=None
+):
     """Return a shallow copy of way with del_nids removed, or None if geometry becomes invalid.
 
     For buffered Polygon ways (all roads/footways/barriers after separate_ways), the polygon
@@ -206,7 +214,8 @@ def _rebuild_way_without_nodes(way, del_nids, zone_number=None, zone_letter=None
                         lat, lon = nd["lat"], nd["lon"]
                 if lat is not None and lon is not None:
                     e, nn, _, _ = utm.from_latlon(
-                        float(lat), float(lon),
+                        float(lat),
+                        float(lon),
                         force_zone_number=zone_number,
                         force_zone_letter=zone_letter,
                     )
@@ -310,7 +319,9 @@ def get_mapdata():
     path = os.path.join(_get_data_dir(), filename)
     if not os.path.isfile(path):
         abort(404, f"File not found: {filename}")
-    map_data = copy.copy(_load_mapdata_cached(path))  # shallow copy — setattr won't mutate cache
+    map_data = copy.copy(
+        _load_mapdata_cached(path)
+    )  # shallow copy — setattr won't mutate cache
     store = _load_annotations(_annotation_path(filename))
     deleted_way_ids = _get_deleted_way_ids(store)
     has_node_dels = bool(store.get("deleted_nodes"))
@@ -338,7 +349,9 @@ def get_mapdata():
                 cat = f["properties"].get("category")
                 if cat in ("road", "footway"):
                     hw = merged.get("highway", "")
-                    f["properties"]["category"] = "footway" if hw in FOOTWAY_VALUES else "road"
+                    f["properties"]["category"] = (
+                        "footway" if hw in FOOTWAY_VALUES else "road"
+                    )
     return jsonify(geojson)
 
 
@@ -460,7 +473,7 @@ def fetch_area():
 @app.route("/api/way_nodes")
 def get_way_nodes():
     filename = request.args.get("file")
-    way_id   = request.args.get("way_id")
+    way_id = request.args.get("way_id")
     if not filename or way_id is None:
         abort(400, "Missing 'file' or 'way_id' query parameter")
     path = os.path.join(_get_data_dir(), filename)
@@ -475,8 +488,12 @@ def get_way_nodes():
         abort(400, "way_id must be an integer")
 
     way = next(
-        (w for lst in (md.roads_list, md.footways_list, md.barriers_list)
-         for w in lst if w.id == wid),
+        (
+            w
+            for lst in (md.roads_list, md.footways_list, md.barriers_list)
+            for w in lst
+            if w.id == wid
+        ),
         None,
     )
     if way is None:
@@ -492,11 +509,15 @@ def get_way_nodes():
         nid = getattr(node_or_id, "id", node_or_id)
         if nid in nodes_cache:
             nd = nodes_cache[nid]
-            nodes.append({"id": nid, "lat": nd["lat"], "lon": nd["lon"], "tags": nd["tags"]})
+            nodes.append(
+                {"id": nid, "lat": nd["lat"], "lon": nd["lon"], "tags": nd["tags"]}
+            )
         else:
             if geom_latlon is None:
                 geom = way.line
-                raw = list(geom.exterior.coords if hasattr(geom, "exterior") else geom.coords)
+                raw = list(
+                    geom.exterior.coords if hasattr(geom, "exterior") else geom.coords
+                )
                 geom_latlon = [utm.to_latlon(e, n, zn, zl) for e, n in raw]
             if i < len(geom_latlon):
                 lat, lon = geom_latlon[i]
@@ -524,7 +545,11 @@ def get_way(way_id):
 
     way = None
     category = None
-    for lst_name, cat in (("roads_list", "road"), ("footways_list", "footway"), ("barriers_list", "barrier")):
+    for lst_name, cat in (
+        ("roads_list", "road"),
+        ("footways_list", "footway"),
+        ("barriers_list", "barrier"),
+    ):
         for w in getattr(md, lst_name):
             if w.id == way_id:
                 way = copy.copy(w)
@@ -564,7 +589,9 @@ def get_way(way_id):
         feature["properties"]["tags"] = merged
         if category in ("road", "footway"):
             hw = merged.get("highway", "")
-            feature["properties"]["category"] = "footway" if hw in FOOTWAY_VALUES else "road"
+            feature["properties"]["category"] = (
+                "footway" if hw in FOOTWAY_VALUES else "road"
+            )
 
     return jsonify(feature)
 
@@ -578,11 +605,13 @@ def delete_way(way_id):
     ann_path = _annotation_path(filename)
     store = _load_annotations(ann_path)
     if way_id not in _get_deleted_way_ids(store):
-        store.setdefault("deleted_ways", []).append({
-            "id": way_id,
-            "category": body.get("category", "unknown"),
-            "label": body.get("label", ""),
-        })
+        store.setdefault("deleted_ways", []).append(
+            {
+                "id": way_id,
+                "category": body.get("category", "unknown"),
+                "label": body.get("label", ""),
+            }
+        )
     _save_annotations(ann_path, store)
     return "", 204
 
@@ -638,12 +667,12 @@ def restore_way(way_id):
 @app.route("/api/way_node", methods=["DELETE"])
 def delete_way_node():
     filename = request.args.get("file")
-    way_id   = request.args.get("way_id")
-    node_id  = request.args.get("node_id")
+    way_id = request.args.get("way_id")
+    node_id = request.args.get("node_id")
     if not filename or way_id is None or node_id is None:
         abort(400, "Missing required query parameters")
     try:
-        way_id  = int(way_id)
+        way_id = int(way_id)
         node_id = int(node_id)
     except (ValueError, TypeError):
         abort(400, "way_id and node_id must be integers")
@@ -663,12 +692,12 @@ def delete_way_node():
 @app.route("/api/way_node/restore", methods=["PUT"])
 def restore_way_node():
     filename = request.args.get("file")
-    way_id   = request.args.get("way_id")
-    node_id  = request.args.get("node_id")
+    way_id = request.args.get("way_id")
+    node_id = request.args.get("node_id")
     if not filename or way_id is None or node_id is None:
         abort(400, "Missing required query parameters")
     try:
-        way_id  = int(way_id)
+        way_id = int(way_id)
         node_id = int(node_id)
     except (ValueError, TypeError):
         abort(400, "way_id and node_id must be integers")
@@ -699,7 +728,7 @@ def export_mapdata():
 
     # Apply OSM deletions
     deleted_way_ids = _get_deleted_way_ids(store)
-    has_node_dels   = bool(store.get("deleted_nodes"))
+    has_node_dels = bool(store.get("deleted_nodes"))
     if deleted_way_ids or has_node_dels:
         for lst_name in ("roads_list", "footways_list", "barriers_list"):
             new_lst = []
