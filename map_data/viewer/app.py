@@ -13,7 +13,7 @@ from flask import Flask, jsonify, request, render_template, abort, send_file
 from shapely.geometry import LineString as _SLS, Polygon as _SPoly, MultiPolygon as _SMPoly
 
 from map_data.map_data import MapData  # noqa: F401 – ensures MapData class is resolvable on pickle load
-from map_data.way import Way           # noqa: F401 – needed for export reconstruction
+from map_data.way import Way, FOOTWAY_VALUES  # noqa: F401 – Way needed for export reconstruction
 
 
 app = Flask(__name__)
@@ -169,8 +169,14 @@ def _geojson_geom_to_utm(geometry, zone_number, zone_letter):
     return None
 
 
-def _rebuild_way_without_nodes(way, del_nids):
-    """Return a shallow copy of way with del_nids removed, or None if geometry becomes invalid."""
+def _rebuild_way_without_nodes(way, del_nids, zone_number=None, zone_letter=None, nodes_cache=None):
+    """Return a shallow copy of way with del_nids removed, or None if geometry becomes invalid.
+
+    For buffered Polygon ways (all roads/footways/barriers after separate_ways), the polygon
+    exterior coords have far more vertices than way.nodes, so index-based removal is wrong.
+    Instead, we rebuild the centerline from node lat/lon positions and re-buffer with the
+    same radius (estimated from the original polygon geometry).
+    """
     node_ids = [getattr(n, "id", n) for n in way.nodes]
     keep = [i for i, nid in enumerate(node_ids) if nid not in del_nids]
     if len(keep) < 2:
