@@ -333,7 +333,11 @@ def get_mapdata():
                     continue
                 del_nids = _get_deleted_node_ids(store, w.id)
                 if del_nids:
-                    w = _rebuild_way_without_nodes(w, del_nids)
+                    w = _rebuild_way_without_nodes(
+                        w, del_nids,
+                        map_data.zone_number, map_data.zone_letter,
+                        getattr(map_data, "nodes_cache", {}),
+                    )
                     if w is None:
                         continue
                 new_lst.append(w)
@@ -561,13 +565,15 @@ def get_way(way_id):
     if way is None:
         abort(404, f"Way {way_id} not found")
 
+    zn, zl = md.zone_number, md.zone_letter
     del_nids = _get_deleted_node_ids(store, way_id)
     if del_nids:
-        way = _rebuild_way_without_nodes(way, del_nids)
+        way = _rebuild_way_without_nodes(
+            way, del_nids, zn, zl, getattr(md, "nodes_cache", {})
+        )
         if way is None:
             abort(404, f"Way {way_id} reduced to nothing by node deletions")
 
-    zn, zl = md.zone_number, md.zone_letter
     geom = _geom_to_geojson(way.line, zn, zl)
     if geom is None:
         abort(500, "Could not convert geometry")
@@ -737,7 +743,9 @@ def export_mapdata():
                     continue
                 del_nids = _get_deleted_node_ids(store, w.id)
                 if del_nids:
-                    w = _rebuild_way_without_nodes(w, del_nids)
+                    w = _rebuild_way_without_nodes(
+                        w, del_nids, zn, zl, getattr(md, "nodes_cache", {})
+                    )
                     if w is None:
                         continue
                 new_lst.append(w)
