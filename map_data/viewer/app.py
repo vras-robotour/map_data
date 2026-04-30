@@ -97,6 +97,7 @@ def _mapdata_to_geojson(map_data):
                     "properties": {
                         "id": way.id,
                         "category": category,
+                        "is_node": category == "barrier" and not bool(way.nodes),
                         "tags": way.tags or {},
                         "in_out": way.in_out,
                     },
@@ -584,6 +585,7 @@ def get_way(way_id):
         "properties": {
             "id": way.id,
             "category": category,
+            "is_node": category == "barrier" and not bool(way.nodes),
             "tags": way.tags or {},
             "in_out": way.in_out,
         },

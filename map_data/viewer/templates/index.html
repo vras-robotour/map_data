@@ -358,6 +358,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
 }).addTo(map);
 
+
 // ── State ────────────────────────────────────────────────────────────────────
 let currentFile = null;
 let currentMode = 'view';
@@ -623,31 +624,40 @@ async function loadMapData(filename, { preserveView = false } = {}) {
     });
 
     ['road', 'footway', 'barrier'].forEach(cat => {
-      geoLayers[cat] = L.geoJSON(
-        { type: 'FeatureCollection', features: byCategory[cat] },
-        {
-          style: () => STYLES[cat],
-          onEachFeature: (feature, layer) => {
-            const st = getSubtype(feature, cat);
-            if (!subtypeLayers[cat][st]) { subtypeLayers[cat][st] = []; subtypeFilters[cat][st] = true; }
-            subtypeLayers[cat][st].push(layer);
-            layer._featureId  = feature.properties.id;
-            layer._featureRef = feature;
-            layer.on('click', e => {
-              L.DomEvent.stopPropagation(e);
-              if (currentMode === 'view') {
-                if (currentClickedLayer && currentClickedLayer !== layer) {
-                  currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
-                }
-                layer._osmCat = cat;
-                currentClickedLayer = layer;
-                layer.setStyle(HIGHLIGHT_STYLES[cat]);
-                showProps(feature.properties, feature);
+      // For barriers: sort so way-barriers come first and node obstacles come last.
+      // Node obstacles have higher canvas IDs and win click priority over enclosing
+      // barrier polygons.
+      const features = cat === 'barrier'
+        ? [
+            ...byCategory[cat].filter(f => !f.properties.is_node),
+            ...byCategory[cat].filter(f =>  f.properties.is_node),
+          ]
+        : byCategory[cat];
+
+      const layerOpts = {
+        style: () => STYLES[cat],
+        onEachFeature: (feature, layer) => {
+          const st = getSubtype(feature, cat);
+          if (!subtypeLayers[cat][st]) { subtypeLayers[cat][st] = []; subtypeFilters[cat][st] = true; }
+          subtypeLayers[cat][st].push(layer);
+          layer._featureId  = feature.properties.id;
+          layer._featureRef = feature;
+          layer.on('click', e => {
+            L.DomEvent.stopPropagation(e);
+            if (currentMode === 'view') {
+              if (currentClickedLayer && currentClickedLayer !== layer) {
+                currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
               }
-            });
-          },
-        }
-      );
+              layer._osmCat = cat;
+              currentClickedLayer = layer;
+              layer.setStyle(HIGHLIGHT_STYLES[cat]);
+              showProps(feature.properties, feature);
+            }
+          });
+        },
+      };
+
+      geoLayers[cat] = L.geoJSON({ type: 'FeatureCollection', features }, layerOpts);
       if (layerCheckbox(cat).checked) geoLayers[cat].addTo(map);
       renderSubtypeFilters(cat);
     });
@@ -772,7 +782,9 @@ async function _reloadWay(wayId) {
     const newCat  = feature.properties.category;
     const catLayer = geoLayers[newCat];
     if (catLayer) {
-      const tmpGeo  = L.geoJSON(feature, { style: () => STYLES[newCat] });
+      const tmpGeo  = L.geoJSON(feature, {
+        style: () => STYLES[newCat],
+      });
       const newLayer = tmpGeo.getLayers()[0];
       if (newLayer) {
         tmpGeo.removeLayer(newLayer);
