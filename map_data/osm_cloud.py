@@ -4,7 +4,8 @@ import rclpy
 from rclpy.node import Node
 from ros2_numpy import msgify, numpify
 from sensor_msgs.msg import PointCloud2
-from tf2_ros import Buffer, TransformListener
+from tf2_ros import Buffer, TransformListener, StaticTransformBroadcaster
+from geometry_msgs.msg import TransformStamped
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy
 
 import numpy as np
@@ -37,17 +38,19 @@ class OSMCloud(Node):
         ).value
         self.grid_res: float = self.declare_parameter("grid_res", 0.25).value
         self.grid_max: List[float] = self.declare_parameter(
-            "grid_max", [250.0, 250.0]
+            "grid_max", [0.0, 0.0]
         ).value
         self.grid_min: List[float] = self.declare_parameter(
-            "grid_min", [-250.0, -250.0]
+            "grid_min", [0.0, 0.0]
         ).value
+        self.auto_utm: bool = self.declare_parameter("auto_utm", False).value
 
         qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self.pub_grid = self.create_publisher(PointCloud2, "grid", qos)
 
         self.tf = Buffer()
         self.tf_sub = TransformListener(self.tf, self)
+        self.tf_static_pub = StaticTransformBroadcaster(self)
 
         self.utm_to_local: Optional[np.ndarray] = None
 
@@ -62,11 +65,59 @@ class OSMCloud(Node):
             exit(1)
         self.get_logger().info(str(self.map_data))
 
-        if self.utm_to_local_param is None:
-            self.get_utm_to_local()
-        else:
+        if self.utm_to_local_param is not None:
             self.utm_to_local = np.array(self.utm_to_local_param)
+        elif self.auto_utm:
+            self.get_logger().info(
+                "Auto-calculating UTM to local transform from map center"
+            )
+            center_x = (self.map_data.min_x + self.map_data.max_x) / 2
+            center_y = (self.map_data.min_y + self.map_data.max_y) / 2
+            self.utm_to_local = np.eye(4)
+            self.utm_to_local[0, 3] = -center_x
+            self.utm_to_local[1, 3] = -center_y
+
+            # Publish the static transform (utm -> local_utm)
+            t = TransformStamped()
+            t.header.stamp = self.get_clock().now().to_msg()
+            t.header.frame_id = self.utm_frame
+            t.child_frame_id = self.local_frame
+            t.transform.translation.x = center_x
+            t.transform.translation.y = center_y
+            t.transform.translation.z = 0.0
+            t.transform.rotation.x = 0.0
+            t.transform.rotation.y = 0.0
+            t.transform.rotation.z = 0.0
+            t.transform.rotation.w = 1.0
+            self.tf_static_pub.sendTransform(t)
+        else:
+            self.get_utm_to_local()
+
         self.get_logger().info(f"Using UTM to local transform: {self.utm_to_local}")
+
+        if all(v == 0.0 for v in self.grid_min) and all(v == 0.0 for v in self.grid_max):
+            self.get_logger().info("Auto-calculating grid bounds from map data")
+            # Transform map bounds to local frame
+            bounds_utm = np.array(
+                [
+                    [self.map_data.min_x, self.map_data.min_y, 0.0],
+                    [self.map_data.max_x, self.map_data.max_y, 0.0],
+                ]
+            )
+            bounds_local = []
+            for p in bounds_utm:
+                p_vec = p.reshape(3, 1)
+                p_loc = (
+                    np.dot(self.utm_to_local[:3, :3], p_vec) + self.utm_to_local[:3, 3:]
+                )
+                bounds_local.append(p_loc.flatten())
+
+            bounds_local = np.array(bounds_local)
+            self.grid_min = [np.min(bounds_local[:, 0]), np.min(bounds_local[:, 1])]
+            self.grid_max = [np.max(bounds_local[:, 0]), np.max(bounds_local[:, 1])]
+            self.get_logger().info(
+                f"Calculated grid bounds: min={self.grid_min}, max={self.grid_max}"
+            )
 
         self.grid_cloud: PointCloud2 = self.get_cloud()
         self.create_timer(10.0, self.publish_cb)
@@ -134,6 +185,7 @@ class OSMCloud(Node):
             self.max_path_dist**2 if self.neighbor_cost == "quadratic" else 1.0
         )
         cloud = create_cloud(grid)
+        self.get_logger().info(str(grid.shape))
         cloud.header.frame_id = self.local_frame
         cloud.header.stamp = self.get_clock().now().to_msg()
 
