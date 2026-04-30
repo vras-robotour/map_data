@@ -184,23 +184,98 @@ def _rebuild_way_without_nodes(way, del_nids, zone_number=None, zone_letter=None
     w = copy.copy(way)
     w.nodes = [way.nodes[i] for i in keep]
     geom = way.line
+
     if geom.geom_type == "LineString":
         coords = list(geom.coords)
         new_coords = [coords[i] for i in keep if i < len(coords)]
         if len(new_coords) < 2:
             return None
         w.line = _SLS(new_coords)
+
     elif geom.geom_type == "Polygon":
-        coords = list(geom.exterior.coords)
-        new_coords = [coords[i] for i in keep if i < len(coords)]
-        if len(new_coords) < 3:
-            return None
-        if new_coords[0] != new_coords[-1]:
-            new_coords.append(new_coords[0])
-        w.line = _SPoly(new_coords)
+        if zone_number is not None:
+            # Rebuild centerline from node positions, then re-buffer with the same radius.
+            nc = nodes_cache or {}
+            utm_coords = []
+            for n in w.nodes:
+                lat = getattr(n, "lat", None)
+                lon = getattr(n, "lon", None)
+                if lat is None:  # node stored as plain ID — look up in cache
+                    nd = nc.get(getattr(n, "id", n))
+                    if nd:
+                        lat, lon = nd["lat"], nd["lon"]
+                if lat is not None and lon is not None:
+                    e, nn, _, _ = utm.from_latlon(
+                        float(lat), float(lon),
+                        force_zone_number=zone_number,
+                        force_zone_letter=zone_letter,
+                    )
+                    utm_coords.append((e, nn))
+            if len(utm_coords) < 2:
+                return None
+            ls = _SLS(utm_coords)
+            # Estimate original buffer radius from polygon area and perimeter:
+            # area = 2*r*L + π*r²  and  perimeter = 2*L + 2*π*r
+            # → π*r² - perimeter*r + area = 0
+            p = geom.length
+            a = geom.area
+            disc = p * p - 4 * np.pi * a
+            r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else a / p
+            try:
+                w.line = ls.buffer(r)
+            except Exception:
+                w.line = ls  # fallback: leave as LineString
+        else:
+            # No zone info — fall back to simple index-based removal (only correct for
+            # unmodified closed areas where coords align with nodes).
+            coords = list(geom.exterior.coords)
+            new_coords = [coords[i] for i in keep if i < len(coords)]
+            if len(new_coords) < 3:
+                return None
+            if new_coords[0] != new_coords[-1]:
+                new_coords.append(new_coords[0])
+            w.line = _SPoly(new_coords)
+
     else:
         return None  # MultiPolygon: not supported for partial node deletion
+
     return w
+
+
+def _get_deleted_way_ids(store):
+    """Return set of deleted way IDs, handling both old (int list) and new (dict list) formats."""
+    dw = store.get("deleted_ways", [])
+    return {(d["id"] if isinstance(d, dict) else d) for d in dw}
+
+
+def _get_deleted_node_ids(store, way_id):
+    """Return set of deleted node IDs for a given way_id, handling both storage formats."""
+    dn = store.get("deleted_nodes", [])
+    if isinstance(dn, dict):
+        return set(dn.get(str(way_id), []))
+    return {d["node_id"] for d in dn if d["way_id"] == way_id}
+
+
+# ------------------------------------------------------------------
+# Mapdata cache  (keyed by (abs_path, mtime); holds at most 3 files)
+# ------------------------------------------------------------------
+
+_mapdata_cache: dict = {}
+
+
+def _load_mapdata_cached(path):
+    mtime = os.path.getmtime(path)
+    key = (path, mtime)
+    if key not in _mapdata_cache:
+        # Evict stale entries for the same path
+        for k in [k for k in _mapdata_cache if k[0] == path]:
+            del _mapdata_cache[k]
+        # Evict oldest entry if over capacity
+        while len(_mapdata_cache) >= 3:
+            del _mapdata_cache[next(iter(_mapdata_cache))]
+        with open(path, "rb") as f:
+            _mapdata_cache[key] = pickle.load(f)
+    return _mapdata_cache[key]
 
 
 # ------------------------------------------------------------------
@@ -235,16 +310,35 @@ def get_mapdata():
     path = os.path.join(_get_data_dir(), filename)
     if not os.path.isfile(path):
         abort(404, f"File not found: {filename}")
-    with open(path, "rb") as f:
-        map_data = pickle.load(f)
-    geojson = _mapdata_to_geojson(map_data)
+    map_data = copy.copy(_load_mapdata_cached(path))  # shallow copy — setattr won't mutate cache
     store = _load_annotations(_annotation_path(filename))
-    deleted_ways = set(store.get("deleted_ways", []))
-    if deleted_ways:
-        geojson["features"] = [
-            f for f in geojson["features"]
-            if f["properties"].get("id") not in deleted_ways
-        ]
+    deleted_way_ids = _get_deleted_way_ids(store)
+    has_node_dels = bool(store.get("deleted_nodes"))
+    if deleted_way_ids or has_node_dels:
+        for lst_name in ("roads_list", "footways_list", "barriers_list"):
+            new_lst = []
+            for w in getattr(map_data, lst_name):
+                if w.id in deleted_way_ids:
+                    continue
+                del_nids = _get_deleted_node_ids(store, w.id)
+                if del_nids:
+                    w = _rebuild_way_without_nodes(w, del_nids)
+                    if w is None:
+                        continue
+                new_lst.append(w)
+            setattr(map_data, lst_name, new_lst)
+    geojson = _mapdata_to_geojson(map_data)
+    tag_overrides = store.get("tag_overrides", {})
+    if tag_overrides:
+        for f in geojson["features"]:
+            ov = tag_overrides.get(str(f["properties"].get("id", "")))
+            if ov:
+                merged = {**(f["properties"].get("tags") or {}), **ov}
+                f["properties"]["tags"] = merged
+                cat = f["properties"].get("category")
+                if cat in ("road", "footway"):
+                    hw = merged.get("highway", "")
+                    f["properties"]["category"] = "footway" if hw in FOOTWAY_VALUES else "road"
     return jsonify(geojson)
 
 
@@ -373,8 +467,7 @@ def get_way_nodes():
     if not os.path.isfile(path):
         abort(404, f"File not found: {filename}")
 
-    with open(path, "rb") as f:
-        md = pickle.load(f)
+    md = _load_mapdata_cached(path)
 
     try:
         wid = int(way_id)
@@ -445,9 +538,37 @@ def delete_way_node():
         abort(400, "way_id and node_id must be integers")
     ann_path = _annotation_path(filename)
     store = _load_annotations(ann_path)
-    bucket = store.setdefault("deleted_nodes", {}).setdefault(str(way_id), [])
-    if node_id not in bucket:
-        bucket.append(node_id)
+    # Migrate old dict format to list format if needed
+    dn = store.get("deleted_nodes", [])
+    if isinstance(dn, dict):
+        dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
+        store["deleted_nodes"] = dn
+    if node_id not in _get_deleted_node_ids(store, way_id):
+        dn.append({"way_id": way_id, "node_id": node_id})
+    _save_annotations(ann_path, store)
+    return "", 204
+
+
+@app.route("/api/way_node/restore", methods=["PUT"])
+def restore_way_node():
+    filename = request.args.get("file")
+    way_id   = request.args.get("way_id")
+    node_id  = request.args.get("node_id")
+    if not filename or way_id is None or node_id is None:
+        abort(400, "Missing required query parameters")
+    try:
+        way_id  = int(way_id)
+        node_id = int(node_id)
+    except (ValueError, TypeError):
+        abort(400, "way_id and node_id must be integers")
+    ann_path = _annotation_path(filename)
+    store = _load_annotations(ann_path)
+    dn = store.get("deleted_nodes", [])
+    if isinstance(dn, dict):
+        dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
+    store["deleted_nodes"] = [
+        d for d in dn if not (d["way_id"] == way_id and d["node_id"] == node_id)
+    ]
     _save_annotations(ann_path, store)
     return "", 204
 
