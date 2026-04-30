@@ -657,6 +657,41 @@ def delete_way_tags(way_id):
     return "", 204
 
 
+@app.route("/api/ways/<int:way_id>/hide", methods=["PUT"])
+def hide_way(way_id):
+    filename = request.args.get("file")
+    if not filename:
+        abort(400, "Missing 'file' query parameter")
+    body = request.get_json(force=True) or {}
+    ann_path = _annotation_path(filename)
+    store = _load_annotations(ann_path)
+    hw = store.setdefault("hidden_ways", [])
+    existing_ids = {(d["id"] if isinstance(d, dict) else d) for d in hw}
+    if way_id not in existing_ids:
+        hw.append({
+            "id": way_id,
+            "category": body.get("category", "unknown"),
+            "label": body.get("label", ""),
+        })
+    _save_annotations(ann_path, store)
+    return "", 204
+
+
+@app.route("/api/ways/<int:way_id>/show", methods=["PUT"])
+def show_way(way_id):
+    filename = request.args.get("file")
+    if not filename:
+        abort(400, "Missing 'file' query parameter")
+    ann_path = _annotation_path(filename)
+    store = _load_annotations(ann_path)
+    hw = store.get("hidden_ways", [])
+    store["hidden_ways"] = [
+        d for d in hw if (d["id"] if isinstance(d, dict) else d) != way_id
+    ]
+    _save_annotations(ann_path, store)
+    return "", 204
+
+
 @app.route("/api/ways/<int:way_id>/restore", methods=["PUT"])
 def restore_way(way_id):
     filename = request.args.get("file")

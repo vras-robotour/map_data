@@ -200,15 +200,13 @@
         </div>
       </div>
 
-      <div class="panel">
+      <div class="panel" id="ann-panel" style="display:none;">
         <div class="panel-title" style="display:flex;align-items:center;cursor:pointer;" onclick="togglePanel('ann')">
           <span style="flex:1;">Annotations <span id="ann-count" class="text-secondary fw-normal ms-1"></span></span>
           <span id="ann-toggle" style="font-size:0.7rem;">&#9650;</span>
         </div>
         <div id="ann-body">
-          <div id="ann-list">
-            <span class="text-secondary" style="font-size:0.78rem;font-style:italic;">None</span>
-          </div>
+          <div id="ann-list"></div>
         </div>
       </div>
 
@@ -219,6 +217,16 @@
         </div>
         <div id="changes-body">
           <div id="changes-list"></div>
+        </div>
+      </div>
+
+      <div class="panel" id="hidden-panel" style="display:none;">
+        <div class="panel-title" style="display:flex;align-items:center;cursor:pointer;" onclick="togglePanel('hidden')">
+          <span style="flex:1;">Hidden <span id="hidden-count" class="text-secondary fw-normal ms-1"></span></span>
+          <span id="hidden-toggle" style="font-size:0.7rem;">&#9650;</span>
+        </div>
+        <div id="hidden-body">
+          <div id="hidden-list"></div>
         </div>
       </div>
 
@@ -374,6 +382,8 @@ let currentClickedLayer  = null;  // Leaflet layer for the selected OSM feature
 let deletedWays  = [];            // [{id, category, label}, ...] from annotations store
 let deletedNodes = [];            // [{way_id, node_id}, ...]        from annotations store
 let tagOverrides = [];            // [{id, category, label, tags}, ...] from annotations store
+let hiddenWays   = [];            // [{id, category, label}, ...] from annotations store
+let hiddenWayIds = new Set();     // Set<number> for O(1) lookup
 let editSelectedLayer = null;   // annotation layer selected in edit mode
 let pathLineDraw  = null;       // L.Draw.Polyline handler for path mode
 let pendingAnnGeom = null;      // geometry waiting for the details modal
@@ -552,8 +562,12 @@ function setSubtypeVisible(cat, subtype, visible) {
   const catLayer = geoLayers[cat];
   if (!catLayer) return;
   (subtypeLayers[cat][subtype] || []).forEach(layer => {
-    if (visible) { if (!catLayer.hasLayer(layer)) catLayer.addLayer(layer); }
-    else         { catLayer.removeLayer(layer); }
+    if (visible) {
+      if (!catLayer.hasLayer(layer) && !hiddenWayIds.has(layer._featureId))
+        catLayer.addLayer(layer);
+    } else {
+      catLayer.removeLayer(layer);
+    }
   });
 }
 
@@ -617,6 +631,10 @@ async function loadMapData(filename, { preserveView = false } = {}) {
       if (cat in byCategory) byCategory[cat].push(f);
     });
 
+    // Pre-compute hidden way IDs before building layers
+    const _loadHiddenMeta = (annData.hidden_ways || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
+    const _loadHiddenIds  = new Set(_loadHiddenMeta.map(d => d.id));
+
     // Reset subtype state for fresh load
     ['road', 'footway', 'barrier'].forEach(cat => {
       subtypeLayers[cat]  = {};
@@ -658,6 +676,11 @@ async function loadMapData(filename, { preserveView = false } = {}) {
       };
 
       geoLayers[cat] = L.geoJSON({ type: 'FeatureCollection', features }, layerOpts);
+      if (_loadHiddenIds.size > 0) {
+        const _toHide = [];
+        geoLayers[cat].eachLayer(l => { if (_loadHiddenIds.has(l._featureId)) _toHide.push(l); });
+        _toHide.forEach(l => geoLayers[cat].removeLayer(l));
+      }
       if (layerCheckbox(cat).checked) geoLayers[cat].addTo(map);
       renderSubtypeFilters(cat);
     });
@@ -705,9 +728,12 @@ async function loadMapData(filename, { preserveView = false } = {}) {
       label:    tagOvMeta[sid]?.label    || '',
       tags,
     }));
+    hiddenWays   = _loadHiddenMeta;
+    hiddenWayIds = _loadHiddenIds;
     renderAnnotationLayer();
     renderAnnotationList();
     renderChangesPanel();
+    renderHiddenPanel();
 
     currentFile = filename;
     document.getElementById('export-btn').disabled = false;
@@ -756,7 +782,10 @@ async function _refreshAnnotationsState() {
     id: +sid, category: tagOvMeta[sid]?.category || 'unknown',
     label: tagOvMeta[sid]?.label || '', tags,
   }));
+  hiddenWays   = (annData.hidden_ways || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
+  hiddenWayIds = new Set(hiddenWays.map(d => d.id));
   renderChangesPanel();
+  renderHiddenPanel();
 }
 
 async function _reloadWay(wayId) {
@@ -804,7 +833,8 @@ async function _reloadWay(wayId) {
             showProps(feature.properties, feature);
           }
         });
-        if (subtypeFilters[newCat][st] !== false) catLayer.addLayer(newLayer);
+        if (subtypeFilters[newCat][st] !== false && !hiddenWayIds.has(feature.properties.id))
+          catLayer.addLayer(newLayer);
         affectedCats.add(newCat);
       }
     }
@@ -866,6 +896,9 @@ function showProps(props, feature = null) {
     el.innerHTML += `<button class="btn btn-sm btn-outline-secondary mt-1"
                              style="font-size:0.72rem;width:100%;"
                              onclick="openWayEditModal()">&#9998; Edit Properties</button>`;
+    el.innerHTML += `<button class="btn btn-sm btn-outline-secondary mt-1"
+                             style="font-size:0.72rem;width:100%;"
+                             onclick="hideCurrentWay()">&#128065; Hide Object</button>`;
     el.innerHTML += `<button class="btn btn-sm btn-outline-danger mt-1"
                              style="font-size:0.72rem;width:100%;"
                              onclick="deleteCurrentWay()">&#128465; Delete Way</button>`;
@@ -1066,6 +1099,7 @@ async function deleteCurrentWay() {
   if (!deletedWays.some(d => d.id === wayId))
     deletedWays.push({ id: wayId, category: cat, label });
   renderChangesPanel();
+  renderHiddenPanel();
   document.getElementById('props-content').innerHTML =
     '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
   setStatus(`Deleted way ${wayId}`, 'text-success');
@@ -1080,6 +1114,49 @@ async function deleteCurrentNode(wayId, nodeId) {
   if (!res.ok) { setStatus('Delete failed', 'text-danger'); return; }
   await _reloadWay(wayId);
   setStatus('Node deleted', 'text-success');
+}
+
+async function hideCurrentWay() {
+  const feature = currentClickedFeature;
+  if (!feature || !currentFile) return;
+  const wayId = feature.properties.id;
+  const cat   = feature.properties.category;
+  const tags  = feature.properties.tags || {};
+  const label = tags.highway || tags.barrier || '';
+  const res = await fetch(
+    `/api/ways/${wayId}/hide?file=${encodeURIComponent(currentFile)}`,
+    { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category: cat, label }) }
+  );
+  if (!res.ok) { setStatus('Hide failed', 'text-danger'); return; }
+  if (currentClickedLayer && geoLayers[cat]) {
+    geoLayers[cat].removeLayer(currentClickedLayer);
+  }
+  currentClickedLayer   = null;
+  currentClickedFeature = null;
+  clearNodes();
+  if (!hiddenWays.some(d => d.id === wayId)) {
+    hiddenWays.push({ id: wayId, category: cat, label });
+    hiddenWayIds.add(wayId);
+  }
+  renderChangesPanel();
+  renderHiddenPanel();
+  document.getElementById('props-content').innerHTML =
+    '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+  setStatus(`Hidden way ${wayId}`, 'text-success');
+}
+
+async function showWay(wayId) {
+  if (!currentFile) return;
+  const res = await fetch(
+    `/api/ways/${wayId}/show?file=${encodeURIComponent(currentFile)}`,
+    { method: 'PUT' }
+  );
+  if (res.ok) {
+    hiddenWays = hiddenWays.filter(d => d.id !== wayId);
+    hiddenWayIds.delete(wayId);
+    await _reloadWay(wayId);
+  }
 }
 
 function renderChangesPanel() {
@@ -1118,6 +1195,24 @@ function renderChangesPanel() {
               title="Undo tag edit" onclick="undoTagOverride(${d.id})">&#8617;</button>
     </div>`).join('');
   list.innerHTML = wayItems + nodeItems + tagItems;
+}
+
+function renderHiddenPanel() {
+  const panel = document.getElementById('hidden-panel');
+  const list  = document.getElementById('hidden-list');
+  const count = document.getElementById('hidden-count');
+  if (!hiddenWays.length) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  count.textContent = `(${hiddenWays.length})`;
+  list.innerHTML = hiddenWays.map(d => `
+    <div class="change-item">
+      <div>
+        <span>${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
+        <br><span class="change-id">#${d.id}</span>
+      </div>
+      <button class="btn btn-sm btn-outline-info py-0 px-1" style="font-size:0.7rem;"
+              title="Show object" onclick="showWay(${d.id})">&#128065;</button>
+    </div>`).join('');
 }
 
 async function undoWayDeletion(wayId) {
@@ -1195,13 +1290,12 @@ function renderAnnotationLayer() {
 }
 
 function renderAnnotationList() {
+  const panel = document.getElementById('ann-panel');
   const el    = document.getElementById('ann-list');
   const count = document.getElementById('ann-count');
-  count.textContent = annotations.length ? `(${annotations.length})` : '';
-  if (!annotations.length) {
-    el.innerHTML = '<span class="text-secondary" style="font-size:0.78rem;font-style:italic;">None</span>';
-    return;
-  }
+  if (!annotations.length) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  count.textContent = `(${annotations.length})`;
   el.innerHTML = annotations.map(a => `
     <div class="ann-item">
       <div>
