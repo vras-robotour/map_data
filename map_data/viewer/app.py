@@ -503,11 +503,70 @@ def get_way_nodes():
                 nodes.append({"id": nid, "lat": lat, "lon": lon, "tags": {}})
 
     store = _load_annotations(_annotation_path(filename))
-    deleted_node_ids = set(store.get("deleted_nodes", {}).get(str(wid), []))
+    deleted_node_ids = _get_deleted_node_ids(store, wid)
     if deleted_node_ids:
         nodes = [n for n in nodes if n["id"] not in deleted_node_ids]
 
     return jsonify({"way_id": wid, "nodes": nodes})
+
+
+@app.route("/api/ways/<int:way_id>")
+def get_way(way_id):
+    filename = request.args.get("file")
+    if not filename:
+        abort(400, "Missing 'file' query parameter")
+    path = os.path.join(_get_data_dir(), filename)
+    if not os.path.isfile(path):
+        abort(404, f"File not found: {filename}")
+
+    md = _load_mapdata_cached(path)
+    store = _load_annotations(_annotation_path(filename))
+
+    way = None
+    category = None
+    for lst_name, cat in (("roads_list", "road"), ("footways_list", "footway"), ("barriers_list", "barrier")):
+        for w in getattr(md, lst_name):
+            if w.id == way_id:
+                way = copy.copy(w)
+                category = cat
+                break
+        if way:
+            break
+
+    if way is None:
+        abort(404, f"Way {way_id} not found")
+
+    del_nids = _get_deleted_node_ids(store, way_id)
+    if del_nids:
+        way = _rebuild_way_without_nodes(way, del_nids)
+        if way is None:
+            abort(404, f"Way {way_id} reduced to nothing by node deletions")
+
+    zn, zl = md.zone_number, md.zone_letter
+    geom = _geom_to_geojson(way.line, zn, zl)
+    if geom is None:
+        abort(500, "Could not convert geometry")
+
+    feature = {
+        "type": "Feature",
+        "geometry": geom,
+        "properties": {
+            "id": way.id,
+            "category": category,
+            "tags": way.tags or {},
+            "in_out": way.in_out,
+        },
+    }
+
+    ov = store.get("tag_overrides", {}).get(str(way_id))
+    if ov:
+        merged = {**(feature["properties"]["tags"]), **ov}
+        feature["properties"]["tags"] = merged
+        if category in ("road", "footway"):
+            hw = merged.get("highway", "")
+            feature["properties"]["category"] = "footway" if hw in FOOTWAY_VALUES else "road"
+
+    return jsonify(feature)
 
 
 @app.route("/api/ways/<int:way_id>", methods=["DELETE"])
@@ -515,11 +574,63 @@ def delete_way(way_id):
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
+    body = request.get_json(force=True) or {}
     ann_path = _annotation_path(filename)
     store = _load_annotations(ann_path)
-    deleted = store.setdefault("deleted_ways", [])
-    if way_id not in deleted:
-        deleted.append(way_id)
+    if way_id not in _get_deleted_way_ids(store):
+        store.setdefault("deleted_ways", []).append({
+            "id": way_id,
+            "category": body.get("category", "unknown"),
+            "label": body.get("label", ""),
+        })
+    _save_annotations(ann_path, store)
+    return "", 204
+
+
+@app.route("/api/ways/<int:way_id>/tags", methods=["PUT"])
+def update_way_tags(way_id):
+    filename = request.args.get("file")
+    if not filename:
+        abort(400, "Missing 'file' query parameter")
+    body = request.get_json(force=True) or {}
+    tags = body.get("tags")
+    if not isinstance(tags, dict):
+        abort(400, "Request body must include 'tags' dict")
+    ann_path = _annotation_path(filename)
+    store = _load_annotations(ann_path)
+    store.setdefault("tag_overrides", {})[str(way_id)] = tags
+    store.setdefault("tag_override_meta", {})[str(way_id)] = {
+        "category": body.get("category", "unknown"),
+        "label": body.get("label", ""),
+    }
+    _save_annotations(ann_path, store)
+    return "", 204
+
+
+@app.route("/api/ways/<int:way_id>/tags", methods=["DELETE"])
+def delete_way_tags(way_id):
+    filename = request.args.get("file")
+    if not filename:
+        abort(400, "Missing 'file' query parameter")
+    ann_path = _annotation_path(filename)
+    store = _load_annotations(ann_path)
+    store.get("tag_overrides", {}).pop(str(way_id), None)
+    store.get("tag_override_meta", {}).pop(str(way_id), None)
+    _save_annotations(ann_path, store)
+    return "", 204
+
+
+@app.route("/api/ways/<int:way_id>/restore", methods=["PUT"])
+def restore_way(way_id):
+    filename = request.args.get("file")
+    if not filename:
+        abort(400, "Missing 'file' query parameter")
+    ann_path = _annotation_path(filename)
+    store = _load_annotations(ann_path)
+    dw = store.get("deleted_ways", [])
+    store["deleted_ways"] = [
+        d for d in dw if (d["id"] if isinstance(d, dict) else d) != way_id
+    ]
     _save_annotations(ann_path, store)
     return "", 204
 
@@ -582,29 +693,41 @@ def export_mapdata():
     if not os.path.isfile(path):
         abort(404, f"File not found: {filename}")
 
-    with open(path, "rb") as f:
-        md = pickle.load(f)
-
     store = _load_annotations(_annotation_path(filename))
-    md = copy.deepcopy(md)
+    md = copy.deepcopy(_load_mapdata_cached(path))
     zn, zl = md.zone_number, md.zone_letter
 
     # Apply OSM deletions
-    deleted_ways     = set(store.get("deleted_ways", []))
-    deleted_nodes_map = store.get("deleted_nodes", {})  # {str(way_id): [node_id, ...]}
-    if deleted_ways or deleted_nodes_map:
+    deleted_way_ids = _get_deleted_way_ids(store)
+    has_node_dels   = bool(store.get("deleted_nodes"))
+    if deleted_way_ids or has_node_dels:
         for lst_name in ("roads_list", "footways_list", "barriers_list"):
             new_lst = []
             for w in getattr(md, lst_name):
-                if w.id in deleted_ways:
+                if w.id in deleted_way_ids:
                     continue
-                del_nids = set(deleted_nodes_map.get(str(w.id), []))
+                del_nids = _get_deleted_node_ids(store, w.id)
                 if del_nids:
                     w = _rebuild_way_without_nodes(w, del_nids)
                     if w is None:
                         continue
                 new_lst.append(w)
             setattr(md, lst_name, new_lst)
+
+    # Apply tag overrides
+    tag_overrides = store.get("tag_overrides", {})
+    if tag_overrides:
+        for lst_name in ("roads_list", "footways_list", "barriers_list"):
+            for w in getattr(md, lst_name):
+                ov = tag_overrides.get(str(w.id))
+                if ov:
+                    w.tags = {**(w.tags or {}), **ov}
+        new_roads, new_footways = [], []
+        for w in md.roads_list:
+            (new_footways if w.is_footway() else new_roads).append(w)
+        for w in md.footways_list:
+            (new_roads if w.is_road() else new_footways).append(w)
+        md.roads_list, md.footways_list = new_roads, new_footways
 
     ann_id = -1
 
