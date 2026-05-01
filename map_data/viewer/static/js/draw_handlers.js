@@ -47,11 +47,30 @@ async function _saveAnnotationGeometry(layer) {
   if (ann) ann.geometry = geom;
 }
 
+function getSnappableLayers() {
+  const targets = [];
+  ['road', 'footway', 'barrier'].forEach(cat => {
+    if (geoLayers[cat]) {
+      geoLayers[cat].eachLayer(l => targets.push(l));
+    }
+  });
+  drawnItems.eachLayer(l => targets.push(l));
+  return targets;
+}
+
 function enableAnnotationEditMode() {
   map.on('mousemove', _onEditDragMove);
   map.on('mouseup',   _onEditDragUp);
+  const targets = getSnappableLayers();
   drawnItems.eachLayer(layer => {
-    if (layer.editing) layer.editing.enable();
+    if (layer.editing) {
+      layer.editing.enable();
+      if (layer.snapediting) {
+        layer.snapediting = new L.Handler.PolylineSnap(map, layer);
+        targets.forEach(t => layer.snapediting.addGuideLayer(t));
+        layer.snapediting.enable();
+      }
+    }
     layer.on('mousedown', _onEditDragDown);
     if (layer.setStyle)  layer.setStyle({ ..._layerBaseStyle(layer), cursor: 'move' });
   });

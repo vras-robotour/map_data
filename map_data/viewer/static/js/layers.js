@@ -45,6 +45,45 @@ function renderAnnotationLayer() {
   }
 }
 
+function filterLayers(query) {
+  const q = query.toLowerCase().trim();
+  ['road', 'footway', 'barrier', 'annotation'].forEach(cat => {
+    const layer = cat === 'annotation' ? drawnItems : geoLayers[cat];
+    if (!layer) return;
+
+    layer.eachLayer(l => {
+      let visible = true;
+      if (q) {
+        const id = String(l._featureId || l.options._ann_id || '').toLowerCase();
+        const tags = l._featureRef?.properties?.tags || {};
+        const name = (tags.name || tags.ref || '').toLowerCase();
+        visible = id.includes(q) || name.includes(q);
+      }
+
+      if (visible) {
+        if (cat === 'annotation') {
+          if (!drawnItems.hasLayer(l)) drawnItems.addLayer(l);
+        } else {
+          const st = getSubtype(l._featureRef, cat);
+          if (subtypeFilters[cat][st] !== false && !hiddenWayIds.has(l._featureId)) {
+             if (!geoLayers[cat].hasLayer(l)) geoLayers[cat].addLayer(l);
+          } else {
+             geoLayers[cat].removeLayer(l);
+          }
+        }
+      } else {
+        if (cat === 'annotation') {
+           // For drawnItems, we might want to keep annotations but just not show them
+           // But drawnItems IS a layer group.
+           drawnItems.removeLayer(l);
+        } else {
+           geoLayers[cat].removeLayer(l);
+        }
+      }
+    });
+  });
+}
+
 async function loadMapData(filename, { preserveView = false } = {}) {
   setStatus('Loading…', 'text-warning');
 

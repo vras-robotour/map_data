@@ -69,9 +69,18 @@ function setMode(newMode, commit = true) {
         shapeOptions: { ...STYLES.path },
         showLength: true,
       });
+      // Enable snapping
+      const targets = getSnappableLayers();
+      pathLineDraw.enable(); // needs to be enabled to have _mouseMarker
+      if (pathLineDraw._mouseMarker) {
+         const snap = new L.Handler.MarkerSnap(map, pathLineDraw._mouseMarker);
+         targets.forEach(t => snap.addGuideLayer(t));
+         snap.enable();
+      }
+    } else {
+       pathLineDraw.enable();
     }
-    pathLineDraw.enable();
-    setStatus('Click to place path nodes — double-click to finish', 'text-info');
+    setStatus('Click to place path nodes — double-click to finish (Snapping enabled)', 'text-info');
   }
 }
 
@@ -93,6 +102,10 @@ async function initApp() {
   document.getElementById('load-btn')?.addEventListener('click', () => {
     const file = document.getElementById('file-select').value;
     if (file) loadMapData(file);
+  });
+
+  document.getElementById('feature-search')?.addEventListener('input', e => {
+    filterLayers(e.target.value);
   });
 
   document.querySelectorAll('.mode-btn').forEach(btn => {
