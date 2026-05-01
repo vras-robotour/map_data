@@ -101,7 +101,7 @@ def load_mapdata(md_class: Any, path: str) -> Any:
     md.coords_file = meta["coords_file"]
 
     md.waypoints = np.array(data["waypoints"])
-    md.nodes_cache = data["nodes_cache"]
+    md.nodes_cache = {int(k): v for k, v in data["nodes_cache"].items()}
 
     md.roads_list = [way_from_dict(w) for w in data["roads"]]
     md.footways_list = [way_from_dict(w) for w in data["footways"]]

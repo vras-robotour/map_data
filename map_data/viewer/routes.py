@@ -223,8 +223,7 @@ def fetch_area():
     if md.run_parse() != 0:
         abort(500, "Parsing failed")
 
-    with open(out_path, "wb") as fh:
-        pickle.dump(md, fh, protocol=2)
+    md.save(out_path)
 
     return jsonify(
         {
@@ -270,8 +269,7 @@ def get_way_nodes():
 
     geom_latlon = None
     nodes = []
-    for i, node_or_id in enumerate(way.nodes):
-        nid = getattr(node_or_id, "id", node_or_id)
+    for i, nid in enumerate(way.nodes):
         if nid in nodes_cache:
             nd = nodes_cache[nid]
             nodes.append(

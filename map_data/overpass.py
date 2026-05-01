@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
-    "https://overpass.openstreetmap.ru/api/interpreter",
 ]
 
 
