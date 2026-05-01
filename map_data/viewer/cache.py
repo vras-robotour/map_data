@@ -1,5 +1,5 @@
 import os
-import pickle
+from map_data.map_data import MapData
 
 # ------------------------------------------------------------------
 # Mapdata cache  (keyed by (abs_path, mtime); holds at most 3 files)
@@ -18,6 +18,6 @@ def load_mapdata_cached(path):
         # Evict oldest entry if over capacity
         while len(_mapdata_cache) >= 3:
             del _mapdata_cache[next(iter(_mapdata_cache))]
-        with open(path, "rb") as f:
-            _mapdata_cache[key] = pickle.load(f)
+
+        _mapdata_cache[key] = MapData.load(path)
     return _mapdata_cache[key]

@@ -25,6 +25,7 @@ setup(
         "shapely",
         "utm",
         "tqdm",
+        "requests",
     ],
     package_data={
         "map_data": [
@@ -45,6 +46,7 @@ setup(
             "create_mapdata = map_data.create_mapdata:main",
             "visualize_mapdata = map_data.visualize_mapdata:main",
             "map_data_viewer = map_data.viewer.app:main",
+            "map_data_info = map_data.info:main",
         ],
     },
 )

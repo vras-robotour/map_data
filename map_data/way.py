@@ -1,9 +1,13 @@
+from dataclasses import dataclass, field
+from typing import List, Dict, Optional, Any
+
 import numpy as np
 from shapely.prepared import prep
-from shapely.geometry import Point, MultiPoint, LineString
+from shapely.geometry import Point, MultiPoint
+from shapely.geometry import Polygon
+from shapely.geometry.base import BaseGeometry
 
 from map_data.points_to_graph_points import get_point_line
-
 
 FOOTWAY_VALUES = frozenset(
     [
@@ -20,27 +24,30 @@ FOOTWAY_VALUES = frozenset(
 )
 
 
+@dataclass
 class Way:
-    def __init__(
-        self, id=-1, is_area=False, nodes=None, tags=None, line=None, in_out=""
-    ):
-        self.id = id
-        self.is_area = is_area
-        self.nodes = nodes if nodes is not None else []
-        self.tags = tags if tags is not None else {}
-        self.line = line
-        self.in_out = in_out
-        self.pcd_points = None
+    id: int = -1
+    is_area: bool = False
+    nodes: List[Any] = field(default_factory=list)
+    tags: Dict[str, str] = field(default_factory=dict)
+    line: Optional[BaseGeometry] = None
+    in_out: str = ""
+    pcd_points: Optional[np.ndarray] = field(default=None, repr=False)
 
-    def is_road(self):
+    def is_road(self) -> bool:
         hw = self.tags.get("highway")
         return bool(hw and hw not in FOOTWAY_VALUES)
 
-    def is_footway(self):
+    def is_footway(self) -> bool:
         hw = self.tags.get("highway")
         return bool(hw and hw in FOOTWAY_VALUES)
 
-    def is_barrier(self, yes_tags, not_tags, anti_tags):
+    def is_barrier(
+        self,
+        yes_tags: Dict[str, List[str]],
+        not_tags: Dict[str, List[str]],
+        anti_tags: Dict[str, List[str]],
+    ) -> bool:
         has_barrier_tag = any(
             key in yes_tags
             and (
@@ -56,11 +63,14 @@ class Way:
         )
         return has_barrier_tag and not has_anti_tag
 
-    def to_pcd_points(self, density=2, filled=True):
+    def to_pcd_points(self, density: float = 2.0, filled: bool = True) -> np.ndarray:
         if self.pcd_points is not None:
             return self.pcd_points
 
-        if filled:
+        if not self.line:
+            return np.empty((0, 2))
+
+        if filled and isinstance(self.line, Polygon):
             xmin, ymin, xmax, ymax = self.line.bounds
             x = np.arange(
                 np.floor(xmin * density) / density,
@@ -75,13 +85,22 @@ class Way:
             xv, yv = np.meshgrid(x, y)
             candidates = MultiPoint(np.column_stack([xv.ravel(), yv.ravel()])).geoms
             pts = list(self._mask_points(candidates, self.line))
-            self.pcd_points = np.array(list(LineString(pts).xy)).T
+            if not pts:
+                self.pcd_points = np.empty((0, 2))
+            else:
+                self.pcd_points = np.array([(p.x, p.y) for p in pts])
         else:
-            coords = self.line.exterior.coords
+            # For LineString or unfilled Polygon
+            geom = self.line
+            if hasattr(geom, "exterior"):
+                coords = list(geom.exterior.coords)
+            else:
+                coords = list(geom.coords)
+
             pcd_points = np.empty((0, 2))
-            for i in range(len(coords)):
+            for i in range(len(coords) - 1):
                 p1 = Point(coords[i])
-                p2 = Point(coords[(i + 1) % len(coords)])
+                p2 = Point(coords[i + 1])
                 _, line, _ = get_point_line(p1, p2, 0.5)
                 pcd_points = np.concatenate([pcd_points, line])
             self.pcd_points = pcd_points
@@ -89,9 +108,9 @@ class Way:
         return self.pcd_points
 
     @staticmethod
-    def _mask_points(points, polygon):
+    def _mask_points(points: List[Point], polygon: Polygon) -> filter:
         prepared = prep(polygon)
         return filter(prepared.contains, points)
 
-    def mask_points(self, points, polygon):
+    def mask_points(self, points: List[Point], polygon: Polygon) -> filter:
         return self._mask_points(points, polygon)

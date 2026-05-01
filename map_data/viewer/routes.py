@@ -594,12 +594,12 @@ def export_mapdata():
             md.barriers_list.append(w)
 
     buf = io.BytesIO()
-    pickle.dump(md, buf, protocol=2)
+    buf.write(json.dumps(map_data_to_dict(md), indent=2).encode("utf-8"))
     buf.seek(0)
     base = filename.rsplit(".", 1)[0]
     return send_file(
         buf,
         as_attachment=True,
         download_name=f"{base}.exported.mapdata",
-        mimetype="application/octet-stream",
+        mimetype="application/json",
     )

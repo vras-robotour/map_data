@@ -2,7 +2,6 @@
 
 import os
 import argparse
-import pickle
 import logging
 import matplotlib.pyplot as plt
 from ament_index_python.resources import get_resource
@@ -27,8 +26,7 @@ def visualize_map_data(file_name, save_map_img, image_file, save_bgd, bgd_file):
     path = os.getcwd()
 
     try:
-        with open(os.path.join(data_path, file_name), "rb") as fh:
-            map_data = pickle.load(fh)
+        map_data = md.MapData.load(os.path.join(data_path, args.file))
     except FileNotFoundError:
         logger.error(f"Map data file {file_name} not found in {data_path}")
         raise SystemExit(1)

@@ -2,7 +2,6 @@
 
 import os
 import argparse
-import pickle
 import logging
 from ament_index_python.resources import get_resource
 import map_data.map_data as md
@@ -24,20 +23,20 @@ def process_map_data(file_name, download):
         raise SystemExit(1)
 
     try:
+        full_path = os.path.join(data_path, file_name)
         if download:
-            map_data = md.MapData(os.path.join(data_path, file_name))
+            map_data = md.MapData(full_path)
             map_data.run_queries()
-            if map_data.run_parse():
+            if map_data.run_parse() != 0:
                 logger.error("Failed to parse map data")
                 raise SystemExit(1)
-            map_data.save_to_pickle()
+            map_data.save()
         else:
-            with open(os.path.join(data_path, file_name), "rb") as fh:
-                map_data = pickle.load(fh)
-            if map_data.run_parse():
-                logger.error("Failed to parse map data")
+            map_data = md.MapData.load(full_path)
+            if map_data.run_parse() != 0:
+                logger.error("Failed to re-parse map data")
                 raise SystemExit(1)
-            map_data.save_to_pickle()
+            map_data.save()
         logger.info(f"Successfully processed map data for {file_name}")
     except FileNotFoundError:
         logger.error(f"File {file_name} not found in {data_path}")
