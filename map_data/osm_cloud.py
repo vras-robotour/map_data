@@ -11,9 +11,9 @@ from rclpy.qos import QoSProfile, QoSDurabilityPolicy
 import numpy as np
 from numpy.lib.recfunctions import unstructured_to_structured
 from scipy.spatial import cKDTree
-import pickle
 from typing import Dict, List, Optional, Tuple, Any
 
+from rcl_interfaces.msg import SetParametersResult
 import map_data.map_data as md
 
 
@@ -45,6 +45,9 @@ class OSMCloud(Node):
         ).value
         self.auto_utm: bool = self.declare_parameter("auto_utm", False).value
 
+        # Register parameter callback
+        self.add_on_set_parameters_callback(self.parameter_callback)
+
         qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self.pub_grid = self.create_publisher(PointCloud2, "grid", qos)
 
@@ -55,8 +58,7 @@ class OSMCloud(Node):
         self.utm_to_local: Optional[np.ndarray] = None
 
         if self.mapdata_file is not None:
-            with open(self.mapdata_file, "rb") as fh:
-                self.map_data: md.MapData = pickle.load(fh)
+            self.map_data = md.MapData.load(self.mapdata_file)
         elif self.gpx_file is not None:
             self.map_data = md.MapData(self.gpx_file)
             self.map_data.run_all(self.save_mapdata)
@@ -95,7 +97,9 @@ class OSMCloud(Node):
 
         self.get_logger().info(f"Using UTM to local transform: {self.utm_to_local}")
 
-        if all(v == 0.0 for v in self.grid_min) and all(v == 0.0 for v in self.grid_max):
+        if all(v == 0.0 for v in self.grid_min) and all(
+            v == 0.0 for v in self.grid_max
+        ):
             self.get_logger().info("Auto-calculating grid bounds from map data")
             # Transform map bounds to local frame
             bounds_utm = np.array(
@@ -122,6 +126,35 @@ class OSMCloud(Node):
         self.grid_cloud: PointCloud2 = self.get_cloud()
         self.create_timer(10.0, self.publish_cb)
         self.get_logger().info("Initialized OSM cloud")
+
+    def parameter_callback(self, params: List[rclpy.Parameter]) -> SetParametersResult:
+        rebuild_cloud = False
+        for param in params:
+            if param.name == "max_path_dist":
+                self.max_path_dist = param.value
+                rebuild_cloud = True
+            elif param.name == "neighbor_cost":
+                self.neighbor_cost = param.value
+                rebuild_cloud = True
+            elif param.name == "grid_res":
+                self.grid_res = param.value
+                rebuild_cloud = True
+            elif param.name == "grid_max":
+                self.grid_max = param.value
+                rebuild_cloud = True
+            elif param.name == "grid_min":
+                self.grid_min = param.value
+                rebuild_cloud = True
+
+        if rebuild_cloud:
+            self.get_logger().info("Rebuilding grid cloud due to parameter change")
+            try:
+                self.grid_cloud = self.get_cloud()
+            except Exception as e:
+                self.get_logger().error(f"Failed to rebuild grid cloud: {e}")
+                return SetParametersResult(successful=False, reason=str(e))
+
+        return SetParametersResult(successful=True)
 
     def publish_cb(self) -> None:
         """
@@ -360,8 +393,10 @@ def split_ways(
     waypoints = []
     for way in ways.get("footways", []):
         for i, (n0, n1) in enumerate(zip(way.nodes, way.nodes[1:])):
-            point0 = points[n0.id].ravel()[:2]
-            point1 = points[n1.id].ravel()[:2]
+            id0 = getattr(n0, "id", n0)
+            id1 = getattr(n1, "id", n1)
+            point0 = points[id0].ravel()[:2]
+            point1 = points[id1].ravel()[:2]
 
             if i == 0:
                 waypoints.append(point0)
