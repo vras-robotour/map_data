@@ -1,4 +1,5 @@
 import os
+from typing import List
 import requests
 from PIL import Image
 from geopy.distance import geodesic
@@ -7,23 +8,9 @@ from geopy.distance import geodesic
 URL_PREF = "https://maps.geoapify.com/v1/staticmap?style=osm-carto"
 
 
-def get_url(w, h, corners):
+def get_url(w: int, h: int, corners: List[float]) -> str:
     """
     Get url for the background map.
-
-    Parameters:
-    -----------
-    w : int
-        Width of the image.
-    h : int
-        Height of the image.
-    corners : list
-        Corners of the area to get the map of.
-
-    Returns:
-    --------
-    url : str
-        Url for the background map.
     """
     api_key = os.environ.get("GEOAPIFY_API_KEY", "")
     if not api_key:
@@ -40,29 +27,16 @@ def get_url(w, h, corners):
     return url
 
 
-def get_background_image(min_long, max_long, min_lat, max_lat, x_margin, y_margin):
+def get_background_image(
+    min_long: float,
+    max_long: float,
+    min_lat: float,
+    max_lat: float,
+    x_margin: float,
+    y_margin: float,
+) -> Image.Image:
     """
     Get background image of the area.
-
-    Parameters:
-    -----------
-    min_long : float
-        Minimum longitude.
-    max_long : float
-        Maximum longitude.
-    min_lat : float
-        Minimum latitude.
-    max_lat : float
-        Maximum latitude.
-    x_margin : float
-        Margin in x direction.
-    y_margin : float
-        Margin in y direction.
-
-    Returns:
-    --------
-    bg_map : PIL.Image
-        Background map.
     """
     width_m = geodesic(
         (max_lat + y_margin, max_long + x_margin),

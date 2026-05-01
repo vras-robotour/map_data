@@ -1,25 +1,17 @@
-import sys
-
+from typing import List, Optional, Any
 import utm
 import numpy as np
 import matplotlib.pyplot as plt
-
+from matplotlib.axes import Axes
+from PIL import Image
 
 from map_data.background_map import get_background_image
+from map_data.way import Way
 
 
-def plot_background_map(ax, image, coords_data):
+def plot_background_map(ax: Axes, image: Image.Image, coords_data: Any):
     """
     Plot background map.
-
-    Parameters:
-    -----------
-    ax : matplotlib.axes.Axes
-        Axes to plot the map on.
-    image : PIL.Image
-        Image of the map.
-    coords_data : map_data.CoordsData
-        Coordinates data.
     """
     min_utm = utm.from_latlon(
         coords_data.min_lat - coords_data.y_margin,
@@ -41,16 +33,9 @@ def plot_background_map(ax, image, coords_data):
     print("Background map plotted")
 
 
-def plot_path(ax, path):
+def plot_path(ax: Axes, path: np.ndarray):
     """
     Plot path.
-
-    Parameters:
-    -----------
-    ax : matplotlib.axes.Axes
-        Axes to plot the path on.
-    path : np.array
-        Path to plot.
     """
     ax.scatter(
         path[:, 0],
@@ -73,18 +58,13 @@ def plot_path(ax, path):
     print("Path plotted")
 
 
-def plot_barrier_areas(ax, barrier_areas):
+def plot_barrier_areas(ax: Axes, barrier_areas: List[Way]):
     """
     Plot barriers in map.
-
-    Parameters:
-    -----------
-    ax : matplotlib.axes.Axes
-        Axes to plot the barriers on.
-    barrier_areas : list
-        List of barrier areas.
     """
     for area in barrier_areas:
+        if not area.line:
+            continue
         x, y = area.line.exterior.xy
         ax.plot(x, y, c="#BF0009", linewidth=1, zorder=7)
 
@@ -93,83 +73,64 @@ def plot_barrier_areas(ax, barrier_areas):
     print("Barrier areas plotted")
 
 
-def plot_footways(ax, footways):
+def plot_footways(ax: Axes, footways: List[Way]):
     """
     Plot footways in map.
-
-    Parameters:
-    -----------
-    ax : matplotlib.axes.Axes
-        Axes to plot the footways on.
-    footways : list
-        List of footways.
     """
     for footway in footways:
+        if not footway.line:
+            continue
         x, y = footway.line.exterior.xy
         ax.plot(x, y, c="#FFD700", linewidth=0.5, zorder=6)
         ax.fill(x, y, c="#FFD700", alpha=0.4, zorder=4)
     print("Footways plotted")
 
 
-def plot_roads(ax, roads):
+def plot_roads(ax: Axes, roads: List[Way]):
     """
     Plot roads in map.
-
-    Parameters:
-    -----------
-    ax : matplotlib.axes.Axes
-        Axes to plot the roads on.
-    roads : list
-        List of roads.
     """
     for road in roads:
+        if not road.line:
+            continue
         x, y = road.line.exterior.xy
         ax.plot(x, y, c="#000000", linewidth=1, zorder=6)
         ax.fill(x, y, c="#000000", alpha=0.8, zorder=5)
     print("Roads plotted")
 
 
-def save_map(file_name):
+def save_map(file_name: str):
     """
     Save map to file.
-
-    Parameters:
-    -----------
-    file_name : str
-        Path and name of the file.
     """
     plt.savefig(file_name)
     print(f"Map saved to {file_name}")
 
 
-def save_bgd_map(bgd_map, bgd_file=None):
+def save_bgd_map(bgd_map: Image.Image, bgd_file: Optional[str] = None):
     """
     Save the background image to file.
-
-    Parameters:
-    -----------
-    bgd_map : PIL.Image
-        Background image.
-    bgd_file : str
-        Name of the file.
     """
     if bgd_file is not None:
-        path = sys.path[0]
-        file_name = path + "/../data/" + bgd_file
+        # Use a more robust way to find the data directory
+        try:
+            from ament_index_python.resources import get_resource
+
+            _, package_path = get_resource("packages", "map_data")
+            data_path = os.path.join(package_path, "share", "map_data", "data")
+        except Exception:
+            data_path = os.path.realpath(
+                os.path.join(os.path.dirname(__file__), "..", "..", "data")
+            )
+
+        file_name = os.path.join(data_path, bgd_file)
         bgd_map.save(file_name)
         print(f"Background image saved to {file_name}")
 
 
-def plot_map(map_data, bgd_file=None):
+def plot_map(map_data: Any, bgd_file: Optional[str] = None):
     """
     Plot map from map_data.
-
-    Parameters:
-    -----------
-    map_data : map_data.MapData
-        Map data.
-    save_bgd : bool
-        Save background image.
     """
     _, ax = plt.subplots(figsize=(12, 12), dpi=400)
 
@@ -187,25 +148,18 @@ def plot_map(map_data, bgd_file=None):
 
     save_bgd_map(bgd_map, bgd_file)
 
-    plot_barrier_areas(ax, np.array(map_data.barriers_list))
-    plot_footways(ax, np.array(map_data.footways_list))
-    plot_roads(ax, np.array(map_data.roads_list))
+    plot_barrier_areas(ax, map_data.barriers_list)
+    plot_footways(ax, map_data.footways_list)
+    plot_roads(ax, map_data.roads_list)
 
     ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel("Easting (m)")
     ax.set_ylabel("Northing (m)")
 
 
-def plot_footways_plan(map_data, bgd_file=None):
+def plot_footways_plan(map_data: Any, bgd_file: Optional[str] = None):
     """
     Plot only footways from map_data.
-
-    Parameters:
-    -----------
-    map_data : map_data.MapData
-        Map data.
-    save_bgd : bool
-        Save background image.
     """
     _, ax = plt.subplots(figsize=(12, 12), dpi=400)
 
@@ -223,4 +177,4 @@ def plot_footways_plan(map_data, bgd_file=None):
 
     save_bgd_map(bgd_map, bgd_file)
 
-    plot_footways(ax, np.array(map_data.footways_list))
+    plot_footways(ax, map_data.footways_list)

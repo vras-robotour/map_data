@@ -1,42 +1,23 @@
 import numpy as np
-from shapely.geometry import MultiPoint
+from shapely.geometry import Point, MultiPoint
+from typing import Tuple
 
 
-def get_point_line(p1, p2, density, increase=0):
+def get_point_line(
+    p1: Point, p2: Point, density: float, increase: int = 0
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Get the line between two points.
-
-    Parameters:
-    -----------
-    p1 : shapely.geometry.Point
-        First point.
-    p2 : shapely.geometry.Point
-        Second point.
-    density : float
-        Density of the line.
-    increase : int
-        Increase the line by this many points.
-
-    Returns:
-    --------
-    vec : np.array
-        Vector between the two points.
-    line : np.array
-        Line between the two points.
-    dist_line : np.array
-        Distance of each point in the line from the first point.
     """
-    x1 = p1.x
-    y1 = p1.y
-    x2 = p2.x
-    y2 = p2.y
+    x1, y1 = p1.x, p1.y
+    x2, y2 = p2.x, p2.y
 
     a = np.array([x1, y1])
     b = np.array([x2, y2])
 
     vec = (b - a).T
 
-    # Ceil, because more points is OK, while less points could be problematic (distance between points should not be larger than 1*density)
+    # Ceil, because more points is OK, while less points could be problematic
     line = get_equidistant_points(a, b, int(np.ceil(np.linalg.norm(vec) / density)) + 1)
     dist_line = np.zeros((len(line), 1))
 
@@ -46,29 +27,11 @@ def get_point_line(p1, p2, density, increase=0):
     return vec, line, dist_line
 
 
-def increase_line(line, dist_line, vec, n, density):
+def increase_line(
+    line: np.ndarray, dist_line: np.ndarray, vec: np.ndarray, n: int, density: float
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Increase the line by n points in the direction of vec.
-
-    Parameters:
-    -----------
-    line : np.array
-        Line to increase.
-    dist_line : np.array
-        Distance of each point in the line from the first point.
-    vec : np.array
-        Vector to increase the line in.
-    n : int
-        Number of points to increase the line by.
-    density : float
-        Density of the line.
-
-    Returns:
-    --------
-    line : np.array
-        Increased line.
-    dist_line : np.array
-        Distance of each point in the increased line from the first point.
     """
     vec = vec / np.linalg.norm(vec)
     arange_increase_vec = density * np.arange(1, n + 1)
@@ -85,23 +48,9 @@ def increase_line(line, dist_line, vec, n, density):
     return line, dist_line
 
 
-def get_equidistant_points(p1, p2, n):
+def get_equidistant_points(p1: np.ndarray, p2: np.ndarray, n: int) -> np.ndarray:
     """
     Split the line between p1 and p2 into n equidistant points.
-
-    Parameters:
-    -----------
-    p1 : np.array
-        First point.
-    p2 : np.array
-        Second point.
-    n : int
-        Number of points.
-
-    Returns:
-    --------
-    np.array
-        Equidistantly spaced points.
     """
     return np.concatenate(
         (
@@ -112,29 +61,11 @@ def get_equidistant_points(p1, p2, n):
     )
 
 
-def points_to_graph_points(point1, point2, density=1, width=10):
+def points_to_graph_points(
+    point1: Point, point2: Point, density: float = 1.0, width: float = 10.0
+) -> Tuple[MultiPoint, MultiPoint, np.ndarray]:
     """
     Transform point into graph point.
-
-    Parameters:
-    -----------
-    points1 : shapely.geometry.Point
-        First point.
-    points2 : shapely.geometry.Point
-        Second point.
-    density : float
-        Density of the line.
-    width : float
-        Width of the line.
-
-    Returns:
-    --------
-    all_points : shapely.geometry.MultiPoint
-        All points.
-    point_line : shapely.geometry.MultiPoint
-        Points in the line.
-    dist_from_line : np.array
-        Distance of each point from the line.
     """
     perpendicular_increase = int(round(width / 2 / density))
     parallel_increase = int(round(width / 4 / density))
