@@ -105,6 +105,7 @@ class MapData:
         self.roads_list: List[Way] = []
         self.footways_list: List[Way] = []
         self.barriers_list: List[Way] = []
+        self.crossroads_list: List[Way] = []
 
         # Raw data stored temporarily during parsing
         self.osm_ways_data: Optional[Any] = None
@@ -193,6 +194,43 @@ class MapData:
             ways_dict, self.BARRIER_TAGS, self.NOT_BARRIER_TAGS, self.ANTI_BARRIER_TAGS
         )
         self.barriers_list = parsed_barriers + node_barriers
+        self.crossroads_list = self.parse_intersections(ways_dict)
+
+    def parse_intersections(self, ways_dict: Dict[int, Way]) -> List[Way]:
+        """Identify nodes shared by multiple footways and return them as crossroad Ways."""
+        node_usage: Dict[int, List[bool]] = {}
+
+        footways = [w for w in ways_dict.values() if w.is_footway()]
+
+        for way in footways:
+            for i, node_id in enumerate(way.nodes):
+                is_endpoint = (i == 0 or i == len(way.nodes) - 1)
+                if node_id not in node_usage:
+                    node_usage[node_id] = []
+                node_usage[node_id].append(is_endpoint)
+
+        crossroads = []
+        for node_id, usages in node_usage.items():
+            count = len(usages)
+            is_crossroad = count > 2 or (count == 2 and not (usages[0] and usages[1]))
+            if is_crossroad:
+                node_data = self.nodes_cache.get(node_id)
+                if node_data is None:
+                    continue
+                e, n, _, _ = utm.from_latlon(node_data["lat"], node_data["lon"])
+                crossroads.append(
+                    Way(
+                        id=node_id,
+                        is_area=True,
+                        tags={"type": "footway_intersection", "count": str(count)},
+                        line=geometry.Point(e, n).buffer(1.5),
+                    )
+                )
+        return crossroads
+
+    # ------------------------------------------------------------------
+    # High-level API
+    # ------------------------------------------------------------------
 
         logger.info("Parsing finished.")
         return 0
@@ -239,4 +277,5 @@ class MapData:
             "roads": self.roads_list,
             "footways": self.footways_list,
             "barriers": self.barriers_list,
+            "crossroads": self.crossroads_list,
         }

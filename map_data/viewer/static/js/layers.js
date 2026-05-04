@@ -97,7 +97,7 @@ async function loadMapData(filename, { preserveView = false } = {}) {
     const geojson = await fetchMapData(filename);
     const annData = await fetchAnnotations(filename);
 
-    const byCategory = { road: [], footway: [], barrier: [], waypoint: [] };
+    const byCategory = { road: [], footway: [], barrier: [], waypoint: [], crossroad: [] };
     geojson.features.forEach(f => {
       const cat = f.properties.category;
       if (cat in byCategory) byCategory[cat].push(f);
@@ -108,12 +108,12 @@ async function loadMapData(filename, { preserveView = false } = {}) {
     const _loadHiddenIds  = new Set(_loadHiddenMeta.map(d => d.id));
 
     // Reset subtype state for fresh load
-    ['road', 'footway', 'barrier'].forEach(cat => {
+    ['road', 'footway', 'barrier', 'crossroad'].forEach(cat => {
       subtypeLayers[cat]  = {};
       subtypeFilters[cat] = {};
     });
 
-    ['road', 'footway', 'barrier'].forEach(cat => {
+    ['road', 'footway', 'barrier', 'crossroad'].forEach(cat => {
       const features = cat === 'barrier'
         ? [
             ...byCategory[cat].filter(f => !f.properties.is_node),
@@ -153,7 +153,7 @@ async function loadMapData(filename, { preserveView = false } = {}) {
       }
       const cb = document.querySelector(`[data-layer="${cat}"]`);
       if (cb && cb.checked) geoLayers[cat].addTo(map);
-      renderSubtypeFilters(cat);
+      if (cat !== 'crossroad') renderSubtypeFilters(cat);
     });
 
     geoLayers.waypoint = L.geoJSON(

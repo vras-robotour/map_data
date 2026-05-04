@@ -78,6 +78,8 @@ def mapdata_to_geojson(map_data):
     add_ways(map_data.roads_list, "road")
     add_ways(map_data.footways_list, "footway")
     add_ways(map_data.barriers_list, "barrier")
+    if hasattr(map_data, "crossroads_list"):
+        add_ways(map_data.crossroads_list, "crossroad")
 
     for i, (x, y) in enumerate(map_data.waypoints):
         lat, lon = utm.to_latlon(x, y, zn, zl)

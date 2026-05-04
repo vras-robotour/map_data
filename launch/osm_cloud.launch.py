@@ -79,13 +79,23 @@ def generate_launch_description():
         name="local_utm_transform",
         output="screen",
         arguments=[
-            "670667.0",
-            "5439425.14",
+            "--x",
+            # "670667.0", # buchlovice
+            "458378.63",  # stromovka
+            "--y",
+            # "5439425.14", # buchlovice
+            "5550538.10",  # stromovka
+            "--z",
             "0.0",
+            "--yaw",
             "0.0",
+            "--pitch",
             "0.0",
+            "--roll",
             "0.0",
+            "--frame-id",
             "utm",
+            "--child-frame-id",
             "local_utm",
         ],
         condition=IfCondition(LaunchConfiguration("publish_static_tf")),
@@ -97,13 +107,21 @@ def generate_launch_description():
         name="map_transform",
         output="screen",
         arguments=[
+            "--x",
             "0.0",
+            "--y",
             "0.0",
+            "--z",
             "0.0",
+            "--yaw",
             "0.0",
+            "--pitch",
             "0.0",
+            "--roll",
             "0.0",
+            "--frame-id",
             "map",
+            "--child-frame-id",
             "local_utm",
         ],
         condition=IfCondition(LaunchConfiguration("publish_static_tf")),
@@ -115,16 +133,55 @@ def generate_launch_description():
         name="base_link_transform",
         output="screen",
         arguments=[
+            "--x",
             "0.0",
+            "--y",
             "0.0",
+            "--z",
             "0.0",
+            "--yaw",
             "0.0",
+            "--pitch",
             "0.0",
+            "--roll",
             "0.0",
+            "--frame-id",
             "map",
+            "--child-frame-id",
             "base_link",
         ],
         condition=IfCondition(LaunchConfiguration("publish_static_tf")),
+    )
+
+    # Define the osm_intersections node
+    osm_intersections_node = Node(
+        package="map_data",
+        executable="osm_intersections",
+        name="osm_intersections",
+        output="screen",
+        respawn=True,
+        respawn_delay=1.0,
+        parameters=[
+            {
+                "utm_frame": "utm",
+                "local_frame": "local_utm",
+                # "mapdata_file": PathJoinSubstitution(
+                #     [
+                #         LaunchConfiguration("mapdata_path"),
+                #         LaunchConfiguration("mapdata_file"),
+                #     ]
+                # ),
+                "gpx_file": PathJoinSubstitution(
+                    [
+                        LaunchConfiguration("mapdata_path"),
+                        LaunchConfiguration("gpx_file"),
+                    ]
+                ),
+                "save_mapdata": False,
+                "grid_max": [500.0, 500.0],
+                "grid_min": [-500.0, -500.0],
+            }
+        ],
     )
 
     return LaunchDescription(
@@ -135,6 +192,7 @@ def generate_launch_description():
             grid_topic,
             publish_static_tf,
             osm_cloud_node,
+            osm_intersections_node,
             local_utm_node,
             map_node,
             base_link_node,

@@ -26,6 +26,7 @@ setup(
         "utm",
         "tqdm",
         "requests",
+        "ros2_numpy",
     ],
     package_data={
         "map_data": [
@@ -43,6 +44,7 @@ setup(
     entry_points={
         "console_scripts": [
             "osm_cloud = map_data.osm_cloud:main",
+            "osm_intersections = map_data.osm_intersections:main",
             "create_mapdata = map_data.create_mapdata:main",
             "visualize_mapdata = map_data.visualize_mapdata:main",
             "map_data_viewer = map_data.viewer.app:main",

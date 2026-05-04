@@ -231,6 +231,7 @@ def fetch_area():
             "roads": len(md.roads_list),
             "footways": len(md.footways_list),
             "barriers": len(md.barriers_list),
+            "crossroads": len(md.crossroads_list),
         }
     )
 
