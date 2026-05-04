@@ -102,6 +102,9 @@ def _mapdata_to_geojson(map_data):
     add_ways(map_data.roads_list, "road")
     add_ways(map_data.footways_list, "footway")
     add_ways(map_data.barriers_list, "barrier")
+    
+    if hasattr(map_data, "crossroads_list"):
+        add_ways(map_data.crossroads_list, "crossroad")
 
     for i, (x, y) in enumerate(map_data.waypoints):
         lat, lon = utm.to_latlon(x, y, zn, zl)
@@ -353,6 +356,7 @@ def fetch_area():
             "roads": len(md.roads_list),
             "footways": len(md.footways_list),
             "barriers": len(md.barriers_list),
+            "crossroads": len(md.crossroads_list),
         }
     )
 
@@ -466,7 +470,8 @@ def export_mapdata():
     deleted_ways     = set(store.get("deleted_ways", []))
     deleted_nodes_map = store.get("deleted_nodes", {})  # {str(way_id): [node_id, ...]}
     if deleted_ways or deleted_nodes_map:
-        for lst_name in ("roads_list", "footways_list", "barriers_list"):
+        for lst_name in ("roads_list", "footways_list", "barriers_list", "crossroads_list"):
+            if not hasattr(md, lst_name): continue
             new_lst = []
             for w in getattr(md, lst_name):
                 if w.id in deleted_ways:

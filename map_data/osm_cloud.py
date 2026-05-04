@@ -21,13 +21,19 @@ class OSMCloud(Node):
         super().__init__("osm_cloud")
         self.utm_frame: str = self.declare_parameter("utm_frame", "utm").value
         self.local_frame: str = self.declare_parameter("local_frame", "map").value
-        self.utm_to_local_param: Optional[List[float]] = self.declare_parameter(
-            "utm_to_local", None
+        self.utm_to_local_param = self.declare_parameter(
+            "utm_to_local", rclpy.Parameter.Type.DOUBLE_ARRAY
         ).value
-        self.mapdata_file: Optional[str] = self.declare_parameter(
-            "mapdata_file", None
+        self.mapdata_file = self.declare_parameter(
+            "mapdata_file", ""
         ).value
-        self.gpx_file: Optional[str] = self.declare_parameter("gpx_file", None).value
+        self.gpx_file = self.declare_parameter(
+            "gpx_file", ""
+        ).value
+
+        # Handle empty strings as None for consistency with previous logic
+        if self.mapdata_file == "": self.mapdata_file = None
+        if self.gpx_file == "": self.gpx_file = None
         self.save_mapdata: bool = self.declare_parameter("save_mapdata", False).value
         self.max_path_dist: float = self.declare_parameter("max_path_dist", 1.0).value
         self.neighbor_cost: str = self.declare_parameter(

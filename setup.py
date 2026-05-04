@@ -15,7 +15,7 @@ setup(
         (os.path.join("share", package_name, "data"), glob("data/*.gpx")),
         (os.path.join("share", package_name, "parameters"), glob("parameters/*.csv")),
     ],
-    install_requires=["setuptools", "flask", "gpxpy", "numpy", "overpy", "shapely", "utm", "tqdm"],
+    install_requires=["setuptools", "flask", "gpxpy", "numpy", "overpy", "shapely", "utm", "tqdm", "ros2_numpy"],
     package_data={"map_data": ["viewer/templates/*.html"]},
     zip_safe=False,
     maintainer="vlkjan6",
@@ -26,6 +26,7 @@ setup(
     entry_points={
         "console_scripts": [
             "osm_cloud = map_data.osm_cloud:main",
+            "osm_intersections = map_data.osm_intersections:main",
             "create_mapdata = map_data.create_mapdata:main",
             "visualize_mapdata = map_data.visualize_mapdata:main",
             "map_data_viewer = map_data.viewer.app:main",

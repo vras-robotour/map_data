@@ -16,12 +16,12 @@ def generate_launch_description():
     )
     mapdata_file = DeclareLaunchArgument(
         "mapdata_file",
-        default_value="buchlovice.mapdata",
+        default_value="stromovka.mapdata",
         description="File with preprocessed OSM map data.",
     )
     gpx_file = DeclareLaunchArgument(
         "gpx_file",
-        default_value="buchlovice.gpx",
+        default_value="stromovka.gpx",
         description="File with gpx coords denoting area to be processed.",
     )
     grid_topic = DeclareLaunchArgument(
@@ -59,8 +59,8 @@ def generate_launch_description():
                 "max_path_dist": 2.5,
                 "neighbor_cost": "linear",  # zero, linear, quadratic
                 "grid_res": 0.4,
-                "grid_max": [250.0, 250.0],
-                "grid_min": [-250.0, -250.0],
+                "grid_max": [500.0, 500.0],
+                "grid_min": [-500.0, -500.0],
             }
         ],
     )
@@ -71,13 +71,23 @@ def generate_launch_description():
         name="local_utm_transform",
         output="screen",
         arguments=[
-            "670667.0",
-            "5439425.14",
+            "--x",
+            # "670667.0", # buchlovice
+            "458378.63",  # stromovka
+            "--y",
+            # "5439425.14", # buchlovice
+            "5550538.10",  # stromovka
+            "--z",
             "0.0",
+            "--yaw",
             "0.0",
+            "--pitch",
             "0.0",
+            "--roll",
             "0.0",
+            "--frame-id",
             "utm",
+            "--child-frame-id",
             "local_utm",
         ],
     )
@@ -88,13 +98,21 @@ def generate_launch_description():
         name="map_transform",
         output="screen",
         arguments=[
+            "--x",
             "0.0",
+            "--y",
             "0.0",
+            "--z",
             "0.0",
+            "--yaw",
             "0.0",
+            "--pitch",
             "0.0",
+            "--roll",
             "0.0",
+            "--frame-id",
             "map",
+            "--child-frame-id",
             "local_utm",
         ],
     )
@@ -105,14 +123,53 @@ def generate_launch_description():
         name="base_link_transform",
         output="screen",
         arguments=[
+            "--x",
             "0.0",
+            "--y",
             "0.0",
+            "--z",
             "0.0",
+            "--yaw",
             "0.0",
+            "--pitch",
             "0.0",
+            "--roll",
             "0.0",
+            "--frame-id",
             "map",
+            "--child-frame-id",
             "base_link",
+        ],
+    )
+
+    # Define the osm_intersections node
+    osm_intersections_node = Node(
+        package="map_data",
+        executable="osm_intersections",
+        name="osm_intersections",
+        output="screen",
+        respawn=True,
+        respawn_delay=1.0,
+        parameters=[
+            {
+                "utm_frame": "utm",
+                "local_frame": "local_utm",
+                # "mapdata_file": PathJoinSubstitution(
+                #     [
+                #         LaunchConfiguration("mapdata_path"),
+                #         LaunchConfiguration("mapdata_file"),
+                #     ]
+                # ),
+                "gpx_file": PathJoinSubstitution(
+                    [
+                        LaunchConfiguration("mapdata_path"),
+                        LaunchConfiguration("gpx_file"),
+                    ]
+                ),
+                "save_mapdata": False,
+                "grid_max": [500.0, 500.0],
+                "grid_min": [-500.0, -500.0],
+            }
         ],
     )
 
@@ -123,6 +180,7 @@ def generate_launch_description():
             gpx_file,
             grid_topic,
             osm_cloud_node,
+            osm_intersections_node,
             local_utm_node,
             map_node,
             base_link_node,

@@ -141,9 +141,11 @@ class MapData:
         self.roads = set()
         self.footways = set()
         self.barriers = set()
+        self.crossroads = set()
         self.roads_list = []
         self.footways_list = []
         self.barriers_list = []
+        self.crossroads_list = []
         self.ways = {}
 
         self._load_tag_configs()
@@ -479,6 +481,48 @@ class MapData:
                     way = self._buffer_line(way, width=2)
                 self.barriers.add(way)
 
+    def parse_intersections(self):
+        """Identify nodes shared by multiple footways and add them to crossroads."""
+        node_usage = {} # node_id -> list of bool (is_endpoint)
+        node_coords = {}
+        
+        # Only consider ways that are classified as footways
+        footways = [w for w in self.ways.values() if w.is_footway()]
+        
+        # Track how each node is used in each footway
+        for way in footways:
+            for i, node in enumerate(way.nodes):
+                is_endpoint = (i == 0 or i == len(way.nodes) - 1)
+                if node.id not in node_usage:
+                    node_usage[node.id] = []
+                    node_coords[node.id] = (float(node.lat), float(node.lon))
+                node_usage[node.id].append(is_endpoint)
+        
+        # Create small circular polygons for real crossroads
+        for node_id, usages in node_usage.items():
+            count = len(usages)
+            is_crossroad = False
+            
+            if count > 2:
+                # 3 or more ways meeting is always a crossroad
+                is_crossroad = True
+            elif count == 2:
+                # 2 ways meeting is a crossroad ONLY if it's not a simple continuation
+                # (i.e., at least one way uses it as an interior node)
+                is_crossroad = not (usages[0] and usages[1])
+            
+            if is_crossroad:
+                lat, lon = node_coords[node_id]
+                e, n, _, _ = utm.from_latlon(lat, lon)
+                self.crossroads.add(
+                    Way(
+                        id=node_id,
+                        is_area=True,
+                        tags={'type': 'footway_intersection', 'count': str(count)},
+                        line=geometry.Point(e, n).buffer(1.5)  # 1.5m radius circle
+                    )
+                )
+
     @staticmethod
     def _buffer_line(way, width):
         way.line = way.line.buffer(width / 2)
@@ -489,6 +533,7 @@ class MapData:
         self.roads_list = list(self.roads)
         self.footways_list = list(self.footways)
         self.barriers_list = list(self.barriers)
+        self.crossroads_list = list(self.crossroads)
 
     # ------------------------------------------------------------------
     # High-level API
@@ -513,6 +558,7 @@ class MapData:
         self.parse_ways()
         self.parse_rels()
         self.parse_nodes()
+        self.parse_intersections()
         self.separate_ways()
         self.sets_to_lists()
         logger.info("Parsing finished.")
@@ -573,6 +619,7 @@ class MapData:
             "roads": self.roads_list,
             "footways": self.footways_list,
             "barriers": self.barriers_list,
+            "crossroads": self.crossroads_list,
         }
 
     # ------------------------------------------------------------------
