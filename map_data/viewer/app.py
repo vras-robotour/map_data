@@ -3,11 +3,17 @@ import os
 
 import logging
 from flask import Flask
+from werkzeug.routing import IntegerConverter
 from .routes import bp
+
+
+class SignedIntConverter(IntegerConverter):
+    regex = r"-?\d+"
 
 
 def create_app(data_dir=None):
     app = Flask(__name__)
+    app.url_map.converters["signed_int"] = SignedIntConverter
 
     if data_dir:
         app.config["DATA_DIR"] = data_dir

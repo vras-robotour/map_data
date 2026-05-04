@@ -195,6 +195,8 @@ class MapData:
         )
         self.barriers_list = parsed_barriers + node_barriers
         self.crossroads_list = self.parse_intersections(ways_dict)
+        logger.info("Parsing finished.")
+        return 0
 
     def parse_intersections(self, ways_dict: Dict[int, Way]) -> List[Way]:
         """Identify nodes shared by multiple footways and return them as crossroad Ways."""
@@ -231,9 +233,6 @@ class MapData:
     # ------------------------------------------------------------------
     # High-level API
     # ------------------------------------------------------------------
-
-        logger.info("Parsing finished.")
-        return 0
 
     def run_all(self, save: bool = True):
         self.run_queries()

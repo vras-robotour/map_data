@@ -277,12 +277,25 @@ async function initApp() {
       case 'n': case 'N':
         if (currentMode === 'view') toggleNodes();
         break;
+      case 'h': case 'H':
+        if (currentMode === 'view' && currentClickedFeature &&
+            ['road', 'footway', 'barrier'].includes(currentClickedFeature.properties.category)) {
+          if (hiddenWayIds.has(currentClickedFeature.properties.id))
+            showWay(currentClickedFeature.properties.id);
+          else
+            hideCurrentWay();
+        }
+        break;
       case 'Escape':
         if (currentMode !== 'add' && currentMode !== 'fetch') setMode('view');
         break;
       case 'Delete':
       case 'Backspace':
         if (currentMode === 'edit') { e.preventDefault(); deleteSelectedAnnotation(); }
+        else if (currentMode === 'view' && currentClickedFeature &&
+                 ['road', 'footway', 'barrier'].includes(currentClickedFeature.properties.category)) {
+          e.preventDefault(); deleteCurrentWay();
+        }
         break;
     }
   });

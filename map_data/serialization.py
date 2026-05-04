@@ -51,6 +51,7 @@ def map_data_to_dict(md: Any) -> Dict[str, Any]:
         "roads": [way_to_dict(w) for w in md.roads_list],
         "footways": [way_to_dict(w) for w in md.footways_list],
         "barriers": [way_to_dict(w) for w in md.barriers_list],
+        "crossroads": [way_to_dict(w) for w in md.crossroads_list],
         "nodes_cache": md.nodes_cache,
     }
 
@@ -106,6 +107,7 @@ def load_mapdata(md_class: Any, path: str) -> Any:
     md.roads_list = [way_from_dict(w) for w in data["roads"]]
     md.footways_list = [way_from_dict(w) for w in data["footways"]]
     md.barriers_list = [way_from_dict(w) for w in data["barriers"]]
+    md.crossroads_list = [way_from_dict(w) for w in data.get("crossroads", [])]
 
     md.roads = {w.id for w in md.roads_list}
     md.footways = {w.id for w in md.footways_list}

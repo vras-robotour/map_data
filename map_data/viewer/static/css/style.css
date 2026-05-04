@@ -98,5 +98,5 @@ html, body { height: 100%; margin: 0; overflow: hidden; font-size: 14px; }
   font-size: 0.65rem; font-weight: 700; letter-spacing: 1.5px;
   text-transform: uppercase; color: #6c7a9c; margin: 0;
 }
-.bottom-panel-body { padding: 4px 14px 12px 14px; background: #16213e; }
+.bottom-panel-body { padding: 4px 14px 12px 14px; background: #16213e; max-height: 200px; overflow-y: auto; }
 .panel-toggle-icon { font-size: 0.6rem; color: #6c7a9c; }

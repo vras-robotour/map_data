@@ -17,6 +17,7 @@ from flask import (
     current_app,
 )
 from map_data.map_data import MapData
+from map_data.serialization import map_data_to_dict
 from map_data.way import Way, FOOTWAY_VALUES
 from .cache import load_mapdata_cached
 from .helpers import (
@@ -104,6 +105,9 @@ def get_mapdata():
                         continue
                 new_lst.append(w)
             setattr(map_data, lst_name, new_lst)
+        map_data.crossroads_list = map_data.parse_intersections(
+            {w.id: w for w in map_data.footways_list}
+        )
     geojson = mapdata_to_geojson(map_data)
     tag_overrides = store.get("tag_overrides", {})
     if tag_overrides:
@@ -295,7 +299,7 @@ def get_way_nodes():
     return jsonify({"way_id": wid, "nodes": nodes})
 
 
-@bp.route("/api/ways/<int:way_id>")
+@bp.route("/api/ways/<signed_int:way_id>")
 def get_way(way_id):
     filename = request.args.get("file")
     if not filename:
@@ -363,7 +367,7 @@ def get_way(way_id):
     return jsonify(feature)
 
 
-@bp.route("/api/ways/<int:way_id>", methods=["DELETE"])
+@bp.route("/api/ways/<signed_int:way_id>", methods=["DELETE"])
 def delete_way(way_id):
     filename = request.args.get("file")
     if not filename:
@@ -383,7 +387,7 @@ def delete_way(way_id):
     return "", 204
 
 
-@bp.route("/api/ways/<int:way_id>/tags", methods=["PUT"])
+@bp.route("/api/ways/<signed_int:way_id>/tags", methods=["PUT"])
 def update_way_tags(way_id):
     filename = request.args.get("file")
     if not filename:
@@ -403,7 +407,7 @@ def update_way_tags(way_id):
     return "", 204
 
 
-@bp.route("/api/ways/<int:way_id>/tags", methods=["DELETE"])
+@bp.route("/api/ways/<signed_int:way_id>/tags", methods=["DELETE"])
 def delete_way_tags(way_id):
     filename = request.args.get("file")
     if not filename:
@@ -416,7 +420,7 @@ def delete_way_tags(way_id):
     return "", 204
 
 
-@bp.route("/api/ways/<int:way_id>/hide", methods=["PUT"])
+@bp.route("/api/ways/<signed_int:way_id>/hide", methods=["PUT"])
 def hide_way(way_id):
     filename = request.args.get("file")
     if not filename:
@@ -438,7 +442,7 @@ def hide_way(way_id):
     return "", 204
 
 
-@bp.route("/api/ways/<int:way_id>/show", methods=["PUT"])
+@bp.route("/api/ways/<signed_int:way_id>/show", methods=["PUT"])
 def show_way(way_id):
     filename = request.args.get("file")
     if not filename:
@@ -453,7 +457,7 @@ def show_way(way_id):
     return "", 204
 
 
-@bp.route("/api/ways/<int:way_id>/restore", methods=["PUT"])
+@bp.route("/api/ways/<signed_int:way_id>/restore", methods=["PUT"])
 def restore_way(way_id):
     filename = request.args.get("file")
     if not filename:
@@ -482,7 +486,7 @@ def delete_way_node():
         abort(400, "way_id and node_id must be integers")
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
-    dn = store.get("deleted_nodes", [])
+    dn = store.setdefault("deleted_nodes", [])
     if isinstance(dn, dict):
         dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
         store["deleted_nodes"] = dn
@@ -560,6 +564,11 @@ def export_mapdata():
         for w in md.footways_list:
             (new_roads if w.is_road() else new_footways).append(w)
         md.roads_list, md.footways_list = new_roads, new_footways
+
+    if deleted_way_ids or has_node_dels or tag_overrides:
+        md.crossroads_list = md.parse_intersections(
+            {w.id: w for w in md.footways_list}
+        )
 
     ann_id = -1
     for ann in store.get("annotations", []):

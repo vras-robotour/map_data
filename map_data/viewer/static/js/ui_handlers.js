@@ -75,12 +75,18 @@ function showProps(props, feature = null) {
     el.innerHTML += `<button class="btn btn-sm btn-outline-secondary mt-1"
                              style="font-size:0.72rem;width:100%;"
                              onclick="openWayEditModal()">&#9998; Edit Properties</button>`;
-    el.innerHTML += `<button class="btn btn-sm btn-outline-secondary mt-1"
-                             style="font-size:0.72rem;width:100%;"
-                             onclick="hideCurrentWay()">&#128065; Hide Object</button>`;
-    el.innerHTML += `<button class="btn btn-sm btn-outline-danger mt-1"
-                             style="font-size:0.72rem;width:100%;"
-                             onclick="deleteCurrentWay()">&#128465; Delete Way</button>`;
+    if (hiddenWayIds.has(props.id)) {
+      el.innerHTML += `<button class="btn btn-sm btn-outline-info mt-1"
+                               style="font-size:0.72rem;width:100%;"
+                               onclick="showWay(${props.id})">&#128065; Show Object</button>`;
+    } else {
+      el.innerHTML += `<button class="btn btn-sm btn-outline-secondary mt-1"
+                               style="font-size:0.72rem;width:100%;"
+                               onclick="hideCurrentWay()">&#128065; Hide Object</button>`;
+      el.innerHTML += `<button class="btn btn-sm btn-outline-danger mt-1"
+                               style="font-size:0.72rem;width:100%;"
+                               onclick="deleteCurrentWay()">&#128465; Delete Way</button>`;
+    }
   }
 }
 
@@ -224,6 +230,7 @@ async function deleteCurrentNode(wayId, nodeId) {
   const res = await deleteNodeApi(currentFile, wayId, nodeId);
   if (!res.ok) { setStatus('Delete failed', 'text-danger'); return; }
   await _reloadWay(wayId);
+  if (currentClickedFeature) await toggleNodes();
   setStatus('Node deleted', 'text-success');
 }
 
@@ -263,6 +270,52 @@ async function showWay(wayId) {
   }
 }
 
+function focusFeatureById(wayId) {
+  // Search visible layers first
+  for (const cat of ['road', 'footway', 'barrier', 'crossroad']) {
+    const catLayer = geoLayers[cat];
+    if (!catLayer) continue;
+    let found = null;
+    catLayer.eachLayer(l => { if (l._featureId === wayId) found = l; });
+    if (found) {
+      if (currentClickedLayer && currentClickedLayer !== found) {
+        const oldCat = currentClickedLayer._osmCat;
+        currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
+      }
+      found._osmCat = cat;
+      currentClickedLayer = found;
+      currentClickedFeature = found._featureRef;
+      found.setStyle(HIGHLIGHT_STYLES[cat]);
+      showProps(found._featureRef.properties, found._featureRef);
+      try { map.fitBounds(found.getBounds(), { maxZoom: 18, padding: [40, 40] }); } catch (_) {}
+      return;
+    }
+  }
+  // Search hidden layers still tracked in subtypeLayers
+  for (const cat of ['road', 'footway', 'barrier']) {
+    for (const layers of Object.values(subtypeLayers[cat])) {
+      const found = layers.find(l => l._featureId === wayId);
+      if (found) {
+        if (found._featureRef) {
+          currentClickedFeature = found._featureRef;
+          showProps(found._featureRef.properties, found._featureRef);
+        }
+        try { map.fitBounds(found.getBounds(), { maxZoom: 18, padding: [40, 40] }); } catch (_) {}
+        return;
+      }
+    }
+  }
+  // Fall back to API for deleted ways
+  if (!currentFile) return;
+  fetchWayApi(currentFile, wayId).then(res => {
+    if (!res.ok) return;
+    res.json().then(feature => {
+      showProps(feature.properties, feature);
+      try { map.fitBounds(L.geoJSON(feature).getBounds(), { maxZoom: 18, padding: [40, 40] }); } catch (_) {}
+    });
+  });
+}
+
 function renderChangesPanel() {
   const total = deletedWays.length + deletedNodes.length + tagOverrides.length;
   const panel = document.getElementById('changes-panel');
@@ -272,32 +325,32 @@ function renderChangesPanel() {
   if (!total) { panel.style.display = 'none'; return; }
   panel.style.display = '';
   count.textContent = `(${total})`;
-  const wayItems = deletedWays.map(d => `
-    <div class="change-item">
+  const wayItems = [...deletedWays].reverse().map(d => `
+    <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
       <div>
         <span>del ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
         <br><span class="change-id">#${d.id}</span>
       </div>
       <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-              title="Undo deletion" onclick="undoWayDeletion(${d.id})">&#8617;</button>
+              title="Undo deletion" onclick="event.stopPropagation(); undoWayDeletion(${d.id})">&#8617;</button>
     </div>`).join('');
-  const nodeItems = deletedNodes.map(d => `
-    <div class="change-item">
+  const nodeItems = [...deletedNodes].reverse().map(d => `
+    <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.way_id})">
       <div>
         <span>del node in way</span>
         <br><span class="change-id">#${d.node_id} &rarr; #${d.way_id}</span>
       </div>
       <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-              title="Undo deletion" onclick="undoNodeDeletion(${d.way_id}, ${d.node_id})">&#8617;</button>
+              title="Undo deletion" onclick="event.stopPropagation(); undoNodeDeletion(${d.way_id}, ${d.node_id})">&#8617;</button>
     </div>`).join('');
-  const tagItems = tagOverrides.map(d => `
-    <div class="change-item">
+  const tagItems = [...tagOverrides].reverse().map(d => `
+    <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
       <div>
         <span>edit ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
         <br><span class="change-id">#${d.id}</span>
       </div>
       <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-              title="Undo tag edit" onclick="undoTagOverride(${d.id})">&#8617;</button>
+              title="Undo tag edit" onclick="event.stopPropagation(); undoTagOverride(${d.id})">&#8617;</button>
     </div>`).join('');
   list.innerHTML = wayItems + nodeItems + tagItems;
 }
@@ -311,13 +364,13 @@ function renderHiddenPanel() {
   panel.style.display = '';
   count.textContent = `(${hiddenWays.length})`;
   list.innerHTML = hiddenWays.map(d => `
-    <div class="change-item">
+    <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
       <div>
         <span>${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
         <br><span class="change-id">#${d.id}</span>
       </div>
       <button class="btn btn-sm btn-outline-info py-0 px-1" style="font-size:0.7rem;"
-              title="Show object" onclick="showWay(${d.id})">&#128065;</button>
+              title="Show object" onclick="event.stopPropagation(); showWay(${d.id})">&#128065;</button>
     </div>`).join('');
 }
 
