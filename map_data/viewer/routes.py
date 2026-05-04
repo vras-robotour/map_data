@@ -2,8 +2,8 @@ import os
 import re
 import io
 import copy
+import json
 import uuid
-import pickle
 import logging
 import utm
 import numpy as np
