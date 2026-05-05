@@ -209,6 +209,11 @@ async function loadMapData(filename, { preserveView = false } = {}) {
     }));
     hiddenWays   = _loadHiddenMeta;
     hiddenWayIds = _loadHiddenIds;
+    changeLog = [
+      ...deletedWays.map(d => ({ type: 'way', ...d })),
+      ...deletedNodes.map(d => ({ type: 'node', ...d })),
+      ...tagOverrides.map(d => ({ type: 'tag', ...d })),
+    ];
     renderAnnotationLayer();
     renderAnnotationList();
     renderChangesPanel();

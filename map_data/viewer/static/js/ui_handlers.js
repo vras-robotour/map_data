@@ -216,8 +216,10 @@ async function deleteCurrentWay() {
   currentClickedLayer   = null;
   currentClickedFeature = null;
   clearNodes();
-  if (!deletedWays.some(d => d.id === wayId))
+  if (!deletedWays.some(d => d.id === wayId)) {
     deletedWays.push({ id: wayId, category: cat, label });
+    changeLog.push({ type: 'way', id: wayId, category: cat, label });
+  }
   renderChangesPanel();
   renderHiddenPanel();
   document.getElementById('props-content').innerHTML =
@@ -229,6 +231,7 @@ async function deleteCurrentNode(wayId, nodeId) {
   if (!currentFile) return;
   const res = await deleteNodeApi(currentFile, wayId, nodeId);
   if (!res.ok) { setStatus('Delete failed', 'text-danger'); return; }
+  changeLog.push({ type: 'node', way_id: wayId, node_id: nodeId });
   await _reloadWay(wayId);
   if (currentClickedFeature) await toggleNodes();
   setStatus('Node deleted', 'text-success');
@@ -317,42 +320,43 @@ function focusFeatureById(wayId) {
 }
 
 function renderChangesPanel() {
-  const total = deletedWays.length + deletedNodes.length + tagOverrides.length;
   const panel = document.getElementById('changes-panel');
   const list  = document.getElementById('changes-list');
   const count = document.getElementById('changes-count');
   if (!panel || !list || !count) return;
-  if (!total) { panel.style.display = 'none'; return; }
+  if (!changeLog.length) { panel.style.display = 'none'; return; }
   panel.style.display = '';
-  count.textContent = `(${total})`;
-  const wayItems = [...deletedWays].reverse().map(d => `
-    <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
-      <div>
-        <span>del ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
-        <br><span class="change-id">#${d.id}</span>
-      </div>
-      <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-              title="Undo deletion" onclick="event.stopPropagation(); undoWayDeletion(${d.id})">&#8617;</button>
-    </div>`).join('');
-  const nodeItems = [...deletedNodes].reverse().map(d => `
-    <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.way_id})">
-      <div>
-        <span>del node in way</span>
-        <br><span class="change-id">#${d.node_id} &rarr; #${d.way_id}</span>
-      </div>
-      <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-              title="Undo deletion" onclick="event.stopPropagation(); undoNodeDeletion(${d.way_id}, ${d.node_id})">&#8617;</button>
-    </div>`).join('');
-  const tagItems = [...tagOverrides].reverse().map(d => `
-    <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
-      <div>
-        <span>edit ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
-        <br><span class="change-id">#${d.id}</span>
-      </div>
-      <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-              title="Undo tag edit" onclick="event.stopPropagation(); undoTagOverride(${d.id})">&#8617;</button>
-    </div>`).join('');
-  list.innerHTML = wayItems + nodeItems + tagItems;
+  count.textContent = `(${changeLog.length})`;
+  list.innerHTML = [...changeLog].reverse().map(d => {
+    if (d.type === 'way') return `
+      <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
+        <div>
+          <span>del ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
+          <br><span class="change-id">#${d.id}</span>
+        </div>
+        <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
+                title="Undo deletion" onclick="event.stopPropagation(); undoWayDeletion(${d.id})">&#8617;</button>
+      </div>`;
+    if (d.type === 'node') return `
+      <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.way_id})">
+        <div>
+          <span>del node in way</span>
+          <br><span class="change-id">#${d.node_id} &rarr; #${d.way_id}</span>
+        </div>
+        <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
+                title="Undo deletion" onclick="event.stopPropagation(); undoNodeDeletion(${d.way_id}, ${d.node_id})">&#8617;</button>
+      </div>`;
+    if (d.type === 'tag') return `
+      <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
+        <div>
+          <span>edit ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
+          <br><span class="change-id">#${d.id}</span>
+        </div>
+        <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
+                title="Undo tag edit" onclick="event.stopPropagation(); undoTagOverride(${d.id})">&#8617;</button>
+      </div>`;
+    return '';
+  }).join('');
 }
 
 function renderHiddenPanel() {
@@ -363,7 +367,7 @@ function renderHiddenPanel() {
   if (!hiddenWays.length) { panel.style.display = 'none'; return; }
   panel.style.display = '';
   count.textContent = `(${hiddenWays.length})`;
-  list.innerHTML = hiddenWays.map(d => `
+  list.innerHTML = [...hiddenWays].reverse().map(d => `
     <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
       <div>
         <span>${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
@@ -377,19 +381,28 @@ function renderHiddenPanel() {
 async function undoWayDeletion(wayId) {
   if (!currentFile) return;
   const res = await restoreWayApi(currentFile, wayId);
-  if (res.ok) await _reloadWay(wayId);
+  if (res.ok) {
+    changeLog = changeLog.filter(c => !(c.type === 'way' && c.id === wayId));
+    await _reloadWay(wayId);
+  }
 }
 
 async function undoNodeDeletion(wayId, nodeId) {
   if (!currentFile) return;
   const res = await restoreNodeApi(currentFile, wayId, nodeId);
-  if (res.ok) await _reloadWay(wayId);
+  if (res.ok) {
+    changeLog = changeLog.filter(c => !(c.type === 'node' && c.way_id === wayId && c.node_id === nodeId));
+    await _reloadWay(wayId);
+  }
 }
 
 async function undoTagOverride(wayId) {
   if (!currentFile) return;
   const res = await deleteWayTagsApi(currentFile, wayId);
-  if (res.ok) await _reloadWay(wayId);
+  if (res.ok) {
+    changeLog = changeLog.filter(c => !(c.type === 'tag' && c.id === wayId));
+    await _reloadWay(wayId);
+  }
 }
 
 function togglePanel(name) {

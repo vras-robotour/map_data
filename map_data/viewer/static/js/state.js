@@ -14,6 +14,7 @@ let deletedWays  = [];            // [{id, category, label}, ...] from annotatio
 let deletedNodes = [];            // [{way_id, node_id}, ...]        from annotations store
 let tagOverrides = [];            // [{id, category, label, tags}, ...] from annotations store
 let hiddenWays   = [];            // [{id, category, label}, ...] from annotations store
+let changeLog    = [];            // [{type:'way'|'node'|'tag', ...data}] in insertion order
 let hiddenWayIds = new Set();     // Set<number> for O(1) lookup
 let editSelectedLayer = null;   // annotation layer selected in edit mode
 let pathLineDraw  = null;       // L.Draw.Polyline handler for path mode

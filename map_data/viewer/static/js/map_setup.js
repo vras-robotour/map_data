@@ -201,6 +201,9 @@ async function initApp() {
     bootstrap.Modal.getInstance(document.getElementById('way-edit-modal')).hide();
     const res = await updateWayTagsApi(currentFile, savedWayId, tags, cat, lbl);
     if (res.ok) {
+      const existing = changeLog.findIndex(c => c.type === 'tag' && c.id === savedWayId);
+      if (existing >= 0) changeLog.splice(existing, 1);
+      changeLog.push({ type: 'tag', id: savedWayId, category: cat, label: lbl });
       setStatus('Properties updated', 'text-success');
       await _reloadWay(savedWayId);
     } else {
@@ -294,7 +297,12 @@ async function initApp() {
         if (currentMode === 'edit') { e.preventDefault(); deleteSelectedAnnotation(); }
         else if (currentMode === 'view' && currentClickedFeature &&
                  ['road', 'footway', 'barrier'].includes(currentClickedFeature.properties.category)) {
-          e.preventDefault(); deleteCurrentWay();
+          e.preventDefault();
+          if (selectedNodeIndex >= 0 && currentNodes[selectedNodeIndex]) {
+            deleteCurrentNode(currentClickedFeature.properties.id, currentNodes[selectedNodeIndex].id);
+          } else {
+            deleteCurrentWay();
+          }
         }
         break;
     }
