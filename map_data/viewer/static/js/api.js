@@ -112,6 +112,20 @@ async function fetchWayApi(filename, wayId) {
   return await fetch(`/api/ways/${wayId}?file=${encodeURIComponent(filename)}`);
 }
 
+async function moveWayNodesApi(filename, wayId, nodes) {
+  return await fetch(`/api/way_nodes/move?file=${encodeURIComponent(filename)}&way_id=${wayId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nodes }),
+  });
+}
+
+async function undoWayNodeMovesApi(filename, wayId) {
+  return await fetch(`/api/way_nodes/move?file=${encodeURIComponent(filename)}&way_id=${wayId}`, {
+    method: 'DELETE',
+  });
+}
+
 async function fetchAreaApi(params) {
   const res = await fetch('/api/fetch_area', {
     method: 'POST',

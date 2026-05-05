@@ -126,6 +126,104 @@ def get_deleted_node_ids(store, way_id):
     return {d["node_id"] for d in dn if d["way_id"] == way_id}
 
 
+def get_node_position_overrides(store, way_id):
+    """Return {node_id (int): {lat, lon}} for position overrides on a given way."""
+    return {
+        int(k): v
+        for k, v in store.get("node_position_overrides", {}).get(str(way_id), {}).items()
+    }
+
+
+def apply_node_position_overrides(way, overrides, zone_number, zone_letter, nodes_cache=None):
+    """Return a copy of way with geometry updated from node position overrides.
+
+    overrides: {node_id (int): {"lat": float, "lon": float}}
+    For non-overridden nodes, nodes_cache is consulted before falling back to
+    geometry coordinates (geometry coords are unreliable for buffered polygons).
+    """
+    if not overrides:
+        return way
+    geom = way.line
+    node_ids = [getattr(n, "id", n) for n in way.nodes]
+    if not node_ids:
+        return way
+
+    nc = nodes_cache or {}
+    # Geometry coords as fallback only — may be unreliable for buffered polygons
+    raw = list(geom.exterior.coords if hasattr(geom, "exterior") else geom.coords)
+    geom_latlon = [utm.to_latlon(e, n, zone_number, zone_letter) for e, n in raw]
+
+    utm_coords = []
+    for i, nid in enumerate(node_ids):
+        if nid in overrides:
+            lat = float(overrides[nid]["lat"])
+            lon = float(overrides[nid]["lon"])
+        elif nid in nc:
+            lat = float(nc[nid]["lat"])
+            lon = float(nc[nid]["lon"])
+        elif i < len(geom_latlon):
+            lat, lon = geom_latlon[i]
+        else:
+            continue
+        e, n, _, _ = utm.from_latlon(
+            lat, lon,
+            force_zone_number=zone_number,
+            force_zone_letter=zone_letter,
+        )
+        utm_coords.append((e, n))
+
+    if len(utm_coords) < 2:
+        return way
+
+    # Preserve closure. Primary signal: closed OSM ways have the same node ID at first
+    # and last position (node_ids[0] == node_ids[-1]).  Fallback: geom.is_closed (only
+    # valid for LineString).  Apply before the geom-type branch so both LineString ways
+    # and buffered Polygon barriers get a closed centerline — otherwise ls.buffer(r)
+    # produces a capsule instead of a ring for closed barriers.
+    _is_closed = (len(node_ids) >= 2 and node_ids[0] == node_ids[-1]) or (
+        geom.geom_type == "LineString" and geom.is_closed
+    )
+    if _is_closed and utm_coords[0] != utm_coords[-1]:
+        utm_coords.append(utm_coords[0])
+
+    w = copy.copy(way)
+    if geom.geom_type == "LineString":
+        w.line = _SLS(utm_coords)
+    elif geom.geom_type == "Polygon":
+        if len(utm_coords) < 2:
+            return way
+        if getattr(way, "is_area", False):
+            # Closed linear feature (roundabout, loop road, closed barrier): keep as
+            # closed LineString so it renders as a path, not a filled polygon.
+            if utm_coords[0] != utm_coords[-1]:
+                utm_coords.append(utm_coords[0])
+            try:
+                w.line = _SLS(utm_coords)
+            except Exception:
+                return way
+        else:
+            # Open barrier stored as buffered polygon: re-buffer the centerline
+            ls = _SLS(utm_coords)
+            p = geom.length
+            a = geom.area
+            disc = p * p - 4 * np.pi * a
+            r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else (a / p if p else 0)
+            try:
+                w.line = ls.buffer(max(r, 0.01))
+            except Exception:
+                if len(utm_coords) >= 3:
+                    closed = utm_coords + [utm_coords[0]]
+                    try:
+                        w.line = _SPoly(closed)
+                    except Exception:
+                        return way
+                else:
+                    return way
+    else:
+        return way
+    return w
+
+
 # ------------------------------------------------------------------
 # Export helpers
 # ------------------------------------------------------------------
@@ -175,6 +273,11 @@ def rebuild_way_without_nodes(
         new_coords = [coords[i] for i in keep if i < len(coords)]
         if len(new_coords) < 2:
             return None
+        # Preserve closure: primary signal is node_ids[0] == node_ids[-1] (closed OSM
+        # way); geom.is_closed is the fallback for geometries that stored the repeat.
+        _is_closed = (len(node_ids) >= 2 and node_ids[0] == node_ids[-1]) or geom.is_closed
+        if _is_closed and new_coords[0] != new_coords[-1]:
+            new_coords.append(new_coords[0])
         w.line = _SLS(new_coords)
 
     elif geom.geom_type == "Polygon":
@@ -198,15 +301,25 @@ def rebuild_way_without_nodes(
                     utm_coords.append((e, nn))
             if len(utm_coords) < 2:
                 return None
-            ls = _SLS(utm_coords)
-            p = geom.length
-            a = geom.area
-            disc = p * p - 4 * np.pi * a
-            r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else a / p
-            try:
-                w.line = ls.buffer(r)
-            except Exception:
-                w.line = ls
+            if getattr(way, "is_area", False):
+                # Closed linear feature: reconstruct as closed LineString (not Polygon)
+                if utm_coords[0] != utm_coords[-1]:
+                    utm_coords.append(utm_coords[0])
+                try:
+                    w.line = _SLS(utm_coords)
+                except Exception:
+                    return None
+            else:
+                # Open barrier stored as buffered polygon: re-buffer the centerline
+                ls = _SLS(utm_coords)
+                p = geom.length
+                a = geom.area
+                disc = p * p - 4 * np.pi * a
+                r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else a / p
+                try:
+                    w.line = ls.buffer(r)
+                except Exception:
+                    w.line = ls
         else:
             coords = list(geom.exterior.coords)
             new_coords = [coords[i] for i in keep if i < len(coords)]

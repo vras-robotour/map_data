@@ -92,10 +92,91 @@ function showProps(props, feature = null) {
 
 function clearNodes() {
   if (nodeLayer) { map.removeLayer(nodeLayer); nodeLayer = null; }
+  if (osmEditLayer) {
+    osmEditLayer.off('mousedown', _onOsmWayDragDown);
+    osmEditLayer = null;
+  }
+  if (osmDragGhost) { map.removeLayer(osmDragGhost); osmDragGhost = null; }
   nodeCount         = 0;
   currentNodes      = [];
   nodeMarkers       = [];
   selectedNodeIndex = -1;
+}
+
+async function loadNodesForEditing(feature, layer) {
+  if (!currentFile) return;
+  clearNodes();
+  const wayId = feature.properties.id;
+  const el = document.getElementById('props-content');
+  el.innerHTML = `<span class="text-secondary" style="font-size:0.8rem;">Loading nodes…</span>`;
+
+  let data;
+  try { data = await fetchWayNodes(currentFile, wayId); }
+  catch (err) { setStatus('Failed to load nodes', 'text-danger'); return; }
+  currentNodes = data.nodes;
+  nodeCount    = currentNodes.length;
+
+  osmEditLayer = layer;
+  layer.on('mousedown', _onOsmWayDragDown);
+
+  // Ghost must be added BEFORE node markers so nodes sit on top in the SVG DOM
+  // and receive mousedown events before the ghost does.
+  const geomType = feature.geometry.type;
+  if (geomType === 'LineString') {
+    const latlngs = feature.geometry.coordinates.map(c => [c[1], c[0]]);
+    osmDragGhost = L.polyline(latlngs, {
+      renderer: L.svg(), color: '#000', weight: 15, opacity: 0,
+      interactive: true, bubblingMouseEvents: false,
+    });
+  } else if (geomType === 'Polygon') {
+    const ring = feature.geometry.coordinates[0].map(c => [c[1], c[0]]);
+    osmDragGhost = L.polygon(ring, {
+      renderer: L.svg(), color: '#000', weight: 15, opacity: 0, fillOpacity: 0,
+      interactive: true, bubblingMouseEvents: false,
+    });
+  }
+  if (osmDragGhost) {
+    osmDragGhost.on('mousedown', e => {
+      // The SVG ghost is always above the canvas node markers in the DOM, so it intercepts
+      // all mousedowns. Route to node drag if click is within 10px of a marker, else way drag.
+      const clickPt = map.latLngToContainerPoint(e.latlng);
+      for (let i = 0; i < nodeMarkers.length; i++) {
+        if (!nodeMarkers[i]) continue;
+        if (clickPt.distanceTo(map.latLngToContainerPoint(nodeMarkers[i].getLatLng())) <= 10) {
+          _onOsmNodeDragDown(e, i);
+          return;
+        }
+      }
+      _onOsmWayDragDown(e);
+    });
+    osmDragGhost.addTo(map);
+  }
+
+  nodeLayer  = L.layerGroup();
+  nodeMarkers = currentNodes.map((node, i) => {
+    const marker = L.circleMarker([node.lat, node.lon], {
+      radius: 5, color: '#fff', weight: 2,
+      fillColor: '#f0a500', fillOpacity: 0.9,
+      bubblingMouseEvents: false,
+    });
+    marker.on('mousedown', e => _onOsmNodeDragDown(e, i));
+    marker.on('add', () => { const el = marker.getElement(); if (el) el.style.cursor = 'grab'; });
+    nodeLayer.addLayer(marker);
+    return marker;
+  });
+  nodeLayer.addTo(map);
+
+  const props = feature.properties;
+  const tags  = props.tags || {};
+  const label = tags.highway || tags.barrier || '';
+  el.innerHTML = `
+    <div style="font-size:0.8rem;color:#aaa;margin-bottom:6px;">
+      Editing <span class="badge bg-secondary">${escHtml(props.category)}</span>
+      ${label ? `<span class="badge bg-dark ms-1">${escHtml(label)}</span>` : ''}
+      <span class="text-secondary ms-1">#${props.id}</span>
+    </div>
+    <div style="font-size:0.75rem;color:#6c7a9c;">${currentNodes.length} nodes — drag node or way to move</div>`;
+  setStatus(`Editing way ${wayId}`, 'text-info');
 }
 
 function clickNode(index) {
@@ -355,6 +436,15 @@ function renderChangesPanel() {
         <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
                 title="Undo tag edit" onclick="event.stopPropagation(); undoTagOverride(${d.id})">&#8617;</button>
       </div>`;
+    if (d.type === 'move') return `
+      <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
+        <div>
+          <span>move ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
+          <br><span class="change-id">#${d.id}</span>
+        </div>
+        <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
+                title="Undo move" onclick="event.stopPropagation(); undoWayNodeMoves(${d.id})">&#8617;</button>
+      </div>`;
     return '';
   }).join('');
 }
@@ -401,6 +491,15 @@ async function undoTagOverride(wayId) {
   const res = await deleteWayTagsApi(currentFile, wayId);
   if (res.ok) {
     changeLog = changeLog.filter(c => !(c.type === 'tag' && c.id === wayId));
+    await _reloadWay(wayId);
+  }
+}
+
+async function undoWayNodeMoves(wayId) {
+  if (!currentFile) return;
+  const res = await undoWayNodeMovesApi(currentFile, wayId);
+  if (res.ok) {
+    changeLog = changeLog.filter(c => !(c.type === 'move' && c.id === wayId));
     await _reloadWay(wayId);
   }
 }

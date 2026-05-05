@@ -140,6 +140,16 @@ async function loadMapData(filename, { preserveView = false } = {}) {
               currentClickedLayer = layer;
               layer.setStyle(HIGHLIGHT_STYLES[cat]);
               showProps(feature.properties, feature);
+            } else if (currentMode === 'edit' && cat !== 'crossroad') {
+              if (currentClickedLayer && currentClickedLayer !== layer) {
+                const oldCat = currentClickedLayer._osmCat;
+                currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
+              }
+              layer._osmCat        = cat;
+              currentClickedLayer  = layer;
+              currentClickedFeature = feature;
+              layer.setStyle(HIGHLIGHT_STYLES[cat]);
+              loadNodesForEditing(feature, layer);
             }
           });
         },
@@ -271,6 +281,16 @@ async function _reloadWay(wayId) {
             currentClickedLayer = newLayer;
             newLayer.setStyle(HIGHLIGHT_STYLES[newCat]);
             showProps(feature.properties, feature);
+          } else if (currentMode === 'edit' && newCat !== 'crossroad') {
+            if (currentClickedLayer && currentClickedLayer !== newLayer) {
+              const oldCat = currentClickedLayer._osmCat;
+              currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
+            }
+            newLayer._osmCat       = newCat;
+            currentClickedLayer    = newLayer;
+            currentClickedFeature  = feature;
+            newLayer.setStyle(HIGHLIGHT_STYLES[newCat]);
+            loadNodesForEditing(feature, newLayer);
           }
         });
         if (subtypeFilters[newCat][st] !== false && !hiddenWayIds.has(feature.properties.id))

@@ -26,6 +26,8 @@ from .helpers import (
     save_annotations,
     get_deleted_way_ids,
     get_deleted_node_ids,
+    get_node_position_overrides,
+    apply_node_position_overrides,
     rebuild_way_without_nodes,
     geom_to_geojson,
     geojson_geom_to_utm,
@@ -108,6 +110,18 @@ def get_mapdata():
         map_data.crossroads_list = map_data.parse_intersections(
             {w.id: w for w in map_data.footways_list}
         )
+    node_pos_store = store.get("node_position_overrides", {})
+    if node_pos_store:
+        zn, zl = map_data.zone_number, map_data.zone_letter
+        for lst_name in ("roads_list", "footways_list", "barriers_list"):
+            new_lst = []
+            for w in getattr(map_data, lst_name):
+                ov = get_node_position_overrides(store, w.id)
+                if ov:
+                    w = apply_node_position_overrides(w, ov, zn, zl, getattr(map_data, "nodes_cache", {})) or w
+                new_lst.append(w)
+            setattr(map_data, lst_name, new_lst)
+
     geojson = mapdata_to_geojson(map_data)
     tag_overrides = store.get("tag_overrides", {})
     if tag_overrides:
@@ -296,6 +310,13 @@ def get_way_nodes():
     if deleted_node_ids:
         nodes = [n for n in nodes if n["id"] not in deleted_node_ids]
 
+    pos_overrides = get_node_position_overrides(store, wid)
+    if pos_overrides:
+        for n in nodes:
+            if n["id"] in pos_overrides:
+                n["lat"] = pos_overrides[n["id"]]["lat"]
+                n["lon"] = pos_overrides[n["id"]]["lon"]
+
     return jsonify({"way_id": wid, "nodes": nodes})
 
 
@@ -337,6 +358,10 @@ def get_way(way_id):
         )
         if way is None:
             abort(404, f"Way {way_id} reduced to nothing by node deletions")
+
+    pos_overrides = get_node_position_overrides(store, way_id)
+    if pos_overrides:
+        way = apply_node_position_overrides(way, pos_overrides, zn, zl, getattr(md, "nodes_cache", {})) or way
 
     geom = geom_to_geojson(way.line, zn, zl)
     if geom is None:
@@ -520,6 +545,49 @@ def restore_way_node():
     return "", 204
 
 
+@bp.route("/api/way_nodes/move", methods=["PUT"])
+def move_way_nodes():
+    filename = request.args.get("file")
+    way_id = request.args.get("way_id")
+    if not filename or way_id is None:
+        abort(400, "Missing required query parameters")
+    try:
+        way_id = int(way_id)
+    except (ValueError, TypeError):
+        abort(400, "way_id must be an integer")
+    body = request.get_json(force=True) or {}
+    nodes = body.get("nodes")
+    if not isinstance(nodes, list):
+        abort(400, "Request body must include 'nodes' list")
+    ann_path = _annotation_path(filename)
+    store = load_annotations(ann_path)
+    overrides = store.setdefault("node_position_overrides", {})
+    way_key = str(way_id)
+    if way_key not in overrides:
+        overrides[way_key] = {}
+    for n in nodes:
+        overrides[way_key][str(n["id"])] = {"lat": float(n["lat"]), "lon": float(n["lon"])}
+    save_annotations(ann_path, store)
+    return "", 204
+
+
+@bp.route("/api/way_nodes/move", methods=["DELETE"])
+def undo_move_way_nodes():
+    filename = request.args.get("file")
+    way_id = request.args.get("way_id")
+    if not filename or way_id is None:
+        abort(400, "Missing required query parameters")
+    try:
+        way_id = int(way_id)
+    except (ValueError, TypeError):
+        abort(400, "way_id must be an integer")
+    ann_path = _annotation_path(filename)
+    store = load_annotations(ann_path)
+    store.get("node_position_overrides", {}).pop(str(way_id), None)
+    save_annotations(ann_path, store)
+    return "", 204
+
+
 @bp.route("/api/export")
 def export_mapdata():
     filename = request.args.get("file")
@@ -548,6 +616,17 @@ def export_mapdata():
                     )
                     if w is None:
                         continue
+                new_lst.append(w)
+            setattr(md, lst_name, new_lst)
+
+    node_pos_store = store.get("node_position_overrides", {})
+    if node_pos_store:
+        for lst_name in ("roads_list", "footways_list", "barriers_list"):
+            new_lst = []
+            for w in getattr(md, lst_name):
+                ov = get_node_position_overrides(store, w.id)
+                if ov:
+                    w = apply_node_position_overrides(w, ov, zn, zl, getattr(md, "nodes_cache", {})) or w
                 new_lst.append(w)
             setattr(md, lst_name, new_lst)
 
