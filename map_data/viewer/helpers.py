@@ -134,7 +134,7 @@ def get_node_position_overrides(store, way_id):
     }
 
 
-def apply_node_position_overrides(way, overrides, zone_number, zone_letter, nodes_cache=None):
+def apply_node_position_overrides(way, overrides, zone_number, zone_letter, nodes_cache=None, category=None):
     """Return a copy of way with geometry updated from node position overrides.
 
     overrides: {node_id (int): {"lat": float, "lon": float}}
@@ -192,17 +192,26 @@ def apply_node_position_overrides(way, overrides, zone_number, zone_letter, node
     elif geom.geom_type == "Polygon":
         if len(utm_coords) < 2:
             return way
-        if getattr(way, "is_area", False):
-            # Closed linear feature (roundabout, loop road, closed barrier): keep as
-            # closed LineString so it renders as a path, not a filled polygon.
-            if utm_coords[0] != utm_coords[-1]:
-                utm_coords.append(utm_coords[0])
-            try:
-                w.line = _SLS(utm_coords)
-            except Exception:
-                return way
+        if _is_closed:
+            if category == 'barrier':
+                # Closed barrier area: reconstruct as flat Polygon from the node ring
+                ring = utm_coords if utm_coords[0] == utm_coords[-1] else utm_coords + [utm_coords[0]]
+                if len(ring) < 4:
+                    return way
+                try:
+                    w.line = _SPoly(ring)
+                except Exception:
+                    return way
+            else:
+                # Closed linear feature (roundabout, loop road): keep as closed LineString
+                if utm_coords[0] != utm_coords[-1]:
+                    utm_coords.append(utm_coords[0])
+                try:
+                    w.line = _SLS(utm_coords)
+                except Exception:
+                    return way
         else:
-            # Open barrier stored as buffered polygon: re-buffer the centerline
+            # Open way stored as buffered polygon: re-buffer the centerline
             ls = _SLS(utm_coords)
             p = geom.length
             a = geom.area
@@ -257,7 +266,7 @@ def geojson_geom_to_utm(geometry, zone_number, zone_letter):
 
 
 def rebuild_way_without_nodes(
-    way, del_nids, zone_number=None, zone_letter=None, nodes_cache=None
+    way, del_nids, zone_number=None, zone_letter=None, nodes_cache=None, category=None
 ):
     """Return a shallow copy of way with del_nids removed, or None if geometry becomes invalid."""
     node_ids = [getattr(n, "id", n) for n in way.nodes]
@@ -301,16 +310,27 @@ def rebuild_way_without_nodes(
                     utm_coords.append((e, nn))
             if len(utm_coords) < 2:
                 return None
-            if getattr(way, "is_area", False):
-                # Closed linear feature: reconstruct as closed LineString (not Polygon)
-                if utm_coords[0] != utm_coords[-1]:
-                    utm_coords.append(utm_coords[0])
-                try:
-                    w.line = _SLS(utm_coords)
-                except Exception:
-                    return None
+            _is_closed_orig = len(node_ids) >= 2 and node_ids[0] == node_ids[-1]
+            if _is_closed_orig:
+                if category == 'barrier':
+                    # Closed barrier area: reconstruct as flat Polygon from the node ring
+                    ring = utm_coords if utm_coords[0] == utm_coords[-1] else utm_coords + [utm_coords[0]]
+                    if len(ring) < 4:
+                        return None
+                    try:
+                        w.line = _SPoly(ring)
+                    except Exception:
+                        return None
+                else:
+                    # Closed linear feature (roundabout, loop road): keep as closed LineString
+                    if utm_coords[0] != utm_coords[-1]:
+                        utm_coords.append(utm_coords[0])
+                    try:
+                        w.line = _SLS(utm_coords)
+                    except Exception:
+                        return None
             else:
-                # Open barrier stored as buffered polygon: re-buffer the centerline
+                # Open way stored as buffered polygon: re-buffer the centerline
                 ls = _SLS(utm_coords)
                 p = geom.length
                 a = geom.area

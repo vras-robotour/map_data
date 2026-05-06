@@ -354,14 +354,14 @@ def get_way(way_id):
     del_nids = get_deleted_node_ids(store, way_id)
     if del_nids:
         way = rebuild_way_without_nodes(
-            way, del_nids, zn, zl, getattr(md, "nodes_cache", {})
+            way, del_nids, zn, zl, getattr(md, "nodes_cache", {}), category=category
         )
         if way is None:
             abort(404, f"Way {way_id} reduced to nothing by node deletions")
 
     pos_overrides = get_node_position_overrides(store, way_id)
     if pos_overrides:
-        way = apply_node_position_overrides(way, pos_overrides, zn, zl, getattr(md, "nodes_cache", {})) or way
+        way = apply_node_position_overrides(way, pos_overrides, zn, zl, getattr(md, "nodes_cache", {}), category=category) or way
 
     geom = geom_to_geojson(way.line, zn, zl)
     if geom is None:
