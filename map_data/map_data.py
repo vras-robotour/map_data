@@ -18,7 +18,7 @@ from map_data.serialization import save_mapdata, load_mapdata
 
 logger = logging.getLogger(__name__)
 
-OSM_RECTANGLE_MARGIN = 100  # meters, expansion margin for OSM bounding box query
+OSM_MARGIN = 100  # meters, expansion margin for OSM bounding box query
 RESERVE = 50  # meters, safety margin added to waypoint bounds
 
 
@@ -75,20 +75,20 @@ class MapData:
         else:
             self.robot_position_first_point = False
 
-        self.max_x = float(np.max(self.waypoints[:, 0]) + RESERVE)
-        self.min_x = float(np.min(self.waypoints[:, 0]) - RESERVE)
-        self.max_y = float(np.max(self.waypoints[:, 1]) + RESERVE)
-        self.min_y = float(np.min(self.waypoints[:, 1]) - RESERVE)
+        self.max_x = float(np.max(self.waypoints[:, 0]) + RESERVE + OSM_MARGIN)
+        self.min_x = float(np.min(self.waypoints[:, 0]) - (RESERVE + OSM_MARGIN))
+        self.max_y = float(np.max(self.waypoints[:, 1]) + RESERVE + OSM_MARGIN)
+        self.min_y = float(np.min(self.waypoints[:, 1]) - (RESERVE + OSM_MARGIN))
 
         self.max_lat, self.max_long = utm.to_latlon(
-            self.max_x + OSM_RECTANGLE_MARGIN,
-            self.max_y + OSM_RECTANGLE_MARGIN,
+            self.max_x,
+            self.max_y,
             self.zone_number,
             self.zone_letter,
         )
         self.min_lat, self.min_long = utm.to_latlon(
-            self.min_x - OSM_RECTANGLE_MARGIN,
-            self.min_y - OSM_RECTANGLE_MARGIN,
+            self.min_x,
+            self.min_y,
             self.zone_number,
             self.zone_letter,
         )
@@ -206,7 +206,7 @@ class MapData:
 
         for way in footways:
             for i, node_id in enumerate(way.nodes):
-                is_endpoint = (i == 0 or i == len(way.nodes) - 1)
+                is_endpoint = i == 0 or i == len(way.nodes) - 1
                 if node_id not in node_usage:
                     node_usage[node_id] = []
                 node_usage[node_id].append(is_endpoint)

@@ -10,7 +10,7 @@ from rclpy.qos import QoSProfile, QoSDurabilityPolicy
 
 import numpy as np
 import pickle
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple
 
 import map_data.map_data as md
 
@@ -23,16 +23,14 @@ class OSMIntersections(Node):
         self.utm_to_local_param = self.declare_parameter(
             "utm_to_local", rclpy.Parameter.Type.DOUBLE_ARRAY
         ).value
-        self.mapdata_file = self.declare_parameter(
-            "mapdata_file", ""
-        ).value
-        self.gpx_file = self.declare_parameter(
-            "gpx_file", ""
-        ).value
+        self.mapdata_file = self.declare_parameter("mapdata_file", "").value
+        self.gpx_file = self.declare_parameter("gpx_file", "").value
 
         # Handle empty strings as None for consistency
-        if self.mapdata_file == "": self.mapdata_file = None
-        if self.gpx_file == "": self.gpx_file = None
+        if self.mapdata_file == "":
+            self.mapdata_file = None
+        if self.gpx_file == "":
+            self.gpx_file = None
         self.save_mapdata: bool = self.declare_parameter("save_mapdata", False).value
         self.grid_max: List[float] = self.declare_parameter(
             "grid_max", [250.0, 250.0]
@@ -43,7 +41,9 @@ class OSMIntersections(Node):
 
         qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self.pub_poses = self.create_publisher(PoseArray, "intersections", qos)
-        self.pub_markers = self.create_publisher(MarkerArray, "intersection_markers", qos)
+        self.pub_markers = self.create_publisher(
+            MarkerArray, "intersection_markers", qos
+        )
 
         self.tf = Buffer()
         self.tf_sub = TransformListener(self.tf, self)
@@ -51,8 +51,7 @@ class OSMIntersections(Node):
         self.utm_to_local: Optional[np.ndarray] = None
 
         if self.mapdata_file is not None:
-            with open(self.mapdata_file, "rb") as fh:
-                self.map_data: md.MapData = pickle.load(fh)
+            self.map_data = md.MapData.load(self.mapdata_file)
         elif self.gpx_file is not None:
             self.map_data = md.MapData(self.gpx_file)
             self.map_data.run_all(self.save_mapdata)
@@ -96,7 +95,9 @@ class OSMIntersections(Node):
                     rclpy.duration.Duration(seconds=15.0),
                 )
                 self.utm_to_local = numpify(utm_to_local.transform)
-                self.get_logger().info(f"Got UTM to local transform: {self.utm_to_local}")
+                self.get_logger().info(
+                    f"Got UTM to local transform: {self.utm_to_local}"
+                )
                 break
             except Exception as e:
                 self.get_logger().warn(f"Failed to get UTM to local transform: {e}")
@@ -113,9 +114,13 @@ class OSMIntersections(Node):
         for way in crossroads:
             # way.line is a buffered Point (Polygon)
             centroid = way.line.centroid
-            points_to_transform[way.id] = np.array([centroid.x, centroid.y, 0.0]).reshape(3, 1)
+            points_to_transform[way.id] = np.array(
+                [centroid.x, centroid.y, 0.0]
+            ).reshape(3, 1)
 
-        transformed_points = transform_points(points_to_transform, self.utm_to_local, 0.0)
+        transformed_points = transform_points(
+            points_to_transform, self.utm_to_local, 0.0
+        )
 
         pose_array = PoseArray()
         pose_array.header.frame_id = self.local_frame

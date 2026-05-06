@@ -165,12 +165,12 @@ def generate_launch_description():
             {
                 "utm_frame": "utm",
                 "local_frame": "local_utm",
-                # "mapdata_file": PathJoinSubstitution(
-                #     [
-                #         LaunchConfiguration("mapdata_path"),
-                #         LaunchConfiguration("mapdata_file"),
-                #     ]
-                # ),
+                "mapdata_file": PathJoinSubstitution(
+                    [
+                        LaunchConfiguration("mapdata_path"),
+                        LaunchConfiguration("mapdata_file"),
+                    ]
+                ),
                 "gpx_file": PathJoinSubstitution(
                     [
                         LaunchConfiguration("mapdata_path"),
@@ -178,8 +178,11 @@ def generate_launch_description():
                     ]
                 ),
                 "save_mapdata": False,
-                "grid_max": [500.0, 500.0],
-                "grid_min": [-500.0, -500.0],
+                "max_path_dist": 2.5,
+                "grid_res": 0.4,
+                "grid_max": [0.0, 0.0],
+                "grid_min": [0.0, 0.0],
+                "auto_utm": True,
             }
         ],
     )
