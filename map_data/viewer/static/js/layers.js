@@ -301,6 +301,7 @@ async function _reloadWay(wayId) {
   }
 
   affectedCats.forEach(c => renderSubtypeFilters(c));
+  _enforceLayerOrder();
   clearNodes();
   await _refreshAnnotationsState();
   if (!_reselectFeature(wayId)) {

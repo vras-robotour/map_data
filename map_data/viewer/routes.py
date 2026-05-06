@@ -305,6 +305,13 @@ def get_way_nodes():
                 lat, lon = geom_latlon[i]
                 nodes.append({"id": nid, "lat": lat, "lon": lon, "tags": {}})
 
+    # For ways with no nodes (e.g. individual barrier nodes), synthesize a centroid node
+    # so the object can be selected and dragged in edit mode.
+    if not nodes:
+        centroid = way.line.centroid
+        lat, lon = utm.to_latlon(centroid.x, centroid.y, zn, zl)
+        nodes = [{"id": wid, "lat": lat, "lon": lon, "tags": {}}]
+
     store = load_annotations(_annotation_path(filename))
     deleted_node_ids = get_deleted_node_ids(store, wid)
     if deleted_node_ids:
@@ -650,6 +657,9 @@ def export_mapdata():
         )
 
     ann_id = -1
+    node_id = -1
+    if not hasattr(md, "nodes_cache") or md.nodes_cache is None:
+        md.nodes_cache = {}
     for ann in store.get("annotations", []):
         geom = geojson_geom_to_utm(ann["geometry"], zn, zl)
         if geom is None:
@@ -672,6 +682,15 @@ def export_mapdata():
             for k, v in props.items():
                 if k not in ("highway", "width"):
                     w.tags[k] = str(v)
+            if geom.geom_type == "LineString":
+                width_m = float(props.get("width", 1.5))
+                for e_coord, n_coord in geom.coords:
+                    lat, lon = utm.to_latlon(e_coord, n_coord, zn, zl)
+                    md.nodes_cache[node_id] = {"lat": lat, "lon": lon, "tags": {}}
+                    w.nodes.append(node_id)
+                    node_id -= 1
+                w.line = geom.buffer(width_m / 2)
+                w.is_area = True
             (md.roads_list if w.is_road() else md.footways_list).append(w)
         else:
             w.tags = {"barrier": props.get("barrier", "wall")}

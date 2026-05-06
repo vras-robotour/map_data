@@ -8,6 +8,7 @@ from shapely.geometry import (
     Polygon as _SPoly,
     MultiPolygon as _SMPoly,
 )
+from shapely.affinity import translate as _affine_translate
 
 # ------------------------------------------------------------------
 # GeoJSON conversion helpers
@@ -146,6 +147,18 @@ def apply_node_position_overrides(way, overrides, zone_number, zone_letter, node
     geom = way.line
     node_ids = [getattr(n, "id", n) for n in way.nodes]
     if not node_ids:
+        # No OSM nodes (e.g. individual barrier node): translate geometry by centroid shift.
+        if overrides:
+            first_ov = next(iter(overrides.values()))
+            e_new, n_new, _, _ = utm.from_latlon(
+                float(first_ov["lat"]), float(first_ov["lon"]),
+                force_zone_number=zone_number,
+                force_zone_letter=zone_letter,
+            )
+            centroid = geom.centroid
+            w = copy.copy(way)
+            w.line = _affine_translate(geom, xoff=e_new - centroid.x, yoff=n_new - centroid.y)
+            return w
         return way
 
     nc = nodes_cache or {}
@@ -203,13 +216,33 @@ def apply_node_position_overrides(way, overrides, zone_number, zone_letter, node
                 except Exception:
                     return way
             else:
-                # Closed linear feature (roundabout, loop road): keep as closed LineString
+                # Closed road/footway: flat Polygon if area=yes, else re-buffer the loop
+                is_area_way = (getattr(way, 'tags', None) or {}).get('area') == 'yes'
                 if utm_coords[0] != utm_coords[-1]:
                     utm_coords.append(utm_coords[0])
-                try:
-                    w.line = _SLS(utm_coords)
-                except Exception:
-                    return way
+                if is_area_way:
+                    if len(utm_coords) < 4:
+                        return way
+                    try:
+                        w.line = _SPoly(utm_coords)
+                    except Exception:
+                        return way
+                else:
+                    ls = _SLS(utm_coords)
+                    p = geom.length
+                    a = geom.area
+                    disc = p * p - 4 * np.pi * a
+                    r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else (a / p if p else 0)
+                    try:
+                        w.line = ls.buffer(max(r, 0.01))
+                    except Exception:
+                        if len(utm_coords) >= 4:
+                            try:
+                                w.line = _SPoly(utm_coords)
+                            except Exception:
+                                return way
+                        else:
+                            return way
         else:
             # Open way stored as buffered polygon: re-buffer the centerline
             ls = _SLS(utm_coords)
@@ -322,13 +355,27 @@ def rebuild_way_without_nodes(
                     except Exception:
                         return None
                 else:
-                    # Closed linear feature (roundabout, loop road): keep as closed LineString
+                    # Closed road/footway: flat Polygon if area=yes, else re-buffer the loop
+                    is_area_way = (getattr(way, 'tags', None) or {}).get('area') == 'yes'
                     if utm_coords[0] != utm_coords[-1]:
                         utm_coords.append(utm_coords[0])
-                    try:
-                        w.line = _SLS(utm_coords)
-                    except Exception:
-                        return None
+                    if is_area_way:
+                        if len(utm_coords) < 4:
+                            return None
+                        try:
+                            w.line = _SPoly(utm_coords)
+                        except Exception:
+                            return None
+                    else:
+                        ls = _SLS(utm_coords)
+                        p = geom.length
+                        a = geom.area
+                        disc = p * p - 4 * np.pi * a
+                        r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else a / p
+                        try:
+                            w.line = ls.buffer(r)
+                        except Exception:
+                            w.line = ls
             else:
                 # Open way stored as buffered polygon: re-buffer the centerline
                 ls = _SLS(utm_coords)
