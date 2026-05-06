@@ -8,6 +8,19 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 drawnItems.addTo(map);
 
+// Restore the canonical draw order after any layer is toggled back on.
+// bringToFront() on a GeoJSON/FeatureGroup re-queues all its sub-layers at
+// the end of the canvas renderer's draw list (later = drawn on top).
+// Iterating in the desired bottom→top order leaves each successive layer
+// on top of the previous one, reproducing the initial load order.
+function _enforceLayerOrder() {
+  ['road', 'footway', 'barrier', 'crossroad', 'waypoint'].forEach(cat => {
+    const layer = geoLayers[cat];
+    if (layer && map.hasLayer(layer)) layer.bringToFront();
+  });
+  if (map.hasLayer(drawnItems)) drawnItems.bringToFront();
+}
+
 // ── Mode switching ────────────────────────────────────────────────────────────
 function setMode(newMode, commit = true) {
   const prev = currentMode;
@@ -150,12 +163,14 @@ async function initApp() {
   document.querySelectorAll('[data-layer]').forEach(cb => {
     cb.addEventListener('change', () => {
       if (cb.dataset.layer === 'annotation') {
-        cb.checked ? drawnItems.addTo(map) : map.removeLayer(drawnItems);
+        if (cb.checked) { drawnItems.addTo(map); _enforceLayerOrder(); }
+        else map.removeLayer(drawnItems);
         return;
       }
       const layer = geoLayers[cb.dataset.layer];
       if (!layer) return;
-      cb.checked ? layer.addTo(map) : map.removeLayer(layer);
+      if (cb.checked) { layer.addTo(map); _enforceLayerOrder(); }
+      else map.removeLayer(layer);
     });
   });
 
