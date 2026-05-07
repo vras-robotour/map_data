@@ -18,7 +18,7 @@ from flask import (
     current_app,
 )
 from map_data.map_data import MapData
-from map_data.serialization import map_data_to_dict
+from map_data.utils.serialization import map_data_to_dict
 from map_data.way import Way, FOOTWAY_VALUES
 from .cache import load_mapdata_cached
 from .helpers import (

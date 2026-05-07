@@ -7,14 +7,14 @@ from gpxpy import parse as gpxparse
 from typing import Optional, Dict, List, Any, Tuple
 
 from map_data.way import Way
-from map_data.overpass import OverpassClient
-from map_data.parsing import (
+from map_data.utils.overpass import OverpassClient
+from map_data.utils.parsing import (
     parse_osm_ways,
     parse_osm_rels,
     parse_osm_nodes,
     separate_ways,
 )
-from map_data.serialization import save_mapdata, load_mapdata
+from map_data.utils.serialization import save_mapdata, load_mapdata
 
 logger = logging.getLogger(__name__)
 

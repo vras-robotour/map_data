@@ -1,8 +1,8 @@
 import pytest
 from shapely.geometry import LineString
 from map_data.way import Way
-from map_data.serialization import way_to_dict, way_from_dict
-from map_data.parsing import combine_ways
+from map_data.utils.serialization import way_to_dict, way_from_dict
+from map_data.utils.parsing import combine_ways
 
 
 def test_way_classification():

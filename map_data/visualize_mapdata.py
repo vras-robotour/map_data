@@ -5,7 +5,7 @@ import argparse
 import logging
 import matplotlib.pyplot as plt
 from ament_index_python.resources import get_resource
-from map_data.vis_utils import plot_map, save_map, plot_footways_plan
+from map_data.utils.vis_utils import plot_map, save_map, plot_footways_plan
 
 # Configure logging
 logging.basicConfig(

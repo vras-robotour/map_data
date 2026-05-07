@@ -7,7 +7,7 @@ from shapely.geometry import Point, MultiPoint
 from shapely.geometry import Polygon
 from shapely.geometry.base import BaseGeometry
 
-from map_data.points_to_graph_points import get_point_line
+from map_data.utils.points_to_graph_points import get_point_line
 
 FOOTWAY_VALUES = frozenset(
     [

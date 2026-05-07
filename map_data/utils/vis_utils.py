@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from PIL import Image
 
-from map_data.background_map import get_background_image
+from map_data.utils.background_map import get_background_image
 from map_data.way import Way
 
 
