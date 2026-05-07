@@ -1,12 +1,14 @@
-from typing import List, Optional, Any
-import utm
-import numpy as np
+import os
+from typing import Any, List, Optional
+
 import matplotlib.pyplot as plt
+import numpy as np
+import utm
 from matplotlib.axes import Axes
 from PIL import Image
 
 from map_data.utils.background_map import get_background_image
-from map_data.way import Way
+from map_data.utils.way import Way
 
 
 def plot_background_map(ax: Axes, image: Image.Image, coords_data: Any):

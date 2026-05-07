@@ -1,10 +1,12 @@
 import json
-import pickle
 import logging
-from typing import Dict, Any
+import pickle
+from typing import Any, Dict
+
 import numpy as np
 from shapely import wkt
-from map_data.way import Way
+
+from map_data.utils.way import Way
 
 logger = logging.getLogger(__name__)
 

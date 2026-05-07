@@ -1,6 +1,7 @@
-import numpy as np
-from shapely.geometry import Point, MultiPoint
 from typing import Tuple
+
+import numpy as np
+from shapely.geometry import MultiPoint, Point
 
 
 def get_point_line(

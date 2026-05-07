@@ -1,11 +1,10 @@
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Any
+from typing import Any, Dict, List, Optional
 
 import numpy as np
-from shapely.prepared import prep
-from shapely.geometry import Point, MultiPoint
-from shapely.geometry import Polygon
+from shapely.geometry import MultiPoint, Point, Polygon
 from shapely.geometry.base import BaseGeometry
+from shapely.prepared import prep
 
 from map_data.utils.points_to_graph_points import get_point_line
 

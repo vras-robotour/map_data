@@ -1,11 +1,13 @@
 import logging
+from typing import Any, Dict, List, Set
+
 import numpy as np
-import utm
-from tqdm import tqdm
 import shapely.geometry as geometry
+import utm
 from shapely.ops import linemerge
-from typing import Dict, List, Set, Any
-from map_data.way import Way
+from tqdm import tqdm
+
+from map_data.utils.way import Way
 
 logger = logging.getLogger(__name__)
 

@@ -1,9 +1,10 @@
 import argparse
+import logging
 import os
 
-import logging
 from flask import Flask
 from werkzeug.routing import IntegerConverter
+
 from .routes import bp
 
 

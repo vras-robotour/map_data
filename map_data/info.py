@@ -1,6 +1,7 @@
 import argparse
-import os
 import logging
+import os
+
 from map_data.map_data import MapData
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -25,7 +26,6 @@ def get_stats(path: str):
     source = f"File: {md.coords_file}" if md.coords_file else "Array"
     print(f"Source:      {source}")
     print(f"UTM Zone:    {md.zone_number}{md.zone_letter}")
-    print(f"Waypoints:   {len(md.waypoints)}")
 
     area = (md.max_x - md.min_x) * (md.max_y - md.min_y)
     print(f"Bounds X:    [{md.min_x:.1f}, {md.max_x:.1f}]")

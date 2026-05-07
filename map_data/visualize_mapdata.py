@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 
-import os
 import argparse
 import logging
+import os
+
 import matplotlib.pyplot as plt
+
 from ament_index_python.resources import get_resource
-from map_data.utils.vis_utils import plot_map, save_map, plot_footways_plan
+
+from map_data.utils.vis_utils import plot_footways_plan, plot_map, save_map
 
 # Configure logging
 logging.basicConfig(

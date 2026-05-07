@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
-import os
 import argparse
 import logging
+import os
+
 from ament_index_python.resources import get_resource
+
 import map_data.map_data as md
 
 # Configure logging
@@ -25,7 +27,9 @@ def process_map_data(file_name, download):
             data_path = os.path.join(package_path, "share", "map_data", "data")
             full_path = os.path.join(data_path, file_name)
         except LookupError:
-            logger.error(f"File '{file_name}' not found and package 'map_data' not found")
+            logger.error(
+                f"File '{file_name}' not found and package 'map_data' not found"
+            )
             raise SystemExit(1)
 
     if not os.path.exists(full_path) and not download:

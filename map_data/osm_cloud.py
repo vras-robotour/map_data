@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 
-import rclpy
-from rclpy.node import Node
-from ros2_numpy import msgify, numpify
-from sensor_msgs.msg import PointCloud2
-from geometry_msgs.msg import TransformStamped, PoseArray, Pose
-from visualization_msgs.msg import MarkerArray, Marker
-from tf2_ros import Buffer, TransformListener, StaticTransformBroadcaster
-from rclpy.qos import QoSProfile, QoSDurabilityPolicy
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from numpy.lib.recfunctions import unstructured_to_structured
 from scipy.spatial import cKDTree
-from typing import Dict, List, Optional, Tuple, Any
 
+import rclpy
+from geometry_msgs.msg import Pose, PoseArray, TransformStamped
 from rcl_interfaces.msg import SetParametersResult
+from rclpy.node import Node
+from rclpy.qos import QoSDurabilityPolicy, QoSProfile
+from ros2_numpy import msgify, numpify
+from sensor_msgs.msg import PointCloud2
+from tf2_ros import Buffer, StaticTransformBroadcaster, TransformListener
+from visualization_msgs.msg import Marker, MarkerArray
+
 import map_data.map_data as md
 
 

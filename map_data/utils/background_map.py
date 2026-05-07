@@ -1,8 +1,9 @@
 import os
 from typing import List
+
 import requests
-from PIL import Image
 from geopy.distance import geodesic
+from PIL import Image
 
 
 URL_PREF = "https://maps.geoapify.com/v1/staticmap?style=osm-carto"

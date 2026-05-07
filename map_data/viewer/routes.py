@@ -1,38 +1,41 @@
+import copy
+import io
+import json
+import logging
 import os
 import re
-import io
-import copy
-import json
-import uuid
 import time
-import logging
-import utm
+import uuid
+
 import numpy as np
+import utm
 from flask import (
     Blueprint,
-    jsonify,
-    request,
     abort,
-    send_file,
-    render_template,
     current_app,
+    jsonify,
+    render_template,
+    request,
+    send_file,
 )
+
 from map_data.map_data import MapData
 from map_data.utils.serialization import map_data_to_dict
-from map_data.way import Way, FOOTWAY_VALUES
+from map_data.utils.way import FOOTWAY_VALUES, Way
+
 from .cache import load_mapdata_cached
 from .helpers import (
-    mapdata_to_geojson,
-    load_annotations,
-    save_annotations,
-    get_deleted_way_ids,
-    get_deleted_node_ids,
-    get_node_position_overrides,
     apply_node_position_overrides,
-    rebuild_way_without_nodes,
     geom_to_geojson,
+    get_deleted_node_ids,
+    get_deleted_way_ids,
+    get_node_position_overrides,
     geojson_geom_to_utm,
+    load_annotations,
+    mapdata_to_geojson,
     migrate_change_log,
+    rebuild_way_without_nodes,
+    save_annotations,
 )
 
 bp = Blueprint("viewer", __name__)

@@ -1,14 +1,15 @@
-import os
 import copy
 import json
-import utm
+import os
+
 import numpy as np
+import utm
+from shapely.affinity import translate as _affine_translate
 from shapely.geometry import (
     LineString as _SLS,
-    Polygon as _SPoly,
     MultiPolygon as _SMPoly,
+    Polygon as _SPoly,
 )
-from shapely.affinity import translate as _affine_translate
 
 # ------------------------------------------------------------------
 # GeoJSON conversion helpers
