@@ -4,8 +4,9 @@ import rclpy
 from rclpy.node import Node
 from ros2_numpy import msgify, numpify
 from sensor_msgs.msg import PointCloud2
+from geometry_msgs.msg import TransformStamped, PoseArray, Pose
+from visualization_msgs.msg import MarkerArray, Marker
 from tf2_ros import Buffer, TransformListener, StaticTransformBroadcaster
-from geometry_msgs.msg import TransformStamped
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy
 
 import numpy as np
@@ -44,12 +45,21 @@ class OSMCloud(Node):
             "grid_min", [0.0, 0.0]
         ).value
         self.auto_utm: bool = self.declare_parameter("auto_utm", False).value
+        self.publish_intersections: bool = self.declare_parameter(
+            "publish_intersections", False
+        ).value
 
         # Register parameter callback
         self.add_on_set_parameters_callback(self.parameter_callback)
 
         qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self.pub_grid = self.create_publisher(PointCloud2, "grid", qos)
+
+        if self.publish_intersections:
+            self.pub_poses = self.create_publisher(PoseArray, "intersections", qos)
+            self.pub_markers = self.create_publisher(
+                MarkerArray, "intersection_markers", qos
+            )
 
         self.tf = Buffer()
         self.tf_sub = TransformListener(self.tf, self)
@@ -124,11 +134,15 @@ class OSMCloud(Node):
             )
 
         self.grid_cloud: PointCloud2 = self.get_cloud()
+        if self.publish_intersections:
+            self.poses, self.markers = self.get_intersections()
+
         self.create_timer(10.0, self.publish_cb)
         self.get_logger().info("Initialized OSM cloud")
 
     def parameter_callback(self, params: List[rclpy.Parameter]) -> SetParametersResult:
         rebuild_cloud = False
+        rebuild_intersections = False
         for param in params:
             if param.name == "max_path_dist":
                 self.max_path_dist = param.value
@@ -142,9 +156,24 @@ class OSMCloud(Node):
             elif param.name == "grid_max":
                 self.grid_max = param.value
                 rebuild_cloud = True
+                rebuild_intersections = True
             elif param.name == "grid_min":
                 self.grid_min = param.value
                 rebuild_cloud = True
+                rebuild_intersections = True
+            elif param.name == "publish_intersections":
+                self.publish_intersections = param.value
+                if self.publish_intersections and not hasattr(self, "pub_poses"):
+                    qos = QoSProfile(
+                        depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL
+                    )
+                    self.pub_poses = self.create_publisher(
+                        PoseArray, "intersections", qos
+                    )
+                    self.pub_markers = self.create_publisher(
+                        MarkerArray, "intersection_markers", qos
+                    )
+                rebuild_intersections = True
 
         if rebuild_cloud:
             self.get_logger().info("Rebuilding grid cloud due to parameter change")
@@ -154,15 +183,32 @@ class OSMCloud(Node):
                 self.get_logger().error(f"Failed to rebuild grid cloud: {e}")
                 return SetParametersResult(successful=False, reason=str(e))
 
+        if rebuild_intersections and self.publish_intersections:
+            self.get_logger().info("Rebuilding intersections due to parameter change")
+            try:
+                self.poses, self.markers = self.get_intersections()
+            except Exception as e:
+                self.get_logger().error(f"Failed to rebuild intersections: {e}")
+                return SetParametersResult(successful=False, reason=str(e))
+
         return SetParametersResult(successful=True)
 
     def publish_cb(self) -> None:
         """
-        Timer callback to publish the grid cloud.
+        Timer callback to publish the grid cloud and intersections.
         """
-        self.grid_cloud.header.stamp = self.get_clock().now().to_msg()
+        now = self.get_clock().now().to_msg()
+        self.grid_cloud.header.stamp = now
         self.pub_grid.publish(self.grid_cloud)
-        self.get_logger().info("Published grid cloud")
+
+        if self.publish_intersections:
+            self.poses.header.stamp = now
+            for marker in self.markers.markers:
+                marker.header.stamp = now
+            self.pub_poses.publish(self.poses)
+            self.pub_markers.publish(self.markers)
+
+        self.get_logger().info("Published OSM data")
 
     def get_utm_to_local(self) -> None:
         """
@@ -223,6 +269,68 @@ class OSMCloud(Node):
         cloud.header.stamp = self.get_clock().now().to_msg()
 
         return cloud
+
+    def get_intersections(self) -> Tuple[PoseArray, MarkerArray]:
+        """
+        Create PoseArray and MarkerArray from intersections.
+        """
+        ways = self.map_data.get_ways()
+        crossroads = ways.get("crossroads", [])
+
+        points_to_transform = {}
+        for way in crossroads:
+            # way.line is a buffered Point (Polygon)
+            centroid = way.line.centroid
+            points_to_transform[way.id] = np.array(
+                [centroid.x, centroid.y, 0.0]
+            ).reshape(3, 1)
+
+        transformed_points = transform_points(
+            points_to_transform, self.utm_to_local, 0.0
+        )
+
+        pose_array = PoseArray()
+        pose_array.header.frame_id = self.local_frame
+
+        marker_array = MarkerArray()
+
+        marker_id = 0
+        for pid, point in transformed_points.items():
+            p = point.ravel()
+
+            # Spatial filtering based on local frame coordinates
+            if not (
+                self.grid_min[0] <= p[0] <= self.grid_max[0]
+                and self.grid_min[1] <= p[1] <= self.grid_max[1]
+            ):
+                continue
+
+            pose = Pose()
+            pose.position.x = float(p[0])
+            pose.position.y = float(p[1])
+            pose.position.z = 0.0
+            pose_array.poses.append(pose)
+
+            marker = Marker()
+            marker.header.frame_id = self.local_frame
+            marker.ns = "intersections"
+            marker.id = marker_id
+            marker_id += 1
+            marker.type = Marker.SPHERE
+            marker.action = Marker.ADD
+            marker.pose.position.x = float(p[0])
+            marker.pose.position.y = float(p[1])
+            marker.pose.position.z = 0.0
+            marker.scale.x = 2.0
+            marker.scale.y = 2.0
+            marker.scale.z = 2.0
+            marker.color.a = 1.0
+            marker.color.r = 1.0
+            marker.color.g = 0.0
+            marker.color.b = 1.0
+            marker_array.markers.append(marker)
+
+        return pose_array, marker_array
 
 
 def create_grid(

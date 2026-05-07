@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import launch
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
@@ -69,6 +68,7 @@ def generate_launch_description():
                 "grid_max": [0.0, 0.0],
                 "grid_min": [0.0, 0.0],
                 "auto_utm": True,
+                "publish_intersections": True,
             }
         ],
     )
@@ -153,40 +153,6 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration("publish_static_tf")),
     )
 
-    # Define the osm_intersections node
-    osm_intersections_node = Node(
-        package="map_data",
-        executable="osm_intersections",
-        name="osm_intersections",
-        output="screen",
-        respawn=True,
-        respawn_delay=1.0,
-        parameters=[
-            {
-                "utm_frame": "utm",
-                "local_frame": "local_utm",
-                "mapdata_file": PathJoinSubstitution(
-                    [
-                        LaunchConfiguration("mapdata_path"),
-                        LaunchConfiguration("mapdata_file"),
-                    ]
-                ),
-                "gpx_file": PathJoinSubstitution(
-                    [
-                        LaunchConfiguration("mapdata_path"),
-                        LaunchConfiguration("gpx_file"),
-                    ]
-                ),
-                "save_mapdata": False,
-                "max_path_dist": 2.5,
-                "grid_res": 0.4,
-                "grid_max": [0.0, 0.0],
-                "grid_min": [0.0, 0.0],
-                "auto_utm": True,
-            }
-        ],
-    )
-
     return LaunchDescription(
         [
             mapdata_path,
@@ -195,7 +161,6 @@ def generate_launch_description():
             grid_topic,
             publish_static_tf,
             osm_cloud_node,
-            osm_intersections_node,
             local_utm_node,
             map_node,
             base_link_node,
