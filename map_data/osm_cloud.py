@@ -67,6 +67,8 @@ class OSMCloud(Node):
         self.tf_static_pub = StaticTransformBroadcaster(self)
 
         self.utm_to_local: Optional[np.ndarray] = None
+        self.poses: Optional[PoseArray] = None
+        self.markers: Optional[MarkerArray] = None
 
         if self.mapdata_file is not None:
             self.map_data = md.MapData.load(self.mapdata_file)
@@ -202,7 +204,11 @@ class OSMCloud(Node):
         self.grid_cloud.header.stamp = now
         self.pub_grid.publish(self.grid_cloud)
 
-        if self.publish_intersections:
+        if (
+            self.publish_intersections
+            and self.poses is not None
+            and self.markers is not None
+        ):
             self.poses.header.stamp = now
             for marker in self.markers.markers:
                 marker.header.stamp = now
