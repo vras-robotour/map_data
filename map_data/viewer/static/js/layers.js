@@ -150,6 +150,11 @@ async function loadMapData(filename, { preserveView = false } = {}) {
               currentClickedFeature = feature;
               layer.setStyle(HIGHLIGHT_STYLES[cat]);
               loadNodesForEditing(feature, layer);
+            } else if (currentMode === 'delete' && cat !== 'crossroad') {
+              layer._osmCat         = cat;
+              currentClickedLayer   = layer;
+              currentClickedFeature = feature;
+              deleteCurrentWay();
             }
           });
         },
@@ -219,11 +224,27 @@ async function loadMapData(filename, { preserveView = false } = {}) {
     }));
     hiddenWays   = _loadHiddenMeta;
     hiddenWayIds = _loadHiddenIds;
-    changeLog = [
-      ...deletedWays.map(d => ({ type: 'way', ...d })),
-      ...deletedNodes.map(d => ({ type: 'node', ...d })),
-      ...tagOverrides.map(d => ({ type: 'tag', ...d })),
-    ];
+    const rawChangeLog = (annData.change_log && annData.change_log.length > 0) ? annData.change_log : null;
+    if (rawChangeLog) {
+      const wayMap = new Map(deletedWays.map(d => [d.id, d]));
+      const tagMap = new Map(tagOverrides.map(d => [d.id, d]));
+      const sorted = [...rawChangeLog].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+      changeLog = sorted.flatMap(e => {
+        if (e.type === 'way') { const d = wayMap.get(e.id); return d ? [{ type: 'way', ts: e.ts, ...d }] : []; }
+        if (e.type === 'tag') { const d = tagMap.get(e.id); return d ? [{ type: 'tag', ts: e.ts, ...d }] : []; }
+        if (e.type === 'node') {
+          const d = deletedNodes.find(n => n.way_id === e.way_id && n.node_id === e.node_id);
+          return d ? [{ type: 'node', ts: e.ts, ...d }] : [];
+        }
+        return [];
+      });
+    } else {
+      changeLog = [
+        ...deletedWays.map(d => ({ type: 'way', ...d })),
+        ...deletedNodes.map(d => ({ type: 'node', ...d })),
+        ...tagOverrides.map(d => ({ type: 'tag', ...d })),
+      ];
+    }
     renderAnnotationLayer();
     renderAnnotationList();
     renderChangesPanel();
@@ -291,6 +312,11 @@ async function _reloadWay(wayId) {
             currentClickedFeature  = feature;
             newLayer.setStyle(HIGHLIGHT_STYLES[newCat]);
             loadNodesForEditing(feature, newLayer);
+          } else if (currentMode === 'delete' && newCat !== 'crossroad') {
+            newLayer._osmCat      = newCat;
+            currentClickedLayer   = newLayer;
+            currentClickedFeature = feature;
+            deleteCurrentWay();
           }
         });
         if (subtypeFilters[newCat][st] !== false && !hiddenWayIds.has(feature.properties.id))

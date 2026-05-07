@@ -127,15 +127,81 @@ def get_deleted_node_ids(store, way_id):
     return {d["node_id"] for d in dn if d["way_id"] == way_id}
 
 
+_MIGRATION_VERSION = "v2"
+
+
+def migrate_change_log(store):
+    """Ensure change_log covers all existing changes with proportional way/node interleaving.
+
+    On first call (or when migration is outdated): entries without a "ts" key are
+    considered legacy and are replaced by a fresh proportionally-interleaved block.
+    Entries that carry a "ts" (recorded by user actions) are preserved as-is.
+    Idempotent once migration_version matches.
+    """
+    if store.get("change_log_migration") != _MIGRATION_VERSION:
+        # Drop legacy entries (no "ts") added by a previous grouped-order migration;
+        # keep user-action entries that already have a timestamp.
+        cl_kept = [e for e in store.get("change_log", []) if "ts" in e]
+        store["change_log"] = cl_kept
+
+    cl = store.setdefault("change_log", [])
+    tracked_ways = {e["id"] for e in cl if e.get("type") == "way"}
+    tracked_tags = {e["id"] for e in cl if e.get("type") == "tag"}
+    tracked_nodes = {(e["way_id"], e["node_id"]) for e in cl if e.get("type") == "node"}
+
+    untracked_ways = []
+    for d in store.get("deleted_ways", []):
+        wid = d["id"] if isinstance(d, dict) else d
+        if wid not in tracked_ways:
+            untracked_ways.append({"type": "way", "id": wid})
+
+    dn = store.get("deleted_nodes", [])
+    if isinstance(dn, dict):
+        dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
+    untracked_nodes = []
+    for d in dn:
+        if isinstance(d, dict):
+            key = (d["way_id"], d["node_id"])
+            if key not in tracked_nodes:
+                untracked_nodes.append(
+                    {"type": "node", "way_id": d["way_id"], "node_id": d["node_id"]}
+                )
+
+    untracked_tags = []
+    for wid_str in store.get("tag_overrides", {}):
+        wid = int(wid_str)
+        if wid not in tracked_tags:
+            untracked_tags.append({"type": "tag", "id": wid})
+
+    if untracked_ways or untracked_nodes or untracked_tags:
+        nw, nn = len(untracked_ways), len(untracked_nodes)
+        if nw == 0 or nn == 0:
+            interleaved = untracked_ways + untracked_nodes
+        else:
+            # Spread ways and nodes uniformly using normalised midpoint positions.
+            items = [((i + 0.5) / nw, e) for i, e in enumerate(untracked_ways)] + [
+                ((j + 0.5) / nn, e) for j, e in enumerate(untracked_nodes)
+            ]
+            items.sort(key=lambda x: x[0])
+            interleaved = [e for _, e in items]
+        store["change_log"] = interleaved + untracked_tags + cl
+
+    store["change_log_migration"] = _MIGRATION_VERSION
+
+
 def get_node_position_overrides(store, way_id):
     """Return {node_id (int): {lat, lon}} for position overrides on a given way."""
     return {
         int(k): v
-        for k, v in store.get("node_position_overrides", {}).get(str(way_id), {}).items()
+        for k, v in store.get("node_position_overrides", {})
+        .get(str(way_id), {})
+        .items()
     }
 
 
-def apply_node_position_overrides(way, overrides, zone_number, zone_letter, nodes_cache=None, category=None):
+def apply_node_position_overrides(
+    way, overrides, zone_number, zone_letter, nodes_cache=None, category=None
+):
     """Return a copy of way with geometry updated from node position overrides.
 
     overrides: {node_id (int): {"lat": float, "lon": float}}
@@ -151,13 +217,16 @@ def apply_node_position_overrides(way, overrides, zone_number, zone_letter, node
         if overrides:
             first_ov = next(iter(overrides.values()))
             e_new, n_new, _, _ = utm.from_latlon(
-                float(first_ov["lat"]), float(first_ov["lon"]),
+                float(first_ov["lat"]),
+                float(first_ov["lon"]),
                 force_zone_number=zone_number,
                 force_zone_letter=zone_letter,
             )
             centroid = geom.centroid
             w = copy.copy(way)
-            w.line = _affine_translate(geom, xoff=e_new - centroid.x, yoff=n_new - centroid.y)
+            w.line = _affine_translate(
+                geom, xoff=e_new - centroid.x, yoff=n_new - centroid.y
+            )
             return w
         return way
 
@@ -179,7 +248,8 @@ def apply_node_position_overrides(way, overrides, zone_number, zone_letter, node
         else:
             continue
         e, n, _, _ = utm.from_latlon(
-            lat, lon,
+            lat,
+            lon,
             force_zone_number=zone_number,
             force_zone_letter=zone_letter,
         )
@@ -206,9 +276,13 @@ def apply_node_position_overrides(way, overrides, zone_number, zone_letter, node
         if len(utm_coords) < 2:
             return way
         if _is_closed:
-            if category == 'barrier':
+            if category == "barrier":
                 # Closed barrier area: reconstruct as flat Polygon from the node ring
-                ring = utm_coords if utm_coords[0] == utm_coords[-1] else utm_coords + [utm_coords[0]]
+                ring = (
+                    utm_coords
+                    if utm_coords[0] == utm_coords[-1]
+                    else utm_coords + [utm_coords[0]]
+                )
                 if len(ring) < 4:
                     return way
                 try:
@@ -217,7 +291,7 @@ def apply_node_position_overrides(way, overrides, zone_number, zone_letter, node
                     return way
             else:
                 # Closed road/footway: flat Polygon if area=yes, else re-buffer the loop
-                is_area_way = (getattr(way, 'tags', None) or {}).get('area') == 'yes'
+                is_area_way = (getattr(way, "tags", None) or {}).get("area") == "yes"
                 if utm_coords[0] != utm_coords[-1]:
                     utm_coords.append(utm_coords[0])
                 if is_area_way:
@@ -232,7 +306,11 @@ def apply_node_position_overrides(way, overrides, zone_number, zone_letter, node
                     p = geom.length
                     a = geom.area
                     disc = p * p - 4 * np.pi * a
-                    r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else (a / p if p else 0)
+                    r = (
+                        (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi)
+                        if disc >= 0
+                        else (a / p if p else 0)
+                    )
                     try:
                         w.line = ls.buffer(max(r, 0.01))
                     except Exception:
@@ -249,7 +327,11 @@ def apply_node_position_overrides(way, overrides, zone_number, zone_letter, node
             p = geom.length
             a = geom.area
             disc = p * p - 4 * np.pi * a
-            r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else (a / p if p else 0)
+            r = (
+                (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi)
+                if disc >= 0
+                else (a / p if p else 0)
+            )
             try:
                 w.line = ls.buffer(max(r, 0.01))
             except Exception:
@@ -317,7 +399,9 @@ def rebuild_way_without_nodes(
             return None
         # Preserve closure: primary signal is node_ids[0] == node_ids[-1] (closed OSM
         # way); geom.is_closed is the fallback for geometries that stored the repeat.
-        _is_closed = (len(node_ids) >= 2 and node_ids[0] == node_ids[-1]) or geom.is_closed
+        _is_closed = (
+            len(node_ids) >= 2 and node_ids[0] == node_ids[-1]
+        ) or geom.is_closed
         if _is_closed and new_coords[0] != new_coords[-1]:
             new_coords.append(new_coords[0])
         w.line = _SLS(new_coords)
@@ -345,9 +429,13 @@ def rebuild_way_without_nodes(
                 return None
             _is_closed_orig = len(node_ids) >= 2 and node_ids[0] == node_ids[-1]
             if _is_closed_orig:
-                if category == 'barrier':
+                if category == "barrier":
                     # Closed barrier area: reconstruct as flat Polygon from the node ring
-                    ring = utm_coords if utm_coords[0] == utm_coords[-1] else utm_coords + [utm_coords[0]]
+                    ring = (
+                        utm_coords
+                        if utm_coords[0] == utm_coords[-1]
+                        else utm_coords + [utm_coords[0]]
+                    )
                     if len(ring) < 4:
                         return None
                     try:
@@ -356,7 +444,9 @@ def rebuild_way_without_nodes(
                         return None
                 else:
                     # Closed road/footway: flat Polygon if area=yes, else re-buffer the loop
-                    is_area_way = (getattr(way, 'tags', None) or {}).get('area') == 'yes'
+                    is_area_way = (getattr(way, "tags", None) or {}).get(
+                        "area"
+                    ) == "yes"
                     if utm_coords[0] != utm_coords[-1]:
                         utm_coords.append(utm_coords[0])
                     if is_area_way:
@@ -371,7 +461,11 @@ def rebuild_way_without_nodes(
                         p = geom.length
                         a = geom.area
                         disc = p * p - 4 * np.pi * a
-                        r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else a / p
+                        r = (
+                            (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi)
+                            if disc >= 0
+                            else a / p
+                        )
                         try:
                             w.line = ls.buffer(r)
                         except Exception:

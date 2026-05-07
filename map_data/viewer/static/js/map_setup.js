@@ -286,8 +286,33 @@ async function initApp() {
     if (e.target.isContentEditable) return;
 
     switch (e.key) {
-      case 'v': case 'V':      setMode('view');   break;
-      case 'e': case 'E':      setMode('edit');   break;
+      case 'v': case 'V': {
+        const prevLayer   = currentClickedLayer;
+        const prevFeature = currentClickedFeature;
+        setMode('view');
+        if (prevLayer && prevFeature) {
+          currentClickedLayer   = prevLayer;
+          currentClickedFeature = prevFeature;
+          prevLayer._osmCat = prevFeature.properties.category;
+          prevLayer.setStyle(HIGHLIGHT_STYLES[prevFeature.properties.category]);
+          showProps(prevFeature.properties, prevFeature);
+        }
+        break;
+      }
+      case 'e': case 'E': {
+        const prevLayer   = currentClickedLayer;
+        const prevFeature = currentClickedFeature;
+        setMode('edit');
+        const cat = prevFeature?.properties?.category;
+        if (prevLayer && prevFeature && cat && cat !== 'crossroad') {
+          currentClickedLayer   = prevLayer;
+          currentClickedFeature = prevFeature;
+          prevLayer._osmCat = cat;
+          prevLayer.setStyle(HIGHLIGHT_STYLES[cat]);
+          loadNodesForEditing(prevFeature, prevLayer);
+        }
+        break;
+      }
       case 'a': case 'A':      setMode('add');    break;
       case 'd': case 'D':      setMode('delete'); break;
       case 'f': case 'F':      setMode('fetch');  break;
@@ -305,7 +330,21 @@ async function initApp() {
         }
         break;
       case 'Escape':
-        if (currentMode !== 'add' && currentMode !== 'fetch') setMode('view');
+        if (currentClickedLayer || currentClickedFeature) {
+          if (currentClickedLayer) {
+            const oldCat = currentClickedLayer._osmCat;
+            currentClickedLayer.setStyle(
+              oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id))
+            );
+            currentClickedLayer = null;
+          }
+          currentClickedFeature = null;
+          clearNodes();
+          const propsEl = document.getElementById('props-content');
+          if (propsEl) propsEl.innerHTML = '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+        } else if (currentMode !== 'view' && currentMode !== 'add' && currentMode !== 'fetch') {
+          setMode('view');
+        }
         break;
       case 'Delete':
       case 'Backspace':

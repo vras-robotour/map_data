@@ -4,6 +4,7 @@ import io
 import copy
 import json
 import uuid
+import time
 import logging
 import utm
 import numpy as np
@@ -31,6 +32,7 @@ from .helpers import (
     rebuild_way_without_nodes,
     geom_to_geojson,
     geojson_geom_to_utm,
+    migrate_change_log,
 )
 
 bp = Blueprint("viewer", __name__)
@@ -118,7 +120,12 @@ def get_mapdata():
             for w in getattr(map_data, lst_name):
                 ov = get_node_position_overrides(store, w.id)
                 if ov:
-                    w = apply_node_position_overrides(w, ov, zn, zl, getattr(map_data, "nodes_cache", {})) or w
+                    w = (
+                        apply_node_position_overrides(
+                            w, ov, zn, zl, getattr(map_data, "nodes_cache", {})
+                        )
+                        or w
+                    )
                 new_lst.append(w)
             setattr(map_data, lst_name, new_lst)
 
@@ -368,7 +375,17 @@ def get_way(way_id):
 
     pos_overrides = get_node_position_overrides(store, way_id)
     if pos_overrides:
-        way = apply_node_position_overrides(way, pos_overrides, zn, zl, getattr(md, "nodes_cache", {}), category=category) or way
+        way = (
+            apply_node_position_overrides(
+                way,
+                pos_overrides,
+                zn,
+                zl,
+                getattr(md, "nodes_cache", {}),
+                category=category,
+            )
+            or way
+        )
 
     geom = geom_to_geojson(way.line, zn, zl)
     if geom is None:
@@ -407,6 +424,7 @@ def delete_way(way_id):
     body = request.get_json(force=True) or {}
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
+    migrate_change_log(store)
     if way_id not in get_deleted_way_ids(store):
         store.setdefault("deleted_ways", []).append(
             {
@@ -415,6 +433,9 @@ def delete_way(way_id):
                 "label": body.get("label", ""),
             }
         )
+        cl = store.setdefault("change_log", [])
+        if not any(e.get("type") == "way" and e.get("id") == way_id for e in cl):
+            cl.append({"type": "way", "id": way_id, "ts": time.time()})
     save_annotations(ann_path, store)
     return "", 204
 
@@ -430,11 +451,15 @@ def update_way_tags(way_id):
         abort(400, "Request body must include 'tags' dict")
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
+    migrate_change_log(store)
     store.setdefault("tag_overrides", {})[str(way_id)] = tags
     store.setdefault("tag_override_meta", {})[str(way_id)] = {
         "category": body.get("category", "unknown"),
         "label": body.get("label", ""),
     }
+    cl = store.setdefault("change_log", [])
+    if not any(e.get("type") == "tag" and e.get("id") == way_id for e in cl):
+        cl.append({"type": "tag", "id": way_id, "ts": time.time()})
     save_annotations(ann_path, store)
     return "", 204
 
@@ -448,6 +473,10 @@ def delete_way_tags(way_id):
     store = load_annotations(ann_path)
     store.get("tag_overrides", {}).pop(str(way_id), None)
     store.get("tag_override_meta", {}).pop(str(way_id), None)
+    cl = store.get("change_log", [])
+    store["change_log"] = [
+        e for e in cl if not (e.get("type") == "tag" and e.get("id") == way_id)
+    ]
     save_annotations(ann_path, store)
     return "", 204
 
@@ -500,6 +529,10 @@ def restore_way(way_id):
     store["deleted_ways"] = [
         d for d in dw if (d["id"] if isinstance(d, dict) else d) != way_id
     ]
+    cl = store.get("change_log", [])
+    store["change_log"] = [
+        e for e in cl if not (e.get("type") == "way" and e.get("id") == way_id)
+    ]
     save_annotations(ann_path, store)
     return "", 204
 
@@ -518,12 +551,28 @@ def delete_way_node():
         abort(400, "way_id and node_id must be integers")
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
+    migrate_change_log(store)
     dn = store.setdefault("deleted_nodes", [])
     if isinstance(dn, dict):
         dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
         store["deleted_nodes"] = dn
     if node_id not in get_deleted_node_ids(store, way_id):
         dn.append({"way_id": way_id, "node_id": node_id})
+        cl = store.setdefault("change_log", [])
+        if not any(
+            e.get("type") == "node"
+            and e.get("way_id") == way_id
+            and e.get("node_id") == node_id
+            for e in cl
+        ):
+            cl.append(
+                {
+                    "type": "node",
+                    "way_id": way_id,
+                    "node_id": node_id,
+                    "ts": time.time(),
+                }
+            )
     save_annotations(ann_path, store)
     return "", 204
 
@@ -547,6 +596,16 @@ def restore_way_node():
         dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
     store["deleted_nodes"] = [
         d for d in dn if not (d["way_id"] == way_id and d["node_id"] == node_id)
+    ]
+    cl = store.get("change_log", [])
+    store["change_log"] = [
+        e
+        for e in cl
+        if not (
+            e.get("type") == "node"
+            and e.get("way_id") == way_id
+            and e.get("node_id") == node_id
+        )
     ]
     save_annotations(ann_path, store)
     return "", 204
@@ -573,7 +632,10 @@ def move_way_nodes():
     if way_key not in overrides:
         overrides[way_key] = {}
     for n in nodes:
-        overrides[way_key][str(n["id"])] = {"lat": float(n["lat"]), "lon": float(n["lon"])}
+        overrides[way_key][str(n["id"])] = {
+            "lat": float(n["lat"]),
+            "lon": float(n["lon"]),
+        }
     save_annotations(ann_path, store)
     return "", 204
 
@@ -633,7 +695,12 @@ def export_mapdata():
             for w in getattr(md, lst_name):
                 ov = get_node_position_overrides(store, w.id)
                 if ov:
-                    w = apply_node_position_overrides(w, ov, zn, zl, getattr(md, "nodes_cache", {})) or w
+                    w = (
+                        apply_node_position_overrides(
+                            w, ov, zn, zl, getattr(md, "nodes_cache", {})
+                        )
+                        or w
+                    )
                 new_lst.append(w)
             setattr(md, lst_name, new_lst)
 
@@ -652,9 +719,7 @@ def export_mapdata():
         md.roads_list, md.footways_list = new_roads, new_footways
 
     if deleted_way_ids or has_node_dels or tag_overrides:
-        md.crossroads_list = md.parse_intersections(
-            {w.id: w for w in md.footways_list}
-        )
+        md.crossroads_list = md.parse_intersections({w.id: w for w in md.footways_list})
 
     ann_id = -1
     node_id = -1
