@@ -1,4 +1,5 @@
 # map_data
+
 ROS2 tools to work with OSM data.
 
 - [Overview](#overview)
@@ -13,11 +14,13 @@ ROS2 tools to work with OSM data.
 - [License](#license)
 
 ## Overview
+
 This package parses a `.gpx` file with GPS waypoints into a Python class, queries
 [OpenStreetMap](https://www.openstreetmap.org) for map features within the area, and
 serializes the result as a `.mapdata` file.
 
 Parsed features are classified into three categories:
+
 - **barriers** — obstacles assumed to be untraversable (walls, buildings, fences, water…)
 - **footways** — paths intended for pedestrians
 - **roads** — areas intended for vehicles
@@ -36,6 +39,7 @@ Sample `.gpx` files are provided in `./data/`.
 ## How to use
 
 ### Parsing and creating files
+
 `create_mapdata` creates a `.mapdata` file from a `.gpx` file, or re-parses an existing
 `.mapdata` with the current tag configuration.
 
@@ -47,17 +51,21 @@ Sample `.gpx` files are provided in `./data/`.
 Default input file when `-f` is omitted: `buchlovice.gpx`.
 
 Download and parse OSM data for a GPX file:
+
 ```bash
 ros2 run map_data create_mapdata -d -f coords.gpx
 ```
+
 This creates `coords.mapdata` in the package data directory.
 
 Re-parse an existing `.mapdata` file (e.g. after editing tag CSVs):
+
 ```bash
 ros2 run map_data create_mapdata -f coords.mapdata
 ```
 
 ### Interactive viewer
+
 `map_data_viewer` launches a local Flask web server with a Leaflet-based map UI.
 It lets you inspect parsed features, view their OSM tags, draw manual annotations,
 and even fetch new areas directly from the UI — without needing ROS2.
@@ -87,6 +95,7 @@ Then open `http://127.0.0.1:5000` in a browser.
 | **Fetch** | `f` | Draw a bounding box to download and parse a new OSM area. |
 
 **UI Features:**
+
 - **Collapsible Management:** The Annotations, Changes (edits/deletions), and Hidden lists are stacked at the bottom of the sidebar and can be independently collapsed.
 - **Enhanced Selection:** Selected objects are highlighted with a bold white border, while other features are dimmed for better focus.
 - **Node Inspection:** Toggle OSM node visibility for a selected way using the `n` key to inspect individual coordinates and tags.
@@ -96,6 +105,7 @@ Annotations are saved automatically to a sidecar `.annotations.json` file alongs
 the `.mapdata` file, so they survive re-parsing.
 
 ### Visualizing the parsed data
+
 `visualize_mapdata` generates static matplotlib plots from a `.mapdata` file.
 It shows two figures: one with all parsed features (barriers, footways, roads) and
 one with footways only.
@@ -111,19 +121,22 @@ one with footways only.
 All saved images are written to the `./data/` directory.
 
 Visualize and display interactively:
+
 ```bash
 ros2 run map_data visualize_mapdata -f coords.mapdata
 ```
 
 Visualize and save both images:
+
 ```bash
 ros2 run map_data visualize_mapdata -f coords.mapdata -sm -sb
 ```
 
-### Publishing a point cloud of footways
+### Publishing a point cloud of footways and intersections
+
 `osm_cloud` is a ROS2 node that publishes a `sensor_msgs/PointCloud2` on the `grid`
-topic. Each point carries a `cost` field: `0.0` means on a footway, `1.0` means at
-the maximum configured distance from any footway.
+topic (cost-aware footway grid) and optionally publishes intersections as a
+`geometry_msgs/PoseArray` and `visualization_msgs/MarkerArray`.
 
 **ROS2 parameters:**
 
@@ -138,11 +151,13 @@ the maximum configured distance from any footway.
 | `max_path_dist` | `1.0` | Max distance (m) at which a grid point receives a cost |
 | `neighbor_cost` | `"linear"` | Cost function: `linear`, `quadratic`, or `zero` |
 | `grid_res` | `0.25` | Grid point spacing (m) |
-| `grid_max` | `[250, 250]` | Upper bounds of the local-frame grid (m) |
-| `grid_min` | `[-250, -250]` | Lower bounds of the local-frame grid (m) |
+| `grid_max` | `[0.0, 0.0]` | Upper bounds of the local-frame grid (m). `[0,0]` triggers auto-calc. |
+| `grid_min` | `[0.0, 0.0]` | Lower bounds of the local-frame grid (m). `[0,0]` triggers auto-calc. |
+| `auto_utm` | `false` | Auto-calculate UTM-to-local transform from map center |
+| `publish_intersections` | `false` | Whether to publish footway intersections |
 
 The recommended way to run the node is via the provided launch file, which also sets
-up the required static transforms:
+up the required static transforms and enables intersection publishing by default:
 
 ```bash
 ros2 launch map_data osm_cloud.launch.py \
@@ -155,9 +170,10 @@ Launch file arguments:
 | Argument | Default | Description |
 |----------|---------|-------------|
 | `mapdata_path` | package share/data | Directory containing the map file |
-| `mapdata_file` | `buchlovice.mapdata` | Map data filename |
-| `gpx_file` | `buchlovice.gpx` | GPX fallback filename |
+| `mapdata_file` | `stromovka.mapdata` | Map data filename |
+| `gpx_file` | `stromovka.gpx` | GPX fallback filename |
 | `grid_topic` | `osm_grid` | Topic name for the published point cloud |
+| `publish_static_tf` | `false` | Whether to publish static transforms for utm/map |
 
 ## Importing as a Python package
 
@@ -170,13 +186,18 @@ or a `colcon build`) so the `parameters/` CSV files are accessible.
 ```
 map_data/
 ├── map_data.py              # MapData class — parses GPX + OSM into roads/footways/barriers
-├── way.py                   # Way class — represents a single OSM feature with geometry
-├── background_map.py        # Fetches raster map tiles from Geoapify for visualizations
-├── vis_utils.py             # matplotlib helpers for plotting parsed map data
-├── points_to_graph_points.py# Utility: equidistant point interpolation along lines
+├── info.py                  # CLI tool to print information about a .mapdata file
 ├── create_mapdata.py        # ROS2 node / CLI: download and parse OSM data
 ├── visualize_mapdata.py     # ROS2 node / CLI: static matplotlib plots
-├── osm_cloud.py             # ROS2 node: publishes footway cost point cloud
+├── osm_cloud.py             # ROS2 node: publishes footway grid and intersections
+├── utils/                   # Shared utility functions
+│   ├── way.py               # Way class — represents a single OSM feature with geometry
+│   ├── overpass.py          # OSM Overpass API client
+│   ├── parsing.py           # OSM XML/JSON parsing logic
+│   ├── serialization.py     # .mapdata file I/O
+│   ├── background_map.py    # Raster map tile fetching
+│   ├── vis_utils.py         # matplotlib plotting helpers
+│   └── points_to_graph_points.py # Equidistant point interpolation
 └── viewer/                  # Modular interactive viewer (Flask + Leaflet)
     ├── app.py               # App factory and server entry point
     ├── routes.py            # REST API endpoints and GeoJSON conversion
@@ -189,6 +210,7 @@ map_data/
 ### Examples
 
 Parse a GPX file and save a `.mapdata` file:
+
 ```python
 from map_data.map_data import MapData
 
@@ -197,6 +219,7 @@ md.run_all(save=True)  # queries OSM, parses, saves coords.mapdata
 ```
 
 Load an existing `.mapdata` file and access parsed features:
+
 ```python
 import pickle
 
@@ -209,6 +232,7 @@ print(len(md.barriers_list))
 ```
 
 Plot the parsed data:
+
 ```python
 import pickle
 from map_data.vis_utils import plot_map
@@ -222,4 +246,5 @@ plt.show()
 ```
 
 ## License
+
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://github.com/vras-robotour/map_data/blob/master/LICENSE)
