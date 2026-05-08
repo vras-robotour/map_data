@@ -12,7 +12,7 @@ from joblib import Parallel, delayed
 from shapely.geometry import LineString
 from matplotlib.patches import Polygon as MplPolygon
 
-from .src.rrt_star import RRTStar
+from map_data.pathsolver.rrt_star import RRTStar
 from map_data.map_data import MapData
 from map_data.utils.parsing import (
     ways_to_shapely,
