@@ -476,7 +476,7 @@ function renderChangesPanel() {
   const list  = document.getElementById('changes-list');
   const count = document.getElementById('changes-count');
   if (!panel || !list || !count) return;
-  if (!changeLog.length) { panel.style.display = 'none'; return; }
+  if (!changeLog.length || currentAppMode === 'planner') { panel.style.display = 'none'; return; }
   panel.style.display = '';
   count.textContent = `(${changeLog.length})`;
   list.innerHTML = [...changeLog].reverse().map(d => {
@@ -525,7 +525,7 @@ function renderHiddenPanel() {
   const list  = document.getElementById('hidden-list');
   const count = document.getElementById('hidden-count');
   if (!panel || !list || !count) return;
-  if (!hiddenWays.length) { panel.style.display = 'none'; return; }
+  if (!hiddenWays.length || currentAppMode === 'planner') { panel.style.display = 'none'; return; }
   panel.style.display = '';
   count.textContent = `(${hiddenWays.length})`;
   list.innerHTML = [...hiddenWays].reverse().map(d => `
@@ -603,7 +603,7 @@ function renderAnnotationList() {
   const el    = document.getElementById('ann-list');
   const count = document.getElementById('ann-count');
   if (!panel || !el || !count) return;
-  if (!annotations.length) { panel.style.display = 'none'; return; }
+  if (!annotations.length || currentAppMode === 'planner') { panel.style.display = 'none'; return; }
   panel.style.display = '';
   count.textContent = `(${annotations.length})`;
   el.innerHTML = annotations.map(a => `
