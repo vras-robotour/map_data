@@ -10,8 +10,9 @@ from scipy.spatial import cKDTree
 from joblib import Parallel, delayed
 from shapely.geometry import LineString
 from matplotlib.patches import Polygon as MplPolygon
+from matplotlib.path import Path
 
-from map_data.pathsolver.rrt_star import RRTStar
+from map_data.pathsolver.astar import astar_search
 from map_data.map_data import MapData
 from map_data.utils.parsing import (
     ways_to_shapely,
@@ -60,7 +61,8 @@ class ReplanPath:
             segment_path = [start[:2]]
             path_seg = LineString([start[:2], goal[:2]])
             if self._colides(path_seg, obstacles):
-                way = self._rrt(start[:2] - args.low, goal[:2] - args.low, obstacles)
+                # Using A* instead of RRT*
+                way = self._astar(start[:2], goal[:2])
                 if way is None:
                     return None, i
                 segment_path.extend(way[1:-1])
@@ -80,7 +82,7 @@ class ReplanPath:
         results.sort(key=lambda x: x[1])
         for segment_path, _ in results:
             if segment_path is None:
-                print("RRT* failed to find a path.")
+                print("A* failed to find a path.")
                 return None
             new_path.extend(segment_path)
 
@@ -111,6 +113,39 @@ class ReplanPath:
         grid[x_indices, y_indices] = c
         return grid.T
 
+    def _burn_obstacles_into_grid(self, grid_2d):
+        """
+        Burn obstacles into the grid by setting their cost to infinity.
+        """
+        if not self.obstacles:
+            return grid_2d
+
+        # grid_2d is (Y, X)
+        ny, nx = grid_2d.shape
+
+        # Create a grid of coordinates for Path.contains_points
+        # We need to match the logic in _reshape_grid:
+        # x_indices = np.floor((x - low[0]) / cell_size)
+        # So x = index * cell_size + low[0] + offset (half cell size for center)
+        # But contains_points is usually fine with just the corners or centers.
+        x = np.linspace(self.args.low[0], self.args.high[0], nx)
+        y = np.linspace(self.args.low[1], self.args.high[1], ny)
+        xv, yv = np.meshgrid(x, y)
+        points = np.stack((xv.ravel(), yv.ravel()), axis=-1)
+
+        for obstacle in self.obstacles:
+            if obstacle.geom_type == "Polygon":
+                poly_path = Path(np.array(obstacle.exterior.coords))
+                mask = poly_path.contains_points(points).reshape(ny, nx)
+                grid_2d[mask] = np.inf
+            elif obstacle.geom_type == "MultiPolygon":
+                for poly in obstacle.geoms:
+                    poly_path = Path(np.array(poly.exterior.coords))
+                    mask = poly_path.contains_points(points).reshape(ny, nx)
+                    grid_2d[mask] = np.inf
+
+        return grid_2d
+
     def _convert_obstacles(self, obstacles):
         """
         Convert obstacles to a format suitable for RRT*.
@@ -129,29 +164,68 @@ class ReplanPath:
             obst.append(obstacle)
         return obst
 
-    def _rrt(self, start, goal, obstacles):
+    def _astar(self, start, goal):
         grid = (
             self._reshaped_grid_cache
             if self._reshaped_grid_cache is not None
-            else self._reshape_grid()
+            else self._burn_obstacles_into_grid(self._reshape_grid())
         )
-        rrt_star = RRTStar(
-            start,
-            goal,
-            self._converted_obstacles,
-            grid,
-            grid_scale=self.args.cell_size,
-            simplify=self.args.simplify_path,
-            transfer_id=self.transfer_id,
-        )
-        path = rrt_star.find_path()
-        if path is None and self.debug:  # debug
-            rrt_star.visualize()
-        elif path is None:
-            print("Path not found")
-        else:
-            path += self.args.low  # Convert back to original coordinates
-            # path = np.hstack([path, np.zeros((path.shape[0], 1))])  # Add z-coordinate, removed temporarily
+        ny, nx = grid.shape
+        low = self.args.low
+        cs = self.args.cell_size
+
+        # Convert UTM to grid indices
+        def to_idx(p):
+            ix = int(np.floor((p[0] - low[0]) / cs))
+            iy = int(np.floor((p[1] - low[1]) / cs))
+            return np.clip(ix, 0, nx - 1), np.clip(iy, 0, ny - 1)
+
+        start_idx = to_idx(start)
+        goal_idx = to_idx(goal)
+
+        def get_neighbors(u):
+            ix, iy = u
+            neighbors = []
+            # 8-connected
+            for dx in [-1, 0, 1]:
+                for dy in [-1, 0, 1]:
+                    if dx == 0 and dy == 0:
+                        continue
+                    nix, niy = ix + dx, iy + dy
+                    if 0 <= nix < nx and 0 <= niy < ny:
+                        # grid is (Y, X)
+                        cost = grid[niy, nix]
+                        if np.isinf(cost):
+                            continue
+                        # Base distance (1 for straight, 1.41 for diagonal)
+                        dist = np.sqrt(dx**2 + dy**2)
+                        # cost is 0.0 near paths, 1.0 away from paths.
+                        # We want to penalize moving away from paths.
+                        # Total cost = distance * (1.0 + cost * penalty_multiplier)
+                        # Using 5.0 as penalty_multiplier to strongly prefer paths.
+                        move_cost = dist * (1.0 + cost * 5.0)
+                        neighbors.append(((nix, niy), move_cost))
+            return neighbors
+
+        def heuristic(u):
+            # Euclidean distance in grid units
+            return np.sqrt((u[0] - goal_idx[0]) ** 2 + (u[1] - goal_idx[1]) ** 2)
+
+        path_indices = astar_search(start_idx, goal_idx, get_neighbors, heuristic)
+
+        if path_indices is None:
+            return None
+
+        # Convert back to UTM
+        path = []
+        for ix, iy in path_indices:
+            path.append([ix * cs + low[0], iy * cs + low[1]])
+
+        path = np.array(path)
+
+        # Simplify path
+        if self.args.simplify_path and len(path) > 2:
+            path = np.array(LineString(path).simplify(cs / 2.0).coords)
 
         return path
 
@@ -232,7 +306,8 @@ class ReplanPath:
         path_grid[mask, 3] = tmp[:, 3]
 
         self.grid = path_grid
-        self._reshaped_grid_cache = self._reshape_grid()
+        grid_2d = self._reshape_grid()
+        self._reshaped_grid_cache = self._burn_obstacles_into_grid(grid_2d)
 
     def _points_near_ref(self, points, reference, max_dist=1):
         """
@@ -306,7 +381,7 @@ class ReplanPath:
         return np.array(waypoints)
 
     def visualize(self, path, old_path=None):
-        """Visualize the grid, obstacles, RRT* tree, and path using Matplotlib."""
+        """Visualize the grid, obstacles, and path using Matplotlib."""
         _, ax = plt.subplots()
 
         # Plot grid as a heatmap (0: white, 1: gray)
@@ -412,7 +487,7 @@ if __name__ == "__main__":
 
     if args.save:
         new_wgs_path = utm_path_to_latlon(new_path, path_data[1], path_data[2])
-        gpx_content = create_gpx_content(new_wgs_path, creator_name="RRT* Replanner")
+        gpx_content = create_gpx_content(new_wgs_path, creator_name="A* Replanner")
         with open(args.save, "w") as f:
             f.write(gpx_content)
 

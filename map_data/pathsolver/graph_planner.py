@@ -1,7 +1,7 @@
-import heapq
 import numpy as np
 from shapely.geometry import Point, LineString
 from shapely.strtree import STRtree
+from map_data.pathsolver.astar import astar_search
 
 
 class GraphPlanner:
@@ -63,9 +63,6 @@ class GraphPlanner:
         Standard A* between two nodes.
         extra_nodes: dict for temporary nodes (e.g. snapped points)
         """
-        count = 0
-        q = [(0, count, start_node)]
-        visited = {start_node: (0, None)}  # node -> (cost, parent)
 
         def get_neighbors(u):
             neighs = list(self.graph.get(u, []))
@@ -76,33 +73,17 @@ class GraphPlanner:
         if not get_neighbors(start_node) and start_node != goal_node:
             return None
 
-        def heuristic(u, v):
+        def heuristic(u):
             p1 = self._get_node_pos(u, extra_nodes)
-            p2 = self._get_node_pos(v, extra_nodes)
+            p2 = self._get_node_pos(goal_node, extra_nodes)
             return np.linalg.norm(p1 - p2)
 
-        while q:
-            (cost_plus_h, _, u) = heapq.heappop(q)
-            cost = visited[u][0]
+        node_path = astar_search(start_node, goal_node, get_neighbors, heuristic)
 
-            if u == goal_node:
-                # Path found, reconstruct
-                path = []
-                curr = u
-                while curr is not None:
-                    path.append(self._get_node_pos(curr, extra_nodes))
-                    curr = visited[curr][1]
-                return path[::-1]
+        if node_path is None:
+            return None
 
-            for v, dist in get_neighbors(u):
-                new_cost = cost + dist
-                if v not in visited or new_cost < visited[v][0]:
-                    visited[v] = (new_cost, u)
-                    h = heuristic(v, goal_node)
-                    count += 1
-                    heapq.heappush(q, (new_cost + h, count, v))
-
-        return None
+        return [self._get_node_pos(node, extra_nodes) for node in node_path]
 
     def _get_node_pos(self, node_id, extra_nodes_data=None):
         if isinstance(node_id, str) and node_id.startswith("temp_"):
