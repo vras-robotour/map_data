@@ -15,6 +15,9 @@ ROS2 tools to work with OSM data.
 
 ## Overview
 
+> [!IMPORTANT]
+> **Path planning features** in this repository (including the `pathsolver` modules) are currently under development and should be ignored for now.
+
 This package parses a `.gpx` file with GPS waypoints into a Python class, queries
 [OpenStreetMap](https://www.openstreetmap.org) for map features within the area, and
 serializes the result as a `.mapdata` file.
@@ -202,7 +205,7 @@ map_data/
     ├── app.py               # App factory and server entry point
     ├── routes.py            # REST API endpoints and GeoJSON conversion
     ├── helpers.py           # Geometry and annotation utility functions
-    ├── cache.py             # MapData pickle caching
+    ├── cache.py             # MapData object caching
     ├── templates/           # HTML templates
     └── static/              # External CSS and Modular JS assets
 ```
@@ -221,10 +224,9 @@ md.run_all(save=True)  # queries OSM, parses, saves coords.mapdata
 Load an existing `.mapdata` file and access parsed features:
 
 ```python
-import pickle
+from map_data.map_data import MapData
 
-with open("coords.mapdata", "rb") as fh:
-    md = pickle.load(fh)
+md = MapData.load("coords.mapdata")
 
 print(len(md.roads_list))    # list of Way objects
 print(len(md.footways_list))
@@ -234,12 +236,11 @@ print(len(md.barriers_list))
 Plot the parsed data:
 
 ```python
-import pickle
+from map_data.map_data import MapData
 from map_data.vis_utils import plot_map
 import matplotlib.pyplot as plt
 
-with open("coords.mapdata", "rb") as fh:
-    md = pickle.load(fh)
+md = MapData.load("coords.mapdata")
 
 plot_map(md)
 plt.show()
