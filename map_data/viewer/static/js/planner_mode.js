@@ -13,6 +13,7 @@ class PlannerMode {
     this.currentReplanId = null;
     this.currentWormholeId = null;
     this.pathPolyline = null;
+    this.markerLayer = L.layerGroup();
 
     this.init();
   }
@@ -24,6 +25,7 @@ class PlannerMode {
 
   enable() {
     this.active = true;
+    this.markerLayer.addTo(map);
     this.redraw();
     this.updateUI();
     // Enable map click for adding points
@@ -34,6 +36,7 @@ class PlannerMode {
     this.active = false;
     map.off('click', this.handleMapClick, this);
     this.clearMarkers();
+    map.removeLayer(this.markerLayer);
     if (this.pathPolyline) {
       map.removeLayer(this.pathPolyline);
       this.pathPolyline = null;
@@ -42,6 +45,7 @@ class PlannerMode {
 
   bindEvents() {
     document.getElementById('planner-clear-btn').addEventListener('click', () => this.clearAll());
+    document.getElementById('planner-clear-middle-btn').addEventListener('click', () => this.clearMiddle());
     document.getElementById('import-gpx-btn').addEventListener('click', () => document.getElementById('gpx-input').click());
     document.getElementById('gpx-input').addEventListener('change', (e) => this.handleGpxImport(e));
     document.getElementById('replan-btn').addEventListener('click', () => this.replanPath());
@@ -136,10 +140,12 @@ class PlannerMode {
 
       // Right click to delete
       marker.on('contextmenu', (e) => {
+        L.DomEvent.preventDefault(e);
         L.DomEvent.stopPropagation(e);
         this.showContextMenu(p, e.latlng);
       });
 
+      this.markerLayer.addLayer(marker);
       p.marker = marker;
     });
 
@@ -190,9 +196,7 @@ class PlannerMode {
   }
 
   clearMarkers() {
-    this.points.forEach(p => {
-      if (p.marker) map.removeLayer(p.marker);
-    });
+    this.markerLayer.clearLayers();
   }
 
   updateUI() {
@@ -213,7 +217,9 @@ class PlannerMode {
 
       countEl.textContent = `${this.points.length} points | ${distStr}`;
     }
-    document.getElementById('planner-export-btn').disabled = this.points.length < 2;
+    document.getElementById('export-gpx-path-btn').disabled = this.points.length < 2;
+    document.getElementById('export-wormhole-path-btn').disabled = this.points.length < 2;
+    document.getElementById('planner-clear-middle-btn').disabled = this.points.length <= 2;
   }
 
   clearAll() {
@@ -224,6 +230,17 @@ class PlannerMode {
     this.pathPolyline = null;
     this.updateUI();
     setStatus('Path cleared', 'text-info');
+  }
+
+  clearMiddle() {
+    if (this.isProcessing) return;
+    if (this.points.length <= 2) return;
+    const start = this.points[0];
+    const end = this.points[this.points.length - 1];
+    this.points = [start, end];
+    this.redraw();
+    this.updateUI();
+    setStatus('Middle points cleared', 'text-info');
   }
 
   handleGpxImport(event) {
@@ -495,7 +512,7 @@ ${pts}
     };
     container.appendChild(delBtn);
     
-    L.popup({ minWidth: 120, className: 'planner-popup' })
+    L.popup({ minWidth: 120, className: 'planner-popup', offset: [0, -5] })
       .setLatLng(latlng)
       .setContent(container)
       .openOn(map);

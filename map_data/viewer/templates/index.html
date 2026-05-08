@@ -159,20 +159,23 @@
             📂 Import GPX
           </button>
 
-          <div class="dropdown w-100">
-            <button id="planner-export-btn" class="btn btn-sm btn-outline-primary w-100 dropdown-toggle" 
-                    type="button" data-bs-toggle="dropdown" disabled>
-              💾 Export Path
+          <div class="d-flex gap-2">
+            <button id="export-gpx-path-btn" class="btn btn-sm btn-outline-primary flex-grow-1 w-100" disabled>
+              💾 Download
             </button>
-            <ul class="dropdown-menu dropdown-menu-dark">
-              <li><button id="export-gpx-path-btn" class="dropdown-item" type="button">📎 Download GPX</button></li>
-              <li><button id="export-wormhole-path-btn" class="dropdown-item" type="button">🌀 Share via Wormhole</button></li>
-            </ul>
+            <button id="export-wormhole-path-btn" class="btn btn-sm btn-outline-primary flex-grow-1 w-100" disabled>
+              🌀 Wormhole
+            </button>
           </div>
 
-          <button class="btn btn-sm btn-outline-danger" id="planner-clear-btn">
-            🗑️ Delete All
-          </button>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-danger flex-grow-1 w-100" id="planner-clear-btn">
+              🗑️ Delete All
+            </button>
+            <button class="btn btn-sm btn-outline-warning flex-grow-1 w-100" id="planner-clear-middle-btn">
+              🧹 Keep Endpoints
+            </button>
+          </div>
 
           <button class="btn btn-primary btn-sm mt-2" id="replan-btn">
             ✏️ Replan Path
