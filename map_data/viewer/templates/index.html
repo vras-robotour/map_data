@@ -166,6 +166,18 @@
         </div>
 
         <div class="planner-options mt-3 pt-3 border-top border-secondary">
+          <div class="panel-title mb-2" style="font-size:0.6rem;">PLANNING MODE</div>
+          <div class="d-flex gap-2 mb-3">
+            <div class="form-check">
+              <input class="form-check-input bg-dark border-secondary" type="radio" name="plan-mode" id="mode-all-terrain" value="rrt" checked>
+              <label class="form-check-label text-secondary" for="mode-all-terrain" style="font-size: 0.75rem;">All terrain</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input bg-dark border-secondary" type="radio" name="plan-mode" id="mode-paths-only" value="graph">
+              <label class="form-check-label text-secondary" for="mode-paths-only" style="font-size: 0.75rem;">Paths only</label>
+            </div>
+          </div>
+
           <div class="panel-title mb-2" style="font-size:0.6rem;">ROUTING OPTIONS</div>
           <div class="form-check mb-1">
             <input class="form-check-input bg-dark border-secondary" type="checkbox" id="plan-footways" checked>

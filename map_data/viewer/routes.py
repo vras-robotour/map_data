@@ -26,6 +26,7 @@ from flask import (
 
 from map_data.map_data import MapData
 from map_data.pathsolver.replan import ReplanPath, cancel_replan_backend, parse_args
+from map_data.pathsolver.graph_planner import GraphPlanner
 from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.serialization import map_data_to_dict
 from map_data.utils.way import FOOTWAY_VALUES, Way
@@ -1007,6 +1008,7 @@ def create_replan():
     filename = body.get("file")
     highway_types = body.get("allowed_ways", ["footway"])
     transfer_id = body.get("transfer_id")
+    algorithm = body.get("algorithm", "rrt")
 
     cell_size = body.get("cell_size", 0.25)
     inflate_obstacles = body.get("inflate_obstacles", 0.25)
@@ -1019,18 +1021,6 @@ def create_replan():
     if md is None:
         abort(404, f"File {filename} not found")
 
-    args = parse_args([])
-    args.simplify_path = simplify_path
-    args.cell_size = cell_size
-    args.inflate_obstacles = inflate_obstacles
-    args.visualize = False
-    args.low = (md.min_x, md.min_y)
-    args.high = (md.max_x, md.max_y)
-
-    obstacles = ways_to_shapely(md.barriers_list)
-    replanner = ReplanPath(args, obstacles, transfer_id=transfer_id)
-    replanner.fill_grid(md, highway_types=highway_types)
-
     zn, zl = md.zone_number, md.zone_letter
     utm_path = []
     for p in path_data:
@@ -1038,7 +1028,23 @@ def create_replan():
         utm_path.append([e, n])
     utm_path = np.array(utm_path, dtype=np.float64)
 
-    res = replanner.replan_rrt(utm_path)
+    if algorithm == "graph":
+        planner = GraphPlanner(md, highway_types=highway_types)
+        res = planner.plan(utm_path)
+    else:
+        args = parse_args([])
+        args.simplify_path = simplify_path
+        args.cell_size = cell_size
+        args.inflate_obstacles = inflate_obstacles
+        args.visualize = False
+        args.low = (md.min_x, md.min_y)
+        args.high = (md.max_x, md.max_y)
+
+        obstacles = ways_to_shapely(md.barriers_list)
+        replanner = ReplanPath(args, obstacles, transfer_id=transfer_id)
+        replanner.fill_grid(md, highway_types=highway_types)
+        res = replanner.replan_rrt(utm_path)
+
     if res is None:
         return jsonify({"retrieveNum": 1, "newPath": None, "status": "cancelled"})
 

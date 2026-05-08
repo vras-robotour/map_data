@@ -300,6 +300,7 @@ class PlannerMode {
     if (document.getElementById('plan-footways').checked) allowedWays.push('footway');
     if (document.getElementById('plan-roads').checked) allowedWays.push('road');
 
+    const algorithm = document.querySelector('input[name="plan-mode"]:checked').value;
     const cellSize = parseFloat(document.getElementById('planner-cell-size').value) || 0.25;
     const inflate = parseFloat(document.getElementById('planner-inflate').value) || 0.25;
     const simplify = document.getElementById('planner-simplify').checked;
@@ -313,6 +314,7 @@ class PlannerMode {
           points: this.points.map(p => [p.lat, p.lon]),
           file: currentFile,
           allowed_ways: allowedWays,
+          algorithm: algorithm,
           cell_size: cellSize,
           inflate_obstacles: inflate,
           simplify_path: simplify,
