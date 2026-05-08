@@ -1,6 +1,7 @@
 import heapq
 import numpy as np
 from shapely.geometry import Point, LineString
+from shapely.strtree import STRtree
 
 
 class GraphPlanner:
@@ -12,13 +13,16 @@ class GraphPlanner:
         self._build_graph()
 
     def _build_graph(self):
-        allowed_ways = []
+        self._allowed_ways = []
         if "footway" in self.highway_types:
-            allowed_ways.extend(self.map_data.footways_list)
+            self._allowed_ways.extend(self.map_data.footways_list)
         if "road" in self.highway_types:
-            allowed_ways.extend(self.map_data.roads_list)
+            self._allowed_ways.extend(self.map_data.roads_list)
 
-        for way in allowed_ways:
+        edge_segments = []
+        edge_node_pairs = []
+
+        for way in self._allowed_ways:
             for i in range(len(way.nodes) - 1):
                 n1 = way.nodes[i]
                 n2 = way.nodes[i + 1]
@@ -30,39 +34,29 @@ class GraphPlanner:
                 self.graph.setdefault(n1, []).append((n2, dist))
                 self.graph.setdefault(n2, []).append((n1, dist))
 
+                edge_segments.append(LineString([p1, p2]))
+                edge_node_pairs.append((n1, n2))
+
+        self._edge_segments = edge_segments
+        self._edge_node_pairs = edge_node_pairs
+        self._edge_tree = STRtree(edge_segments) if edge_segments else None
+
     def _find_closest_edge(self, point_utm):
-        """
-        Find the closest edge in the graph to the given UTM point.
-        Returns: (n1, n2, projected_point, distance)
-        """
+        """Find the closest edge using an STRtree spatial index."""
+        if self._edge_tree is None:
+            return None, float("inf")
+
         p_sh = Point(point_utm)
-        min_dist = float("inf")
-        best_edge = None  # (n1, n2, projected_point)
+        nearest_idx = self._edge_tree.nearest(p_sh)
+        if nearest_idx is None:
+            return None, float("inf")
 
-        allowed_ways = []
-        if "footway" in self.highway_types:
-            allowed_ways.extend(self.map_data.footways_list)
-        if "road" in self.highway_types:
-            allowed_ways.extend(self.map_data.roads_list)
-
-        for way in allowed_ways:
-            for i in range(len(way.nodes) - 1):
-                n1 = way.nodes[i]
-                n2 = way.nodes[i + 1]
-                p1 = self.nodes[n1].ravel()[:2]
-                p2 = self.nodes[n2].ravel()[:2]
-
-                line = LineString([p1, p2])
-                dist = line.distance(p_sh)
-
-                if dist < min_dist:
-                    min_dist = dist
-                    # Project point onto line
-                    proj_dist = line.project(p_sh)
-                    projected_point = np.array(line.interpolate(proj_dist).coords[0])
-                    best_edge = (n1, n2, projected_point)
-
-        return best_edge, min_dist
+        n1, n2 = self._edge_node_pairs[nearest_idx]
+        line = self._edge_segments[nearest_idx]
+        min_dist = line.distance(p_sh)
+        proj_dist = line.project(p_sh)
+        projected_point = np.array(line.interpolate(proj_dist).coords[0])
+        return (n1, n2, projected_point), min_dist
 
     def a_star(self, start_node, goal_node, extra_nodes=None):
         """

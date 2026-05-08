@@ -46,6 +46,10 @@ class ReplanPath:
         else:
             self.obstacles = obstacles
         self.debug = False
+        self._reshaped_grid_cache = None
+        self._converted_obstacles = (
+            self._convert_obstacles(self.obstacles) if self.obstacles else []
+        )
 
     def replan_rrt(self, path):
         def process_segment(i, path, obstacles, args):
@@ -127,12 +131,15 @@ class ReplanPath:
         return obst
 
     def _rrt(self, start, goal, obstacles):
-        grid = self._reshape_grid()
-        obst = self._convert_obstacles(obstacles)
+        grid = (
+            self._reshaped_grid_cache
+            if self._reshaped_grid_cache is not None
+            else self._reshape_grid()
+        )
         rrt_star = RRTStar(
             start,
             goal,
-            obst,
+            self._converted_obstacles,
             grid,
             grid_scale=self.args.cell_size,
             simplify=self.args.simplify_path,
@@ -228,6 +235,7 @@ class ReplanPath:
         path_grid[mask, 3] = tmp[:, 3]
 
         self.grid = path_grid
+        self._reshaped_grid_cache = self._reshape_grid()
 
     def _points_near_ref(self, points, reference, max_dist=1):
         """

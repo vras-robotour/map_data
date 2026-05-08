@@ -37,6 +37,9 @@ class RRTStar:
         self.nodes = [self.start]
         self.parent = {0: None}
         self.cost = {0: 0.0}
+        # Pre-allocated buffer for O(1) node appends and vectorized lookups
+        self._nodes_buf = np.empty((max_iter + 2, 2), dtype=np.float64)
+        self._nodes_buf[0] = self.start
         self.goal_tolerance = step_size / 2
         self.traversability_threshold = traversability_threshold
         self.simplify = simplify
@@ -121,7 +124,7 @@ class RRTStar:
 
     def _sample_point(self) -> np.ndarray:
         """Sample a random point in the grid space, biased towards traversable areas."""
-        while True:
+        for _ in range(100):
             x = random.uniform(0, self.grid_shape[1] * self.grid_scale)
             y = random.uniform(0, self.grid_shape[0] * self.grid_scale)
             point = np.array([x, y])
@@ -129,14 +132,19 @@ class RRTStar:
                 point
             ) < self.traversability_threshold and not self._is_collision(point):
                 return point
-            # Occasionally allow sampling in non-traversable areas to ensure exploration
-            # if random.random() < 0.1:
-            #     return point
+        return np.array(
+            [
+                random.uniform(0, self.grid_shape[1] * self.grid_scale),
+                random.uniform(0, self.grid_shape[0] * self.grid_scale),
+            ]
+        )
 
     def _nearest_node(self, point: np.ndarray) -> int:
-        """Find the index of the nearest node to the given point."""
-        distances = [np.linalg.norm(node - point) for node in self.nodes]
-        return distances.index(min(distances))
+        """Find the index of the nearest node using vectorized squared-distance comparison."""
+        nodes_arr = self._nodes_buf[: len(self.nodes)]
+        diffs = nodes_arr - point
+        sq_dists = (diffs * diffs).sum(axis=1)
+        return int(np.argmin(sq_dists))
 
     def _steer(self, start: np.ndarray, target: np.ndarray) -> np.ndarray:
         """Steer from start towards target with a fixed step size."""
@@ -147,13 +155,12 @@ class RRTStar:
         return start + (direction / distance) * self.step_size
 
     def _get_near_nodes(self, new_point: np.ndarray) -> List[int]:
-        """Find indices of nodes within neighbor_radius of the new point."""
-        return [
-            i
-            for i, node in enumerate(self.nodes)
-            if np.linalg.norm(node - new_point) < self.neighbor_radius
-            and np.linalg.norm(node - new_point) > 0
-        ]
+        """Find indices of nodes within neighbor_radius using vectorized comparison."""
+        nodes_arr = self._nodes_buf[: len(self.nodes)]
+        diffs = nodes_arr - new_point
+        sq_dists = (diffs * diffs).sum(axis=1)
+        r2 = self.neighbor_radius**2
+        return list(np.where((sq_dists < r2) & (sq_dists > 0))[0])
 
     def _path_cost(self, start: np.ndarray, end: np.ndarray) -> float:
         """Calculate the cost of a path segment using Bresenham's line algorithm."""
@@ -178,6 +185,30 @@ class RRTStar:
             1 + avg_cost
         )  # Scale distance by average traversability cost
 
+    def _segment_cost(self, start: np.ndarray, end: np.ndarray) -> Tuple[bool, float]:
+        """Check collision and compute traversal cost in a single Bresenham pass."""
+        geom = LineString([start, end])
+        for obstacle in self.obstacles:
+            if obstacle.contains(geom) or obstacle.intersects(geom):
+                return True, float("inf")
+
+        p1_grid = (int(start[0] / self.grid_scale), int(start[1] / self.grid_scale))
+        p2_grid = (int(end[0] / self.grid_scale), int(end[1] / self.grid_scale))
+        bres_line = self._bresenham(p1_grid, p2_grid)
+
+        total_cost = 0.0
+        valid_cells = 0
+        for x, y in bres_line:
+            if 0 <= x < self.grid_shape[1] and 0 <= y < self.grid_shape[0]:
+                cell_cost = self.grid[y, x]
+                if cell_cost >= self.traversability_threshold:
+                    return True, float("inf")
+                total_cost += cell_cost
+                valid_cells += 1
+
+        avg_cost = total_cost / valid_cells if valid_cells > 0 else 0.0
+        return False, np.linalg.norm(end - start) * (1 + avg_cost)
+
     def find_path(self) -> Optional[np.ndarray]:
         """Main RRT* algorithm to find a path from start to goal."""
         from .replan import _cancelled_transfers
@@ -186,38 +217,38 @@ class RRTStar:
             if self.transfer_id in _cancelled_transfers:
                 return None
 
-            while True:
-                # Occasionally sample the goal to bias exploration
-                if random.random() < 0.1:
-                    rand_point = self.goal
-                else:
-                    rand_point = self._sample_point()
-
-                # Find nearest node
+            # Sample a valid steering point; skip iteration if none found within budget
+            found = False
+            for _ in range(50):
+                rand_point = (
+                    self.goal if random.random() < 0.1 else self._sample_point()
+                )
                 nearest_idx = self._nearest_node(rand_point)
                 nearest = self.nodes[nearest_idx]
                 new_point = self._steer(nearest, rand_point)
-
-                # Check if new point is valid
                 if (
                     not self._is_collision(new_point)
                     or self._get_grid_cost(new_point) < self.traversability_threshold
                 ):
+                    found = True
                     break
+            if not found:
+                continue
 
-            if not self._is_collision(nearest, new_point):
+            collision, seg_cost = self._segment_cost(nearest, new_point)
+            if not collision:
                 new_idx = len(self.nodes)
                 self.nodes.append(new_point)
-                min_cost = self.cost[nearest_idx] + self._path_cost(nearest, new_point)
+                self._nodes_buf[new_idx] = new_point
+                min_cost = self.cost[nearest_idx] + seg_cost
                 min_parent = nearest_idx
 
-                # Find near nodes for rewiring
                 near_nodes = self._get_near_nodes(new_point)
-                # Choose best parent
                 for idx in near_nodes:
                     node = self.nodes[idx]
-                    if not self._is_collision(node, new_point):
-                        cost = self.cost[idx] + self._path_cost(node, new_point)
+                    col, sc = self._segment_cost(node, new_point)
+                    if not col:
+                        cost = self.cost[idx] + sc
                         if cost < min_cost:
                             min_cost = cost
                             min_parent = idx
@@ -225,27 +256,25 @@ class RRTStar:
                 self.parent[new_idx] = min_parent
                 self.cost[new_idx] = min_cost
 
-                # Rewire the tree
                 for idx in near_nodes:
                     if idx == min_parent:
                         continue
                     node = self.nodes[idx]
-                    new_cost = self.cost[new_idx] + self._path_cost(new_point, node)
-                    if new_cost < self.cost[idx] and not self._is_collision(
-                        new_point, node
-                    ):
-                        self.parent[idx] = new_idx
-                        self.cost[idx] = new_cost
+                    col, sc = self._segment_cost(new_point, node)
+                    if not col:
+                        new_cost = self.cost[new_idx] + sc
+                        if new_cost < self.cost[idx]:
+                            self.parent[idx] = new_idx
+                            self.cost[idx] = new_cost
 
-                # Check if we can connect to the goal
                 if np.linalg.norm(new_point - self.goal) < self.goal_tolerance:
-                    if not self._is_collision(new_point, self.goal):
+                    col, sc = self._segment_cost(new_point, self.goal)
+                    if not col:
                         goal_idx = len(self.nodes)
                         self.nodes.append(self.goal)
+                        self._nodes_buf[goal_idx] = self.goal
                         self.parent[goal_idx] = new_idx
-                        self.cost[goal_idx] = self.cost[new_idx] + self._path_cost(
-                            new_point, self.goal
-                        )
+                        self.cost[goal_idx] = self.cost[new_idx] + sc
                         return np.array(self._reconstruct_path(goal_idx))
 
         return None
