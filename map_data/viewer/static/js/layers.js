@@ -19,6 +19,7 @@ function addAnnotationToLayer(ann) {
     layer.options._ann_id = ann.id;
     const cat = ann.type === 'path' ? 'path' : 'annotation';
     layer.on('click', e => {
+      if (currentAppMode === 'planner') return;
       L.DomEvent.stopPropagation(e);
       if (currentMode === 'view') {
         if (currentClickedLayer && currentClickedLayer !== layer) {
@@ -84,6 +85,25 @@ function filterLayers(query) {
   });
 }
 
+function toggleMapInteractivity(interactive) {
+  ['road', 'footway', 'barrier', 'crossroad', 'waypoint'].forEach(cat => {
+    const layer = geoLayers[cat];
+    if (layer) {
+      layer.eachLayer(l => {
+        if (l.getElement()) {
+          l.getElement().style.pointerEvents = interactive ? 'auto' : 'none';
+        }
+      });
+    }
+  });
+  
+  drawnItems.eachLayer(l => {
+    if (l.getElement()) {
+      l.getElement().style.pointerEvents = interactive ? 'auto' : 'none';
+    }
+  });
+}
+
 async function loadMapData(filename, { preserveView = false } = {}) {
   setStatus('Loading…', 'text-warning');
 
@@ -130,6 +150,7 @@ async function loadMapData(filename, { preserveView = false } = {}) {
           layer._featureId  = feature.properties.id;
           layer._featureRef = feature;
           layer.on('click', e => {
+            if (currentAppMode === 'planner') return;
             L.DomEvent.stopPropagation(e);
             if (currentMode === 'view') {
               if (currentClickedLayer && currentClickedLayer !== layer) {
@@ -180,6 +201,7 @@ async function loadMapData(filename, { preserveView = false } = {}) {
           }),
         onEachFeature: (feature, layer) => {
           layer.on('click', e => {
+            if (currentAppMode === 'planner') return;
             L.DomEvent.stopPropagation(e);
             if (currentMode === 'view') {
               if (currentClickedLayer && currentClickedLayer !== layer) {
@@ -296,6 +318,7 @@ async function _reloadWay(wayId) {
         newLayer._featureId  = feature.properties.id;
         newLayer._featureRef = feature;
         newLayer.on('click', e => {
+          if (currentAppMode === 'planner') return;
           L.DomEvent.stopPropagation(e);
           if (currentMode === 'view') {
             if (currentClickedLayer && currentClickedLayer !== newLayer) {

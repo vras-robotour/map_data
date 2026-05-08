@@ -7,6 +7,77 @@ function setStatus(msg, cls = 'text-secondary') {
   el.className = cls + ' ms-auto';
 }
 
+// ── App Mode Switching ───────────────────────────────────────────────────────
+
+document.querySelectorAll('.app-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    setAppMode(btn.dataset.appMode);
+  });
+});
+
+function setAppMode(mode) {
+  if (mode === currentAppMode) return;
+  currentAppMode = mode;
+
+  document.querySelectorAll('.app-mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.appMode === mode);
+  });
+
+  const sidebar = document.getElementById('sidebar');
+  const propsPanel = document.getElementById('props-panel');
+  const plannerPanel = document.getElementById('planner-sidebar-panel');
+  
+  // Accessory panels
+  const accessoryPanels = ['ann-panel', 'changes-panel', 'hidden-panel'];
+
+  if (mode === 'viewer') {
+    propsPanel.style.display = ''; // Revert to CSS default (block)
+    plannerPanel.style.display = 'none';
+    
+    toggleMapInteractivity(true);
+
+    // Restore accessory panels visibility based on their content/state
+    renderAnnotationList();
+    renderChangesPanel();
+    renderHiddenPanel();
+
+    setStatus('Viewer Mode', 'text-info');
+    if (plannerMode) plannerMode.disable();
+    // Re-enable draw controls if they were active
+    if (drawControl) map.addControl(drawControl);
+  } else {
+    propsPanel.style.display = 'none';
+    plannerPanel.style.display = 'flex';
+    
+    toggleMapInteractivity(false);
+
+    // Hide all accessory panels in planner mode
+    accessoryPanels.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+
+    setStatus('Planner Mode', 'text-warning');
+    
+    // Cleanup Viewer state
+    clearNodes();
+    if (currentClickedLayer && currentClickedLayer._osmCat) {
+      currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
+    }
+    currentClickedLayer = null;
+    currentClickedFeature = null;
+    document.getElementById('props-content').innerHTML = 
+      '<span class="text-secondary" style="font-style:italic;">Click a feature to inspect</span>';
+
+    if (drawControl) map.removeControl(drawControl);
+    
+    if (plannerMode) plannerMode.enable();
+  }
+  
+  // Force map resize
+  setTimeout(() => map.invalidateSize(), 100);
+}
+
 function renderSubtypeFilters(cat) {
   const panel = document.getElementById(`subfilter-${cat}`);
   if (!panel) return;

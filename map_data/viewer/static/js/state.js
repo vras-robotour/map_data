@@ -1,5 +1,6 @@
 // ── State ────────────────────────────────────────────────────────────────────
-let currentFile = null;
+let currentAppMode = 'viewer'; // 'viewer' or 'planner'
+let plannerMode = null; // Will hold the PlannerMode instance
 let currentMode = 'view';
 let annotations = [];
 let pendingBbox  = null;

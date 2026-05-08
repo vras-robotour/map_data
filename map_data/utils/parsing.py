@@ -222,3 +222,10 @@ def buffer_line(way: Way, width: float) -> Way:
     way.line = way.line.buffer(width / 2)
     way.is_area = True
     return way
+
+
+def ways_to_shapely(ways: List[Way]) -> List[geometry.base.BaseGeometry]:
+    """
+    Convert a list of Way objects to their underlying Shapely geometries.
+    """
+    return [w.line for w in ways if w.line]
