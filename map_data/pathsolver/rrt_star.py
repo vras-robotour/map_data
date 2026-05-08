@@ -83,23 +83,25 @@ class RRTStar:
             for obstacle in self.obstacles:
                 if obstacle.contains(geom) or obstacle.intersects(geom):
                     return True
-        if point2 is not None:
-            p1_grid = (
-                int(point1[0] / self.grid_scale),
-                int(point1[1] / self.grid_scale),
-            )
-            p2_grid = (
-                int(point2[0] / self.grid_scale),
-                int(point2[1] / self.grid_scale),
-            )
-            bres_line = self._bresenham(p1_grid, p2_grid)
-            for point in bres_line:
-                if (
-                    0 <= point[0] < self.grid_shape[1]
-                    and 0 <= point[1] < self.grid_shape[0]
-                ):
-                    if self.grid[point[1], point[0]] >= self.traversability_threshold:
-                        return True
+        if point2 is None:
+            return self._get_grid_cost(point1) >= self.traversability_threshold
+
+        p1_grid = (
+            int(point1[0] / self.grid_scale),
+            int(point1[1] / self.grid_scale),
+        )
+        p2_grid = (
+            int(point2[0] / self.grid_scale),
+            int(point2[1] / self.grid_scale),
+        )
+        bres_line = self._bresenham(p1_grid, p2_grid)
+        for point in bres_line:
+            if (
+                0 <= point[0] < self.grid_shape[1]
+                and 0 <= point[1] < self.grid_shape[0]
+            ):
+                if self.grid[point[1], point[0]] >= self.traversability_threshold:
+                    return True
         return False
 
     def _bresenham(
@@ -256,10 +258,7 @@ class RRTStar:
                 nearest_idx = self._nearest_node(rand_point)
                 nearest = self.nodes[nearest_idx]
                 new_point = self._steer(nearest, rand_point)
-                if (
-                    not self._is_collision(new_point)
-                    or self._get_grid_cost(new_point) < self.traversability_threshold
-                ):
+                if not self._is_collision(new_point):
                     found = True
                     break
             if not found:

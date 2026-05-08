@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import os
-import pickle
 import argparse
 
 import numpy as np
@@ -191,7 +190,7 @@ class ReplanPath:
         )
         return grid
 
-    def fill_grid(self, map_data, highway_types=None):
+    def fill_grid(self, map_data, highway_types=None, max_path_dist=20.0):
         if highway_types is None:
             highway_types = ["footway"]
 
@@ -214,7 +213,6 @@ class ReplanPath:
             self._split_ways(points, allowed_ways, self.args.cell_size),
             ((0, 0), (0, 1)),
         )
-        max_path_dist = 1
         neighbor_cost = "quadratic"
         tmp, mask = self._points_near_ref(path_grid, paths, max_path_dist)
         # Initialize path_grid cost to 1.0 (un-traversable/high cost)
@@ -230,7 +228,6 @@ class ReplanPath:
         else:
             print(f"Unknown neighbor cost: {neighbor_cost}")
 
-        tmp[:, 3] /= max_path_dist**2 if neighbor_cost == "quadratic" else 1
         # Set points near paths to their calculated cost (0.0 to 1.0)
         path_grid[mask, 3] = tmp[:, 3]
 
@@ -375,6 +372,12 @@ def parse_args(args=None):
         default=0.25,
         help="Inflate obstacles by this amount",
     )
+    parser.add_argument(
+        "--max_path_dist",
+        type=float,
+        default=20.0,
+        help="Maximum distance from path to be traversable",
+    )
     parser.add_argument("--save", type=str, default=None, help="Save path to file")
     parser.add_argument("--visualize", action="store_true", help="Visualize the path")
 
@@ -394,17 +397,17 @@ if __name__ == "__main__":
         if ret:
             exit(1)
     else:
-        with open(
-            os.path.join(os.path.dirname(__file__), "../", args.file), "rb"
-        ) as fh:
-            map_data = pickle.load(fh)
+        map_data = MapData.load(
+            os.path.join(os.path.dirname(__file__), "../", args.file)
+        )
 
     args.low = (map_data.min_x, map_data.min_y)
     args.high = (map_data.max_x, map_data.max_y)
     obstacles = ways_to_shapely(map_data.barriers_list)
 
     replanner = ReplanPath(args, obstacles)
-    replanner.fill_grid(map_data)
+    replanner.fill_grid(map_data, max_path_dist=args.max_path_dist)
+
     new_path = replanner.replan_rrt(path_data[0])
 
     if args.save:
