@@ -45,26 +45,55 @@ class RRTStar:
         self.simplify = simplify
         self.transfer_id = transfer_id
 
+        # Restrict sampling to a bounding box around start/goal, then precompute
+        # the traversable cell centres within that region.  On sparse footway grids
+        # where < 1 % of cells are reachable, this eliminates the 100-attempt
+        # rejection loop and reduces wasted random samples by orders of magnitude.
+        _dist = np.linalg.norm(self.goal - self.start)
+        _margin = max(_dist * 2.0, step_size * 20)
+        _w = self.grid_shape[1] * grid_scale
+        _h = self.grid_shape[0] * grid_scale
+        self._sample_min = np.maximum(
+            np.array([0.0, 0.0]),
+            np.minimum(self.start, self.goal) - _margin,
+        )
+        self._sample_max = np.minimum(
+            np.array([_w, _h]),
+            np.maximum(self.start, self.goal) + _margin,
+        )
+        _xi_lo = max(0, int(self._sample_min[0] / grid_scale))
+        _xi_hi = min(self.grid_shape[1], int(np.ceil(self._sample_max[0] / grid_scale)))
+        _yi_lo = max(0, int(self._sample_min[1] / grid_scale))
+        _yi_hi = min(self.grid_shape[0], int(np.ceil(self._sample_max[1] / grid_scale)))
+        _sub = self.grid[_yi_lo:_yi_hi, _xi_lo:_xi_hi]
+        _ys, _xs = np.where(_sub < self.traversability_threshold)
+        if len(_xs) > 0:
+            self._trav_xs = (_xs + _xi_lo) * grid_scale
+            self._trav_ys = (_ys + _yi_lo) * grid_scale
+        else:
+            self._trav_xs = None
+            self._trav_ys = None
+
     def _is_collision(
         self, point1: np.ndarray, point2: Optional[np.ndarray] = None
     ) -> bool:
         """Check for collision between obstacles and map segments."""
-        if point2 is None:
-            geom = Point(point1)
-        else:
-            geom = LineString([point1, point2])
-
-        for obstacle in self.obstacles:
-            if obstacle.contains(geom) or obstacle.intersects(geom):
-                return True
+        if self.obstacles:
+            geom = Point(point1) if point2 is None else LineString([point1, point2])
+            for obstacle in self.obstacles:
+                if obstacle.contains(geom) or obstacle.intersects(geom):
+                    return True
         if point2 is not None:
-            p1_grid = (point1[0] / self.grid_scale, point1[1] / self.grid_scale)
-            p2_grid = (point2[0] / self.grid_scale, point2[1] / self.grid_scale)
-            p1_grid = (int(p1_grid[0]), int(p1_grid[1]))
-            p2_grid = (int(p2_grid[0]), int(p2_grid[1]))
+            p1_grid = (
+                int(point1[0] / self.grid_scale),
+                int(point1[1] / self.grid_scale),
+            )
+            p2_grid = (
+                int(point2[0] / self.grid_scale),
+                int(point2[1] / self.grid_scale),
+            )
             bres_line = self._bresenham(p1_grid, p2_grid)
             for point in bres_line:
-                # point is (x_idx, y_idx), self.grid is (num_y, num_x)
                 if (
                     0 <= point[0] < self.grid_shape[1]
                     and 0 <= point[1] < self.grid_shape[0]
@@ -123,19 +152,19 @@ class RRTStar:
         return float(self.grid[i, j])
 
     def _sample_point(self) -> np.ndarray:
-        """Sample a random point in the grid space, biased towards traversable areas."""
-        for _ in range(100):
-            x = random.uniform(0, self.grid_shape[1] * self.grid_scale)
-            y = random.uniform(0, self.grid_shape[0] * self.grid_scale)
-            point = np.array([x, y])
-            if self._get_grid_cost(
-                point
-            ) < self.traversability_threshold and not self._is_collision(point):
-                return point
+        """Sample a traversable point from the precomputed cell list (O(1))."""
+        if self._trav_xs is not None:
+            idx = random.randrange(len(self._trav_xs))
+            return np.array(
+                [
+                    self._trav_xs[idx] + random.uniform(0, self.grid_scale),
+                    self._trav_ys[idx] + random.uniform(0, self.grid_scale),
+                ]
+            )
         return np.array(
             [
-                random.uniform(0, self.grid_shape[1] * self.grid_scale),
-                random.uniform(0, self.grid_shape[0] * self.grid_scale),
+                random.uniform(self._sample_min[0], self._sample_max[0]),
+                random.uniform(self._sample_min[1], self._sample_max[1]),
             ]
         )
 
@@ -187,10 +216,11 @@ class RRTStar:
 
     def _segment_cost(self, start: np.ndarray, end: np.ndarray) -> Tuple[bool, float]:
         """Check collision and compute traversal cost in a single Bresenham pass."""
-        geom = LineString([start, end])
-        for obstacle in self.obstacles:
-            if obstacle.contains(geom) or obstacle.intersects(geom):
-                return True, float("inf")
+        if self.obstacles:
+            geom = LineString([start, end])
+            for obstacle in self.obstacles:
+                if obstacle.contains(geom) or obstacle.intersects(geom):
+                    return True, float("inf")
 
         p1_grid = (int(start[0] / self.grid_scale), int(start[1] / self.grid_scale))
         p2_grid = (int(end[0] / self.grid_scale), int(end[1] / self.grid_scale))
