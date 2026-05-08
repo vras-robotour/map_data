@@ -10,7 +10,8 @@ class PlannerMode {
     this.isProcessing = false;
     this.isDragging = false;
     this.lastDragEndTime = 0;
-    this.activeTransferId = null;
+    this.currentReplanId = null;
+    this.currentWormholeId = null;
     this.pathPolyline = null;
 
     this.init();
@@ -272,6 +273,14 @@ class PlannerMode {
   }
 
   async replanPath() {
+    if (this.isProcessing) {
+      if (this.abortController) {
+        this.abortController.abort();
+      }
+      this.cancelReplan();
+      return;
+    }
+
     if (this.points.length < 2) {
       setStatus('At least 2 points required', 'text-warning');
       return;
@@ -282,6 +291,8 @@ class PlannerMode {
     }
 
     this.isProcessing = true;
+    this.abortController = new AbortController();
+    this.currentReplanId = 'replan-' + Date.now();
     this.updateProcessingUI(true);
     setStatus('Replanning path...', 'text-warning');
 
@@ -297,13 +308,15 @@ class PlannerMode {
       const res = await fetch('/api/create_replan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: this.abortController.signal,
         body: JSON.stringify({
           points: this.points.map(p => [p.lat, p.lon]),
           file: currentFile,
           allowed_ways: allowedWays,
           cell_size: cellSize,
           inflate_obstacles: inflate,
-          simplify_path: simplify
+          simplify_path: simplify,
+          transfer_id: this.currentReplanId
         })
       });
 
@@ -311,7 +324,11 @@ class PlannerMode {
       const data = await res.json();
 
       if (data.retrieveNum === 1) {
-        setStatus('Replanning failed: path not found', 'text-danger');
+        if (data.status === 'cancelled') {
+            setStatus('Replanning cancelled', 'text-info');
+        } else {
+            setStatus('Replanning failed: path not found', 'text-danger');
+        }
       } else if (data.retrieveNum === -1) {
         setStatus('Path is already optimal', 'text-success');
       } else {
@@ -322,19 +339,47 @@ class PlannerMode {
         setStatus('Path replanned successfully', 'text-success');
       }
     } catch (err) {
-      setStatus(`Error: ${err.message}`, 'text-danger');
+      if (err.name === 'AbortError') {
+        setStatus('Replanning cancelled', 'text-info');
+      } else {
+        setStatus(`Error: ${err.message}`, 'text-danger');
+      }
     } finally {
       this.isProcessing = false;
+      this.abortController = null;
+      this.currentReplanId = null;
       this.updateProcessingUI(false);
+    }
+  }
+
+  async cancelReplan() {
+    if (!this.currentReplanId) return;
+    setStatus('Cancelling...', 'text-warning');
+    try {
+      await fetch('/api/cancel_replan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transfer_id: this.currentReplanId })
+      });
+    } catch (err) {
+      console.error('Cancel failed:', err);
     }
   }
 
   updateProcessingUI(processing) {
     const btn = document.getElementById('replan-btn');
-    btn.disabled = processing;
-    btn.innerHTML = processing ? 
-      '<span class="spinner-border spinner-border-sm"></span> Processing...' : 
-      '<span class="btn-icon">✏️</span><span>Replan Path</span>';
+    btn.classList.toggle('btn-primary', !processing);
+    btn.classList.toggle('btn-danger', processing);
+    
+    if (processing) {
+      btn.innerHTML = `
+        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+        <span class="ms-1">Planning...</span>
+        <span class="ms-auto" style="font-weight:bold; font-size:1.1rem;">&times;</span>
+      `;
+    } else {
+      btn.innerHTML = '<span class="btn-icon">✏️</span><span>Replan Path</span>';
+    }
   }
 
   exportToGPX() {
@@ -370,7 +415,7 @@ ${pts}
       });
       const data = await res.json();
       if (data.success) {
-        this.activeTransferId = data.transfer_id;
+        this.currentWormholeId = data.transfer_id;
         this.showWormholeDialog(data.code);
       } else {
         alert('Wormhole failed: ' + data.message);
@@ -394,7 +439,15 @@ ${pts}
     `;
     document.body.appendChild(overlay);
     overlay.querySelector('.dialog-close-btn').onclick = () => {
+      if (this.currentWormholeId) {
+        fetch('/api/cancel_wormhole', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transfer_id: this.currentWormholeId })
+        }).catch(err => console.error('Wormhole cancel failed:', err));
+      }
       document.body.removeChild(overlay);
+      this.currentWormholeId = null;
     };
   }
 

@@ -179,7 +179,9 @@ def migrate_change_log(store):
     for wid_str in store.get("node_position_overrides", {}):
         wid = int(wid_str)
         if wid not in tracked_moves:
-            untracked_moves.append({"type": "move", "id": wid, "category": "unknown", "label": ""})
+            untracked_moves.append(
+                {"type": "move", "id": wid, "category": "unknown", "label": ""}
+            )
 
     if untracked_ways or untracked_nodes or untracked_tags or untracked_moves:
         nw, nn = len(untracked_ways), len(untracked_nodes)

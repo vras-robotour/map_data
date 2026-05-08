@@ -24,9 +24,19 @@ from map_data.utils.gpx import (
 )
 
 
+# Global cancellation state
+_cancelled_transfers = set()
+
+
+def cancel_replan_backend(transfer_id):
+    if transfer_id:
+        _cancelled_transfers.add(transfer_id)
+
+
 class ReplanPath:
-    def __init__(self, args, obstacles=None):
+    def __init__(self, args, obstacles=None, transfer_id=None):
         self.args = args
+        self.transfer_id = transfer_id
 
         self.grid = self._create_grid(args.low, args.high, args.cell_size)
         if args.inflate_obstacles:
@@ -39,6 +49,9 @@ class ReplanPath:
 
     def replan_rrt(self, path):
         def process_segment(i, path, obstacles, args):
+            if self.transfer_id in _cancelled_transfers:
+                return None, i
+
             start = path[i]
             goal = path[i + 1]
             segment_path = [start[:2]]
@@ -51,10 +64,14 @@ class ReplanPath:
             return segment_path, i
 
         new_path = []
-        results = Parallel(n_jobs=-1)(
+        results = Parallel(n_jobs=-1, backend="threading")(
             delayed(process_segment)(i, path, self.obstacles, self.args)
             for i in range(len(path) - 1)
         )
+
+        if self.transfer_id in _cancelled_transfers:
+            _cancelled_transfers.discard(self.transfer_id)
+            return None
 
         # Sort results by index to maintain path order
         results.sort(key=lambda x: x[1])
@@ -119,6 +136,7 @@ class ReplanPath:
             grid,
             grid_scale=self.args.cell_size,
             simplify=self.args.simplify_path,
+            transfer_id=self.transfer_id,
         )
         path = rrt_star.find_path()
         if path is None and self.debug:  # debug
@@ -192,7 +210,10 @@ class ReplanPath:
         max_path_dist = 1
         neighbor_cost = "quadratic"
         tmp, mask = self._points_near_ref(path_grid, paths, max_path_dist)
+        # Initialize path_grid cost to 1.0 (un-traversable/high cost)
         path_grid = np.pad(path_grid, ((0, 0), (0, 1)))
+        path_grid[:, 3] = 1.0
+
         if neighbor_cost == "linear":
             pass
         elif neighbor_cost == "quadratic":
@@ -201,9 +222,10 @@ class ReplanPath:
             tmp[:, 3] = 0
         else:
             print(f"Unknown neighbor cost: {neighbor_cost}")
+
         tmp[:, 3] /= max_path_dist**2 if neighbor_cost == "quadratic" else 1
+        # Set points near paths to their calculated cost (0.0 to 1.0)
         path_grid[mask, 3] = tmp[:, 3]
-        path_grid[~mask, 3] = 0.5
 
         self.grid = path_grid
 

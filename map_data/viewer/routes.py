@@ -25,7 +25,7 @@ from flask import (
 )
 
 from map_data.map_data import MapData
-from map_data.pathsolver.replan import ReplanPath, parse_args
+from map_data.pathsolver.replan import ReplanPath, cancel_replan_backend, parse_args
 from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.serialization import map_data_to_dict
 from map_data.utils.way import FOOTWAY_VALUES, Way
@@ -131,7 +131,11 @@ def get_mapdata():
     node_pos_store = store.get("node_position_overrides", {})
     if node_pos_store:
         zn, zl = map_data.zone_number, map_data.zone_letter
-        _cat_for_list = {"roads_list": "road", "footways_list": "footway", "barriers_list": "barrier"}
+        _cat_for_list = {
+            "roads_list": "road",
+            "footways_list": "footway",
+            "barriers_list": "barrier",
+        }
         for lst_name in ("roads_list", "footways_list", "barriers_list"):
             new_lst = []
             for w in getattr(map_data, lst_name):
@@ -139,7 +143,11 @@ def get_mapdata():
                 if ov:
                     w = (
                         apply_node_position_overrides(
-                            w, ov, zn, zl, getattr(map_data, "nodes_cache", {}),
+                            w,
+                            ov,
+                            zn,
+                            zl,
+                            getattr(map_data, "nodes_cache", {}),
                             category=_cat_for_list[lst_name],
                         )
                         or w
@@ -657,13 +665,15 @@ def move_way_nodes():
     migrate_change_log(store)
     cl = store.setdefault("change_log", [])
     if not any(e.get("type") == "move" and e.get("id") == way_id for e in cl):
-        cl.append({
-            "type": "move",
-            "id": way_id,
-            "category": body.get("category", "unknown"),
-            "label": body.get("label", ""),
-            "ts": time.time(),
-        })
+        cl.append(
+            {
+                "type": "move",
+                "id": way_id,
+                "category": body.get("category", "unknown"),
+                "label": body.get("label", ""),
+                "ts": time.time(),
+            }
+        )
     save_annotations(ann_path, store)
     return "", 204
 
@@ -682,7 +692,9 @@ def undo_move_way_nodes():
     store = load_annotations(ann_path)
     store.get("node_position_overrides", {}).pop(str(way_id), None)
     cl = store.get("change_log", [])
-    store["change_log"] = [e for e in cl if not (e.get("type") == "move" and e.get("id") == way_id)]
+    store["change_log"] = [
+        e for e in cl if not (e.get("type") == "move" and e.get("id") == way_id)
+    ]
     save_annotations(ann_path, store)
     return "", 204
 
@@ -825,13 +837,22 @@ def export_mapdata():
     )
 
 
+@bp.route("/api/cancel_replan", methods=["POST"])
+def cancel_replan_route():
+    transfer_id = request.json.get("transfer_id")
+    cancel_replan_backend(transfer_id)
+    return jsonify({"success": True})
+
+
 class WormholeManager:
     def __init__(self):
         self.active_transfers = {}
         if shutil.which("wormhole") is None:
-            # We don't want to crash the whole app if wormhole is missing, 
+            # We don't want to crash the whole app if wormhole is missing,
             # just log it and the endpoints will fail gracefully.
-            logger.warning("'wormhole' command not found. magic-wormhole is required for sharing.")
+            logger.warning(
+                "'wormhole' command not found. magic-wormhole is required for sharing."
+            )
 
     def create_transfer(self, gpx_data):
         transfer_id = str(uuid.uuid4())
@@ -892,7 +913,9 @@ class WormholeManager:
                         match = re.search(r"Wormhole code is: (\S+-\S+-\S+)", line)
                         if match:
                             wormhole_code = match.group(1)
-                            logger.info(f"Wormhole code captured for transfer {transfer_id}: {wormhole_code}")
+                            logger.info(
+                                f"Wormhole code captured for transfer {transfer_id}: {wormhole_code}"
+                            )
                         elif stream == process.stderr:
                             logger.warning(f"Wormhole stderr ({transfer_id}): {line}")
 
@@ -962,7 +985,9 @@ def create_wormhole():
             return jsonify({"success": True, "code": code, "transfer_id": transfer_id})
         else:
             wormhole_manager.cancel_transfer(transfer_id)
-            return jsonify({"success": False, "message": "Failed to capture wormhole code in time"}), 500
+            return jsonify(
+                {"success": False, "message": "Failed to capture wormhole code in time"}
+            ), 500
     except Exception as e:
         logger.error(f"Error creating wormhole: {e}", exc_info=True)
         return jsonify({"success": False, "message": str(e)}), 500
@@ -981,7 +1006,8 @@ def create_replan():
     path_data = body.get("points")  # [[lat, lon], ...]
     filename = body.get("file")
     highway_types = body.get("allowed_ways", ["footway"])
-    
+    transfer_id = body.get("transfer_id")
+
     cell_size = body.get("cell_size", 0.25)
     inflate_obstacles = body.get("inflate_obstacles", 0.25)
     simplify_path = body.get("simplify_path", True)
@@ -1002,7 +1028,7 @@ def create_replan():
     args.high = (md.max_x, md.max_y)
 
     obstacles = ways_to_shapely(md.barriers_list)
-    replanner = ReplanPath(args, obstacles)
+    replanner = ReplanPath(args, obstacles, transfer_id=transfer_id)
     replanner.fill_grid(md, highway_types=highway_types)
 
     zn, zl = md.zone_number, md.zone_letter
@@ -1014,15 +1040,15 @@ def create_replan():
 
     res = replanner.replan_rrt(utm_path)
     if res is None:
-        return jsonify({"retrieveNum": 1, "newPath": None})
+        return jsonify({"retrieveNum": 1, "newPath": None, "status": "cancelled"})
 
     new_path = []
     changed = False
-    
+
     # RRT* result might have more/different points
     if len(res) != len(utm_path):
         changed = True
-    
+
     for i in range(len(res)):
         lat, lon = utm.to_latlon(res[i][0], res[i][1], zn, zl)
         new_path.append([lat, lon])

@@ -17,12 +17,13 @@ class RRTStar:
         goal: Tuple[float, float],
         obstacles: List,
         grid: np.ndarray,
-        max_iter: int = 5000,
-        step_size: float = 0.5,
-        neighbor_radius: float = 1.0,
+        max_iter: int = 10000,
+        step_size: float = 1.0,
+        neighbor_radius: float = 2.0,
         grid_scale: float = 1.0,
-        traversability_threshold: float = 0.75,
+        traversability_threshold: float = 0.95,
         simplify: bool = True,
+        transfer_id: Optional[str] = None,
     ):
         self.start = np.array(start)
         self.goal = np.array(goal)
@@ -39,6 +40,7 @@ class RRTStar:
         self.goal_tolerance = step_size / 2
         self.traversability_threshold = traversability_threshold
         self.simplify = simplify
+        self.transfer_id = transfer_id
 
     def _is_collision(
         self, point1: np.ndarray, point2: Optional[np.ndarray] = None
@@ -64,10 +66,7 @@ class RRTStar:
                     0 <= point[0] < self.grid_shape[1]
                     and 0 <= point[1] < self.grid_shape[0]
                 ):
-                    if (
-                        self.grid[point[1], point[0]]
-                        >= self.traversability_threshold
-                    ):
+                    if self.grid[point[1], point[0]] >= self.traversability_threshold:
                         return True
         return False
 
@@ -181,7 +180,12 @@ class RRTStar:
 
     def find_path(self) -> Optional[np.ndarray]:
         """Main RRT* algorithm to find a path from start to goal."""
+        from .replan import _cancelled_transfers
+
         for _ in range(self.max_iter):
+            if self.transfer_id in _cancelled_transfers:
+                return None
+
             while True:
                 # Occasionally sample the goal to bias exploration
                 if random.random() < 0.1:
