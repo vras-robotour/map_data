@@ -48,6 +48,13 @@ class PlannerMode {
 
     document.getElementById('export-gpx-path-btn').addEventListener('click', () => this.exportToGPX());
     document.getElementById('export-wormhole-path-btn').addEventListener('click', () => this.shareViaWormhole());
+
+    document.querySelectorAll('input[name="plan-mode"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+            this.drawPathLine();
+            this.updateUI();
+        });
+    });
   }
 
   handleMapClick(e) {
@@ -62,6 +69,9 @@ class PlannerMode {
     this.points.push(point);
     this.redraw();
     this.updateUI();
+    // Reset path state if we just added a point and we are in graph mode
+    // (the server will return a path when replan is clicked)
+    this.hasPlannedPath = false;
   }
 
   redraw() {
@@ -106,6 +116,7 @@ class PlannerMode {
           marker.setLatLng(e.latlng);
           p.lat = e.latlng.lat;
           p.lon = e.latlng.lng;
+          this.hasPlannedPath = false; // Point moved, path is invalid
           this.drawPathLine();
         }
       });
@@ -141,12 +152,18 @@ class PlannerMode {
     }
     if (this.points.length < 2) return;
 
+    const algorithm = document.querySelector('input[name="plan-mode"]:checked').value;
+    // For graph mode, don't show the straight line if a path hasn't been returned by the server
+    if (algorithm === 'graph' && !this.hasPlannedPath) {
+      return;
+    }
+
     const latlngs = this.points.map(p => [p.lat, p.lon]);
     this.pathPolyline = L.polyline(latlngs, {
       color: '#0d6efd',
       weight: 4,
       opacity: 0.7,
-      dashArray: '5, 10'
+      dashArray: algorithm === 'rrt' && !this.hasPlannedPath ? '5, 10' : ''
     }).addTo(map);
     
     this.pathPolyline.on('click', (e) => {
@@ -183,7 +200,18 @@ class PlannerMode {
     if (this.points.length === 0) {
       countEl.textContent = 'Click map to start drawing a path';
     } else {
-      countEl.textContent = `${this.points.length} points in path`;
+      let totalDist = 0;
+      for (let i = 0; i < this.points.length - 1; i++) {
+        const p1 = L.latLng(this.points[i].lat, this.points[i].lon);
+        const p2 = L.latLng(this.points[i+1].lat, this.points[i+1].lon);
+        totalDist += p1.distanceTo(p2);
+      }
+      
+      let distStr = totalDist > 1000 
+        ? `${(totalDist / 1000).toFixed(2)} km` 
+        : `${totalDist.toFixed(1)} m`;
+
+      countEl.textContent = `${this.points.length} points | ${distStr}`;
     }
     document.getElementById('planner-export-btn').disabled = this.points.length < 2;
   }
@@ -334,6 +362,7 @@ class PlannerMode {
       } else if (data.retrieveNum === -1) {
         setStatus('Path is already optimal', 'text-success');
       } else {
+        this.hasPlannedPath = true;
         this.clearMarkers();
         this.points = data.newPath.map(p => ({ lat: p[0], lon: p[1], marker: null }));
         this.redraw();

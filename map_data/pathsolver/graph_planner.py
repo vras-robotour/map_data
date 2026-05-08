@@ -1,5 +1,6 @@
 import heapq
 import numpy as np
+from shapely.geometry import Point, LineString
 
 
 class GraphPlanner:
@@ -29,26 +30,44 @@ class GraphPlanner:
                 self.graph.setdefault(n1, []).append((n2, dist))
                 self.graph.setdefault(n2, []).append((n1, dist))
 
-    def _find_closest_node(self, point_utm):
+    def _find_closest_edge(self, point_utm):
         """
-        Find the closest node in the graph to the given UTM point.
+        Find the closest edge in the graph to the given UTM point.
+        Returns: (n1, n2, projected_point, distance)
         """
-        p_utm = np.array(point_utm)
+        p_sh = Point(point_utm)
         min_dist = float("inf")
-        best_node = None
+        best_edge = None  # (n1, n2, projected_point)
 
-        for node_id in self.graph:
-            pos = self.nodes[node_id].ravel()[:2]
-            dist = np.linalg.norm(p_utm - pos)
-            if dist < min_dist:
-                min_dist = dist
-                best_node = node_id
-        return best_node, min_dist
+        allowed_ways = []
+        if "footway" in self.highway_types:
+            allowed_ways.extend(self.map_data.footways_list)
+        if "road" in self.highway_types:
+            allowed_ways.extend(self.map_data.roads_list)
+
+        for way in allowed_ways:
+            for i in range(len(way.nodes) - 1):
+                n1 = way.nodes[i]
+                n2 = way.nodes[i + 1]
+                p1 = self.nodes[n1].ravel()[:2]
+                p2 = self.nodes[n2].ravel()[:2]
+
+                line = LineString([p1, p2])
+                dist = line.distance(p_sh)
+
+                if dist < min_dist:
+                    min_dist = dist
+                    # Project point onto line
+                    proj_dist = line.project(p_sh)
+                    projected_point = np.array(line.interpolate(proj_dist).coords[0])
+                    best_edge = (n1, n2, projected_point)
+
+        return best_edge, min_dist
 
     def a_star(self, start_node, goal_node, extra_nodes=None):
         """
         Standard A* between two nodes.
-        extra_nodes: dict for temporary nodes (not used in current nearest-node logic but kept for future)
+        extra_nodes: dict for temporary nodes (e.g. snapped points)
         """
         count = 0
         q = [(0, count, start_node)]
@@ -69,7 +88,7 @@ class GraphPlanner:
             return np.linalg.norm(p1 - p2)
 
         while q:
-            (_, _, u) = heapq.heappop(q)
+            (cost_plus_h, _, u) = heapq.heappop(q)
             cost = visited[u][0]
 
             if u == goal_node:
@@ -99,7 +118,7 @@ class GraphPlanner:
     def plan(self, path_utm):
         """
         Plan path between multiple UTM points.
-        Connects clicked points to the nearest graph node with a straight line.
+        Connects clicked points to the nearest point on the nearest edge.
         """
         full_path = []
 
@@ -107,34 +126,62 @@ class GraphPlanner:
             p_start = path_utm[i]
             p_goal = path_utm[i + 1]
 
-            # Find nearest nodes in the graph
-            node_s, _ = self._find_closest_node(p_start)
-            node_g, _ = self._find_closest_node(p_goal)
+            # Find nearest edges and projections
+            edge_start_info, _ = self._find_closest_edge(p_start)
+            edge_goal_info, _ = self._find_closest_edge(p_goal)
 
-            if node_s is None or node_g is None:
+            if not edge_start_info or not edge_goal_info:
                 return None
 
-            # Route between topological nodes
-            segment = self.a_star(node_s, node_g)
+            id_s = "temp_start"
+            id_g = "temp_goal"
+            n_s1, n_s2, p_proj_s = edge_start_info
+            n_g1, n_g2, p_proj_g = edge_goal_info
+
+            # Construct local subgraph for snapped points
+            extra = {
+                "positions": {id_s: p_proj_s, id_g: p_proj_g},
+                id_s: [
+                    (n_s1, np.linalg.norm(p_proj_s - self.nodes[n_s1].ravel()[:2])),
+                    (n_s2, np.linalg.norm(p_proj_s - self.nodes[n_s2].ravel()[:2])),
+                ],
+                id_g: [
+                    (n_g1, np.linalg.norm(p_proj_g - self.nodes[n_g1].ravel()[:2])),
+                    (n_g2, np.linalg.norm(p_proj_g - self.nodes[n_g2].ravel()[:2])),
+                ],
+                n_s1: [(id_s, np.linalg.norm(p_proj_s - self.nodes[n_s1].ravel()[:2]))],
+                n_s2: [(id_s, np.linalg.norm(p_proj_s - self.nodes[n_s2].ravel()[:2]))],
+                n_g1: [(id_g, np.linalg.norm(p_proj_g - self.nodes[n_g1].ravel()[:2]))],
+                n_g2: [(id_g, np.linalg.norm(p_proj_g - self.nodes[n_g2].ravel()[:2]))],
+            }
+
+            # Special case: start and goal on the same edge
+            if (n_s1 == n_g1 and n_s2 == n_g2) or (n_s1 == n_g2 and n_s2 == n_g1):
+                dist_sg = np.linalg.norm(p_proj_s - p_proj_g)
+                extra[id_s].append((id_g, dist_sg))
+                extra[id_g].append((id_s, dist_sg))
+
+            # Route between temporary nodes (projections)
+            segment = self.a_star(id_s, id_g, extra)
             if not segment:
                 return None
 
-            # The segment starts at node_s_pos and ends at node_g_pos.
-            # We add the actual clicked points p_start and p_goal.
-            # To avoid duplicate points if user clicked exactly on a node:
-            segment_with_ends = []
-            segment_with_ends.append(p_start)
+            # Combine: clicked point -> projection -> graph path -> projection -> clicked point
+            # segment already contains [p_proj_s, ..., p_proj_g]
+
+            final_segment = []
+            final_segment.append(p_start)
 
             for p in segment:
-                if np.linalg.norm(p - segment_with_ends[-1]) > 1e-3:
-                    segment_with_ends.append(p)
+                if np.linalg.norm(p - final_segment[-1]) > 1e-3:
+                    final_segment.append(p)
 
-            if np.linalg.norm(p_goal - segment_with_ends[-1]) > 1e-3:
-                segment_with_ends.append(p_goal)
+            if np.linalg.norm(p_goal - final_segment[-1]) > 1e-3:
+                final_segment.append(p_goal)
 
             if i > 0:
-                full_path.extend(segment_with_ends[1:])
+                full_path.extend(final_segment[1:])
             else:
-                full_path.extend(segment_with_ends)
+                full_path.extend(final_segment)
 
         return np.array(full_path)
