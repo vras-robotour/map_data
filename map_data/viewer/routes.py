@@ -118,6 +118,7 @@ def get_mapdata():
     node_pos_store = store.get("node_position_overrides", {})
     if node_pos_store:
         zn, zl = map_data.zone_number, map_data.zone_letter
+        _cat_for_list = {"roads_list": "road", "footways_list": "footway", "barriers_list": "barrier"}
         for lst_name in ("roads_list", "footways_list", "barriers_list"):
             new_lst = []
             for w in getattr(map_data, lst_name):
@@ -125,7 +126,8 @@ def get_mapdata():
                 if ov:
                     w = (
                         apply_node_position_overrides(
-                            w, ov, zn, zl, getattr(map_data, "nodes_cache", {})
+                            w, ov, zn, zl, getattr(map_data, "nodes_cache", {}),
+                            category=_cat_for_list[lst_name],
                         )
                         or w
                     )
@@ -639,6 +641,16 @@ def move_way_nodes():
             "lat": float(n["lat"]),
             "lon": float(n["lon"]),
         }
+    migrate_change_log(store)
+    cl = store.setdefault("change_log", [])
+    if not any(e.get("type") == "move" and e.get("id") == way_id for e in cl):
+        cl.append({
+            "type": "move",
+            "id": way_id,
+            "category": body.get("category", "unknown"),
+            "label": body.get("label", ""),
+            "ts": time.time(),
+        })
     save_annotations(ann_path, store)
     return "", 204
 
@@ -656,6 +668,8 @@ def undo_move_way_nodes():
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
     store.get("node_position_overrides", {}).pop(str(way_id), None)
+    cl = store.get("change_log", [])
+    store["change_log"] = [e for e in cl if not (e.get("type") == "move" and e.get("id") == way_id)]
     save_annotations(ann_path, store)
     return "", 204
 
@@ -693,6 +707,7 @@ def export_mapdata():
 
     node_pos_store = store.get("node_position_overrides", {})
     if node_pos_store:
+        _cat_for_list = {"roads_list": "road", "footways_list": "footway", "barriers_list": "barrier"}
         for lst_name in ("roads_list", "footways_list", "barriers_list"):
             new_lst = []
             for w in getattr(md, lst_name):
@@ -700,7 +715,8 @@ def export_mapdata():
                 if ov:
                     w = (
                         apply_node_position_overrides(
-                            w, ov, zn, zl, getattr(md, "nodes_cache", {})
+                            w, ov, zn, zl, getattr(md, "nodes_cache", {}),
+                            category=_cat_for_list[lst_name],
                         )
                         or w
                     )

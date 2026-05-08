@@ -112,11 +112,11 @@ async function fetchWayApi(filename, wayId) {
   return await fetch(`/api/ways/${wayId}?file=${encodeURIComponent(filename)}`);
 }
 
-async function moveWayNodesApi(filename, wayId, nodes) {
+async function moveWayNodesApi(filename, wayId, nodes, category, label) {
   return await fetch(`/api/way_nodes/move?file=${encodeURIComponent(filename)}&way_id=${wayId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nodes }),
+    body: JSON.stringify({ nodes, category: category ?? 'unknown', label: label ?? '' }),
   });
 }
 

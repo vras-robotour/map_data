@@ -228,6 +228,7 @@ async function loadMapData(filename, { preserveView = false } = {}) {
     if (rawChangeLog) {
       const wayMap = new Map(deletedWays.map(d => [d.id, d]));
       const tagMap = new Map(tagOverrides.map(d => [d.id, d]));
+      const nodePosOverrides = annData.node_position_overrides || {};
       const sorted = [...rawChangeLog].sort((a, b) => (a.ts || 0) - (b.ts || 0));
       changeLog = sorted.flatMap(e => {
         if (e.type === 'way') { const d = wayMap.get(e.id); return d ? [{ type: 'way', ts: e.ts, ...d }] : []; }
@@ -235,6 +236,9 @@ async function loadMapData(filename, { preserveView = false } = {}) {
         if (e.type === 'node') {
           const d = deletedNodes.find(n => n.way_id === e.way_id && n.node_id === e.node_id);
           return d ? [{ type: 'node', ts: e.ts, ...d }] : [];
+        }
+        if (e.type === 'move') {
+          return nodePosOverrides[String(e.id)] ? [{ type: 'move', ts: e.ts, id: e.id, category: e.category || 'unknown', label: e.label || '' }] : [];
         }
         return [];
       });

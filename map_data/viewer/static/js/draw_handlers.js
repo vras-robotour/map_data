@@ -192,7 +192,10 @@ async function _onOsmDragUp(e) {
   }
 
   if (!currentFile || !wayId) return;
-  const res = await moveWayNodesApi(currentFile, wayId, nodesToSave);
+  const _mcat = currentClickedFeature?.properties?.category ?? 'unknown';
+  const _mtags0 = currentClickedFeature?.properties?.tags || {};
+  const _mlbl = _mtags0.highway || _mtags0.barrier || '';
+  const res = await moveWayNodesApi(currentFile, wayId, nodesToSave, _mcat, _mlbl);
   if (!res.ok) { setStatus('Move failed', 'text-danger'); return; }
 
   const isLine = currentClickedFeature?.geometry?.type === 'LineString';
@@ -201,15 +204,8 @@ async function _onOsmDragUp(e) {
   }
 
   // Record move in changelog (once per way; re-drags don't add duplicates)
-  const _mfeat = currentClickedFeature;
-  if (_mfeat && !changeLog.some(c => c.type === 'move' && c.id === wayId)) {
-    const _mtags = _mfeat.properties?.tags || {};
-    changeLog.push({
-      type: 'move',
-      id: wayId,
-      category: _mfeat.properties?.category ?? 'unknown',
-      label: _mtags.highway || _mtags.barrier || '',
-    });
+  if (!changeLog.some(c => c.type === 'move' && c.id === wayId)) {
+    changeLog.push({ type: 'move', id: wayId, category: _mcat, label: _mlbl });
   }
   renderChangesPanel();
 

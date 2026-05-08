@@ -174,7 +174,14 @@ def migrate_change_log(store):
         if wid not in tracked_tags:
             untracked_tags.append({"type": "tag", "id": wid})
 
-    if untracked_ways or untracked_nodes or untracked_tags:
+    tracked_moves = {e["id"] for e in cl if e.get("type") == "move"}
+    untracked_moves = []
+    for wid_str in store.get("node_position_overrides", {}):
+        wid = int(wid_str)
+        if wid not in tracked_moves:
+            untracked_moves.append({"type": "move", "id": wid, "category": "unknown", "label": ""})
+
+    if untracked_ways or untracked_nodes or untracked_tags or untracked_moves:
         nw, nn = len(untracked_ways), len(untracked_nodes)
         if nw == 0 or nn == 0:
             interleaved = untracked_ways + untracked_nodes
@@ -185,7 +192,7 @@ def migrate_change_log(store):
             ]
             items.sort(key=lambda x: x[0])
             interleaved = [e for _, e in items]
-        store["change_log"] = interleaved + untracked_tags + cl
+        store["change_log"] = interleaved + untracked_tags + untracked_moves + cl
 
     store["change_log_migration"] = _MIGRATION_VERSION
 
