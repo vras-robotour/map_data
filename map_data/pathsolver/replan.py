@@ -13,6 +13,7 @@ from matplotlib.patches import Polygon as MplPolygon
 from matplotlib.path import Path
 
 from map_data.pathsolver.grid_astar import grid_astar
+from map_data.pathsolver.rrt_star import RRTStar
 from map_data.map_data import MapData
 from map_data.utils.parsing import (
     ways_to_shapely,
@@ -55,7 +56,7 @@ class ReplanPath:
             self._convert_obstacles(self.obstacles) if self.obstacles else []
         )
 
-    def replan(self, path):
+    def replan_rrt(self, path, algorithm="astar"):
         def process_segment(i, path, args):
             if self.transfer_id in _cancelled_transfers:
                 return None, i
@@ -65,8 +66,11 @@ class ReplanPath:
             segment_path = [start[:2]]
             path_seg = LineString([start[:2], goal[:2]])
             if self._colides(path_seg):
-                # Using A* instead of RRT*
-                way = self._astar(start[:2], goal[:2])
+                if algorithm == "rrt":
+                    way = self._rrt_star(start[:2], goal[:2])
+                else:
+                    way = self._astar(start[:2], goal[:2])
+
                 if way is None:
                     return None, i
                 segment_path.extend(way[1:-1])
@@ -85,12 +89,31 @@ class ReplanPath:
         results.sort(key=lambda x: x[1])
         for segment_path, _ in results:
             if segment_path is None:
-                print("A* failed to find a path.")
+                print(f"{algorithm} failed to find a path.")
                 return None
             new_path.extend(segment_path)
 
         new_path.append(path[-1][:2])
         return np.array(new_path)
+
+    def _rrt_star(self, start, goal):
+        grid = (
+            self._reshaped_grid_cache
+            if self._reshaped_grid_cache is not None
+            else self._burn_obstacles_into_grid(self._reshape_grid())
+        )
+        planner = RRTStar(
+            start=start,
+            goal=goal,
+            obstacles=self.obstacles,
+            obstacles_tree=self.obstacles_tree,
+            grid=grid,
+            low=self.args.low,
+            grid_scale=self.args.cell_size,
+            transfer_id=self.transfer_id,
+            simplify=self.args.simplify_path,
+        )
+        return planner.find_path()
 
     def _reshape_grid(self):
         """

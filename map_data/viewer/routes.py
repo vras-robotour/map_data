@@ -1010,6 +1010,7 @@ def create_replan():
     highway_types = body.get("allowed_ways", ["footway"])
     transfer_id = body.get("transfer_id")
     algorithm = body.get("algorithm", "rrt")
+    sub_algorithm = body.get("sub_algorithm", "astar")
 
     cell_size = body.get("cell_size", 0.25)
     inflate_obstacles = body.get("inflate_obstacles", 0.25)
@@ -1061,7 +1062,7 @@ def create_replan():
         obstacles = ways_to_shapely(filtered_barriers)
         replanner = ReplanPath(args, obstacles, transfer_id=transfer_id)
         replanner.fill_grid(md, highway_types=highway_types)
-        res = replanner.replan_rrt(utm_path)
+        res = replanner.replan_rrt(utm_path, algorithm=sub_algorithm)
 
     if res is None:
         return jsonify({"retrieveNum": 1, "newPath": None, "status": "cancelled"})

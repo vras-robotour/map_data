@@ -27,7 +27,7 @@ class PlannerMode {
     this.active = true;
     this.markerLayer.addTo(map);
     this.redraw();
-    this.updateUI();
+    this.updateUI(); // Ensure UI state is correct
     // Enable map click for adding points
     map.on('click', this.handleMapClick, this);
   }
@@ -220,6 +220,9 @@ class PlannerMode {
     document.getElementById('export-gpx-path-btn').disabled = this.points.length < 2;
     document.getElementById('export-wormhole-path-btn').disabled = this.points.length < 2;
     document.getElementById('planner-clear-middle-btn').disabled = this.points.length <= 2;
+
+    const isAllTerrain = document.getElementById('mode-all-terrain').checked;
+    document.getElementById('sub-algorithm-select').disabled = !isAllTerrain;
   }
 
   clearAll() {
@@ -346,6 +349,7 @@ class PlannerMode {
     if (document.getElementById('plan-roads').checked) allowedWays.push('road');
 
     const algorithm = document.querySelector('input[name="plan-mode"]:checked').value;
+    const subAlgorithm = document.getElementById('sub-algorithm-select').value;
     const cellSize = parseFloat(document.getElementById('planner-cell-size').value) || 0.25;
     const inflate = parseFloat(document.getElementById('planner-inflate').value) || 0.25;
     const simplify = document.getElementById('planner-simplify').checked;
@@ -360,6 +364,7 @@ class PlannerMode {
           file: currentFile,
           allowed_ways: allowedWays,
           algorithm: algorithm,
+          sub_algorithm: subAlgorithm,
           cell_size: cellSize,
           inflate_obstacles: inflate,
           simplify_path: simplify,

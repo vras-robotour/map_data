@@ -1,75 +1,77 @@
 import random
-
-import matplotlib
 import numpy as np
-import matplotlib.pyplot as plt
 from typing import List, Tuple, Optional
 from shapely.geometry import Point, LineString
-from matplotlib.patches import Polygon as MplPolygon
-
-matplotlib.use("Agg")
 
 
 class RRTStar:
     def __init__(
         self,
-        start: Tuple[float, float],
-        goal: Tuple[float, float],
+        start: np.ndarray,
+        goal: np.ndarray,
         obstacles: List,
+        obstacles_tree: Optional[any],
         grid: np.ndarray,
-        max_iter: int = 10000,
-        step_size: float = 1.0,
-        neighbor_radius: float = 2.0,
+        low: Tuple[float, float],
         grid_scale: float = 1.0,
-        traversability_threshold: float = 0.95,
+        max_iter: int = 2000,
+        step_size: float = 2.0,
+        neighbor_radius: float = 5.0,
+        traversability_threshold: float = 10.0,  # inf is blocked, high values are expensive
         simplify: bool = True,
         transfer_id: Optional[str] = None,
     ):
-        self.start = np.array(start)
-        self.goal = np.array(goal)
+        self.start = start
+        self.goal = goal
         self.obstacles = obstacles
-        self.grid = grid
+        self.obstacles_tree = obstacles_tree
+        self.grid = grid  # (Y, X)
         self.grid_shape = grid.shape
-        self.grid_scale = grid_scale  # Grid cell size in world coordinates
+        self.low = np.array(low)
+        self.grid_scale = grid_scale
         self.max_iter = max_iter
         self.step_size = step_size
         self.neighbor_radius = neighbor_radius
         self.nodes = [self.start]
         self.parent = {0: None}
         self.cost = {0: 0.0}
-        # Pre-allocated buffer for O(1) node appends and vectorized lookups
+
         self._nodes_buf = np.empty((max_iter + 2, 2), dtype=np.float64)
         self._nodes_buf[0] = self.start
-        self.goal_tolerance = step_size / 2
+        self.goal_tolerance = step_size
         self.traversability_threshold = traversability_threshold
         self.simplify = simplify
         self.transfer_id = transfer_id
 
-        # Restrict sampling to a bounding box around start/goal, then precompute
-        # the traversable cell centres within that region.  On sparse footway grids
-        # where < 1 % of cells are reachable, this eliminates the 100-attempt
-        # rejection loop and reduces wasted random samples by orders of magnitude.
-        _dist = np.linalg.norm(self.goal - self.start)
-        _margin = max(_dist * 2.0, step_size * 20)
-        _w = self.grid_shape[1] * grid_scale
-        _h = self.grid_shape[0] * grid_scale
-        self._sample_min = np.maximum(
-            np.array([0.0, 0.0]),
-            np.minimum(self.start, self.goal) - _margin,
+        # Limit sampling area
+        dist = np.linalg.norm(self.goal - self.start)
+        margin = max(dist * 0.5, step_size * 10)
+        self._sample_min = np.minimum(self.start, self.goal) - margin
+        self._sample_max = np.maximum(self.start, self.goal) + margin
+
+        # Clip to grid
+        grid_max_x = self.low[0] + self.grid_shape[1] * grid_scale
+        grid_max_y = self.low[1] + self.grid_shape[0] * grid_scale
+        self._sample_min = np.maximum(self._sample_min, self.low)
+        self._sample_max = np.minimum(self._sample_max, [grid_max_x, grid_max_y])
+
+        # Precompute traversable cells for faster sampling
+        _xi_lo = max(0, int((self._sample_min[0] - self.low[0]) / grid_scale))
+        _xi_hi = min(
+            self.grid_shape[1],
+            int(np.ceil((self._sample_max[0] - self.low[0]) / grid_scale)),
         )
-        self._sample_max = np.minimum(
-            np.array([_w, _h]),
-            np.maximum(self.start, self.goal) + _margin,
+        _yi_lo = max(0, int((self._sample_min[1] - self.low[1]) / grid_scale))
+        _yi_hi = min(
+            self.grid_shape[0],
+            int(np.ceil((self._sample_max[1] - self.low[1]) / grid_scale)),
         )
-        _xi_lo = max(0, int(self._sample_min[0] / grid_scale))
-        _xi_hi = min(self.grid_shape[1], int(np.ceil(self._sample_max[0] / grid_scale)))
-        _yi_lo = max(0, int(self._sample_min[1] / grid_scale))
-        _yi_hi = min(self.grid_shape[0], int(np.ceil(self._sample_max[1] / grid_scale)))
+
         _sub = self.grid[_yi_lo:_yi_hi, _xi_lo:_xi_hi]
         _ys, _xs = np.where(_sub < self.traversability_threshold)
         if len(_xs) > 0:
-            self._trav_xs = (_xs + _xi_lo) * grid_scale
-            self._trav_ys = (_ys + _yi_lo) * grid_scale
+            self._trav_xs = (_xs + _xi_lo) * grid_scale + self.low[0]
+            self._trav_ys = (_ys + _yi_lo) * grid_scale + self.low[1]
         else:
             self._trav_xs = None
             self._trav_ys = None
@@ -77,48 +79,34 @@ class RRTStar:
     def _is_collision(
         self, point1: np.ndarray, point2: Optional[np.ndarray] = None
     ) -> bool:
-        """Check for collision between obstacles and map segments."""
-        if self.obstacles:
+        if self.obstacles_tree:
             geom = Point(point1) if point2 is None else LineString([point1, point2])
-            for obstacle in self.obstacles:
-                if obstacle.contains(geom) or obstacle.intersects(geom):
-                    return True
+            if len(self.obstacles_tree.query(geom, predicate="intersects")) > 0:
+                return True
+
         if point2 is None:
             return self._get_grid_cost(point1) >= self.traversability_threshold
 
         p1_grid = (
-            int(point1[0] / self.grid_scale),
-            int(point1[1] / self.grid_scale),
+            int((point1[0] - self.low[0]) / self.grid_scale),
+            int((point1[1] - self.low[1]) / self.grid_scale),
         )
         p2_grid = (
-            int(point2[0] / self.grid_scale),
-            int(point2[1] / self.grid_scale),
+            int((point2[0] - self.low[0]) / self.grid_scale),
+            int((point2[1] - self.low[1]) / self.grid_scale),
         )
-        bres_line = self._bresenham(p1_grid, p2_grid)
-        for point in bres_line:
-            if (
-                0 <= point[0] < self.grid_shape[1]
-                and 0 <= point[1] < self.grid_shape[0]
-            ):
-                if self.grid[point[1], point[0]] >= self.traversability_threshold:
+
+        for px, py in self._bresenham(p1_grid, p2_grid):
+            if 0 <= px < self.grid_shape[1] and 0 <= py < self.grid_shape[0]:
+                if self.grid[py, px] >= self.traversability_threshold:
                     return True
         return False
 
-    def _bresenham(
-        self, start: Tuple[float, float], goal: Tuple[float, float]
-    ) -> List[Tuple[float, float]]:
-        """Bresenham's line algorithm
-        Args:
-            start: (float64, float64) - start coordinate
-            goal: (float64, float64) - goal coordinate
-        Returns:
-            interlying points between the start and goal coordinate
-        """
+    def _bresenham(self, start, goal):
         x0, y0 = start
         x1, y1 = goal
         line = []
-        dx = abs(x1 - x0)
-        dy = abs(y1 - y0)
+        dx, dy = abs(x1 - x0), abs(y1 - y0)
         x, y = x0, y0
         sx = -1 if x0 > x1 else 1
         sy = -1 if y0 > y1 else 1
@@ -140,27 +128,25 @@ class RRTStar:
                     x += sx
                     err += dy
                 y += sy
-        x = goal[0]
-        y = goal[1]
+        line.append((x1, y1))
         return line
 
     def _get_grid_cost(self, point: np.ndarray) -> float:
-        """Get the traversability cost at a point from the grid."""
-        # Convert world coordinates to grid indices
-        i = min(int(point[1] / self.grid_scale), self.grid_shape[0] - 1)
-        j = min(int(point[0] / self.grid_scale), self.grid_shape[1] - 1)
-        i = max(0, i)
-        j = max(0, j)
-        return float(self.grid[i, j])
+        ix = int((point[0] - self.low[0]) / self.grid_scale)
+        iy = int((point[1] - self.low[1]) / self.grid_scale)
+        ix = np.clip(ix, 0, self.grid_shape[1] - 1)
+        iy = np.clip(iy, 0, self.grid_shape[0] - 1)
+        return float(self.grid[iy, ix])
 
     def _sample_point(self) -> np.ndarray:
-        """Sample a traversable point from the precomputed cell list (O(1))."""
-        if self._trav_xs is not None:
+        if self._trav_xs is not None and random.random() > 0.1:
             idx = random.randrange(len(self._trav_xs))
             return np.array(
                 [
-                    self._trav_xs[idx] + random.uniform(0, self.grid_scale),
-                    self._trav_ys[idx] + random.uniform(0, self.grid_scale),
+                    self._trav_xs[idx]
+                    + random.uniform(-self.grid_scale / 2, self.grid_scale / 2),
+                    self._trav_ys[idx]
+                    + random.uniform(-self.grid_scale / 2, self.grid_scale / 2),
                 ]
             )
         return np.array(
@@ -171,221 +157,146 @@ class RRTStar:
         )
 
     def _nearest_node(self, point: np.ndarray) -> int:
-        """Find the index of the nearest node using vectorized squared-distance comparison."""
         nodes_arr = self._nodes_buf[: len(self.nodes)]
-        diffs = nodes_arr - point
-        sq_dists = (diffs * diffs).sum(axis=1)
+        sq_dists = ((nodes_arr - point) ** 2).sum(axis=1)
         return int(np.argmin(sq_dists))
 
     def _steer(self, start: np.ndarray, target: np.ndarray) -> np.ndarray:
-        """Steer from start towards target with a fixed step size."""
         direction = target - start
-        distance = np.linalg.norm(direction)
-        if distance < self.step_size:
+        dist = np.linalg.norm(direction)
+        if dist < self.step_size:
             return target
-        return start + (direction / distance) * self.step_size
+        return start + (direction / dist) * self.step_size
 
     def _get_near_nodes(self, new_point: np.ndarray) -> List[int]:
-        """Find indices of nodes within neighbor_radius using vectorized comparison."""
         nodes_arr = self._nodes_buf[: len(self.nodes)]
-        diffs = nodes_arr - new_point
-        sq_dists = (diffs * diffs).sum(axis=1)
+        sq_dists = ((nodes_arr - new_point) ** 2).sum(axis=1)
         r2 = self.neighbor_radius**2
         return list(np.where((sq_dists < r2) & (sq_dists > 0))[0])
 
-    def _path_cost(self, start: np.ndarray, end: np.ndarray) -> float:
-        """Calculate the cost of a path segment using Bresenham's line algorithm."""
-        distance = np.linalg.norm(end - start)
-        # Convert world coordinates to grid indices for Bresenham
-        start_grid = (start[0] / self.grid_scale, start[1] / self.grid_scale)
-        end_grid = (end[0] / self.grid_scale, end[1] / self.grid_scale)
-        start_grid = (int(start_grid[0]), int(start_grid[1]))
-        end_grid = (int(end_grid[0]), int(end_grid[1]))
-        # Get grid cells along the line
-        cells = self._bresenham(start_grid, end_grid)
-        total_cost = 0.0
-        valid_cells = 0
-        for x, y in cells:
-            # Ensure indices are within grid bounds
-            if 0 <= y < self.grid_shape[0] and 0 <= x < self.grid_shape[1]:
-                total_cost += self.grid[int(y), int(x)]
-                valid_cells += 1
-        # Average the grid cost over all valid cells
-        avg_cost = total_cost / valid_cells if valid_cells > 0 else 0.0
-        return distance * (
-            1 + avg_cost
-        )  # Scale distance by average traversability cost
-
     def _segment_cost(self, start: np.ndarray, end: np.ndarray) -> Tuple[bool, float]:
-        """Check collision and compute traversal cost in a single Bresenham pass."""
-        if self.obstacles:
-            geom = LineString([start, end])
-            for obstacle in self.obstacles:
-                if obstacle.contains(geom) or obstacle.intersects(geom):
-                    return True, float("inf")
+        if self.obstacles_tree:
+            if (
+                len(
+                    self.obstacles_tree.query(
+                        LineString([start, end]), predicate="intersects"
+                    )
+                )
+                > 0
+            ):
+                return True, float("inf")
 
-        p1_grid = (int(start[0] / self.grid_scale), int(start[1] / self.grid_scale))
-        p2_grid = (int(end[0] / self.grid_scale), int(end[1] / self.grid_scale))
+        p1_grid = (
+            int((start[0] - self.low[0]) / self.grid_scale),
+            int((start[1] - self.low[1]) / self.grid_scale),
+        )
+        p2_grid = (
+            int((end[0] - self.low[0]) / self.grid_scale),
+            int((end[1] - self.low[1]) / self.grid_scale),
+        )
         bres_line = self._bresenham(p1_grid, p2_grid)
 
-        total_cost = 0.0
-        valid_cells = 0
+        total_grid_cost = 0.0
+        count = 0
         for x, y in bres_line:
             if 0 <= x < self.grid_shape[1] and 0 <= y < self.grid_shape[0]:
-                cell_cost = self.grid[y, x]
-                if cell_cost >= self.traversability_threshold:
+                c = self.grid[y, x]
+                if c >= self.traversability_threshold:
                     return True, float("inf")
-                total_cost += cell_cost
-                valid_cells += 1
+                total_grid_cost += c
+                count += 1
 
-        avg_cost = total_cost / valid_cells if valid_cells > 0 else 0.0
-        return False, np.linalg.norm(end - start) * (1 + avg_cost)
+        avg_c = total_grid_cost / count if count > 0 else 0.0
+        # Cost = dist * (1 + avg_grid_cost * penalty)
+        # We use 5.0 to match A* logic
+        return False, np.linalg.norm(end - start) * (1.0 + avg_c * 5.0)
 
     def find_path(self) -> Optional[np.ndarray]:
-        """Main RRT* algorithm to find a path from start to goal."""
         from .replan import _cancelled_transfers
 
         for _ in range(self.max_iter):
             if self.transfer_id in _cancelled_transfers:
                 return None
 
-            # Sample a valid steering point; skip iteration if none found within budget
-            found = False
-            for _ in range(50):
-                rand_point = (
-                    self.goal if random.random() < 0.1 else self._sample_point()
-                )
-                nearest_idx = self._nearest_node(rand_point)
-                nearest = self.nodes[nearest_idx]
-                new_point = self._steer(nearest, rand_point)
-                if not self._is_collision(new_point):
-                    found = True
-                    break
-            if not found:
+            rand_point = self.goal if random.random() < 0.1 else self._sample_point()
+            nearest_idx = self._nearest_node(rand_point)
+            new_point = self._steer(self.nodes[nearest_idx], rand_point)
+
+            if self._is_collision(new_point):
                 continue
 
-            collision, seg_cost = self._segment_cost(nearest, new_point)
-            if not collision:
-                new_idx = len(self.nodes)
-                self.nodes.append(new_point)
-                self._nodes_buf[new_idx] = new_point
-                min_cost = self.cost[nearest_idx] + seg_cost
-                min_parent = nearest_idx
+            collision, seg_cost = self._segment_cost(self.nodes[nearest_idx], new_point)
+            if collision:
+                continue
 
-                near_nodes = self._get_near_nodes(new_point)
-                for idx in near_nodes:
-                    node = self.nodes[idx]
-                    col, sc = self._segment_cost(node, new_point)
-                    if not col:
-                        cost = self.cost[idx] + sc
-                        if cost < min_cost:
-                            min_cost = cost
-                            min_parent = idx
+            new_idx = len(self.nodes)
+            self.nodes.append(new_point)
+            self._nodes_buf[new_idx] = new_point
+            min_cost = self.cost[nearest_idx] + seg_cost
+            min_parent = nearest_idx
 
-                self.parent[new_idx] = min_parent
-                self.cost[new_idx] = min_cost
+            near_indices = self._get_near_nodes(new_point)
+            for idx in near_indices:
+                col, sc = self._segment_cost(self.nodes[idx], new_point)
+                if not col:
+                    c = self.cost[idx] + sc
+                    if c < min_cost:
+                        min_cost = c
+                        min_parent = idx
 
-                for idx in near_nodes:
-                    if idx == min_parent:
-                        continue
-                    node = self.nodes[idx]
-                    col, sc = self._segment_cost(new_point, node)
-                    if not col:
-                        new_cost = self.cost[new_idx] + sc
-                        if new_cost < self.cost[idx]:
-                            self.parent[idx] = new_idx
-                            self.cost[idx] = new_cost
+            self.parent[new_idx] = min_parent
+            self.cost[new_idx] = min_cost
 
-                if np.linalg.norm(new_point - self.goal) < self.goal_tolerance:
-                    col, sc = self._segment_cost(new_point, self.goal)
-                    if not col:
-                        goal_idx = len(self.nodes)
-                        self.nodes.append(self.goal)
-                        self._nodes_buf[goal_idx] = self.goal
-                        self.parent[goal_idx] = new_idx
-                        self.cost[goal_idx] = self.cost[new_idx] + sc
-                        return np.array(self._reconstruct_path(goal_idx))
+            # Rewire
+            for idx in near_indices:
+                if idx == min_parent:
+                    continue
+                col, sc = self._segment_cost(new_point, self.nodes[idx])
+                if not col:
+                    new_c = self.cost[new_idx] + sc
+                    if new_c < self.cost[idx]:
+                        self.parent[idx] = new_idx
+                        self.cost[idx] = new_c
+
+            if np.linalg.norm(new_point - self.goal) < self.goal_tolerance:
+                col, sc = self._segment_cost(new_point, self.goal)
+                if not col:
+                    g_idx = len(self.nodes)
+                    self.nodes.append(self.goal)
+                    self._nodes_buf[g_idx] = self.goal
+                    self.parent[g_idx] = new_idx
+                    self.cost[g_idx] = self.cost[new_idx] + sc
+                    path = self._reconstruct_path(g_idx)
+                    return np.array(path)
 
         return None
 
     def _reconstruct_path(self, goal_idx: int) -> List[np.ndarray]:
-        """Reconstruct the path from start to goal."""
         path = []
-        current_idx = goal_idx
-        while current_idx is not None:
-            path.append(self.nodes[current_idx])
-            current_idx = self.parent[current_idx]
-        return self._simplify_path(path[::-1]) if self.simplify else path[::-1]
+        curr = goal_idx
+        while curr is not None:
+            path.append(self.nodes[curr])
+            curr = self.parent[curr]
+        path = path[::-1]
+        if self.simplify and len(path) > 2:
+            return self._simplify_path(path)
+        return path
 
     def _simplify_path(self, path):
-        new_path = [path[0]]
-        idx = 1
-        while tuple(new_path[-1]) != tuple(path[-1]):
-            start = new_path[-1]
-            for goal in path[idx:]:
-                if not self._is_collision(new_path[-1], goal):
-                    start = goal
-                    idx += 1
-                    if tuple(start) == tuple(path[-1]):
-                        new_path.append(start)
-                        break
-                else:
-                    new_path.append(start)
+        if len(path) <= 2:
+            return path
+        simplified = [path[0]]
+        curr = 0
+        while curr < len(path) - 1:
+            next_best = curr + 1
+            for i in range(len(path) - 1, curr + 1, -1):
+                col, _ = self._segment_cost(path[curr], path[i])
+                if not col:
+                    next_best = i
                     break
-        return new_path
-
-    def visualize(self, path: Optional[List[np.ndarray]] = None):
-        """Visualize the grid, obstacles, RRT* tree, and path using Matplotlib."""
-        _, ax = plt.subplots()
-
-        # Plot grid as a heatmap (0: white, 1: black)
-        grid_display = self.grid
-        ax.imshow(
-            grid_display,
-            cmap="Greys",
-            origin="lower",
-            extent=[
-                0,
-                self.grid_shape[1] * self.grid_scale,
-                0,
-                self.grid_shape[0] * self.grid_scale,
-            ],
-        )
-
-        # Plot obstacles
-        for obstacle in self.obstacles:
-            if obstacle.geom_type == "Polygon":
-                x, y = obstacle.exterior.xy
-                ax.add_patch(MplPolygon(list(zip(x, y)), color="red", alpha=0.5))
-
-        # Plot RRT* tree
-        for idx, node in enumerate(self.nodes):
-            if self.parent[idx] is not None:
-                parent_node = self.nodes[self.parent[idx]]
-                ax.plot(
-                    [node[0], parent_node[0]],
-                    [node[1], parent_node[1]],
-                    "c-",
-                    linewidth=0.5,
-                )
-
-        # Plot start and goal
-        ax.plot(self.start[0], self.start[1], "go", label="Start")
-        ax.plot(self.goal[0], self.goal[1], "bo", label="Goal")
-
-        # Plot path if found
-        if path is not None:
-            path = np.array(path)
-            ax.plot(path[:, 0], path[:, 1], "k-", linewidth=2, label="Path")
-
-        # Set plot properties
-        ax.set_xlabel("X")
-        ax.set_ylabel("Y")
-        ax.set_title("RRT* Path Planning")
-        ax.legend()
-        ax.grid(True)
-        # plt.show()
-        plt.savefig("rrt_star_path.png")
+            simplified.append(path[next_best])
+            curr = next_best
+        return simplified
 
 
 # Example usage
