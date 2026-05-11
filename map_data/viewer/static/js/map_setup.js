@@ -342,7 +342,7 @@ async function initApp() {
           clearNodes();
           const propsEl = document.getElementById('props-content');
           if (propsEl) propsEl.innerHTML = '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
-        } else if (currentMode !== 'view' && currentMode !== 'add' && currentMode !== 'fetch') {
+        } else if (currentMode !== 'view') {
           setMode('view');
         }
         break;

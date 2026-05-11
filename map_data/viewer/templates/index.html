@@ -51,6 +51,13 @@
 
     <button id="export-btn" class="btn btn-warning btn-sm" style="flex-shrink:0;" disabled>Export</button>
 
+    <div class="vr mx-2 bg-secondary" style="height:20px; flex-shrink:0;"></div>
+
+    <div class="btn-group btn-group-sm me-2" style="flex-shrink:0;">
+      <button class="btn btn-outline-info app-mode-btn active" data-app-mode="viewer" title="Map data viewer and editor">VIEWER</button>
+      <button class="btn btn-outline-info app-mode-btn" data-app-mode="planner" title="Path planner and mission tool">PLANNER</button>
+    </div>
+
     <div id="status" class="text-secondary ms-auto px-2" style="font-size:0.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
   </div>
 
@@ -119,10 +126,99 @@
       </div>
 
       <!-- Properties panel -->
-      <div class="panel" style="flex: 1; border-bottom: none; overflow-y: auto;">
+      <div id="props-panel" class="panel" style="flex: 1; border-bottom: none; overflow-y: auto;">
         <div class="panel-title">PROPERTIES</div>
-        <div id="props-content" class="text-secondary" style="font-style:italic;">
-          Click a feature to inspect
+        <div class="mt-1">
+          <div id="props-content" class="text-secondary" style="font-style:italic;">
+            Click a feature to inspect
+          </div>
+        </div>
+      </div>
+
+      <!-- Planner panel (initially hidden) -->
+      <div id="planner-sidebar-panel" class="panel" style="flex: 1; display:none; flex-direction: column;">
+        <div class="panel-title">PLANNER</div>
+        
+        <div class="planner-sidebar-buttons d-flex flex-column gap-2 mt-2">
+          <input type="file" id="gpx-input" accept=".gpx" style="display: none" />
+          <button class="btn btn-sm btn-outline-info" id="import-gpx-btn">
+            📂 Import GPX
+          </button>
+
+          <div class="d-flex gap-2">
+            <button id="export-gpx-path-btn" class="btn btn-sm btn-outline-primary flex-grow-1 w-100" disabled>
+              💾 Download
+            </button>
+            <button id="export-wormhole-path-btn" class="btn btn-sm btn-outline-primary flex-grow-1 w-100" disabled>
+              🌀 Wormhole
+            </button>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-danger flex-grow-1 w-100" id="planner-clear-btn">
+              🗑️ Delete All
+            </button>
+            <button class="btn btn-sm btn-outline-warning flex-grow-1 w-100" id="planner-clear-middle-btn">
+              🧹 Keep Endpoints
+            </button>
+          </div>
+
+          <button class="btn btn-primary btn-sm mt-2" id="replan-btn">
+            ✏️ Replan Path
+          </button>
+        </div>
+
+        <div class="planner-options mt-3 pt-3 border-top border-secondary">
+          <div class="planner-section mb-3">
+            <div class="panel-title mb-2" style="font-size:0.6rem;">PLANNING MODE</div>
+            <div class="d-flex flex-column gap-2">
+              <div class="form-check">
+                <input class="form-check-input bg-dark border-secondary" type="radio" name="plan-mode" id="mode-all-terrain" value="rrt" checked>
+                <label class="form-check-label text-secondary" for="mode-all-terrain" style="font-size: 0.75rem;">All terrain</label>
+                <select id="sub-algorithm-select" class="form-select form-select-sm bg-dark text-secondary border-secondary mt-1" style="font-size: 0.7rem; padding: 0.1rem 0.5rem;">
+                  <option value="astar" selected>A* (Optimal)</option>
+                  <option value="rrt">RRT* (Fast)</option>
+                </select>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input bg-dark border-secondary" type="radio" name="plan-mode" id="mode-paths-only" value="graph">
+                <label class="form-check-label text-secondary" for="mode-paths-only" style="font-size: 0.75rem;">Paths only (OSM)</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-title mb-2 mt-3" style="font-size:0.6rem;">ROUTING OPTIONS</div>
+          <div class="form-check mb-1">
+            <input class="form-check-input bg-dark border-secondary" type="checkbox" id="plan-footways" checked>
+            <label class="form-check-label text-secondary" for="plan-footways" style="font-size: 0.75rem;">Plan on Footways</label>
+          </div>
+          <div class="form-check mb-2">
+            <input class="form-check-input bg-dark border-secondary" type="checkbox" id="plan-roads">
+            <label class="form-check-label text-secondary" for="plan-roads" style="font-size: 0.75rem;">Plan on Roads</label>
+          </div>
+
+          <div class="panel-title mb-2 mt-3" style="font-size:0.6rem;">PLANNER PARAMETERS</div>
+          
+          <div class="mb-2">
+            <label class="text-secondary d-block mb-1" style="font-size: 0.7rem;">Cell Size (m)</label>
+            <input type="number" id="planner-cell-size" class="form-control form-control-sm bg-dark text-light border-secondary" 
+                   value="0.25" step="0.05" min="0.1">
+          </div>
+
+          <div class="mb-2">
+            <label class="text-secondary d-block mb-1" style="font-size: 0.7rem;">Obstacle Inflation (m)</label>
+            <input type="number" id="planner-inflate" class="form-control form-control-sm bg-dark text-light border-secondary" 
+                   value="0.25" step="0.05" min="0.0">
+          </div>
+
+          <div class="form-check">
+            <input class="form-check-input bg-dark border-secondary" type="checkbox" id="planner-simplify" checked>
+            <label class="form-check-label text-secondary" for="planner-simplify" style="font-size: 0.75rem;">Simplify Path</label>
+          </div>
+        </div>
+
+        <div class="mt-auto pt-3 text-center border-top border-secondary">
+          <span id="point-count" class="text-secondary" style="font-size: 0.7rem;">Click map to start drawing</span>
         </div>
       </div>
 
@@ -161,6 +257,15 @@
 
     <!-- Map -->
     <div id="map"></div>
+
+    <!-- Drag and Drop Zone -->
+    <div id="dropzone" class="dropzone">
+      <div class="dropzone-content">
+        <div class="dropzone-icon">📁</div>
+        <div class="dropzone-text">Drop GPX file here</div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -287,6 +392,7 @@
 <script src="{{ url_for('static', filename='js/layers.js') }}"></script>
 <script src="{{ url_for('static', filename='js/draw_handlers.js') }}"></script>
 <script src="{{ url_for('static', filename='js/map_setup.js') }}"></script>
+<script src="{{ url_for('static', filename='js/planner_mode.js') }}"></script>
 
 </body>
 </html>

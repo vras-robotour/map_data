@@ -4,11 +4,14 @@ import json
 import logging
 import os
 import re
+import select
+import shutil
+import subprocess
+import tempfile
+import threading
 import time
 import uuid
 
-import numpy as np
-import utm
 from flask import (
     Blueprint,
     abort,
@@ -18,8 +21,14 @@ from flask import (
     request,
     send_file,
 )
+import numpy as np
+import shapely.geometry as geometry
+import utm
 
 from map_data.map_data import MapData
+from map_data.pathsolver.replan import ReplanPath, cancel_replan_backend, parse_args
+from map_data.pathsolver.graph_planner import GraphPlanner
+from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.serialization import map_data_to_dict
 from map_data.utils.way import FOOTWAY_VALUES, Way
 
@@ -64,7 +73,13 @@ def _annotation_path(filename):
 
 @bp.route("/")
 def index():
-    return render_template("index.html")
+    api_key_thunderforest = os.getenv("THUNDERFOREST_API_KEY")
+    api_key_seznam = os.getenv("SEZNAM_API_KEY")
+    return render_template(
+        "index.html",
+        apikey_thunderforest=api_key_thunderforest,
+        apikey_seznam=api_key_seznam,
+    )
 
 
 @bp.route("/api/files")
@@ -118,7 +133,11 @@ def get_mapdata():
     node_pos_store = store.get("node_position_overrides", {})
     if node_pos_store:
         zn, zl = map_data.zone_number, map_data.zone_letter
-        _cat_for_list = {"roads_list": "road", "footways_list": "footway", "barriers_list": "barrier"}
+        _cat_for_list = {
+            "roads_list": "road",
+            "footways_list": "footway",
+            "barriers_list": "barrier",
+        }
         for lst_name in ("roads_list", "footways_list", "barriers_list"):
             new_lst = []
             for w in getattr(map_data, lst_name):
@@ -126,7 +145,11 @@ def get_mapdata():
                 if ov:
                     w = (
                         apply_node_position_overrides(
-                            w, ov, zn, zl, getattr(map_data, "nodes_cache", {}),
+                            w,
+                            ov,
+                            zn,
+                            zl,
+                            getattr(map_data, "nodes_cache", {}),
                             category=_cat_for_list[lst_name],
                         )
                         or w
@@ -644,13 +667,15 @@ def move_way_nodes():
     migrate_change_log(store)
     cl = store.setdefault("change_log", [])
     if not any(e.get("type") == "move" and e.get("id") == way_id for e in cl):
-        cl.append({
-            "type": "move",
-            "id": way_id,
-            "category": body.get("category", "unknown"),
-            "label": body.get("label", ""),
-            "ts": time.time(),
-        })
+        cl.append(
+            {
+                "type": "move",
+                "id": way_id,
+                "category": body.get("category", "unknown"),
+                "label": body.get("label", ""),
+                "ts": time.time(),
+            }
+        )
     save_annotations(ann_path, store)
     return "", 204
 
@@ -669,19 +694,17 @@ def undo_move_way_nodes():
     store = load_annotations(ann_path)
     store.get("node_position_overrides", {}).pop(str(way_id), None)
     cl = store.get("change_log", [])
-    store["change_log"] = [e for e in cl if not (e.get("type") == "move" and e.get("id") == way_id)]
+    store["change_log"] = [
+        e for e in cl if not (e.get("type") == "move" and e.get("id") == way_id)
+    ]
     save_annotations(ann_path, store)
     return "", 204
 
 
-@bp.route("/api/export")
-def export_mapdata():
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+def get_merged_mapdata(filename):
     path = os.path.join(_get_data_dir(), filename)
     if not os.path.isfile(path):
-        abort(404, f"File not found: {filename}")
+        return None, None
 
     store = load_annotations(_annotation_path(filename))
     md = copy.deepcopy(load_mapdata_cached(path))
@@ -707,7 +730,11 @@ def export_mapdata():
 
     node_pos_store = store.get("node_position_overrides", {})
     if node_pos_store:
-        _cat_for_list = {"roads_list": "road", "footways_list": "footway", "barriers_list": "barrier"}
+        _cat_for_list = {
+            "roads_list": "road",
+            "footways_list": "footway",
+            "barriers_list": "barrier",
+        }
         for lst_name in ("roads_list", "footways_list", "barriers_list"):
             new_lst = []
             for w in getattr(md, lst_name):
@@ -715,7 +742,11 @@ def export_mapdata():
                 if ov:
                     w = (
                         apply_node_position_overrides(
-                            w, ov, zn, zl, getattr(md, "nodes_cache", {}),
+                            w,
+                            ov,
+                            zn,
+                            zl,
+                            getattr(md, "nodes_cache", {}),
                             category=_cat_for_list[lst_name],
                         )
                         or w
@@ -783,6 +814,19 @@ def export_mapdata():
                     w.tags[k] = str(v)
             md.barriers_list.append(w)
 
+    return md, store
+
+
+@bp.route("/api/export")
+def export_mapdata():
+    filename = request.args.get("file")
+    if not filename:
+        abort(400, "Missing 'file' query parameter")
+
+    md, _ = get_merged_mapdata(filename)
+    if md is None:
+        abort(404, f"File not found: {filename}")
+
     buf = io.BytesIO()
     buf.write(json.dumps(map_data_to_dict(md), indent=2).encode("utf-8"))
     buf.seek(0)
@@ -793,3 +837,254 @@ def export_mapdata():
         download_name=f"{base}.exported.mapdata",
         mimetype="application/json",
     )
+
+
+@bp.route("/api/cancel_replan", methods=["POST"])
+def cancel_replan_route():
+    transfer_id = request.json.get("transfer_id")
+    cancel_replan_backend(transfer_id)
+    return jsonify({"success": True})
+
+
+class WormholeManager:
+    def __init__(self):
+        self.active_transfers = {}
+        if shutil.which("wormhole") is None:
+            # We don't want to crash the whole app if wormhole is missing,
+            # just log it and the endpoints will fail gracefully.
+            logger.warning(
+                "'wormhole' command not found. magic-wormhole is required for sharing."
+            )
+
+    def create_transfer(self, gpx_data):
+        transfer_id = str(uuid.uuid4())
+        temp_dir = tempfile.mkdtemp()
+        file_path = os.path.join(temp_dir, "path.gpx")
+
+        with open(file_path, "w") as f:
+            f.write(gpx_data)
+
+        cmd = ["wormhole", "send", file_path]
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                env=env,
+            )
+        except Exception as e:
+            shutil.rmtree(temp_dir)
+            raise RuntimeError(f"Failed to start wormhole process: {e}")
+
+        logger.info(f"Starting wormhole transfer {transfer_id}: {' '.join(cmd)}")
+        logger.info(f"Process ID for transfer {transfer_id}: {process.pid}")
+
+        self.active_transfers[transfer_id] = {
+            "process": process,
+            "temp_dir": temp_dir,
+            "start_time": time.time(),
+            "status": "running",
+            "code": None,
+        }
+
+        threading.Thread(
+            target=self._capture_wormhole_code_thread, args=(transfer_id,), daemon=True
+        ).start()
+        return transfer_id
+
+    def _capture_wormhole_code_thread(self, transfer_id):
+        transfer_info = self.active_transfers.get(transfer_id)
+        if not transfer_info:
+            return
+
+        process = transfer_info["process"]
+        wormhole_code = None
+        try:
+            while True:
+                readable, _, _ = select.select(
+                    [process.stdout, process.stderr], [], [], 0.1
+                )
+                for stream in readable:
+                    line = stream.readline().strip()
+                    if line:
+                        match = re.search(r"Wormhole code is: (\S+-\S+-\S+)", line)
+                        if match:
+                            wormhole_code = match.group(1)
+                            logger.info(
+                                f"Wormhole code captured for transfer {transfer_id}: {wormhole_code}"
+                            )
+                        elif stream == process.stderr:
+                            logger.warning(f"Wormhole stderr ({transfer_id}): {line}")
+
+                if wormhole_code:
+                    transfer_info["code"] = wormhole_code
+                    break
+
+                if process.poll() is not None:
+                    break
+
+            process.wait(timeout=60)
+            transfer_info["status"] = (
+                "completed" if process.returncode == 0 else "failed"
+            )
+        except Exception as e:
+            logger.error(f"Error in wormhole thread for {transfer_id}: {e}")
+            transfer_info["status"] = "failed"
+            if process.poll() is None:
+                process.kill()
+        finally:
+            self._cleanup_transfer(transfer_id)
+
+    def get_transfer_code(self, transfer_id, timeout=10):
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            if transfer_id in self.active_transfers and self.active_transfers[
+                transfer_id
+            ].get("code"):
+                return self.active_transfers[transfer_id]["code"]
+            time.sleep(0.1)
+        return None
+
+    def cancel_transfer(self, transfer_id):
+        if transfer_id not in self.active_transfers:
+            return False, "Invalid or unknown transfer ID"
+
+        logger.info(f"Cancelling wormhole transfer {transfer_id}")
+        process = self.active_transfers[transfer_id]["process"]
+        if process.poll() is None:
+            process.kill()
+
+        self.active_transfers[transfer_id]["status"] = "cancelled"
+        return True, "Transfer cancelled"
+
+    def _cleanup_transfer(self, transfer_id):
+        transfer = self.active_transfers.pop(transfer_id, None)
+        if transfer and transfer.get("temp_dir"):
+            try:
+                shutil.rmtree(transfer["temp_dir"])
+            except Exception as e:
+                logger.error(f"Error cleaning temp dir for {transfer_id}: {e}")
+
+
+wormhole_manager = WormholeManager()
+
+
+@bp.route("/api/create_wormhole", methods=["POST"])
+def create_wormhole():
+    gpx_data = request.json.get("gpx")
+    if not gpx_data:
+        return jsonify({"success": False, "message": "No GPX data provided"}), 400
+
+    try:
+        transfer_id = wormhole_manager.create_transfer(gpx_data)
+        code = wormhole_manager.get_transfer_code(transfer_id, timeout=15)
+        if code:
+            return jsonify({"success": True, "code": code, "transfer_id": transfer_id})
+        else:
+            wormhole_manager.cancel_transfer(transfer_id)
+            return jsonify(
+                {"success": False, "message": "Failed to capture wormhole code in time"}
+            ), 500
+    except Exception as e:
+        logger.error(f"Error creating wormhole: {e}", exc_info=True)
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@bp.route("/api/cancel_wormhole", methods=["POST"])
+def cancel_wormhole():
+    transfer_id = request.json.get("transfer_id")
+    success, message = wormhole_manager.cancel_transfer(transfer_id)
+    return jsonify({"success": success, "message": message})
+
+
+@bp.route("/api/create_replan", methods=["POST"])
+def create_replan():
+    body = request.get_json(force=True) or {}
+    path_data = body.get("points")  # [[lat, lon], ...]
+    filename = body.get("file")
+    highway_types = body.get("allowed_ways", ["footway"])
+    transfer_id = body.get("transfer_id")
+    algorithm = body.get("algorithm", "rrt")
+    sub_algorithm = body.get("sub_algorithm", "astar")
+
+    cell_size = body.get("cell_size", 0.25)
+    inflate_obstacles = body.get("inflate_obstacles", 0.25)
+    simplify_path = body.get("simplify_path", True)
+
+    if not path_data or not filename:
+        abort(400, "Missing points or file parameter")
+
+    md, _ = get_merged_mapdata(filename)
+    if md is None:
+        abort(404, f"File {filename} not found")
+
+    zn, zl = md.zone_number, md.zone_letter
+    utm_path = []
+    for p in path_data:
+        e, n, _, _ = utm.from_latlon(float(p[0]), float(p[1]), zn, zl)
+        utm_path.append([e, n])
+    utm_path = np.array(utm_path, dtype=np.float64)
+
+    # Calculate planning bounding box to limit grid size
+    margin = 50.0  # meters
+    p_min_x = np.min(utm_path[:, 0]) - margin
+    p_max_x = np.max(utm_path[:, 0]) + margin
+    p_min_y = np.min(utm_path[:, 1]) - margin
+    p_max_y = np.max(utm_path[:, 1]) + margin
+
+    # Clip to map boundaries
+    p_low = (max(md.min_x, p_min_x), max(md.min_y, p_min_y))
+    p_high = (min(md.max_x, p_max_x), min(md.max_y, p_max_y))
+
+    if algorithm == "graph":
+        planner = GraphPlanner(md, highway_types=highway_types)
+        res = planner.plan(utm_path)
+    else:
+        args = parse_args([])
+        args.simplify_path = simplify_path
+        args.cell_size = cell_size
+        args.inflate_obstacles = inflate_obstacles
+        args.visualize = False
+        args.low = p_low
+        args.high = p_high
+
+        # Filter barriers to bounding box for faster processing
+        bbox = geometry.box(p_low[0], p_low[1], p_high[0], p_high[1])
+        filtered_barriers = [
+            w for w in md.barriers_list if w.line and w.line.intersects(bbox)
+        ]
+
+        obstacles = ways_to_shapely(filtered_barriers)
+        replanner = ReplanPath(args, obstacles, transfer_id=transfer_id)
+        replanner.fill_grid(md, highway_types=highway_types)
+        res = replanner.replan_rrt(utm_path, algorithm=sub_algorithm)
+
+    if res is None:
+        return jsonify({"retrieveNum": 1, "newPath": None, "status": "cancelled"})
+    if res is False:
+        return jsonify({"retrieveNum": 1, "newPath": None, "status": "failed"})
+
+    new_path = []
+    changed = False
+
+    # RRT* result might have more/different points
+    if len(res) != len(utm_path):
+        changed = True
+
+    for i in range(len(res)):
+        lat, lon = utm.to_latlon(res[i][0], res[i][1], zn, zl)
+        new_path.append([lat, lon])
+        # Simple heuristic to check if it actually changed significantly
+        if not changed and i < len(utm_path):
+            if np.linalg.norm(res[i] - utm_path[i]) > 0.1:
+                changed = True
+
+    if changed:
+        return jsonify({"retrieveNum": 0, "newPath": new_path})
+    else:
+        return jsonify({"retrieveNum": -1, "newPath": new_path})

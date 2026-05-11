@@ -1,11 +1,12 @@
 # map_data
 
-ROS2 tools to work with OSM data.
+ROS2 tools to work with OSM data and perform path planning.
 
 - [Overview](#overview)
 - [How to use](#how-to-use)
   - [Parsing and creating files](#parsing-and-creating-files)
   - [Interactive viewer](#interactive-viewer)
+  - [Path planning](#path-planning)
   - [Visualizing the parsed data](#visualizing-the-parsed-data)
   - [Publishing a point cloud of footways](#publishing-a-point-cloud-of-footways)
 - [Importing as a Python package](#importing-as-a-python-package)
@@ -25,11 +26,11 @@ Parsed features are classified into three categories:
 - **footways** — paths intended for pedestrians
 - **roads** — areas intended for vehicles
 
-Additional tools let you visualize the data, annotate it interactively, and publish a
-cost-aware footway point cloud for use in path-planning nodes.
+Additional tools let you visualize the data, annotate it interactively, perform path planning, and publish a
+cost-aware footway point cloud for use in autonomous navigation.
 
-The `MapData` class and the interactive viewer work **standalone** — no running ROS2
-context is required for data parsing or annotation. ROS2 is only needed for the
+The `MapData` class, the path planning modules, and the interactive viewer work **standalone** — no running ROS2
+context is required for data parsing, annotation, or planning. ROS2 is only needed for the
 `osm_cloud` publisher and the `create_mapdata` / `visualize_mapdata` CLI nodes.
 
 The package targets **ROS2 Humble** or later on Ubuntu 22.04.
@@ -83,7 +84,12 @@ python -m map_data.viewer.app --data-dir ./data
 
 Then open `http://127.0.0.1:5000` in a browser.
 
-**Modes** (toolbar at the top):
+**Main Modes** (tabs in the top-right):
+
+- **VIEWER**: Inspect map features, manage layers, and draw manual annotations.
+- **PLANNER**: Design missions and plan paths using graph-based or all-terrain algorithms.
+
+**Viewer Tools** (toolbar at the top):
 
 | Mode | Shortcut | Action |
 |------|:---:|--------|
@@ -94,15 +100,31 @@ Then open `http://127.0.0.1:5000` in a browser.
 | **Del** | `d` | Remove custom annotations. |
 | **Fetch** | `f` | Draw a bounding box to download and parse a new OSM area. |
 
-**UI Features:**
+**Planner Features:**
 
-- **Collapsible Management:** The Annotations, Changes (edits/deletions), and Hidden lists are stacked at the bottom of the sidebar and can be independently collapsed.
-- **Enhanced Selection:** Selected objects are highlighted with a bold white border, while other features are dimmed for better focus.
-- **Node Inspection:** Toggle OSM node visibility for a selected way using the `n` key to inspect individual coordinates and tags.
-- **Export:** Save all manual annotations and OSM modifications into a new `.mapdata` file for use in the ROS2 pipeline.
+- **Interactive Waypoints:** Click on the map to add waypoints. Drag them to adjust the route.
+- **Graph Planning:** Automatically snaps paths to the OSM road and footway network.
+- **All-Terrain Planning:** Uses Grid A* or RRT* to find the shortest path while avoiding both OSM barriers and manual obstacle annotations.
+- **GPX Support:** Import existing GPX tracks for refinement or export planned missions.
+- **Live Replanning:** Adjust planning parameters (inflation, cell size, path simplification) and see the results instantly.
 
-Annotations are saved automatically to a sidecar `.annotations.json` file alongside
-the `.mapdata` file, so they survive re-parsing.
+### Path planning
+
+The `pathsolver` module provides standalone planning capabilities. You can use the `replan` CLI tool to process existing GPX tracks.
+
+```bash
+# Replan a GPX track using Grid A* and save the result
+python3 -m map_data.pathsolver.replan --path data/coords.gpx --file coords.mapdata --save data/planned.gpx --visualize
+```
+
+| Flag | Description |
+|------|-------------|
+| `--path <file>` | Input `.gpx` file containing the initial path |
+| `--file <file>` | `.mapdata` file used for obstacle information |
+| `--cell_size` | Grid resolution for all-terrain planning (default: 0.25m) |
+| `--inflate_obstacles` | Safety buffer around barriers (default: 0.25m) |
+| `--visualize` | Show a matplotlib plot of the planned path and obstacles |
+| `--save <file>` | Save the resulting path as a GPX file |
 
 ### Visualizing the parsed data
 
@@ -190,6 +212,12 @@ map_data/
 ├── create_mapdata.py        # ROS2 node / CLI: download and parse OSM data
 ├── visualize_mapdata.py     # ROS2 node / CLI: static matplotlib plots
 ├── osm_cloud.py             # ROS2 node: publishes footway grid and intersections
+├── pathsolver/              # Path planning algorithms
+│   ├── graph_planner.py     # Global A* planning on OSM ways
+│   ├── replan.py            # Local/Grid-based replanning (Grid A*, RRT*)
+│   ├── grid_astar.py        # Grid-based A* implementation
+│   ├── rrt_star.py          # RRT* implementation
+│   └── astar.py             # Generic A* search logic
 ├── utils/                   # Shared utility functions
 │   ├── way.py               # Way class — represents a single OSM feature with geometry
 │   ├── overpass.py          # OSM Overpass API client
@@ -202,7 +230,7 @@ map_data/
     ├── app.py               # App factory and server entry point
     ├── routes.py            # REST API endpoints and GeoJSON conversion
     ├── helpers.py           # Geometry and annotation utility functions
-    ├── cache.py             # MapData pickle caching
+    ├── cache.py             # MapData object caching
     ├── templates/           # HTML templates
     └── static/              # External CSS and Modular JS assets
 ```
@@ -221,10 +249,9 @@ md.run_all(save=True)  # queries OSM, parses, saves coords.mapdata
 Load an existing `.mapdata` file and access parsed features:
 
 ```python
-import pickle
+from map_data.map_data import MapData
 
-with open("coords.mapdata", "rb") as fh:
-    md = pickle.load(fh)
+md = MapData.load("coords.mapdata")
 
 print(len(md.roads_list))    # list of Way objects
 print(len(md.footways_list))
@@ -234,12 +261,11 @@ print(len(md.barriers_list))
 Plot the parsed data:
 
 ```python
-import pickle
+from map_data.map_data import MapData
 from map_data.vis_utils import plot_map
 import matplotlib.pyplot as plt
 
-with open("coords.mapdata", "rb") as fh:
-    md = pickle.load(fh)
+md = MapData.load("coords.mapdata")
 
 plot_map(md)
 plt.show()
