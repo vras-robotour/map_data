@@ -34,6 +34,10 @@ function setAppMode(mode) {
     propsPanel.style.display = ''; // Revert to CSS default (block)
     plannerPanel.style.display = 'none';
     
+    // Enable annotation-related buttons
+    document.querySelectorAll('.mode-btn[data-mode="edit"], .mode-btn[data-mode="add"], .mode-btn[data-mode="path"], .mode-btn[data-mode="delete"], .mode-btn[data-mode="fetch"]')
+      .forEach(btn => btn.disabled = false);
+
     toggleMapInteractivity(true);
 
     // Restore accessory panels visibility based on their content/state
@@ -49,6 +53,14 @@ function setAppMode(mode) {
     propsPanel.style.display = 'none';
     plannerPanel.style.display = 'flex';
     
+    // Disable annotation-related buttons
+    document.querySelectorAll('.mode-btn[data-mode="edit"], .mode-btn[data-mode="add"], .mode-btn[data-mode="path"], .mode-btn[data-mode="delete"], .mode-btn[data-mode="fetch"]')
+      .forEach(btn => btn.disabled = true);
+
+    if (currentMode !== 'view') {
+      setMode('view');
+    }
+
     toggleMapInteractivity(false);
 
     // Hide all accessory panels in planner mode

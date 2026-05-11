@@ -39,6 +39,12 @@ html, body { height: 100%; margin: 0; overflow: hidden; font-size: 14px; }
 #status { font-size: 0.75rem; }
 .leaflet-draw { z-index: 500; }
 
+.mode-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed !important;
+  pointer-events: none;
+}
+
 .subtype-btn { background: none; border: none; color: #6c7a9c; font-size: 0.7rem;
                padding: 0 2px; cursor: pointer; line-height: 1; margin-left: auto; }
 .subtype-btn:hover { color: #cdd3de; }
