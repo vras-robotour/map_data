@@ -59,9 +59,9 @@ def grid_astar(grid, start_utm, goal_utm, low, cs, simplify_path=True):
     goal_flat = (goal_iy + 1) * p_nx + (goal_ix + 1)
     g_scores[start_flat] = 0.0
 
-    # Priority queue: (f_score, ix, iy)
+    # Priority queue: (f_score, g_score, ix, iy)
     h0 = np.sqrt((start_ix - goal_ix) ** 2 + (start_iy - goal_iy) ** 2)
-    pq = [(h0, start_ix, start_iy)]
+    pq = [(h0, 0.0, start_ix, start_iy)]
 
     # Neighbor offsets in flattened padded grid (dy * p_nx + dx, dist)
     neighbors_data = []
@@ -74,14 +74,10 @@ def grid_astar(grid, start_utm, goal_utm, low, cs, simplify_path=True):
     flat_costs = padded_costs.ravel()
 
     while pq:
-        f, ix, iy = heapq.heappop(pq)
+        f, g_pushed, ix, iy = heapq.heappop(pq)
 
         u_flat = (iy + 1) * p_nx + (ix + 1)
-        # Standard A* optimization: if we already found a better path to this node, skip
-        if (
-            g_scores[u_flat]
-            < f - np.sqrt((ix - goal_ix) ** 2 + (iy - goal_iy) ** 2) - 1e-4
-        ):
+        if g_scores[u_flat] < g_pushed - 1e-4:
             continue
 
         if u_flat == goal_flat:
@@ -119,6 +115,6 @@ def grid_astar(grid, start_utm, goal_utm, low, cs, simplify_path=True):
                 parents[v_flat] = u_flat
                 v_iy, v_ix = divmod(v_flat, p_nx)
                 h = np.sqrt((v_ix - 1 - goal_ix) ** 2 + (v_iy - 1 - goal_iy) ** 2)
-                heapq.heappush(pq, (new_g + h, v_ix - 1, v_iy - 1))
+                heapq.heappush(pq, (new_g + h, new_g, v_ix - 1, v_iy - 1))
 
     return None

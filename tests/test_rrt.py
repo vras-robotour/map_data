@@ -73,6 +73,7 @@ def test_rrt_star_start_in_collision():
         grid,
         (0.0, 0.0),
         max_iter=100,
+        traversability_threshold=0.5,
     )
     path = rrt_star.find_path()
     assert path is None

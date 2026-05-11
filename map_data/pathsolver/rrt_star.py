@@ -1,7 +1,12 @@
 import random
 import numpy as np
+from scipy.spatial import cKDTree
 from typing import List, Tuple, Optional
 from shapely.geometry import Point, LineString
+
+# Rebuild the spatial index after this many new nodes are added since the last build.
+# Balances rebuild cost (O(n log n)) against linear-scan cost for the unindexed tail.
+_KDTREE_REBUILD_INTERVAL = 50
 
 
 class RRTStar:
@@ -20,6 +25,7 @@ class RRTStar:
         traversability_threshold: float = 10.0,  # inf is blocked, high values are expensive
         simplify: bool = True,
         transfer_id: Optional[str] = None,
+        improve_after_goal: bool = False,
     ):
         self.start = start
         self.goal = goal
@@ -42,6 +48,9 @@ class RRTStar:
         self.traversability_threshold = traversability_threshold
         self.simplify = simplify
         self.transfer_id = transfer_id
+        self.improve_after_goal = improve_after_goal
+        self._kdtree: Optional[cKDTree] = None
+        self._kdtree_n: int = 0
 
         # Limit sampling area
         dist = np.linalg.norm(self.goal - self.start)
@@ -105,7 +114,6 @@ class RRTStar:
     def _bresenham(self, start, goal):
         x0, y0 = start
         x1, y1 = goal
-        line = []
         dx, dy = abs(x1 - x0), abs(y1 - y0)
         x, y = x0, y0
         sx = -1 if x0 > x1 else 1
@@ -113,7 +121,7 @@ class RRTStar:
         if dx > dy:
             err = dx / 2.0
             while x != x1:
-                line.append((x, y))
+                yield (x, y)
                 err -= dy
                 if err < 0:
                     y += sy
@@ -122,14 +130,13 @@ class RRTStar:
         else:
             err = dy / 2.0
             while y != y1:
-                line.append((x, y))
+                yield (x, y)
                 err -= dx
                 if err < 0:
                     x += sx
                     err += dy
                 y += sy
-        line.append((x1, y1))
-        return line
+        yield (x1, y1)
 
     def _get_grid_cost(self, point: np.ndarray) -> float:
         ix = int((point[0] - self.low[0]) / self.grid_scale)
@@ -157,9 +164,22 @@ class RRTStar:
         )
 
     def _nearest_node(self, point: np.ndarray) -> int:
-        nodes_arr = self._nodes_buf[: len(self.nodes)]
-        sq_dists = ((nodes_arr - point) ** 2).sum(axis=1)
-        return int(np.argmin(sq_dists))
+        n = len(self.nodes)
+        if self._kdtree is None or n - self._kdtree_n >= _KDTREE_REBUILD_INTERVAL:
+            self._kdtree = cKDTree(self._nodes_buf[:n])
+            self._kdtree_n = n
+
+        _, best_idx = self._kdtree.query(point)
+        best_d2 = float(((self._nodes_buf[best_idx] - point) ** 2).sum())
+
+        # Linear scan over nodes added since the last rebuild
+        for i in range(self._kdtree_n, n):
+            d2 = float(((self._nodes_buf[i] - point) ** 2).sum())
+            if d2 < best_d2:
+                best_d2 = d2
+                best_idx = i
+
+        return int(best_idx)
 
     def _steer(self, start: np.ndarray, target: np.ndarray) -> np.ndarray:
         direction = target - start
@@ -169,10 +189,27 @@ class RRTStar:
         return start + (direction / dist) * self.step_size
 
     def _get_near_nodes(self, new_point: np.ndarray) -> List[int]:
-        nodes_arr = self._nodes_buf[: len(self.nodes)]
-        sq_dists = ((nodes_arr - new_point) ** 2).sum(axis=1)
-        r2 = self.neighbor_radius**2
-        return list(np.where((sq_dists < r2) & (sq_dists > 0))[0])
+        n = len(self.nodes)
+        new_idx = n - 1  # node just appended by the caller
+        r2 = self.neighbor_radius ** 2
+
+        if self._kdtree is None:
+            sq_dists = ((self._nodes_buf[:n] - new_point) ** 2).sum(axis=1)
+            return list(np.where((sq_dists < r2) & (sq_dists > 0))[0])
+
+        # KD-tree covers [0, _kdtree_n); _nearest_node always rebuilds first so
+        # new_point is never included in the tree.
+        result: List[int] = list(self._kdtree.query_ball_point(new_point, self.neighbor_radius))
+
+        # Linear scan over nodes added since the last rebuild, excluding new_point itself
+        for i in range(self._kdtree_n, n):
+            if i == new_idx:
+                continue
+            d2 = float(((self._nodes_buf[i] - new_point) ** 2).sum())
+            if d2 < r2:
+                result.append(i)
+
+        return result
 
     def _segment_cost(self, start: np.ndarray, end: np.ndarray) -> Tuple[bool, float]:
         if self.obstacles_tree:
@@ -214,6 +251,8 @@ class RRTStar:
     def find_path(self) -> Optional[np.ndarray]:
         from .replan import _cancelled_transfers
 
+        goal_idx = None
+
         for _ in range(self.max_iter):
             if self.transfer_id in _cancelled_transfers:
                 return None
@@ -225,19 +264,23 @@ class RRTStar:
             if self._is_collision(new_point):
                 continue
 
-            collision, seg_cost = self._segment_cost(self.nodes[nearest_idx], new_point)
+            collision, nearest_seg_cost = self._segment_cost(self.nodes[nearest_idx], new_point)
             if collision:
                 continue
 
             new_idx = len(self.nodes)
             self.nodes.append(new_point)
             self._nodes_buf[new_idx] = new_point
-            min_cost = self.cost[nearest_idx] + seg_cost
+            min_cost = self.cost[nearest_idx] + nearest_seg_cost
             min_parent = nearest_idx
 
             near_indices = self._get_near_nodes(new_point)
             for idx in near_indices:
-                col, sc = self._segment_cost(self.nodes[idx], new_point)
+                # Reuse already-computed cost for the nearest node
+                if idx == nearest_idx:
+                    col, sc = False, nearest_seg_cost
+                else:
+                    col, sc = self._segment_cost(self.nodes[idx], new_point)
                 if not col:
                     c = self.cost[idx] + sc
                     if c < min_cost:
@@ -261,14 +304,21 @@ class RRTStar:
             if np.linalg.norm(new_point - self.goal) < self.goal_tolerance:
                 col, sc = self._segment_cost(new_point, self.goal)
                 if not col:
-                    g_idx = len(self.nodes)
-                    self.nodes.append(self.goal)
-                    self._nodes_buf[g_idx] = self.goal
-                    self.parent[g_idx] = new_idx
-                    self.cost[g_idx] = self.cost[new_idx] + sc
-                    path = self._reconstruct_path(g_idx)
-                    return np.array(path)
+                    new_goal_cost = self.cost[new_idx] + sc
+                    if goal_idx is None:
+                        goal_idx = len(self.nodes)
+                        self.nodes.append(self.goal)
+                        self._nodes_buf[goal_idx] = self.goal
+                    if new_goal_cost < self.cost.get(goal_idx, float("inf")):
+                        self.parent[goal_idx] = new_idx
+                        self.cost[goal_idx] = new_goal_cost
+                    if not self.improve_after_goal:
+                        path = self._reconstruct_path(goal_idx)
+                        return np.array(path)
 
+        if goal_idx is not None:
+            path = self._reconstruct_path(goal_idx)
+            return np.array(path)
         return None
 
     def _reconstruct_path(self, goal_idx: int) -> List[np.ndarray]:

@@ -97,11 +97,9 @@ class ReplanPath:
         return np.array(new_path)
 
     def _rrt_star(self, start, goal):
-        grid = (
-            self._reshaped_grid_cache
-            if self._reshaped_grid_cache is not None
-            else self._burn_obstacles_into_grid(self._reshape_grid())
-        )
+        if self._reshaped_grid_cache is None:
+            self._reshaped_grid_cache = self._burn_obstacles_into_grid(self._reshape_grid())
+        grid = self._reshaped_grid_cache
         planner = RRTStar(
             start=start,
             goal=goal,
@@ -209,11 +207,9 @@ class ReplanPath:
         return obst
 
     def _astar(self, start, goal):
-        grid = (
-            self._reshaped_grid_cache
-            if self._reshaped_grid_cache is not None
-            else self._burn_obstacles_into_grid(self._reshape_grid())
-        )
+        if self._reshaped_grid_cache is None:
+            self._reshaped_grid_cache = self._burn_obstacles_into_grid(self._reshape_grid())
+        grid = self._reshaped_grid_cache
         return grid_astar(
             grid,
             start,

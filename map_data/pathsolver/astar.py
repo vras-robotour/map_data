@@ -28,9 +28,13 @@ def astar_search(start_node, goal_node, get_neighbors_func, heuristic_func):
 
     # visited maps node -> (cost, parent)
     visited = {start_node: (0, None)}
+    closed = set()
 
     while q:
         (f_score, _, u) = heapq.heappop(q)
+        if u in closed:
+            continue
+        closed.add(u)
         cost = visited[u][0]
 
         if u == goal_node:
