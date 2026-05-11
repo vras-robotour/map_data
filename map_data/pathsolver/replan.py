@@ -94,11 +94,37 @@ class ReplanPath:
             new_path.extend(segment_path)
 
         new_path.append(path[-1][:2])
-        return np.array(new_path)
+        return self._post_process_path(np.array(new_path))
+
+    def _post_process_path(self, path):
+        """
+        Simplify the final path by removing redundant points.
+        """
+        if path is None or len(path) <= 2:
+            return path
+
+        # 1. Remove points that are extremely close to each other
+        dist_sq = np.sum(np.diff(path, axis=0) ** 2, axis=1)
+        mask = np.ones(len(path), dtype=bool)
+        # Remove points that are closer than 0.05m to the previous point
+        mask[1:] = dist_sq > 0.05**2
+        path = path[mask]
+
+        if len(path) <= 2:
+            return path
+
+        # 2. Final Douglas-Peucker simplification on the whole path
+        if self.args.simplify_path:
+            # Use cell_size as tolerance for the whole path
+            path = np.array(LineString(path).simplify(self.args.cell_size).coords)
+
+        return path
 
     def _rrt_star(self, start, goal):
         if self._reshaped_grid_cache is None:
-            self._reshaped_grid_cache = self._burn_obstacles_into_grid(self._reshape_grid())
+            self._reshaped_grid_cache = self._burn_obstacles_into_grid(
+                self._reshape_grid()
+            )
         grid = self._reshaped_grid_cache
         planner = RRTStar(
             start=start,
@@ -208,7 +234,9 @@ class ReplanPath:
 
     def _astar(self, start, goal):
         if self._reshaped_grid_cache is None:
-            self._reshaped_grid_cache = self._burn_obstacles_into_grid(self._reshape_grid())
+            self._reshaped_grid_cache = self._burn_obstacles_into_grid(
+                self._reshape_grid()
+            )
         grid = self._reshaped_grid_cache
         return grid_astar(
             grid,
@@ -294,6 +322,26 @@ class ReplanPath:
             path_grid[:, 3] = 0.5
             self.grid = path_grid
             return
+
+        # PRIORITIZE PATHS OVER OBSTACLES:
+        # Subtract path geometries from obstacles so that paths are always traversable.
+        path_geoms = [w.line for w in allowed_ways if w.line]
+        if path_geoms and self.obstacles:
+            unioned_paths = sh.unary_union(path_geoms)
+            new_obstacles = []
+            for obstacle in self.obstacles:
+                # Subtract paths from the obstacle
+                diff = obstacle.difference(unioned_paths)
+                if not diff.is_empty:
+                    # difference might return a MultiPolygon
+                    if diff.geom_type == "MultiPolygon":
+                        new_obstacles.extend(list(diff.geoms))
+                    else:
+                        new_obstacles.append(diff)
+
+            self.obstacles = new_obstacles
+            # Rebuild STRtree
+            self.obstacles_tree = sh.STRtree(self.obstacles) if self.obstacles else None
 
         paths = np.pad(
             self._split_ways(points, allowed_ways, self.args.cell_size),
