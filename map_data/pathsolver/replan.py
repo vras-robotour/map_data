@@ -12,7 +12,7 @@ from shapely.geometry import LineString
 from matplotlib.patches import Polygon as MplPolygon
 from matplotlib.path import Path
 
-from map_data.pathsolver.astar import astar_search
+from map_data.pathsolver.grid_astar import grid_astar
 from map_data.map_data import MapData
 from map_data.utils.parsing import (
     ways_to_shapely,
@@ -45,14 +45,18 @@ class ReplanPath:
             ]
         else:
             self.obstacles = obstacles
+
+        # Spatial index for faster collision checking
+        self.obstacles_tree = sh.STRtree(self.obstacles) if self.obstacles else None
+
         self.debug = False
         self._reshaped_grid_cache = None
         self._converted_obstacles = (
             self._convert_obstacles(self.obstacles) if self.obstacles else []
         )
 
-    def replan_rrt(self, path):
-        def process_segment(i, path, obstacles, args):
+    def replan(self, path):
+        def process_segment(i, path, args):
             if self.transfer_id in _cancelled_transfers:
                 return None, i
 
@@ -60,7 +64,7 @@ class ReplanPath:
             goal = path[i + 1]
             segment_path = [start[:2]]
             path_seg = LineString([start[:2], goal[:2]])
-            if self._colides(path_seg, obstacles):
+            if self._colides(path_seg):
                 # Using A* instead of RRT*
                 way = self._astar(start[:2], goal[:2])
                 if way is None:
@@ -70,8 +74,7 @@ class ReplanPath:
 
         new_path = []
         results = Parallel(n_jobs=-1, backend="threading")(
-            delayed(process_segment)(i, path, self.obstacles, self.args)
-            for i in range(len(path) - 1)
+            delayed(process_segment)(i, path, self.args) for i in range(len(path) - 1)
         )
 
         if self.transfer_id in _cancelled_transfers:
@@ -122,27 +125,45 @@ class ReplanPath:
 
         # grid_2d is (Y, X)
         ny, nx = grid_2d.shape
-
-        # Create a grid of coordinates for Path.contains_points
-        # We need to match the logic in _reshape_grid:
-        # x_indices = np.floor((x - low[0]) / cell_size)
-        # So x = index * cell_size + low[0] + offset (half cell size for center)
-        # But contains_points is usually fine with just the corners or centers.
-        x = np.linspace(self.args.low[0], self.args.high[0], nx)
-        y = np.linspace(self.args.low[1], self.args.high[1], ny)
-        xv, yv = np.meshgrid(x, y)
-        points = np.stack((xv.ravel(), yv.ravel()), axis=-1)
+        low = self.args.low
+        cs = self.args.cell_size
 
         for obstacle in self.obstacles:
+            # Get bounding box of the obstacle
+            minx, miny, maxx, maxy = obstacle.bounds
+
+            # Map to grid indices
+            ix_min = max(0, int(np.floor((minx - low[0]) / cs)))
+            ix_max = min(nx - 1, int(np.ceil((maxx - low[0]) / cs)))
+            iy_min = max(0, int(np.floor((miny - low[1]) / cs)))
+            iy_max = min(ny - 1, int(np.ceil((maxy - low[1]) / cs)))
+
+            if ix_min > ix_max or iy_min > iy_max:
+                continue
+
+            # Create points only for this bounding box
+            # We use centers of the cells for better accuracy
+            x = np.linspace(
+                ix_min * cs + low[0], ix_max * cs + low[0], ix_max - ix_min + 1
+            )
+            y = np.linspace(
+                iy_min * cs + low[1], iy_max * cs + low[1], iy_max - iy_min + 1
+            )
+            xv, yv = np.meshgrid(x, y)
+            points_bbox = np.stack((xv.ravel(), yv.ravel()), axis=-1)
+
             if obstacle.geom_type == "Polygon":
                 poly_path = Path(np.array(obstacle.exterior.coords))
-                mask = poly_path.contains_points(points).reshape(ny, nx)
-                grid_2d[mask] = np.inf
+                mask = poly_path.contains_points(points_bbox).reshape(len(y), len(x))
+                grid_2d[iy_min : iy_max + 1, ix_min : ix_max + 1][mask] = np.inf
             elif obstacle.geom_type == "MultiPolygon":
                 for poly in obstacle.geoms:
                     poly_path = Path(np.array(poly.exterior.coords))
-                    mask = poly_path.contains_points(points).reshape(ny, nx)
-                    grid_2d[mask] = np.inf
+                    # We could also crop to this poly's bounds, but for now just check against bbox of MultiPolygon
+                    mask = poly_path.contains_points(points_bbox).reshape(
+                        len(y), len(x)
+                    )
+                    grid_2d[iy_min : iy_max + 1, ix_min : ix_max + 1][mask] = np.inf
 
         return grid_2d
 
@@ -170,70 +191,24 @@ class ReplanPath:
             if self._reshaped_grid_cache is not None
             else self._burn_obstacles_into_grid(self._reshape_grid())
         )
-        ny, nx = grid.shape
-        low = self.args.low
-        cs = self.args.cell_size
+        return grid_astar(
+            grid,
+            start,
+            goal,
+            self.args.low,
+            self.args.cell_size,
+            simplify_path=self.args.simplify_path,
+        )
 
-        # Convert UTM to grid indices
-        def to_idx(p):
-            ix = int(np.floor((p[0] - low[0]) / cs))
-            iy = int(np.floor((p[1] - low[1]) / cs))
-            return np.clip(ix, 0, nx - 1), np.clip(iy, 0, ny - 1)
-
-        start_idx = to_idx(start)
-        goal_idx = to_idx(goal)
-
-        def get_neighbors(u):
-            ix, iy = u
-            neighbors = []
-            # 8-connected
-            for dx in [-1, 0, 1]:
-                for dy in [-1, 0, 1]:
-                    if dx == 0 and dy == 0:
-                        continue
-                    nix, niy = ix + dx, iy + dy
-                    if 0 <= nix < nx and 0 <= niy < ny:
-                        # grid is (Y, X)
-                        cost = grid[niy, nix]
-                        if np.isinf(cost):
-                            continue
-                        # Base distance (1 for straight, 1.41 for diagonal)
-                        dist = np.sqrt(dx**2 + dy**2)
-                        # cost is 0.0 near paths, 1.0 away from paths.
-                        # We want to penalize moving away from paths.
-                        # Total cost = distance * (1.0 + cost * penalty_multiplier)
-                        # Using 5.0 as penalty_multiplier to strongly prefer paths.
-                        move_cost = dist * (1.0 + cost * 5.0)
-                        neighbors.append(((nix, niy), move_cost))
-            return neighbors
-
-        def heuristic(u):
-            # Euclidean distance in grid units
-            return np.sqrt((u[0] - goal_idx[0]) ** 2 + (u[1] - goal_idx[1]) ** 2)
-
-        path_indices = astar_search(start_idx, goal_idx, get_neighbors, heuristic)
-
-        if path_indices is None:
-            return None
-
-        # Convert back to UTM
-        path = []
-        for ix, iy in path_indices:
-            path.append([ix * cs + low[0], iy * cs + low[1]])
-
-        path = np.array(path)
-
-        # Simplify path
-        if self.args.simplify_path and len(path) > 2:
-            path = np.array(LineString(path).simplify(cs / 2.0).coords)
-
-        return path
-
-    def _colides(self, path_seg, obstacles):
-        for obstacle in obstacles:
-            if obstacle.contains(path_seg) or obstacle.intersects(path_seg):
-                return True
-        return False
+    def _colides(self, path_seg):
+        if self.obstacles_tree is None:
+            return False
+        # STRtree.query returns indices of obstacles that intersect the path_seg bounding box
+        # We need to check if any of them actually intersect the segment
+        intersecting_indices = self.obstacles_tree.query(
+            path_seg, predicate="intersects"
+        )
+        return len(intersecting_indices) > 0
 
     def _create_grid(self, low, high, cell_size=0.25):
         """
@@ -271,11 +246,29 @@ class ReplanPath:
         points = map_data.get_points()
         path_grid = self.grid
 
+        bbox = sh.box(
+            self.args.low[0], self.args.low[1], self.args.high[0], self.args.high[1]
+        )
+        # Add a bit of margin for ways that might pass nearby
+        bbox_buffered = bbox.buffer(max_path_dist)
+
         allowed_ways = []
         if "footway" in highway_types:
-            allowed_ways.extend(map_data.footways_list)
+            allowed_ways.extend(
+                [
+                    w
+                    for w in map_data.footways_list
+                    if w.line and w.line.intersects(bbox_buffered)
+                ]
+            )
         if "road" in highway_types:
-            allowed_ways.extend(map_data.roads_list)
+            allowed_ways.extend(
+                [
+                    w
+                    for w in map_data.roads_list
+                    if w.line and w.line.intersects(bbox_buffered)
+                ]
+            )
 
         if not allowed_ways:
             path_grid = np.pad(path_grid, ((0, 0), (0, 1)))
@@ -483,7 +476,7 @@ if __name__ == "__main__":
     replanner = ReplanPath(args, obstacles)
     replanner.fill_grid(map_data, max_path_dist=args.max_path_dist)
 
-    new_path = replanner.replan_rrt(path_data[0])
+    new_path = replanner.replan(path_data[0])
 
     if args.save:
         new_wgs_path = utm_path_to_latlon(new_path, path_data[1], path_data[2])

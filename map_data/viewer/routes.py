@@ -12,8 +12,6 @@ import threading
 import time
 import uuid
 
-import numpy as np
-import utm
 from flask import (
     Blueprint,
     abort,
@@ -23,6 +21,9 @@ from flask import (
     request,
     send_file,
 )
+import numpy as np
+import shapely.geometry as geometry
+import utm
 
 from map_data.map_data import MapData
 from map_data.pathsolver.replan import ReplanPath, cancel_replan_backend, parse_args
@@ -1028,6 +1029,17 @@ def create_replan():
         utm_path.append([e, n])
     utm_path = np.array(utm_path, dtype=np.float64)
 
+    # Calculate planning bounding box to limit grid size
+    margin = 50.0  # meters
+    p_min_x = np.min(utm_path[:, 0]) - margin
+    p_max_x = np.max(utm_path[:, 0]) + margin
+    p_min_y = np.min(utm_path[:, 1]) - margin
+    p_max_y = np.max(utm_path[:, 1]) + margin
+
+    # Clip to map boundaries
+    p_low = (max(md.min_x, p_min_x), max(md.min_y, p_min_y))
+    p_high = (min(md.max_x, p_max_x), min(md.max_y, p_max_y))
+
     if algorithm == "graph":
         planner = GraphPlanner(md, highway_types=highway_types)
         res = planner.plan(utm_path)
@@ -1037,10 +1049,16 @@ def create_replan():
         args.cell_size = cell_size
         args.inflate_obstacles = inflate_obstacles
         args.visualize = False
-        args.low = (md.min_x, md.min_y)
-        args.high = (md.max_x, md.max_y)
+        args.low = p_low
+        args.high = p_high
 
-        obstacles = ways_to_shapely(md.barriers_list)
+        # Filter barriers to bounding box for faster processing
+        bbox = geometry.box(p_low[0], p_low[1], p_high[0], p_high[1])
+        filtered_barriers = [
+            w for w in md.barriers_list if w.line and w.line.intersects(bbox)
+        ]
+
+        obstacles = ways_to_shapely(filtered_barriers)
         replanner = ReplanPath(args, obstacles, transfer_id=transfer_id)
         replanner.fill_grid(md, highway_types=highway_types)
         res = replanner.replan_rrt(utm_path)
