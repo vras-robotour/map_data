@@ -2,7 +2,6 @@
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -67,90 +66,9 @@ def generate_launch_description():
                 "grid_res": 0.4,
                 "grid_max": [0.0, 0.0],
                 "grid_min": [0.0, 0.0],
-                "auto_utm": True,
                 "publish_intersections": True,
             }
         ],
-    )
-
-    local_utm_node = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="local_utm_transform",
-        output="screen",
-        arguments=[
-            "--x",
-            # "670667.0", # buchlovice
-            "458378.63",  # stromovka
-            "--y",
-            # "5439425.14", # buchlovice
-            "5550538.10",  # stromovka
-            "--z",
-            "0.0",
-            "--yaw",
-            "0.0",
-            "--pitch",
-            "0.0",
-            "--roll",
-            "0.0",
-            "--frame-id",
-            "utm",
-            "--child-frame-id",
-            "local_utm",
-        ],
-        condition=IfCondition(LaunchConfiguration("publish_static_tf")),
-    )
-
-    map_node = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="map_transform",
-        output="screen",
-        arguments=[
-            "--x",
-            "0.0",
-            "--y",
-            "0.0",
-            "--z",
-            "0.0",
-            "--yaw",
-            "0.0",
-            "--pitch",
-            "0.0",
-            "--roll",
-            "0.0",
-            "--frame-id",
-            "map",
-            "--child-frame-id",
-            "local_utm",
-        ],
-        condition=IfCondition(LaunchConfiguration("publish_static_tf")),
-    )
-
-    base_link_node = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="base_link_transform",
-        output="screen",
-        arguments=[
-            "--x",
-            "0.0",
-            "--y",
-            "0.0",
-            "--z",
-            "0.0",
-            "--yaw",
-            "0.0",
-            "--pitch",
-            "0.0",
-            "--roll",
-            "0.0",
-            "--frame-id",
-            "map",
-            "--child-frame-id",
-            "base_link",
-        ],
-        condition=IfCondition(LaunchConfiguration("publish_static_tf")),
     )
 
     return LaunchDescription(
@@ -161,8 +79,5 @@ def generate_launch_description():
             grid_topic,
             publish_static_tf,
             osm_cloud_node,
-            local_utm_node,
-            map_node,
-            base_link_node,
         ]
     )
