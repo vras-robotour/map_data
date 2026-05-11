@@ -181,7 +181,7 @@ class GraphPlanner:
             edge_goal_info, _ = self._find_closest_edge(p_goal)
 
             if not edge_start_info or not edge_goal_info:
-                return None
+                return False
 
             id_s = "temp_start"
             id_g = "temp_goal"
@@ -214,7 +214,7 @@ class GraphPlanner:
             # Route between temporary nodes (projections)
             segment = self.a_star(id_s, id_g, extra)
             if not segment:
-                return None
+                return False
 
             # Combine: clicked point -> projection -> graph path -> projection -> clicked point
             # segment already contains [p_proj_s, ..., p_proj_g]

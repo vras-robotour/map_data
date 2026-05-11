@@ -1066,6 +1066,8 @@ def create_replan():
 
     if res is None:
         return jsonify({"retrieveNum": 1, "newPath": None, "status": "cancelled"})
+    if res is False:
+        return jsonify({"retrieveNum": 1, "newPath": None, "status": "failed"})
 
     new_path = []
     changed = False

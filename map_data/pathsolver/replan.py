@@ -90,7 +90,7 @@ class ReplanPath:
         for segment_path, _ in results:
             if segment_path is None:
                 print(f"{algorithm} failed to find a path.")
-                return None
+                return False
             new_path.extend(segment_path)
 
         new_path.append(path[-1][:2])
