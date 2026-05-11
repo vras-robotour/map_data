@@ -9,10 +9,12 @@ def test_rrt_star_simple_success():
     grid = np.zeros((100, 100), dtype=float)
 
     rrt_star = RRTStar(
-        start,
-        goal,
+        np.array(start),
+        np.array(goal),
         obstacles,
+        None,
         grid,
+        (0.0, 0.0),
         max_iter=500,
         step_size=1.0,
         neighbor_radius=2.0,
@@ -33,10 +35,12 @@ def test_rrt_star_with_obstacle():
     grid[40:60, 40:60] = 1.0  # 4m to 6m region
 
     rrt_star = RRTStar(
-        start,
-        goal,
+        np.array(start),
+        np.array(goal),
         [],
+        None,
         grid,
+        (0.0, 0.0),
         max_iter=1000,
         step_size=0.5,
         neighbor_radius=2.0,
@@ -62,10 +66,12 @@ def test_rrt_star_start_in_collision():
     grid = np.ones((100, 100), dtype=float)  # Everything is blocked
 
     rrt_star = RRTStar(
-        start,
-        goal,
+        np.array(start),
+        np.array(goal),
         [],
+        None,
         grid,
+        (0.0, 0.0),
         max_iter=100,
     )
     path = rrt_star.find_path()

@@ -13,33 +13,108 @@ class GraphPlanner:
         self._build_graph()
 
     def _build_graph(self):
+        self.graph = {}
         self._allowed_ways = []
         if "footway" in self.highway_types:
             self._allowed_ways.extend(self.map_data.footways_list)
         if "road" in self.highway_types:
             self._allowed_ways.extend(self.map_data.roads_list)
 
+        # First pass: identify potential splits from annotations
         edge_segments = []
-        edge_node_pairs = []
+        edge_way_info = []  # (way_obj, segment_index)
 
         for way in self._allowed_ways:
             for i in range(len(way.nodes) - 1):
-                n1 = way.nodes[i]
-                n2 = way.nodes[i + 1]
+                n1, n2 = way.nodes[i], way.nodes[i + 1]
+                p1 = self.nodes[n1].ravel()[:2]
+                p2 = self.nodes[n2].ravel()[:2]
+                edge_segments.append(LineString([p1, p2]))
+                edge_way_info.append((way, i))
 
+        tree = STRtree(edge_segments) if edge_segments else None
+
+        # Group splits by way and segment
+        splits = {}  # (way_id, segment_index) -> [(proj_dist, proj_node_id, node_id, dist_to_edge)]
+        new_internal_id = -2000000
+
+        if tree:
+            threshold = 5.0
+            for way in self._allowed_ways:
+                if way.id >= 0:
+                    continue
+                if not way.nodes:
+                    continue
+
+                # Check endpoints of annotation way
+                for node_id in [way.nodes[0], way.nodes[-1]]:
+                    p_node = self.nodes[node_id].ravel()[:2]
+                    p_sh = Point(p_node)
+
+                    indices = tree.query(p_sh.buffer(threshold), predicate="intersects")
+                    if len(indices) == 0:
+                        continue
+
+                    # Find nearest edge that is NOT part of the same way
+                    best_idx = -1
+                    min_dist = float("inf")
+                    for idx in indices:
+                        if edge_way_info[idx][0].id == way.id:
+                            continue
+                        d = edge_segments[idx].distance(p_sh)
+                        if d < min_dist:
+                            min_dist = d
+                            best_idx = idx
+
+                    if best_idx != -1 and min_dist <= threshold:
+                        line = edge_segments[best_idx]
+                        proj_dist = line.project(p_sh)
+                        p_proj = np.array(line.interpolate(proj_dist).coords[0])
+
+                        proj_node_id = new_internal_id
+                        new_internal_id -= 1
+                        self.nodes[proj_node_id] = np.array(
+                            [p_proj[0], p_proj[1], 0.0]
+                        ).reshape(3, 1)
+
+                        target_way, segment_idx = edge_way_info[best_idx]
+                        splits.setdefault((id(target_way), segment_idx), []).append(
+                            (proj_dist, proj_node_id, node_id, min_dist)
+                        )
+
+        # Apply splits to _allowed_ways by inserting new nodes
+        for (way_ptr, segment_idx), s_list in splits.items():
+            # Find the way object by pointer (since we might have modified nodes)
+            target_way = next(w for w in self._allowed_ways if id(w) == way_ptr)
+            # Sort splits on this segment by distance from segment start
+            s_list.sort(key=lambda x: x[0], reverse=True)
+            for _, proj_node_id, ann_node_id, dist_to_edge in s_list:
+                target_way.nodes.insert(segment_idx + 1, proj_node_id)
+                # Manually add the connection from annotation endpoint to the new junction node
+                self._add_edge(ann_node_id, proj_node_id, dist_to_edge)
+
+        # Second pass: build final graph and tree from (possibly modified) ways
+        final_edge_segments = []
+        final_edge_node_pairs = []
+
+        for way in self._allowed_ways:
+            for i in range(len(way.nodes) - 1):
+                n1, n2 = way.nodes[i], way.nodes[i + 1]
                 p1 = self.nodes[n1].ravel()[:2]
                 p2 = self.nodes[n2].ravel()[:2]
                 dist = np.linalg.norm(p1 - p2)
 
-                self.graph.setdefault(n1, []).append((n2, dist))
-                self.graph.setdefault(n2, []).append((n1, dist))
+                self._add_edge(n1, n2, dist)
+                final_edge_segments.append(LineString([p1, p2]))
+                final_edge_node_pairs.append((n1, n2))
 
-                edge_segments.append(LineString([p1, p2]))
-                edge_node_pairs.append((n1, n2))
+        self._edge_segments = final_edge_segments
+        self._edge_node_pairs = final_edge_node_pairs
+        self._edge_tree = STRtree(final_edge_segments) if final_edge_segments else None
 
-        self._edge_segments = edge_segments
-        self._edge_node_pairs = edge_node_pairs
-        self._edge_tree = STRtree(edge_segments) if edge_segments else None
+    def _add_edge(self, u, v, d):
+        self.graph.setdefault(u, []).append((v, d))
+        self.graph.setdefault(v, []).append((u, d))
 
     def _find_closest_edge(self, point_utm):
         """Find the closest edge using an STRtree spatial index."""
