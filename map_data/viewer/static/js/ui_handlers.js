@@ -979,3 +979,50 @@ function openAnnEditModal(annId) {
   updateAnnTypeFields();
   new bootstrap.Modal(document.getElementById('ann-detail-modal')).show();
 }
+
+let pendingGpxFile = null;
+
+function handleGpxMapCreation(file) {
+  pendingGpxFile = file;
+  const nameInput = document.getElementById('gpx-name-input');
+  if (nameInput) {
+    nameInput.value = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_\-]/g, "_");
+  }
+  new bootstrap.Modal(document.getElementById('gpx-upload-modal')).show();
+}
+
+document.getElementById('gpx-upload-submit')?.addEventListener('click', async () => {
+  const name = document.getElementById('gpx-name-input').value.trim();
+  if (!name || !pendingGpxFile) {
+    document.getElementById('gpx-name-input').focus();
+    return;
+  }
+  bootstrap.Modal.getInstance(document.getElementById('gpx-upload-modal')).hide();
+  setStatus('Processing GPX and fetching OSM data... (may take 1–2 min)', 'text-warning');
+
+  const formData = new FormData();
+  formData.append('file', pendingGpxFile);
+  formData.append('name', name);
+
+  try {
+    const data = await uploadGpxApi(formData);
+    setStatus(
+      `GPX Processed: ${data.roads} roads, ${data.footways} footways, ${data.barriers} barriers`,
+      'text-success'
+    );
+    const sel = document.getElementById('file-select');
+    if (sel && ![...sel.options].some(o => o.value === data.filename)) {
+      sel.appendChild(new Option(data.filename, data.filename));
+    }
+    if (sel) sel.value = data.filename;
+    await loadMapData(data.filename);
+  } catch (err) {
+    setStatus(`GPX processing failed: ${err.message}`, 'text-danger');
+  } finally {
+    pendingGpxFile = null;
+  }
+});
+
+document.getElementById('gpx-name-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('gpx-upload-submit').click();
+});

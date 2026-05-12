@@ -157,3 +157,12 @@ async function fetchAreaApi(params) {
   if (!res.ok) throw new Error(await res.text());
   return await res.json();
 }
+
+async function uploadGpxApi(formData) {
+  const res = await fetch('/api/upload_gpx', {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}

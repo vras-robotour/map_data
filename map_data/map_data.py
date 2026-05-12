@@ -54,7 +54,26 @@ class MapData:
             with open(coords, "r") as f:
                 gpx_object = gpxparse(f)
             self.coords_file = coords
-            latlon = np.array([[p.latitude, p.longitude] for p in gpx_object.waypoints])
+
+            points = []
+            if gpx_object.waypoints:
+                points = [[p.latitude, p.longitude] for p in gpx_object.waypoints]
+            elif gpx_object.tracks:
+                for track in gpx_object.tracks:
+                    for segment in track.segments:
+                        points.extend(
+                            [[p.latitude, p.longitude] for p in segment.points]
+                        )
+            elif gpx_object.routes:
+                for route in gpx_object.routes:
+                    points.extend([[p.latitude, p.longitude] for p in route.points])
+
+            if not points:
+                raise ValueError(
+                    f"No points (waypoints, tracks or routes) found in {coords}"
+                )
+
+            latlon = np.array(points)
             self.waypoints, self.zone_number, self.zone_letter = self._latlon_to_utm(
                 latlon
             )

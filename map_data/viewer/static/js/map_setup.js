@@ -125,6 +125,16 @@ async function initApp() {
       window.location = `/api/export?file=${encodeURIComponent(currentFile)}`;
   });
 
+  document.getElementById('gpx-create-btn')?.addEventListener('click', () => {
+    document.getElementById('gpx-create-input').click();
+  });
+
+  document.getElementById('gpx-create-input')?.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) handleGpxMapCreation(file);
+    e.target.value = '';
+  });
+
   document.getElementById('fetch-area-submit')?.addEventListener('click', async () => {
     const name = document.getElementById('area-name-input').value.trim();
     if (!name) {
@@ -312,6 +322,9 @@ async function initApp() {
       case 'd': case 'D':      setMode('delete'); break;
       case 'f': case 'F':      setMode('fetch');  break;
       case 'p': case 'P':      setMode('path');   break;
+      case 'g': case 'G':
+        document.getElementById('gpx-create-input')?.click();
+        break;
       case 'n': case 'N':
         if (currentMode === 'view') toggleNodes();
         break;

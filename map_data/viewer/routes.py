@@ -325,6 +325,53 @@ def fetch_area():
     )
 
 
+@bp.route("/api/upload_gpx", methods=["POST"])
+def upload_gpx():
+    if "file" not in request.files:
+        abort(400, "No file part")
+    file = request.files["file"]
+    if file.filename == "":
+        abort(400, "No selected file")
+
+    name = request.form.get("name")
+    if not name:
+        name = os.path.splitext(file.filename)[0]
+
+    name = re.sub(r"[^a-zA-Z0-9_\-]", "_", name.strip())
+    if not name:
+        abort(400, "name is empty after sanitizing")
+
+    data_dir = _get_data_dir()
+    os.makedirs(data_dir, exist_ok=True)
+    gpx_path = os.path.join(data_dir, f"{name}.gpx")
+    file.save(gpx_path)
+
+    try:
+        md = MapData(gpx_path, coords_type="file")
+        md.run_queries()
+        if any(d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)):
+            abort(503, "Overpass API unavailable — try again later")
+
+        if md.run_parse() != 0:
+            abort(500, "Parsing failed")
+
+        out_path = os.path.join(data_dir, f"{name}.mapdata")
+        md.save(out_path)
+
+        return jsonify(
+            {
+                "filename": f"{name}.mapdata",
+                "roads": len(md.roads_list),
+                "footways": len(md.footways_list),
+                "barriers": len(md.barriers_list),
+                "crossroads": len(md.crossroads_list),
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error processing GPX upload: {e}", exc_info=True)
+        abort(500, str(e))
+
+
 @bp.route("/api/way_nodes")
 def get_way_nodes():
     filename = request.args.get("file")

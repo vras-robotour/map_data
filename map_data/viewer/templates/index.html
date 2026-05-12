@@ -46,6 +46,10 @@
     <button class="btn btn-outline-info btn-sm mode-btn" data-mode="fetch" title="Fetch area from OSM Overpass" style="flex-shrink:0;">
       <span class="d-none d-sm-inline">FETCH (F)</span><span class="d-sm-none">F</span>
     </button>
+    <button id="gpx-create-btn" class="btn btn-outline-info btn-sm" title="Create map from GPX file (G)" style="flex-shrink:0;">
+      <span class="d-none d-sm-inline">GPX (G)</span><span class="d-sm-none">G</span>
+    </button>
+    <input type="file" id="gpx-create-input" accept=".gpx" style="display:none;">
 
     <div class="vr mx-1 bg-secondary" style="height:20px; flex-shrink:0;"></div>
 
@@ -288,6 +292,30 @@
       <div class="modal-footer border-secondary py-2">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
         <button type="button" id="fetch-area-submit" class="btn btn-primary btn-sm">Fetch & Parse</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- GPX Upload Modal -->
+<div class="modal fade" id="gpx-upload-modal" tabindex="-1">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border-secondary">
+      <div class="modal-header border-secondary py-2">
+        <h6 class="modal-title">Create Map from GPX</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body py-2">
+        <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">NAME</label>
+        <input id="gpx-name-input" type="text" placeholder="e.g. stromovka"
+               class="form-control form-control-sm bg-dark text-light border-secondary">
+        <div class="form-text text-secondary mt-1" style="font-size:0.65rem;">
+          The area will be saved as <code>NAME.mapdata</code>.
+        </div>
+      </div>
+      <div class="modal-footer border-secondary py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" id="gpx-upload-submit" class="btn btn-primary btn-sm">Process GPX</button>
       </div>
     </div>
   </div>
