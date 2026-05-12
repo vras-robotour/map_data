@@ -323,7 +323,9 @@ async function initApp() {
       case 'f': case 'F':      setMode('fetch');  break;
       case 'p': case 'P':      setMode('path');   break;
       case 'g': case 'G':
-        document.getElementById('gpx-create-input')?.click();
+        if (currentAppMode === 'viewer') {
+          document.getElementById('gpx-create-input')?.click();
+        }
         break;
       case 'n': case 'N':
         if (currentMode === 'view') toggleNodes();

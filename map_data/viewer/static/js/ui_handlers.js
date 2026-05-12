@@ -37,6 +37,8 @@ function setAppMode(mode) {
     // Enable annotation-related buttons
     document.querySelectorAll('.mode-btn[data-mode="edit"], .mode-btn[data-mode="add"], .mode-btn[data-mode="path"], .mode-btn[data-mode="delete"], .mode-btn[data-mode="fetch"]')
       .forEach(btn => btn.disabled = false);
+    const gpxBtn = document.getElementById('gpx-create-btn');
+    if (gpxBtn) gpxBtn.disabled = false;
 
     toggleMapInteractivity(true);
 
@@ -56,6 +58,8 @@ function setAppMode(mode) {
     // Disable annotation-related buttons
     document.querySelectorAll('.mode-btn[data-mode="edit"], .mode-btn[data-mode="add"], .mode-btn[data-mode="path"], .mode-btn[data-mode="delete"], .mode-btn[data-mode="fetch"]')
       .forEach(btn => btn.disabled = true);
+    const gpxBtn = document.getElementById('gpx-create-btn');
+    if (gpxBtn) gpxBtn.disabled = true;
 
     if (currentMode !== 'view') {
       setMode('view');
@@ -436,7 +440,6 @@ function showOsmNodeProps(node, index, total) {
 
 async function splitCurrentWay(wayId, nodeId) {
   if (!currentFile) return;
-  if (!confirm('Split this way at the selected node?')) return;
   
   const res = await splitWayApi(currentFile, wayId, nodeId);
   if (res.ok) {

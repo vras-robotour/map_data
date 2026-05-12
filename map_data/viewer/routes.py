@@ -343,13 +343,21 @@ def upload_gpx():
 
     data_dir = _get_data_dir()
     os.makedirs(data_dir, exist_ok=True)
-    gpx_path = os.path.join(data_dir, f"{name}.gpx")
-    file.save(gpx_path)
+
+    # Use a temporary file to avoid saving the GPX to the data directory
+    with tempfile.NamedTemporaryFile(suffix=".gpx", delete=False) as tmp:
+        file.save(tmp.name)
+        gpx_tmp_path = tmp.name
 
     try:
-        md = MapData(gpx_path, coords_type="file")
+        md = MapData(gpx_tmp_path, coords_type="file")
+        # Restore the original filename for metadata purposes
+        md.coords_file = file.filename
+
         md.run_queries()
-        if any(d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)):
+        if any(
+            d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)
+        ):
             abort(503, "Overpass API unavailable — try again later")
 
         if md.run_parse() != 0:
@@ -370,6 +378,9 @@ def upload_gpx():
     except Exception as e:
         logger.error(f"Error processing GPX upload: {e}", exc_info=True)
         abort(500, str(e))
+    finally:
+        if os.path.exists(gpx_tmp_path):
+            os.remove(gpx_tmp_path)
 
 
 @bp.route("/api/way_nodes")
@@ -570,7 +581,10 @@ def get_way(way_id):
                         way, seg_del_nids, zn, zl, nodes_cache, category=category
                     )
                     if way is None:
-                        abort(404, "Segment reduced to nothing by segment-specific deletions")
+                        abort(
+                            404,
+                            "Segment reduced to nothing by segment-specific deletions",
+                        )
             else:
                 abort(404, "Segment not found")
 
@@ -754,7 +768,7 @@ def _get_way_segments_geojson(filename, original_way_id):
 
     for i, seg in enumerate(segments):
         virtual_id = f"{original_way_id}:{i}"
-        
+
         # Apply segment-specific deletions to segment geometry
         seg_del_nids = get_deleted_node_ids(store, virtual_id)
         if seg_del_nids:
@@ -977,7 +991,7 @@ def delete_way_node():
 
     # Use the full way_id (could be virtual like "123:0") to allow segment-specific deletion
     target_id = way_id if ":" in str(way_id) else way_id_int
-    
+
     if node_id not in get_deleted_node_ids(store, target_id):
         dn.append({"way_id": target_id, "node_id": node_id})
         cl = store.setdefault("change_log", [])
@@ -1024,7 +1038,9 @@ def restore_way_node():
     if isinstance(dn, dict):
         dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
     store["deleted_nodes"] = [
-        d for d in dn if not (str(d.get("way_id")) == str(target_id) and d.get("node_id") == node_id)
+        d
+        for d in dn
+        if not (str(d.get("way_id")) == str(target_id) and d.get("node_id") == node_id)
     ]
     cl = store.get("change_log", [])
     store["change_log"] = [
@@ -1137,7 +1153,12 @@ def get_merged_mapdata(filename):
                 del_nids = get_deleted_node_ids(store, w.id)
                 if del_nids:
                     w = rebuild_way_without_nodes(
-                        w, del_nids, zn, zl, getattr(md, "nodes_cache", {}), category=cat
+                        w,
+                        del_nids,
+                        zn,
+                        zl,
+                        getattr(md, "nodes_cache", {}),
+                        category=cat,
                     )
                     if w is None:
                         continue
@@ -1210,7 +1231,9 @@ def get_merged_mapdata(filename):
         md.roads_list, md.footways_list = new_roads, new_footways
 
     if deleted_way_ids or has_node_dels or tag_overrides or has_splits:
-        md.crossroads_list = md.parse_intersections({str(w.id): w for w in md.footways_list})
+        md.crossroads_list = md.parse_intersections(
+            {str(w.id): w for w in md.footways_list}
+        )
 
     ann_id = -1
     node_id = -1
