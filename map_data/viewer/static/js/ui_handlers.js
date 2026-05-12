@@ -290,9 +290,39 @@ function clickNode(index) {
 }
 
 function showOsmNodeProps(node, index, total) {
+  const wayFeature = currentClickedFeature;
+  const isPath = wayFeature && ['road', 'footway'].includes(wayFeature.properties.category);
+  // Simple heuristic for "not enclosed": check if it's a LineString and start != end
+  // Actually, we can just check if the backend would allow it.
+  // For UI, we'll show it if it's a road/footway and not the first/last node.
+  const canSplit = isPath && index > 0 && index < total - 1;
+
   const tagRows = Object.entries(node.tags || {})
     .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
     .join('') || '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No tags</td></tr>';
+  
+  let buttons = `
+    <div class="d-flex gap-1 mt-2">
+      <button class="btn btn-sm btn-outline-secondary" style="font-size:0.72rem;flex:1;"
+              onclick="showProps(currentClickedFeature.properties, currentClickedFeature)">
+        ← Back
+      </button>`;
+  
+  if (canSplit) {
+    buttons += `
+      <button class="btn btn-sm btn-outline-warning" style="font-size:0.72rem;" title="Split Way"
+              onclick="splitCurrentWay(currentClickedFeature.properties.id, ${node.id})">
+        ✂️
+      </button>`;
+  }
+
+  buttons += `
+      <button class="btn btn-sm btn-outline-danger" style="font-size:0.72rem;" title="Delete Node"
+              onclick="deleteCurrentNode(currentClickedFeature.properties.id, ${node.id})">
+        &#128465;
+      </button>
+    </div>`;
+
   document.getElementById('props-content').innerHTML = `
     <table><tbody>
       <tr><td>Type</td><td><span class="badge bg-secondary">node</span></td></tr>
@@ -302,16 +332,34 @@ function showOsmNodeProps(node, index, total) {
       <tr><td>Lon</td><td>${parseFloat(node.lon).toFixed(7)}</td></tr>
       ${tagRows}
     </tbody></table>
-    <div class="d-flex gap-1 mt-2">
-      <button class="btn btn-sm btn-outline-secondary" style="font-size:0.72rem;flex:1;"
-              onclick="showProps(currentClickedFeature.properties, currentClickedFeature)">
-        ← Back to Way
-      </button>
-      <button class="btn btn-sm btn-outline-danger" style="font-size:0.72rem;"
-              onclick="deleteCurrentNode(currentClickedFeature.properties.id, ${node.id})">
-        &#128465;
-      </button>
-    </div>`;
+    ${buttons}`;
+}
+
+async function splitCurrentWay(wayId, nodeId) {
+  if (!currentFile) return;
+  if (!confirm('Split this way at the selected node?')) return;
+  
+  const res = await splitWayApi(currentFile, wayId, nodeId);
+  if (res.ok) {
+    const data = await res.json();
+    setStatus('Way split successfully', 'text-success');
+    
+    // Surgical update
+    const originalWayId = String(wayId).split(':')[0];
+    updateWayWithSegments(originalWayId, data.segments);
+    
+    // Clear selection
+    currentClickedLayer = null;
+    currentClickedFeature = null;
+    clearNodes();
+    document.getElementById('props-content').innerHTML = 
+      '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+    
+    // Refresh only metadata (changes list, etc.) without map flashing
+    refreshMetadata(currentFile);
+  } else {
+    setStatus('Split failed', 'text-danger');
+  }
 }
 
 async function toggleNodes() {
@@ -332,6 +380,10 @@ async function toggleNodes() {
       }).on('click', e => {
         L.DomEvent.stopPropagation(e);
         if (currentMode === 'view') clickNode(i);
+      }).on('contextmenu', e => {
+        L.DomEvent.stopPropagation(e);
+        L.DomEvent.preventDefault(e);
+        if (currentMode === 'view') showNodeContextMenu(node, i, e.latlng);
       }).addTo(nodeLayer);
       nodeMarkers.push(marker);
     });
@@ -341,6 +393,35 @@ async function toggleNodes() {
   } catch (err) {
     setStatus(`Node load failed: ${err.message}`, 'text-danger');
   }
+}
+
+function showNodeContextMenu(node, index, latlng) {
+  const wayFeature = currentClickedFeature;
+  if (!wayFeature) return;
+  const wayId = wayFeature.properties.id;
+  const total = currentNodes.length;
+  const isPath = ['road', 'footway'].includes(wayFeature.properties.category);
+  const canSplit = isPath && index > 0 && index < total - 1;
+
+  const container = document.createElement('div');
+  container.className = 'context-menu';
+
+  if (canSplit) {
+    const splitBtn = document.createElement('button');
+    splitBtn.innerHTML = '✂️ Split Way';
+    splitBtn.onclick = () => { map.closePopup(); splitCurrentWay(wayId, node.id); };
+    container.appendChild(splitBtn);
+  }
+
+  const delBtn = document.createElement('button');
+  delBtn.innerHTML = '&#128465; Delete Node';
+  delBtn.onclick = () => { map.closePopup(); deleteCurrentNode(wayId, node.id); };
+  container.appendChild(delBtn);
+
+  L.popup({ minWidth: 150, className: 'planner-popup', offset: [0, -5] })
+    .setLatLng(latlng)
+    .setContent(container)
+    .openOn(map);
 }
 
 function openWayEditModal() {
@@ -528,11 +609,35 @@ function renderChangesPanel() {
         <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
                 title="Undo move" onclick="event.stopPropagation(); undoWayNodeMoves(${d.id})">&#8617;</button>
       </div>`;
+    if (d.type === 'split') return `
+      <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.way_id})">
+        <div>
+          <span>split way</span>
+          <br><span class="change-id">#${d.way_id} @ node #${d.node_id}</span>
+        </div>
+        <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
+                title="Undo split" onclick="event.stopPropagation(); undoWaySplit(${d.way_id}, ${d.node_id})">&#8617;</button>
+      </div>`;
     return '';
-  }).join('');
-}
+    }).join('');
+    }
 
-function renderHiddenPanel() {
+    async function undoWaySplit(wayId, nodeId) {
+      if (!currentFile) return;
+      const res = await undoWaySplitApi(currentFile, wayId, nodeId);
+      if (res.ok) {
+        const data = await res.json();
+        setStatus('Split reverted', 'text-success');
+
+        // Surgical update
+        updateWayWithSegments(wayId, data.segments);
+
+        // Refresh only metadata (changes list, etc.) without map flashing
+        refreshMetadata(currentFile);
+      } else {
+        setStatus('Undo failed', 'text-danger');
+      }
+    }function renderHiddenPanel() {
   const panel = document.getElementById('hidden-panel');
   const list  = document.getElementById('hidden-list');
   const count = document.getElementById('hidden-count');

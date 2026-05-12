@@ -77,11 +77,27 @@ async function deleteWayApi(filename, wayId, cat, label) {
 }
 
 async function deleteNodeApi(filename, wayId, nodeId) {
-  return await fetch(`/api/way_node?file=${encodeURIComponent(filename)}&way_id=${wayId}&node_id=${nodeId}`, {
+  const res = await fetch(`/api/way_node?file=${encodeURIComponent(filename)}&way_id=${wayId}&node_id=${nodeId}`, {
     method: 'DELETE'
   });
+  return res;
 }
 
+async function splitWayApi(filename, wayId, nodeId) {
+  const res = await fetch(`/api/ways/split?file=${encodeURIComponent(filename)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ way_id: wayId, node_id: nodeId })
+  });
+  return res;
+}
+
+async function undoWaySplitApi(filename, wayId, nodeId) {
+  const res = await fetch(`/api/ways/split?file=${encodeURIComponent(filename)}&way_id=${wayId}&node_id=${nodeId}`, {
+    method: 'DELETE'
+  });
+  return res;
+}
 async function hideWayApi(filename, wayId, cat, label) {
   return await fetch(`/api/ways/${wayId}/hide?file=${encodeURIComponent(filename)}`, {
     method: 'PUT',
