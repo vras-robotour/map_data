@@ -1,3 +1,4 @@
+import concurrent.futures
 import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple
@@ -49,7 +50,6 @@ class MapData:
         current_robot_position: Optional[np.ndarray] = None,
         flip: bool = False,
     ):
-        self.coords_type = coords_type
         if coords_type == "file":
             with open(coords, "r") as f:
                 gpx_object = gpxparse(f)
@@ -85,15 +85,11 @@ class MapData:
         else:
             raise ValueError(f"Unknown coords_type: {coords_type!r}")
 
-        self.flip = flip
         if flip:
             self.waypoints = np.flip(self.waypoints, 0)
 
         if current_robot_position is not None:
-            self.robot_position_first_point = True
             self.waypoints = np.concatenate([current_robot_position, self.waypoints])
-        else:
-            self.robot_position_first_point = False
 
         self.max_x = float(np.max(self.waypoints[:, 0]) + RESERVE + OSM_MARGIN)
         self.min_x = float(np.min(self.waypoints[:, 0]) - (RESERVE + OSM_MARGIN))
@@ -116,6 +112,7 @@ class MapData:
         self.coords_data = CoordsData(
             self.min_long, self.max_long, self.min_lat, self.max_lat
         )
+        self._check_utm_zone_boundary()
         self.points = [
             geometry.Point(x, y)
             for x, y in zip(self.waypoints[:, 0], self.waypoints[:, 1])
@@ -133,7 +130,25 @@ class MapData:
         self.osm_nodes_data: Optional[Any] = None
 
         self._load_tag_configs()
-        self.overpass = OverpassClient()
+
+    def _check_utm_zone_boundary(self):
+        corners = [
+            (self.min_lat, self.min_long),
+            (self.min_lat, self.max_long),
+            (self.max_lat, self.min_long),
+            (self.max_lat, self.max_long),
+        ]
+        zones = set()
+        for lat, lon in corners:
+            _, _, zn, zl = utm.from_latlon(lat, lon)
+            zones.add((zn, zl))
+        if len(zones) > 1:
+            zone_strs = ", ".join(f"{zn}{zl}" for zn, zl in sorted(zones))
+            logger.warning(
+                "Waypoints span multiple UTM zones (%s). Geometry near zone boundaries "
+                "may be distorted. Consider splitting the area into smaller regions.",
+                zone_strs,
+            )
 
     def _load_tag_configs(self):
         try:
@@ -184,9 +199,15 @@ class MapData:
             "rels": f"[out:json]; (way({bbox}); <; ); out;",
             "nodes": f"[out:json]; (node({bbox}); ); out;",
         }
-        self.osm_ways_data = self.overpass.query(queries["ways"])
-        self.osm_rels_data = self.overpass.query(queries["rels"])
-        self.osm_nodes_data = self.overpass.query(queries["nodes"])
+
+        def _fetch(q):
+            return OverpassClient().query(q)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+            futs = {name: ex.submit(_fetch, q) for name, q in queries.items()}
+            self.osm_ways_data = futs["ways"].result()
+            self.osm_rels_data = futs["rels"].result()
+            self.osm_nodes_data = futs["nodes"].result()
         logger.info("All OSM queries finished.")
 
     def run_parse(self) -> int:
@@ -215,6 +236,11 @@ class MapData:
         )
         self.barriers_list = parsed_barriers + node_barriers
         self.crossroads_list = self.parse_intersections(ways_dict)
+
+        self.osm_ways_data = None
+        self.osm_rels_data = None
+        self.osm_nodes_data = None
+
         logger.info("Parsing finished.")
         return 0
 
