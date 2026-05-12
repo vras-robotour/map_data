@@ -559,6 +559,54 @@ function _renderWayEditProps(obj) {
       </div>`).join('');
 }
 
+document.getElementById('way-edit-save')?.addEventListener('click', async () => {
+  if (!currentFile || !editingWayId) return;
+  const keys = document.querySelectorAll('#way-edit-props .we-key');
+  const vals = document.querySelectorAll('#way-edit-props .we-val');
+  const tags = {};
+  keys.forEach((el, i) => {
+    const k = el.value.trim();
+    if (k) tags[k] = vals[i].value.trim();
+  });
+  const cat = currentClickedFeature?.properties?.category ?? 'unknown';
+  const lbl = currentClickedFeature?.properties?.tags?.highway
+            || currentClickedFeature?.properties?.tags?.barrier || '';
+  const res = await updateWayTagsApi(currentFile, editingWayId, tags, cat, lbl);
+  if (!res.ok) { setStatus('Save failed', 'text-danger'); return; }
+  bootstrap.Modal.getInstance(document.getElementById('way-edit-modal'))?.hide();
+  if (!changeLog.some(c => c.type === 'tag' && String(c.id) === String(editingWayId))) {
+    changeLog.push({ type: 'tag', id: editingWayId, category: cat, label: lbl });
+  }
+  await _reloadWay(editingWayId);
+  setStatus(`Tags saved for way ${editingWayId}`, 'text-success');
+  renderChangesPanel();
+});
+
+document.getElementById('way-edit-add-prop-btn')?.addEventListener('click', () => {
+  const container = document.getElementById('way-edit-props');
+  const row = document.createElement('div');
+  row.className = 'd-flex gap-1 mb-1';
+  row.innerHTML = `
+    <input class="form-control form-control-sm bg-dark text-light border-secondary we-key"
+           placeholder="key" style="flex:1;font-size:0.75rem;">
+    <input class="form-control form-control-sm bg-dark text-light border-secondary we-val"
+           placeholder="value" style="flex:1;font-size:0.75rem;">
+    <button type="button" class="btn btn-sm btn-outline-danger px-1"
+            onclick="this.closest('.d-flex').remove()">×</button>`;
+  container.appendChild(row);
+});
+
+async function undoTagOverride(wayId) {
+  if (!currentFile) return;
+  const res = await deleteWayTagsApi(currentFile, wayId);
+  if (res.ok) {
+    changeLog = changeLog.filter(c => !(c.type === 'tag' && String(c.id) === String(wayId)));
+    tagOverrides = tagOverrides.filter(t => String(t.id) !== String(wayId));
+    await _reloadWay(wayId);
+    renderChangesPanel();
+  }
+}
+
 async function deleteCurrentWay() {
   const feature = currentClickedFeature;
   if (!feature || !currentFile) return;
