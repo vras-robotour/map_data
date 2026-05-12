@@ -1,5 +1,5 @@
 import pytest
-from shapely.geometry import LineString
+from shapely.geometry import LineString, Point, Polygon
 
 from map_data.utils.parsing import combine_ways
 from map_data.utils.serialization import way_from_dict, way_to_dict
@@ -56,3 +56,42 @@ def test_way_pcd_points():
     assert len(pcd) >= 11
     assert pcd[0][0] == 0
     assert pcd[-1][0] == 10
+
+
+def test_way_is_barrier_wildcard():
+    """Wildcard '*' in yes_tags matches any tag value."""
+    way = Way(tags={"barrier": "anything"})
+    assert way.is_barrier({"barrier": ["*"]}, {}, {})
+
+
+def test_way_is_barrier_anti_tag():
+    """Anti-tag blocks a way that would otherwise qualify as a barrier."""
+    way = Way(tags={"barrier": "wall", "access": "yes"})
+    yes_tags = {"barrier": ["*"]}
+    anti_tags = {"access": ["yes"]}
+    assert not way.is_barrier(yes_tags, {}, anti_tags)
+
+
+def test_combine_ways_reversed():
+    """combine_ways handles a segment whose endpoint order is reversed."""
+    # w1: 10→11, w2: 12→11 — they share node 11 but w2's end is first
+    w1 = Way(id=1, nodes=[10, 11], line=LineString([(0, 0), (1, 0)]))
+    w2 = Way(id=2, nodes=[12, 11], line=LineString([(2, 0), (1, 0)]))
+    ways = {1: w1, 2: w2}
+    merged_ids = combine_ways([1, 2], ways)
+
+    assert len(merged_ids) == 1
+    new_way = ways[merged_ids[0]]
+    assert len(new_way.nodes) == 3
+    assert new_way.nodes == [10, 11, 12]
+
+
+def test_way_pcd_points_filled_polygon():
+    """to_pcd_points with filled=True returns interior grid points for a polygon."""
+    poly = Polygon([(0, 0), (4, 0), (4, 4), (0, 4)])
+    way = Way(line=poly, is_area=True)
+    pts = way.to_pcd_points(density=1.0, filled=True)
+
+    assert len(pts) > 0
+    for p in pts:
+        assert poly.contains(Point(float(p[0]), float(p[1])))

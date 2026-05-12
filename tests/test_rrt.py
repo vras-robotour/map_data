@@ -57,6 +57,31 @@ def test_rrt_star_with_obstacle():
             assert grid[i, j] < 0.95
 
 
+def test_rrt_star_near_equal_start_goal():
+    """Start and goal closer than step_size: path should be found in very few iterations."""
+    start = np.array([5.0, 5.0])
+    goal = np.array([5.5, 5.5])  # distance ~0.7 < step_size=1.0
+    grid = np.zeros((100, 100), dtype=float)
+
+    rrt = RRTStar(
+        start,
+        goal,
+        [],
+        None,
+        grid,
+        (0.0, 0.0),
+        max_iter=200,
+        step_size=1.0,
+        neighbor_radius=2.0,
+        grid_scale=0.1,
+    )
+    path = rrt.find_path()
+
+    assert path is not None
+    assert np.allclose(path[0], start)
+    assert np.allclose(path[-1], goal)
+
+
 def test_rrt_star_start_in_collision():
     # If the start is in collision, it should currently fail if we don't have the "escape" logic
     # but with my changes, if we increase max_path_dist it should be fine.
