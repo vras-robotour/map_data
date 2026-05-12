@@ -346,14 +346,25 @@ async function splitCurrentWay(wayId, nodeId) {
     
     // Surgical update
     const originalWayId = String(wayId).split(':')[0];
-    updateWayWithSegments(originalWayId, data.segments);
+    const newLayer = updateWayWithSegments(originalWayId, data.segments);
     
-    // Clear selection
-    currentClickedLayer = null;
-    currentClickedFeature = null;
-    clearNodes();
-    document.getElementById('props-content').innerHTML = 
-      '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+    // Update selection to the first new segment if it exists
+    if (newLayer && newLayer._featureRef) {
+        currentClickedLayer = newLayer;
+        currentClickedFeature = newLayer._featureRef;
+        newLayer._osmCat = newLayer._featureRef.properties.category;
+        newLayer.setStyle(HIGHLIGHT_STYLES[newLayer._osmCat]);
+        showProps(newLayer._featureRef.properties, newLayer._featureRef);
+        // Clear nodes but immediately reload them for the new segment
+        clearNodes();
+        loadNodesForEditing(newLayer._featureRef, newLayer);
+    } else {
+        currentClickedLayer = null;
+        currentClickedFeature = null;
+        clearNodes();
+        document.getElementById('props-content').innerHTML = 
+          '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+    }
     
     // Refresh only metadata (changes list, etc.) without map flashing
     refreshMetadata(currentFile);
@@ -573,50 +584,51 @@ function renderChangesPanel() {
   panel.style.display = '';
   count.textContent = `(${changeLog.length})`;
   list.innerHTML = [...changeLog].reverse().map(d => {
+    const wayIdJson = JSON.stringify(d.id || d.way_id);
     if (d.type === 'way') return `
-      <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
+      <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
         <div>
           <span>del ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
           <br><span class="change-id">#${d.id}</span>
         </div>
         <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Undo deletion" onclick="event.stopPropagation(); undoWayDeletion(${d.id})">&#8617;</button>
+                title="Undo deletion" onclick='event.stopPropagation(); undoWayDeletion(${wayIdJson})'>&#8617;</button>
       </div>`;
     if (d.type === 'node') return `
-      <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.way_id})">
+      <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
         <div>
           <span>del node in way</span>
           <br><span class="change-id">#${d.node_id} &rarr; #${d.way_id}</span>
         </div>
         <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Undo deletion" onclick="event.stopPropagation(); undoNodeDeletion(${d.way_id}, ${d.node_id})">&#8617;</button>
+                title="Undo deletion" onclick='event.stopPropagation(); undoNodeDeletion(${wayIdJson}, ${d.node_id})'>&#8617;</button>
       </div>`;
     if (d.type === 'tag') return `
-      <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
+      <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
         <div>
           <span>edit ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
           <br><span class="change-id">#${d.id}</span>
         </div>
         <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Undo tag edit" onclick="event.stopPropagation(); undoTagOverride(${d.id})">&#8617;</button>
+                title="Undo tag edit" onclick='event.stopPropagation(); undoTagOverride(${wayIdJson})'>&#8617;</button>
       </div>`;
     if (d.type === 'move') return `
-      <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
+      <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
         <div>
           <span>move ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
           <br><span class="change-id">#${d.id}</span>
         </div>
         <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Undo move" onclick="event.stopPropagation(); undoWayNodeMoves(${d.id})">&#8617;</button>
+                title="Undo move" onclick='event.stopPropagation(); undoWayNodeMoves(${wayIdJson})'>&#8617;</button>
       </div>`;
     if (d.type === 'split') return `
-      <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.way_id})">
+      <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
         <div>
           <span>split way</span>
           <br><span class="change-id">#${d.way_id} @ node #${d.node_id}</span>
         </div>
         <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Undo split" onclick="event.stopPropagation(); undoWaySplit(${d.way_id}, ${d.node_id})">&#8617;</button>
+                title="Undo split" onclick='event.stopPropagation(); undoWaySplit(${wayIdJson}, ${d.node_id})'>&#8617;</button>
       </div>`;
     return '';
     }).join('');
@@ -630,8 +642,25 @@ function renderChangesPanel() {
         setStatus('Split reverted', 'text-success');
 
         // Surgical update
-        updateWayWithSegments(wayId, data.segments);
+        const newLayer = updateWayWithSegments(wayId, data.segments);
 
+        // If the split was focused, update focus to the merged way
+        if (currentClickedFeature && (String(currentClickedFeature.properties.id) === String(wayId) || String(currentClickedFeature.properties.id).startsWith(String(wayId) + ':'))) {
+            if (newLayer && newLayer._featureRef) {
+                currentClickedLayer = newLayer;
+                currentClickedFeature = newLayer._featureRef;
+                newLayer._osmCat = newLayer._featureRef.properties.category;
+                newLayer.setStyle(HIGHLIGHT_STYLES[newLayer._osmCat]);
+                showProps(newLayer._featureRef.properties, newLayer._featureRef);
+            } else {
+                currentClickedLayer = null;
+                currentClickedFeature = null;
+                document.getElementById('props-content').innerHTML = 
+                  '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+            }
+            clearNodes();
+        }
+        
         // Refresh only metadata (changes list, etc.) without map flashing
         refreshMetadata(currentFile);
       } else {
@@ -645,15 +674,18 @@ function renderChangesPanel() {
   if (!hiddenWays.length || currentAppMode === 'planner') { panel.style.display = 'none'; return; }
   panel.style.display = '';
   count.textContent = `(${hiddenWays.length})`;
-  list.innerHTML = [...hiddenWays].reverse().map(d => `
-    <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
+  list.innerHTML = [...hiddenWays].reverse().map(d => {
+    const wayIdJson = JSON.stringify(d.id);
+    return `
+    <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
       <div>
         <span>${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
         <br><span class="change-id">#${d.id}</span>
       </div>
       <button class="btn btn-sm btn-outline-info py-0 px-1" style="font-size:0.7rem;"
-              title="Show object" onclick="event.stopPropagation(); showWay(${d.id})">&#128065;</button>
-    </div>`).join('');
+              title="Show object" onclick='event.stopPropagation(); showWay(${wayIdJson})'>&#128065;</button>
+    </div>`;
+  }).join('');
 }
 
 async function undoWayDeletion(wayId) {
@@ -669,25 +701,18 @@ async function undoNodeDeletion(wayId, nodeId) {
   if (!currentFile) return;
   const res = await restoreNodeApi(currentFile, wayId, nodeId);
   if (res.ok) {
-    changeLog = changeLog.filter(c => !(c.type === 'node' && c.way_id === wayId && c.node_id === nodeId));
-    await _reloadWay(wayId);
-  }
-}
-
-async function undoTagOverride(wayId) {
-  if (!currentFile) return;
-  const res = await deleteWayTagsApi(currentFile, wayId);
-  if (res.ok) {
-    changeLog = changeLog.filter(c => !(c.type === 'tag' && c.id === wayId));
+    changeLog = changeLog.filter(c => !(c.type === 'node' && String(c.way_id) === String(wayId) && c.node_id === nodeId));
     await _reloadWay(wayId);
   }
 }
 
 async function undoWayNodeMoves(wayId) {
   if (!currentFile) return;
-  const res = await undoWayNodeMovesApi(currentFile, wayId);
+  // Pass original way ID to backend, but use virtual ID for local state
+  const originalWayId = String(wayId).split(':')[0];
+  const res = await undoWayNodeMovesApi(currentFile, originalWayId);
   if (res.ok) {
-    changeLog = changeLog.filter(c => !(c.type === 'move' && c.id === wayId));
+    changeLog = changeLog.filter(c => !(c.type === 'move' && String(c.id) === String(wayId)));
     await _reloadWay(wayId);
   }
 }

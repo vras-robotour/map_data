@@ -142,6 +142,7 @@ function setupWayLayer(feature, layer, cat) {
 }
 
 function updateWayWithSegments(originalWayId, segments) {
+  const originalWayIdStr = String(originalWayId);
   // Find and remove old segments/original way from all category layers
   ['road', 'footway', 'barrier'].forEach(cat => {
     const layerGroup = geoLayers[cat];
@@ -150,23 +151,26 @@ function updateWayWithSegments(originalWayId, segments) {
     const toRemove = [];
     layerGroup.eachLayer(l => {
       // Check if ID matches original or starts with "original:"
-      const sid = String(l._featureId);
-      if (sid === String(originalWayId) || sid.startsWith(originalWayId + ':')) {
+      const sid = String(l._featureId || '');
+      if (sid === originalWayIdStr || sid.startsWith(originalWayIdStr + ':')) {
         toRemove.push(l);
       }
     });
     
     toRemove.forEach(l => {
       // Remove from subtypeLayers
-      const st = getSubtype(l._featureRef, cat);
-      if (subtypeLayers[cat][st]) {
-        subtypeLayers[cat][st] = subtypeLayers[cat][st].filter(item => item !== l);
+      if (l._featureRef) {
+        const st = getSubtype(l._featureRef, cat);
+        if (subtypeLayers[cat][st]) {
+          subtypeLayers[cat][st] = subtypeLayers[cat][st].filter(item => item !== l);
+        }
       }
       layerGroup.removeLayer(l);
     });
   });
 
   // Add new segments
+  let firstLayer = null;
   segments.forEach(f => {
     const cat = f.properties.category;
     const layerGroup = geoLayers[cat];
@@ -174,12 +178,16 @@ function updateWayWithSegments(originalWayId, segments) {
 
     L.geoJSON(f, {
       style: () => STYLES[cat],
-      onEachFeature: (feature, layer) => setupWayLayer(feature, layer, cat)
-    }).addTo(layerGroup);
+      onEachFeature: (feature, layer) => {
+        setupWayLayer(feature, layer, cat);
+        if (!firstLayer) firstLayer = layer;
+      }
+    }).eachLayer(l => l.addTo(layerGroup)); // Add individual layers, not the group
   });
+  return firstLayer;
 }
 
-async function refreshMetadata(filename) {
+async function refreshMetadata(filename, { refreshAnnotations = false } = {}) {
   try {
     const annData = await fetchAnnotations(filename);
     
@@ -233,8 +241,10 @@ async function refreshMetadata(filename) {
         ...splitItems,
       ];
     }
-    renderAnnotationLayer();
-    renderAnnotationList();
+    if (refreshAnnotations) {
+      renderAnnotationLayer();
+      renderAnnotationList();
+    }
     renderChangesPanel();
     renderHiddenPanel();
   } catch (err) {
@@ -400,6 +410,32 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
 
 async function _reloadWay(wayId) {
   if (!currentFile) return;
+
+  const originalWayId = String(wayId).split(':')[0];
+  const isSplit = String(wayId).includes(':');
+
+  if (isSplit) {
+    try {
+      const data = await fetchWaySegmentsApi(currentFile, originalWayId);
+      const newLayer = updateWayWithSegments(originalWayId, data.segments);
+      _enforceLayerOrder();
+      clearNodes();
+      await _refreshAnnotationsState();
+      
+      // Try to re-select the specific segment we were working on, or fallback to any segment of that way
+      if (!_reselectFeature(wayId)) {
+          if (!_reselectFeature(originalWayId)) {
+              // Try any segment
+              for(let i=0; i<10; i++) {
+                  if(_reselectFeature(`${originalWayId}:${i}`)) break;
+              }
+          }
+      }
+    } catch (err) {
+      console.error('Failed to reload split way segments:', err);
+    }
+    return;
+  }
 
   const affectedCats = new Set();
   for (const cat of ['road', 'footway', 'barrier']) {

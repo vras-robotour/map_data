@@ -328,10 +328,11 @@ def migrate_change_log(store):
 
 def get_node_position_overrides(store, way_id):
     """Return {node_id (int): {lat, lon}} for position overrides on a given way."""
+    original_way_id_str = str(way_id).split(":")[0]
     return {
         int(k): v
         for k, v in store.get("node_position_overrides", {})
-        .get(str(way_id), {})
+        .get(original_way_id_str, {})
         .items()
     }
 
@@ -448,16 +449,17 @@ def apply_node_position_overrides(
                         if disc >= 0
                         else (a / p if p else 0)
                     )
+                    r = max(r, 0.01)
                     try:
-                        w.line = ls.buffer(max(r, 0.01))
+                        w.line = ls.buffer(r)
                     except Exception:
                         if len(utm_coords) >= 4:
                             try:
                                 w.line = _SPoly(utm_coords)
                             except Exception:
-                                return way
+                                return None
                         else:
-                            return way
+                            return None
         else:
             # Open way stored as buffered polygon: re-buffer the centerline
             ls = _SLS(utm_coords)
@@ -469,17 +471,19 @@ def apply_node_position_overrides(
                 if disc >= 0
                 else (a / p if p else 0)
             )
+            r = max(r, 0.01)
             try:
-                w.line = ls.buffer(max(r, 0.01))
+                w.line = ls.buffer(r)
             except Exception:
                 if len(utm_coords) >= 3:
                     closed = utm_coords + [utm_coords[0]]
                     try:
                         w.line = _SPoly(closed)
                     except Exception:
-                        return way
+                        return None
                 else:
-                    return way
+                    return None
+
     else:
         return way
     return w

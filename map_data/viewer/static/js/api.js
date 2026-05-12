@@ -128,6 +128,12 @@ async function fetchWayApi(filename, wayId) {
   return await fetch(`/api/ways/${wayId}?file=${encodeURIComponent(filename)}`);
 }
 
+async function fetchWaySegmentsApi(filename, wayId) {
+  const res = await fetch(`/api/ways/${wayId}/segments?file=${encodeURIComponent(filename)}`);
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
+
 async function moveWayNodesApi(filename, wayId, nodes, category, label) {
   return await fetch(`/api/way_nodes/move?file=${encodeURIComponent(filename)}&way_id=${wayId}`, {
     method: 'PUT',
