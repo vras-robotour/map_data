@@ -249,12 +249,12 @@ class RRTStar:
         return False, np.linalg.norm(end - start) * (1.0 + avg_c * 5.0)
 
     def find_path(self) -> Optional[np.ndarray]:
-        from .replan import _cancelled_transfers
+        from .replan import _is_cancelled
 
         goal_idx = None
 
         for _ in range(self.max_iter):
-            if self.transfer_id in _cancelled_transfers:
+            if _is_cancelled(self.transfer_id):
                 return None
 
             rand_point = self.goal if random.random() < 0.1 else self._sample_point()

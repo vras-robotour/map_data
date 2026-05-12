@@ -2,6 +2,7 @@
 
 import os
 import argparse
+import threading
 
 import numpy as np
 import shapely as sh
@@ -25,13 +26,27 @@ from map_data.utils.gpx import (
 )
 
 
-# Global cancellation state
-_cancelled_transfers = set()
+_cancel_lock = threading.Lock()
+_cancelled_transfers: set = set()
 
 
 def cancel_replan_backend(transfer_id):
     if transfer_id:
-        _cancelled_transfers.add(transfer_id)
+        with _cancel_lock:
+            _cancelled_transfers.add(transfer_id)
+
+
+def _is_cancelled(transfer_id) -> bool:
+    if not transfer_id:
+        return False
+    with _cancel_lock:
+        return transfer_id in _cancelled_transfers
+
+
+def _discard_cancelled(transfer_id):
+    if transfer_id:
+        with _cancel_lock:
+            _cancelled_transfers.discard(transfer_id)
 
 
 class ReplanPath:
@@ -56,9 +71,9 @@ class ReplanPath:
             self._convert_obstacles(self.obstacles) if self.obstacles else []
         )
 
-    def replan_rrt(self, path, algorithm="astar"):
+    def replan(self, path, algorithm="astar"):
         def process_segment(i, path, args):
-            if self.transfer_id in _cancelled_transfers:
+            if _is_cancelled(self.transfer_id):
                 return None, i
 
             start = path[i]
@@ -81,8 +96,8 @@ class ReplanPath:
             delayed(process_segment)(i, path, self.args) for i in range(len(path) - 1)
         )
 
-        if self.transfer_id in _cancelled_transfers:
-            _cancelled_transfers.discard(self.transfer_id)
+        if _is_cancelled(self.transfer_id):
+            _discard_cancelled(self.transfer_id)
             return None
 
         # Sort results by index to maintain path order
@@ -543,7 +558,7 @@ if __name__ == "__main__":
     replanner = ReplanPath(args, obstacles)
     replanner.fill_grid(map_data, max_path_dist=args.max_path_dist)
 
-    new_path = replanner.replan(path_data[0])
+    new_path = replanner.replan(path_data[0], algorithm="astar")
 
     if args.save:
         new_wgs_path = utm_path_to_latlon(new_path, path_data[1], path_data[2])
