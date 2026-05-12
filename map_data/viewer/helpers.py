@@ -128,6 +128,113 @@ def get_deleted_node_ids(store, way_id):
     return {d["node_id"] for d in dn if d["way_id"] == way_id}
 
 
+def get_split_node_ids(store, way_id):
+    """Return list of node IDs where the given way should be split."""
+    splits = store.get("split_ways") or {}
+    way_splits = splits.get(str(way_id), [])
+    # Ensure they are integers for comparison with OSM node IDs
+    return [int(nid) for nid in way_splits]
+
+
+def split_way(way, split_nids, zone_number=None, zone_letter=None, nodes_cache=None):
+    """Split a way at specified node IDs into a list of new Way objects."""
+    if not split_nids:
+        return [way]
+
+    geom = way.line
+    if geom is None:
+        return [way]
+
+    node_ids = [getattr(n, "id", n) for n in way.nodes]
+    if not node_ids:
+        return [way]
+
+    # Check if closed
+    if node_ids[0] == node_ids[-1]:
+        return [way]
+
+    # If it's a Polygon, we assume it's a buffered path since it's not closed at node level
+    is_buffered = geom.geom_type == "Polygon"
+
+    # Calculate buffer radius if buffered
+    radius = 0
+    if is_buffered:
+        p = geom.length
+        a = geom.area
+        disc = p * p - 4 * np.pi * a
+        radius = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else a / p
+
+    # Reconstruct centerline coordinates
+    raw_coords = []
+    if not is_buffered and geom.geom_type == "LineString":
+        raw_coords = list(geom.coords)
+    elif zone_number is not None and zone_letter is not None:
+        # Reconstruct centerline from node positions
+        nc = nodes_cache or {}
+        for nid in node_ids:
+            lat, lon = None, None
+            # Check if node object has lat/lon
+            for n_obj in way.nodes:
+                if getattr(n_obj, "id", None) == nid:
+                    lat, lon = getattr(n_obj, "lat", None), getattr(n_obj, "lon", None)
+                    break
+            # Fallback to cache
+            if lat is None and nid in nc:
+                lat, lon = nc[nid]["lat"], nc[nid]["lon"]
+
+            if lat is not None and lon is not None:
+                e, nn, _, _ = utm.from_latlon(
+                    float(lat),
+                    float(lon),
+                    force_zone_number=zone_number,
+                    force_zone_letter=zone_letter,
+                )
+                raw_coords.append((e, nn))
+
+    if not raw_coords:
+        return [way]
+
+    segments = []
+    current_nodes = []
+    current_coords = []
+
+    split_set = set(int(nid) for nid in split_nids)
+    for i, nid in enumerate(node_ids):
+        current_nodes.append(way.nodes[i])
+        if i < len(raw_coords):
+            current_coords.append(raw_coords[i])
+
+        if nid in split_set and i > 0 and i < len(node_ids) - 1:
+            # Split point reached
+            if len(current_nodes) >= 2:
+                w = copy.copy(way)
+                w.nodes = current_nodes
+                ls = _SLS(current_coords)
+                w.line = ls.buffer(radius) if is_buffered else ls
+                segments.append(w)
+
+            # Start new segment with the split node
+            current_nodes = [way.nodes[i]]
+            current_coords = [raw_coords[i]]
+
+    # Last segment
+    if len(current_nodes) >= 2:
+        w = copy.copy(way)
+        w.nodes = current_nodes
+        ls = _SLS(current_coords)
+        w.line = ls.buffer(radius) if is_buffered else ls
+        segments.append(w)
+
+    if not segments or len(segments) <= 1:
+        return [way]
+
+    # Update IDs to virtual IDs original_id:index
+    for i, seg in enumerate(segments):
+        seg.id = f"{way.id}:{i}"
+
+    return segments
+
+
 _MIGRATION_VERSION = "v2"
 
 
@@ -183,7 +290,25 @@ def migrate_change_log(store):
                 {"type": "move", "id": wid, "category": "unknown", "label": ""}
             )
 
-    if untracked_ways or untracked_nodes or untracked_tags or untracked_moves:
+    tracked_splits = {
+        (e.get("way_id"), e.get("node_id")) for e in cl if e.get("type") == "split"
+    }
+    untracked_splits = []
+    for wid_str, nids in store.get("split_ways", {}).items():
+        wid = int(wid_str)
+        for nid in nids:
+            if (wid, nid) not in tracked_splits:
+                untracked_splits.append(
+                    {"type": "split", "way_id": wid, "node_id": nid}
+                )
+
+    if (
+        untracked_ways
+        or untracked_nodes
+        or untracked_tags
+        or untracked_moves
+        or untracked_splits
+    ):
         nw, nn = len(untracked_ways), len(untracked_nodes)
         if nw == 0 or nn == 0:
             interleaved = untracked_ways + untracked_nodes
@@ -194,17 +319,20 @@ def migrate_change_log(store):
             ]
             items.sort(key=lambda x: x[0])
             interleaved = [e for _, e in items]
-        store["change_log"] = interleaved + untracked_tags + untracked_moves + cl
+        store["change_log"] = (
+            interleaved + untracked_tags + untracked_moves + untracked_splits + cl
+        )
 
     store["change_log_migration"] = _MIGRATION_VERSION
 
 
 def get_node_position_overrides(store, way_id):
     """Return {node_id (int): {lat, lon}} for position overrides on a given way."""
+    original_way_id_str = str(way_id).split(":")[0]
     return {
         int(k): v
         for k, v in store.get("node_position_overrides", {})
-        .get(str(way_id), {})
+        .get(original_way_id_str, {})
         .items()
     }
 
@@ -321,16 +449,17 @@ def apply_node_position_overrides(
                         if disc >= 0
                         else (a / p if p else 0)
                     )
+                    r = max(r, 0.01)
                     try:
-                        w.line = ls.buffer(max(r, 0.01))
+                        w.line = ls.buffer(r)
                     except Exception:
                         if len(utm_coords) >= 4:
                             try:
                                 w.line = _SPoly(utm_coords)
                             except Exception:
-                                return way
+                                return None
                         else:
-                            return way
+                            return None
         else:
             # Open way stored as buffered polygon: re-buffer the centerline
             ls = _SLS(utm_coords)
@@ -342,17 +471,19 @@ def apply_node_position_overrides(
                 if disc >= 0
                 else (a / p if p else 0)
             )
+            r = max(r, 0.01)
             try:
-                w.line = ls.buffer(max(r, 0.01))
+                w.line = ls.buffer(r)
             except Exception:
                 if len(utm_coords) >= 3:
                     closed = utm_coords + [utm_coords[0]]
                     try:
                         w.line = _SPoly(closed)
                     except Exception:
-                        return way
+                        return None
                 else:
-                    return way
+                    return None
+
     else:
         return way
     return w

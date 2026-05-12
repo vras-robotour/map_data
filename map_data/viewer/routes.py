@@ -39,16 +39,84 @@ from .helpers import (
     get_deleted_node_ids,
     get_deleted_way_ids,
     get_node_position_overrides,
+    get_split_node_ids,
     geojson_geom_to_utm,
     load_annotations,
     mapdata_to_geojson,
     migrate_change_log,
     rebuild_way_without_nodes,
     save_annotations,
+    split_way,
 )
 
 bp = Blueprint("viewer", __name__)
 logger = logging.getLogger(__name__)
+
+_CAT_FOR_LIST = {
+    "roads_list": "road",
+    "footways_list": "footway",
+    "barriers_list": "barrier",
+}
+
+
+def _apply_way_edits(md, store):
+    """Apply deletions, node deletions, splits, and position overrides to md in-place."""
+    zn, zl = md.zone_number, md.zone_letter
+    nodes_cache = getattr(md, "nodes_cache", {})
+
+    deleted_way_ids = get_deleted_way_ids(store)
+    has_node_dels = bool(store.get("deleted_nodes"))
+    has_splits = bool(store.get("split_ways"))
+
+    if deleted_way_ids or has_node_dels or has_splits:
+        for lst_name in ("roads_list", "footways_list", "barriers_list"):
+            cat = _CAT_FOR_LIST[lst_name]
+            new_lst = []
+            for w in getattr(md, lst_name):
+                if w.id in deleted_way_ids:
+                    continue
+                del_nids = get_deleted_node_ids(store, w.id)
+                if del_nids:
+                    w = rebuild_way_without_nodes(w, del_nids, zn, zl, nodes_cache, category=cat)
+                    if w is None:
+                        continue
+                split_nids = get_split_node_ids(store, w.id)
+                if split_nids:
+                    segments = split_way(w, split_nids, zn, zl, nodes_cache)
+                    for i, seg in enumerate(segments):
+                        virtual_id = f"{w.id}:{i}"
+                        seg.id = virtual_id
+                        seg_del_nids = get_deleted_node_ids(store, virtual_id)
+                        if seg_del_nids:
+                            seg = rebuild_way_without_nodes(
+                                seg, seg_del_nids, zn, zl, nodes_cache, category=cat
+                            )
+                            if seg is None:
+                                continue
+                        new_lst.append(seg)
+                else:
+                    new_lst.append(w)
+            setattr(md, lst_name, new_lst)
+        md.crossroads_list = md.parse_intersections(
+            {str(w.id): w for w in md.footways_list}
+        )
+
+    node_pos_store = store.get("node_position_overrides", {})
+    if node_pos_store:
+        for lst_name in ("roads_list", "footways_list", "barriers_list"):
+            new_lst = []
+            for w in getattr(md, lst_name):
+                ov = get_node_position_overrides(store, w.id)
+                if ov:
+                    w = (
+                        apply_node_position_overrides(
+                            w, ov, zn, zl, nodes_cache,
+                            category=_CAT_FOR_LIST[lst_name],
+                        )
+                        or w
+                    )
+                new_lst.append(w)
+            setattr(md, lst_name, new_lst)
 
 
 def _get_data_dir():
@@ -106,56 +174,8 @@ def get_mapdata():
         abort(404, f"File not found: {filename}")
     map_data = copy.copy(load_mapdata_cached(path))
     store = load_annotations(_annotation_path(filename))
-    deleted_way_ids = get_deleted_way_ids(store)
-    has_node_dels = bool(store.get("deleted_nodes"))
-    if deleted_way_ids or has_node_dels:
-        for lst_name in ("roads_list", "footways_list", "barriers_list"):
-            new_lst = []
-            for w in getattr(map_data, lst_name):
-                if w.id in deleted_way_ids:
-                    continue
-                del_nids = get_deleted_node_ids(store, w.id)
-                if del_nids:
-                    w = rebuild_way_without_nodes(
-                        w,
-                        del_nids,
-                        map_data.zone_number,
-                        map_data.zone_letter,
-                        getattr(map_data, "nodes_cache", {}),
-                    )
-                    if w is None:
-                        continue
-                new_lst.append(w)
-            setattr(map_data, lst_name, new_lst)
-        map_data.crossroads_list = map_data.parse_intersections(
-            {w.id: w for w in map_data.footways_list}
-        )
-    node_pos_store = store.get("node_position_overrides", {})
-    if node_pos_store:
-        zn, zl = map_data.zone_number, map_data.zone_letter
-        _cat_for_list = {
-            "roads_list": "road",
-            "footways_list": "footway",
-            "barriers_list": "barrier",
-        }
-        for lst_name in ("roads_list", "footways_list", "barriers_list"):
-            new_lst = []
-            for w in getattr(map_data, lst_name):
-                ov = get_node_position_overrides(store, w.id)
-                if ov:
-                    w = (
-                        apply_node_position_overrides(
-                            w,
-                            ov,
-                            zn,
-                            zl,
-                            getattr(map_data, "nodes_cache", {}),
-                            category=_cat_for_list[lst_name],
-                        )
-                        or w
-                    )
-                new_lst.append(w)
-            setattr(map_data, lst_name, new_lst)
+
+    _apply_way_edits(map_data, store)
 
     geojson = mapdata_to_geojson(map_data)
     tag_overrides = store.get("tag_overrides", {})
@@ -289,6 +309,64 @@ def fetch_area():
     )
 
 
+@bp.route("/api/upload_gpx", methods=["POST"])
+def upload_gpx():
+    if "file" not in request.files:
+        abort(400, "No file part")
+    file = request.files["file"]
+    if file.filename == "":
+        abort(400, "No selected file")
+
+    name = request.form.get("name")
+    if not name:
+        name = os.path.splitext(file.filename)[0]
+
+    name = re.sub(r"[^a-zA-Z0-9_\-]", "_", name.strip())
+    if not name:
+        abort(400, "name is empty after sanitizing")
+
+    data_dir = _get_data_dir()
+    os.makedirs(data_dir, exist_ok=True)
+
+    # Use a temporary file to avoid saving the GPX to the data directory
+    with tempfile.NamedTemporaryFile(suffix=".gpx", delete=False) as tmp:
+        file.save(tmp.name)
+        gpx_tmp_path = tmp.name
+
+    try:
+        md = MapData(gpx_tmp_path, coords_type="file")
+        # Restore the original filename for metadata purposes
+        md.coords_file = file.filename
+
+        md.run_queries()
+        if any(
+            d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)
+        ):
+            abort(503, "Overpass API unavailable — try again later")
+
+        if md.run_parse() != 0:
+            abort(500, "Parsing failed")
+
+        out_path = os.path.join(data_dir, f"{name}.mapdata")
+        md.save(out_path)
+
+        return jsonify(
+            {
+                "filename": f"{name}.mapdata",
+                "roads": len(md.roads_list),
+                "footways": len(md.footways_list),
+                "barriers": len(md.barriers_list),
+                "crossroads": len(md.crossroads_list),
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error processing GPX upload: {e}", exc_info=True)
+        abort(500, str(e))
+    finally:
+        if os.path.exists(gpx_tmp_path):
+            os.remove(gpx_tmp_path)
+
+
 @bp.route("/api/way_nodes")
 def get_way_nodes():
     filename = request.args.get("file")
@@ -300,36 +378,87 @@ def get_way_nodes():
         abort(404, f"File not found: {filename}")
 
     md = load_mapdata_cached(path)
+    store = load_annotations(_annotation_path(filename))
 
+    original_way_id_str = str(way_id).split(":")[0]
     try:
-        wid = int(way_id)
+        search_id = int(original_way_id_str)
     except (ValueError, TypeError):
-        abort(400, "way_id must be an integer")
+        abort(400, "way_id must be an integer or virtual ID")
 
-    way = next(
-        (
-            w
-            for lst in (md.roads_list, md.footways_list, md.barriers_list)
-            for w in lst
-            if w.id == wid
-        ),
-        None,
-    )
+    way = None
+    category = None
+    for lst_name, cat in (
+        ("roads_list", "road"),
+        ("footways_list", "footway"),
+        ("barriers_list", "barrier"),
+    ):
+        for w in getattr(md, lst_name):
+            if w.id == search_id:
+                way = copy.copy(w)
+                category = cat
+                break
+        if way:
+            break
+
     if way is None:
-        abort(404, f"Way {wid} not found")
+        abort(404, f"Way {search_id} not found")
 
-    nodes_cache = getattr(md, "nodes_cache", {})
     zn, zl = md.zone_number, md.zone_letter
+    nodes_cache = getattr(md, "nodes_cache", {})
 
-    geom_latlon = None
+    # Apply deletions and overrides (consistent with get_way)
+    del_nids = get_deleted_node_ids(store, search_id)
+    if del_nids:
+        way = rebuild_way_without_nodes(
+            way, del_nids, zn, zl, nodes_cache, category=category
+        )
+        if way is None:
+            return jsonify({"way_id": way_id, "nodes": []})
+
+    pos_overrides = get_node_position_overrides(store, search_id)
+    if pos_overrides:
+        way = (
+            apply_node_position_overrides(
+                way, pos_overrides, zn, zl, nodes_cache, category=category
+            )
+            or way
+        )
+
+    # Handle split segments if it's a virtual ID
+    if ":" in str(way_id):
+        try:
+            segment_idx = int(str(way_id).split(":")[1])
+        except ValueError:
+            abort(400, "Invalid virtual ID")
+
+        split_nids = get_split_node_ids(store, search_id)
+        if split_nids:
+            segments = split_way(way, split_nids, zn, zl, nodes_cache)
+            if segment_idx < len(segments):
+                way = segments[segment_idx]
+                # Apply segment-specific deletions
+                seg_del_nids = get_deleted_node_ids(store, way_id)
+                if seg_del_nids:
+                    way = rebuild_way_without_nodes(
+                        way, seg_del_nids, zn, zl, nodes_cache, category=category
+                    )
+                    if way is None:
+                        return jsonify({"way_id": way_id, "nodes": []})
+            else:
+                abort(404, "Segment not found")
+
     nodes = []
-    for i, nid in enumerate(way.nodes):
+    geom_latlon = None
+    for i, nid_obj in enumerate(way.nodes):
+        nid = getattr(nid_obj, "id", nid_obj)
         if nid in nodes_cache:
             nd = nodes_cache[nid]
             nodes.append(
                 {"id": nid, "lat": nd["lat"], "lon": nd["lon"], "tags": nd["tags"]}
             )
         else:
+            # Fallback to geometry
             if geom_latlon is None:
                 geom = way.line
                 raw = list(
@@ -340,29 +469,23 @@ def get_way_nodes():
                 lat, lon = geom_latlon[i]
                 nodes.append({"id": nid, "lat": lat, "lon": lon, "tags": {}})
 
-    # For ways with no nodes (e.g. individual barrier nodes), synthesize a centroid node
-    # so the object can be selected and dragged in edit mode.
-    if not nodes:
+    # centroid fallback
+    if not nodes and way.line:
         centroid = way.line.centroid
         lat, lon = utm.to_latlon(centroid.x, centroid.y, zn, zl)
-        nodes = [{"id": wid, "lat": lat, "lon": lon, "tags": {}}]
+        nodes = [{"id": search_id, "lat": lat, "lon": lon, "tags": {}}]
 
-    store = load_annotations(_annotation_path(filename))
-    deleted_node_ids = get_deleted_node_ids(store, wid)
-    if deleted_node_ids:
-        nodes = [n for n in nodes if n["id"] not in deleted_node_ids]
-
-    pos_overrides = get_node_position_overrides(store, wid)
+    # Ensure position overrides are applied to the resulting nodes list
     if pos_overrides:
         for n in nodes:
             if n["id"] in pos_overrides:
                 n["lat"] = pos_overrides[n["id"]]["lat"]
                 n["lon"] = pos_overrides[n["id"]]["lon"]
 
-    return jsonify({"way_id": wid, "nodes": nodes})
+    return jsonify({"way_id": way_id, "nodes": nodes})
 
 
-@bp.route("/api/ways/<signed_int:way_id>")
+@bp.route("/api/ways/<way_id>")
 def get_way(way_id):
     filename = request.args.get("file")
     if not filename:
@@ -373,16 +496,25 @@ def get_way(way_id):
 
     md = load_mapdata_cached(path)
     store = load_annotations(_annotation_path(filename))
+    nodes_cache = getattr(md, "nodes_cache", {})
 
     way = None
     category = None
+
+    # Virtual ID handling: split by colon
+    original_way_id_str = str(way_id).split(":")[0]
+    try:
+        search_id = int(original_way_id_str)
+    except ValueError:
+        abort(400, "Invalid way ID")
+
     for lst_name, cat in (
         ("roads_list", "road"),
         ("footways_list", "footway"),
         ("barriers_list", "barrier"),
     ):
         for w in getattr(md, lst_name):
-            if w.id == way_id:
+            if w.id == search_id:
                 way = copy.copy(w)
                 category = cat
                 break
@@ -393,7 +525,7 @@ def get_way(way_id):
         abort(404, f"Way {way_id} not found")
 
     zn, zl = md.zone_number, md.zone_letter
-    del_nids = get_deleted_node_ids(store, way_id)
+    del_nids = get_deleted_node_ids(store, search_id)
     if del_nids:
         way = rebuild_way_without_nodes(
             way, del_nids, zn, zl, getattr(md, "nodes_cache", {}), category=category
@@ -401,7 +533,7 @@ def get_way(way_id):
         if way is None:
             abort(404, f"Way {way_id} reduced to nothing by node deletions")
 
-    pos_overrides = get_node_position_overrides(store, way_id)
+    pos_overrides = get_node_position_overrides(store, search_id)
     if pos_overrides:
         way = (
             apply_node_position_overrides(
@@ -415,6 +547,32 @@ def get_way(way_id):
             or way
         )
 
+    # Handle split segments if it's a virtual ID
+    if ":" in str(way_id):
+        try:
+            segment_idx = int(str(way_id).split(":")[1])
+        except ValueError:
+            abort(400, "Invalid virtual ID")
+
+        split_nids = get_split_node_ids(store, search_id)
+        if split_nids:
+            segments = split_way(way, split_nids, zn, zl, nodes_cache)
+            if segment_idx < len(segments):
+                way = segments[segment_idx]
+                # Apply segment-specific deletions
+                seg_del_nids = get_deleted_node_ids(store, way_id)
+                if seg_del_nids:
+                    way = rebuild_way_without_nodes(
+                        way, seg_del_nids, zn, zl, nodes_cache, category=category
+                    )
+                    if way is None:
+                        abort(
+                            404,
+                            "Segment reduced to nothing by segment-specific deletions",
+                        )
+            else:
+                abort(404, "Segment not found")
+
     geom = geom_to_geojson(way.line, zn, zl)
     if geom is None:
         abort(500, "Could not convert geometry")
@@ -423,7 +581,7 @@ def get_way(way_id):
         "type": "Feature",
         "geometry": geom,
         "properties": {
-            "id": way.id,
+            "id": way_id,
             "category": category,
             "is_node": category == "barrier" and not bool(way.nodes),
             "tags": way.tags or {},
@@ -431,7 +589,7 @@ def get_way(way_id):
         },
     }
 
-    ov = store.get("tag_overrides", {}).get(str(way_id))
+    ov = store.get("tag_overrides", {}).get(original_way_id_str)
     if ov:
         merged = {**(feature["properties"]["tags"]), **ov}
         feature["properties"]["tags"] = merged
@@ -444,35 +602,45 @@ def get_way(way_id):
     return jsonify(feature)
 
 
-@bp.route("/api/ways/<signed_int:way_id>", methods=["DELETE"])
+@bp.route("/api/ways/<way_id>", methods=["DELETE"])
 def delete_way(way_id):
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
+
+    original_way_id_str = str(way_id).split(":")[0]
+    try:
+        way_id_int = int(original_way_id_str)
+    except ValueError:
+        abort(400, "Invalid way ID")
+
     body = request.get_json(force=True) or {}
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
     migrate_change_log(store)
-    if way_id not in get_deleted_way_ids(store):
+    if way_id_int not in get_deleted_way_ids(store):
         store.setdefault("deleted_ways", []).append(
             {
-                "id": way_id,
+                "id": way_id_int,
                 "category": body.get("category", "unknown"),
                 "label": body.get("label", ""),
             }
         )
         cl = store.setdefault("change_log", [])
-        if not any(e.get("type") == "way" and e.get("id") == way_id for e in cl):
-            cl.append({"type": "way", "id": way_id, "ts": time.time()})
+        if not any(e.get("type") == "way" and e.get("id") == way_id_int for e in cl):
+            cl.append({"type": "way", "id": way_id_int, "ts": time.time()})
     save_annotations(ann_path, store)
     return "", 204
 
 
-@bp.route("/api/ways/<signed_int:way_id>/tags", methods=["PUT"])
+@bp.route("/api/ways/<way_id>/tags", methods=["PUT"])
 def update_way_tags(way_id):
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
+
+    original_way_id_str = str(way_id).split(":")[0]
+
     body = request.get_json(force=True) or {}
     tags = body.get("tags")
     if not isinstance(tags, dict):
@@ -480,19 +648,21 @@ def update_way_tags(way_id):
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
     migrate_change_log(store)
-    store.setdefault("tag_overrides", {})[str(way_id)] = tags
-    store.setdefault("tag_override_meta", {})[str(way_id)] = {
+    store.setdefault("tag_overrides", {})[original_way_id_str] = tags
+    store.setdefault("tag_override_meta", {})[original_way_id_str] = {
         "category": body.get("category", "unknown"),
         "label": body.get("label", ""),
     }
     cl = store.setdefault("change_log", [])
-    if not any(e.get("type") == "tag" and e.get("id") == way_id for e in cl):
-        cl.append({"type": "tag", "id": way_id, "ts": time.time()})
+    if not any(
+        e.get("type") == "tag" and e.get("id") == original_way_id_str for e in cl
+    ):
+        cl.append({"type": "tag", "id": original_way_id_str, "ts": time.time()})
     save_annotations(ann_path, store)
     return "", 204
 
 
-@bp.route("/api/ways/<signed_int:way_id>/tags", methods=["DELETE"])
+@bp.route("/api/ways/<way_id>/tags", methods=["DELETE"])
 def delete_way_tags(way_id):
     filename = request.args.get("file")
     if not filename:
@@ -509,20 +679,221 @@ def delete_way_tags(way_id):
     return "", 204
 
 
-@bp.route("/api/ways/<signed_int:way_id>/hide", methods=["PUT"])
+@bp.route("/api/ways/<way_id>/segments")
+def get_way_segments(way_id):
+    filename = request.args.get("file")
+    if not filename:
+        abort(400, "Missing 'file' query parameter")
+    original_way_id = str(way_id).split(":")[0]
+    segments = _get_way_segments_geojson(filename, original_way_id)
+    return jsonify({"segments": segments})
+
+
+def _get_way_segments_geojson(filename, original_way_id):
+    path = os.path.join(_get_data_dir(), filename)
+    md = load_mapdata_cached(path)
+    store = load_annotations(_annotation_path(filename))
+
+    original_way = None
+    category = None
+    search_id = int(original_way_id)
+
+    for lst_name, cat in (
+        ("roads_list", "road"),
+        ("footways_list", "footway"),
+        ("barriers_list", "barrier"),
+    ):
+        for w in getattr(md, lst_name):
+            if w.id == search_id:
+                original_way = copy.copy(w)
+                category = cat
+                break
+        if original_way:
+            break
+
+    if not original_way:
+        return []
+
+    # Apply node deletions first (as in get_mapdata)
+    zn, zl = md.zone_number, md.zone_letter
+    del_nids = get_deleted_node_ids(store, search_id)
+    if del_nids:
+        original_way = rebuild_way_without_nodes(
+            original_way,
+            del_nids,
+            zn,
+            zl,
+            getattr(md, "nodes_cache", {}),
+            category=category,
+        )
+        if original_way is None:
+            return []
+
+    # Apply position overrides
+    pos_overrides = get_node_position_overrides(store, search_id)
+    if pos_overrides:
+        original_way = (
+            apply_node_position_overrides(
+                original_way,
+                pos_overrides,
+                zn,
+                zl,
+                getattr(md, "nodes_cache", {}),
+                category=category,
+            )
+            or original_way
+        )
+
+    split_nids = get_split_node_ids(store, search_id)
+    segments = split_way(original_way, split_nids, zn, zl, md.nodes_cache)
+
+    features = []
+    tag_overrides = store.get("tag_overrides", {})
+    ov = tag_overrides.get(str(original_way_id))
+
+    for i, seg in enumerate(segments):
+        virtual_id = f"{original_way_id}:{i}"
+
+        # Apply segment-specific deletions to segment geometry
+        seg_del_nids = get_deleted_node_ids(store, virtual_id)
+        if seg_del_nids:
+            seg = rebuild_way_without_nodes(
+                seg, seg_del_nids, zn, zl, md.nodes_cache, category=category
+            )
+            if seg is None:
+                continue
+
+        feat_cat = category
+        tags = seg.tags or {}
+        if ov:
+            tags = {**tags, **ov}
+            if feat_cat in ("road", "footway"):
+                hw = tags.get("highway", "")
+                feat_cat = "footway" if hw in FOOTWAY_VALUES else "road"
+
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": geom_to_geojson(seg.line, zn, zl),
+                "properties": {
+                    "id": virtual_id,
+                    "category": feat_cat,
+                    "is_node": feat_cat == "barrier" and not bool(seg.nodes),
+                    "tags": tags,
+                    "in_out": seg.in_out,
+                },
+            }
+        )
+    return features
+
+
+@bp.route("/api/ways/split", methods=["POST"])
+def split_way_endpoint():
+    filename = request.args.get("file")
+    if not filename:
+        abort(400, "Missing 'file' query parameter")
+    body = request.get_json(force=True) or {}
+    way_id = body.get("way_id")
+    node_id = body.get("node_id")
+
+    try:
+        way_id_val = str(way_id)
+        node_id_int = int(node_id)
+    except (ValueError, TypeError):
+        abort(400, "Invalid way_id or node_id")
+
+    # If way_id is virtual (e.g. 123:0), get original ID
+    original_way_id = way_id_val.split(":")[0]
+
+    ann_path = _annotation_path(filename)
+    store = load_annotations(ann_path)
+    migrate_change_log(store)
+    splits = store.setdefault("split_ways", {})
+    way_splits = splits.setdefault(original_way_id, [])
+
+    if node_id_int not in way_splits:
+        way_splits.append(node_id_int)
+        cl = store.setdefault("change_log", [])
+        if not any(
+            e.get("type") == "split"
+            and e.get("way_id") == int(original_way_id)
+            and e.get("node_id") == node_id_int
+            for e in cl
+        ):
+            cl.append(
+                {
+                    "type": "split",
+                    "way_id": int(original_way_id),
+                    "node_id": node_id_int,
+                    "ts": time.time(),
+                }
+            )
+
+    save_annotations(ann_path, store)
+
+    segments = _get_way_segments_geojson(filename, original_way_id)
+    return jsonify({"success": True, "segments": segments}), 200
+
+
+@bp.route("/api/ways/split", methods=["DELETE"])
+def undo_way_split():
+    filename = request.args.get("file")
+    way_id = request.args.get("way_id")
+    node_id = request.args.get("node_id")
+    if not filename or way_id is None or node_id is None:
+        abort(400, "Missing required query parameters")
+    try:
+        way_id_int = int(way_id)
+        node_id_int = int(node_id)
+    except (ValueError, TypeError):
+        abort(400, "way_id and node_id must be integers")
+    ann_path = _annotation_path(filename)
+    store = load_annotations(ann_path)
+    splits = store.get("split_ways", {})
+    if str(way_id_int) in splits:
+        splits[str(way_id_int)] = [
+            nid for nid in splits[str(way_id_int)] if nid != node_id_int
+        ]
+        if not splits[str(way_id_int)]:
+            del splits[str(way_id_int)]
+
+    cl = store.get("change_log", [])
+    store["change_log"] = [
+        e
+        for e in cl
+        if not (
+            e.get("type") == "split"
+            and e.get("way_id") == way_id_int
+            and e.get("node_id") == node_id_int
+        )
+    ]
+    save_annotations(ann_path, store)
+
+    segments = _get_way_segments_geojson(filename, way_id_int)
+    return jsonify({"segments": segments}), 200
+
+
+@bp.route("/api/ways/<way_id>/hide", methods=["PUT"])
 def hide_way(way_id):
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
+
+    original_way_id_str = str(way_id).split(":")[0]
+    try:
+        way_id_int = int(original_way_id_str)
+    except ValueError:
+        abort(400, "Invalid way ID")
+
     body = request.get_json(force=True) or {}
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
     hw = store.setdefault("hidden_ways", [])
     existing_ids = {(d["id"] if isinstance(d, dict) else d) for d in hw}
-    if way_id not in existing_ids:
+    if way_id_int not in existing_ids:
         hw.append(
             {
-                "id": way_id,
+                "id": way_id_int,
                 "category": body.get("category", "unknown"),
                 "label": body.get("label", ""),
             }
@@ -531,35 +902,49 @@ def hide_way(way_id):
     return "", 204
 
 
-@bp.route("/api/ways/<signed_int:way_id>/show", methods=["PUT"])
+@bp.route("/api/ways/<way_id>/show", methods=["PUT"])
 def show_way(way_id):
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
+
+    original_way_id_str = str(way_id).split(":")[0]
+    try:
+        way_id_int = int(original_way_id_str)
+    except ValueError:
+        abort(400, "Invalid way ID")
+
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
     hw = store.get("hidden_ways", [])
     store["hidden_ways"] = [
-        d for d in hw if (d["id"] if isinstance(d, dict) else d) != way_id
+        d for d in hw if (d["id"] if isinstance(d, dict) else d) != way_id_int
     ]
     save_annotations(ann_path, store)
     return "", 204
 
 
-@bp.route("/api/ways/<signed_int:way_id>/restore", methods=["PUT"])
+@bp.route("/api/ways/<way_id>/restore", methods=["PUT"])
 def restore_way(way_id):
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
+
+    original_way_id_str = str(way_id).split(":")[0]
+    try:
+        way_id_int = int(original_way_id_str)
+    except ValueError:
+        abort(400, "Invalid way ID")
+
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
     dw = store.get("deleted_ways", [])
     store["deleted_ways"] = [
-        d for d in dw if (d["id"] if isinstance(d, dict) else d) != way_id
+        d for d in dw if (d["id"] if isinstance(d, dict) else d) != way_id_int
     ]
     cl = store.get("change_log", [])
     store["change_log"] = [
-        e for e in cl if not (e.get("type") == "way" and e.get("id") == way_id)
+        e for e in cl if not (e.get("type") == "way" and e.get("id") == way_id_int)
     ]
     save_annotations(ann_path, store)
     return "", 204
@@ -572,31 +957,39 @@ def delete_way_node():
     node_id = request.args.get("node_id")
     if not filename or way_id is None or node_id is None:
         abort(400, "Missing required query parameters")
+
+    original_way_id_str = str(way_id).split(":")[0]
     try:
-        way_id = int(way_id)
+        way_id_int = int(original_way_id_str)
         node_id = int(node_id)
     except (ValueError, TypeError):
-        abort(400, "way_id and node_id must be integers")
+        abort(400, "way_id and node_id must be integers (way_id can be virtual)")
+
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
     migrate_change_log(store)
+
     dn = store.setdefault("deleted_nodes", [])
     if isinstance(dn, dict):
         dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
         store["deleted_nodes"] = dn
-    if node_id not in get_deleted_node_ids(store, way_id):
-        dn.append({"way_id": way_id, "node_id": node_id})
+
+    # Use the full way_id (could be virtual like "123:0") to allow segment-specific deletion
+    target_id = way_id if ":" in str(way_id) else way_id_int
+
+    if node_id not in get_deleted_node_ids(store, target_id):
+        dn.append({"way_id": target_id, "node_id": node_id})
         cl = store.setdefault("change_log", [])
         if not any(
             e.get("type") == "node"
-            and e.get("way_id") == way_id
+            and str(e.get("way_id")) == str(target_id)
             and e.get("node_id") == node_id
             for e in cl
         ):
             cl.append(
                 {
                     "type": "node",
-                    "way_id": way_id,
+                    "way_id": target_id,
                     "node_id": node_id,
                     "ts": time.time(),
                 }
@@ -612,18 +1005,27 @@ def restore_way_node():
     node_id = request.args.get("node_id")
     if not filename or way_id is None or node_id is None:
         abort(400, "Missing required query parameters")
+
+    original_way_id_str = str(way_id).split(":")[0]
     try:
-        way_id = int(way_id)
+        way_id_int = int(original_way_id_str)
         node_id = int(node_id)
     except (ValueError, TypeError):
-        abort(400, "way_id and node_id must be integers")
+        abort(400, "way_id and node_id must be integers (way_id can be virtual)")
+
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
+
+    # Use the full way_id to match the deletion record
+    target_id = way_id if ":" in str(way_id) else way_id_int
+
     dn = store.get("deleted_nodes", [])
     if isinstance(dn, dict):
         dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
     store["deleted_nodes"] = [
-        d for d in dn if not (d["way_id"] == way_id and d["node_id"] == node_id)
+        d
+        for d in dn
+        if not (str(d.get("way_id")) == str(target_id) and d.get("node_id") == node_id)
     ]
     cl = store.get("change_log", [])
     store["change_log"] = [
@@ -631,7 +1033,7 @@ def restore_way_node():
         for e in cl
         if not (
             e.get("type") == "node"
-            and e.get("way_id") == way_id
+            and str(e.get("way_id")) == str(target_id)
             and e.get("node_id") == node_id
         )
     ]
@@ -645,10 +1047,13 @@ def move_way_nodes():
     way_id = request.args.get("way_id")
     if not filename or way_id is None:
         abort(400, "Missing required query parameters")
+
+    original_way_id_str = str(way_id).split(":")[0]
     try:
-        way_id = int(way_id)
+        way_id_int = int(original_way_id_str)
     except (ValueError, TypeError):
         abort(400, "way_id must be an integer")
+
     body = request.get_json(force=True) or {}
     nodes = body.get("nodes")
     if not isinstance(nodes, list):
@@ -656,7 +1061,7 @@ def move_way_nodes():
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
     overrides = store.setdefault("node_position_overrides", {})
-    way_key = str(way_id)
+    way_key = original_way_id_str
     if way_key not in overrides:
         overrides[way_key] = {}
     for n in nodes:
@@ -666,11 +1071,11 @@ def move_way_nodes():
         }
     migrate_change_log(store)
     cl = store.setdefault("change_log", [])
-    if not any(e.get("type") == "move" and e.get("id") == way_id for e in cl):
+    if not any(e.get("type") == "move" and e.get("id") == way_id_int for e in cl):
         cl.append(
             {
                 "type": "move",
-                "id": way_id,
+                "id": way_id_int,
                 "category": body.get("category", "unknown"),
                 "label": body.get("label", ""),
                 "ts": time.time(),
@@ -686,16 +1091,19 @@ def undo_move_way_nodes():
     way_id = request.args.get("way_id")
     if not filename or way_id is None:
         abort(400, "Missing required query parameters")
+
+    original_way_id_str = str(way_id).split(":")[0]
     try:
-        way_id = int(way_id)
+        way_id_int = int(original_way_id_str)
     except (ValueError, TypeError):
-        abort(400, "way_id must be an integer")
+        abort(400, "way_id must be an integer or virtual ID")
+
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
-    store.get("node_position_overrides", {}).pop(str(way_id), None)
+    store.get("node_position_overrides", {}).pop(original_way_id_str, None)
     cl = store.get("change_log", [])
     store["change_log"] = [
-        e for e in cl if not (e.get("type") == "move" and e.get("id") == way_id)
+        e for e in cl if not (e.get("type") == "move" and e.get("id") == way_id_int)
     ]
     save_annotations(ann_path, store)
     return "", 204
@@ -710,55 +1118,14 @@ def get_merged_mapdata(filename):
     md = copy.deepcopy(load_mapdata_cached(path))
     zn, zl = md.zone_number, md.zone_letter
 
-    deleted_way_ids = get_deleted_way_ids(store)
-    has_node_dels = bool(store.get("deleted_nodes"))
-    if deleted_way_ids or has_node_dels:
-        for lst_name in ("roads_list", "footways_list", "barriers_list"):
-            new_lst = []
-            for w in getattr(md, lst_name):
-                if w.id in deleted_way_ids:
-                    continue
-                del_nids = get_deleted_node_ids(store, w.id)
-                if del_nids:
-                    w = rebuild_way_without_nodes(
-                        w, del_nids, zn, zl, getattr(md, "nodes_cache", {})
-                    )
-                    if w is None:
-                        continue
-                new_lst.append(w)
-            setattr(md, lst_name, new_lst)
-
-    node_pos_store = store.get("node_position_overrides", {})
-    if node_pos_store:
-        _cat_for_list = {
-            "roads_list": "road",
-            "footways_list": "footway",
-            "barriers_list": "barrier",
-        }
-        for lst_name in ("roads_list", "footways_list", "barriers_list"):
-            new_lst = []
-            for w in getattr(md, lst_name):
-                ov = get_node_position_overrides(store, w.id)
-                if ov:
-                    w = (
-                        apply_node_position_overrides(
-                            w,
-                            ov,
-                            zn,
-                            zl,
-                            getattr(md, "nodes_cache", {}),
-                            category=_cat_for_list[lst_name],
-                        )
-                        or w
-                    )
-                new_lst.append(w)
-            setattr(md, lst_name, new_lst)
+    _apply_way_edits(md, store)
 
     tag_overrides = store.get("tag_overrides", {})
     if tag_overrides:
         for lst_name in ("roads_list", "footways_list", "barriers_list"):
             for w in getattr(md, lst_name):
-                ov = tag_overrides.get(str(w.id))
+                original_id = str(w.id).split(":")[0]
+                ov = tag_overrides.get(original_id)
                 if ov:
                     w.tags = {**(w.tags or {}), **ov}
         new_roads, new_footways = [], []
@@ -767,9 +1134,9 @@ def get_merged_mapdata(filename):
         for w in md.footways_list:
             (new_roads if w.is_road() else new_footways).append(w)
         md.roads_list, md.footways_list = new_roads, new_footways
-
-    if deleted_way_ids or has_node_dels or tag_overrides:
-        md.crossroads_list = md.parse_intersections({w.id: w for w in md.footways_list})
+        md.crossroads_list = md.parse_intersections(
+            {str(w.id): w for w in md.footways_list}
+        )
 
     ann_id = -1
     node_id = -1
@@ -1062,7 +1429,7 @@ def create_replan():
         obstacles = ways_to_shapely(filtered_barriers)
         replanner = ReplanPath(args, obstacles, transfer_id=transfer_id)
         replanner.fill_grid(md, highway_types=highway_types)
-        res = replanner.replan_rrt(utm_path, algorithm=sub_algorithm)
+        res = replanner.replan(utm_path, algorithm=sub_algorithm)
 
     if res is None:
         return jsonify({"retrieveNum": 1, "newPath": None, "status": "cancelled"})

@@ -2,6 +2,7 @@
 
 import os
 import argparse
+import threading
 
 import numpy as np
 import shapely as sh
@@ -9,6 +10,7 @@ import matplotlib.pyplot as plt
 from scipy.spatial import cKDTree
 from joblib import Parallel, delayed
 from shapely.geometry import LineString
+from typing import Any, Dict, List, Optional, Tuple
 from matplotlib.patches import Polygon as MplPolygon
 from matplotlib.path import Path
 
@@ -25,17 +27,31 @@ from map_data.utils.gpx import (
 )
 
 
-# Global cancellation state
-_cancelled_transfers = set()
+_cancel_lock = threading.Lock()
+_cancelled_transfers: set = set()
 
 
 def cancel_replan_backend(transfer_id):
     if transfer_id:
-        _cancelled_transfers.add(transfer_id)
+        with _cancel_lock:
+            _cancelled_transfers.add(transfer_id)
+
+
+def _is_cancelled(transfer_id) -> bool:
+    if not transfer_id:
+        return False
+    with _cancel_lock:
+        return transfer_id in _cancelled_transfers
+
+
+def _discard_cancelled(transfer_id):
+    if transfer_id:
+        with _cancel_lock:
+            _cancelled_transfers.discard(transfer_id)
 
 
 class ReplanPath:
-    def __init__(self, args, obstacles=None, transfer_id=None):
+    def __init__(self, args, obstacles=None, transfer_id=None) -> None:
         self.args = args
         self.transfer_id = transfer_id
 
@@ -56,9 +72,9 @@ class ReplanPath:
             self._convert_obstacles(self.obstacles) if self.obstacles else []
         )
 
-    def replan_rrt(self, path, algorithm="astar"):
+    def replan(self, path: np.ndarray, algorithm: str = "astar") -> Optional[np.ndarray]:
         def process_segment(i, path, args):
-            if self.transfer_id in _cancelled_transfers:
+            if _is_cancelled(self.transfer_id):
                 return None, i
 
             start = path[i]
@@ -81,8 +97,8 @@ class ReplanPath:
             delayed(process_segment)(i, path, self.args) for i in range(len(path) - 1)
         )
 
-        if self.transfer_id in _cancelled_transfers:
-            _cancelled_transfers.discard(self.transfer_id)
+        if _is_cancelled(self.transfer_id):
+            _discard_cancelled(self.transfer_id)
             return None
 
         # Sort results by index to maintain path order
@@ -96,7 +112,7 @@ class ReplanPath:
         new_path.append(path[-1][:2])
         return self._post_process_path(np.array(new_path))
 
-    def _post_process_path(self, path):
+    def _post_process_path(self, path: np.ndarray) -> np.ndarray:
         """
         Simplify the final path by removing redundant points.
         """
@@ -120,7 +136,7 @@ class ReplanPath:
 
         return path
 
-    def _rrt_star(self, start, goal):
+    def _rrt_star(self, start: np.ndarray, goal: np.ndarray) -> Optional[np.ndarray]:
         if self._reshaped_grid_cache is None:
             self._reshaped_grid_cache = self._burn_obstacles_into_grid(
                 self._reshape_grid()
@@ -139,7 +155,7 @@ class ReplanPath:
         )
         return planner.find_path()
 
-    def _reshape_grid(self):
+    def _reshape_grid(self) -> np.ndarray:
         """
         Reshape the grid to match the shape of the map data.
         """
@@ -163,7 +179,7 @@ class ReplanPath:
         grid[x_indices, y_indices] = c
         return grid.T
 
-    def _burn_obstacles_into_grid(self, grid_2d):
+    def _burn_obstacles_into_grid(self, grid_2d: np.ndarray) -> np.ndarray:
         """
         Burn obstacles into the grid by setting their cost to infinity.
         """
@@ -214,7 +230,7 @@ class ReplanPath:
 
         return grid_2d
 
-    def _convert_obstacles(self, obstacles):
+    def _convert_obstacles(self, obstacles: List) -> List:
         """
         Convert obstacles to a format suitable for RRT*.
         Parameters:
@@ -232,7 +248,7 @@ class ReplanPath:
             obst.append(obstacle)
         return obst
 
-    def _astar(self, start, goal):
+    def _astar(self, start: np.ndarray, goal: np.ndarray) -> Optional[np.ndarray]:
         if self._reshaped_grid_cache is None:
             self._reshaped_grid_cache = self._burn_obstacles_into_grid(
                 self._reshape_grid()
@@ -247,7 +263,7 @@ class ReplanPath:
             simplify_path=self.args.simplify_path,
         )
 
-    def _colides(self, path_seg):
+    def _colides(self, path_seg: LineString) -> bool:
         if self.obstacles_tree is None:
             return False
         # STRtree.query returns indices of obstacles that intersect the path_seg bounding box
@@ -257,7 +273,7 @@ class ReplanPath:
         )
         return len(intersecting_indices) > 0
 
-    def _create_grid(self, low, high, cell_size=0.25):
+    def _create_grid(self, low: Tuple[float, float], high: Tuple[float, float], cell_size: float = 0.25) -> np.ndarray:
         """
         Create a grid of points.
 
@@ -286,7 +302,7 @@ class ReplanPath:
         )
         return grid
 
-    def fill_grid(self, map_data, highway_types=None, max_path_dist=20.0):
+    def fill_grid(self, map_data: Any, highway_types: Optional[List[str]] = None, max_path_dist: float = 20.0) -> None:
         if highway_types is None:
             highway_types = ["footway"]
 
@@ -369,7 +385,7 @@ class ReplanPath:
         grid_2d = self._reshape_grid()
         self._reshaped_grid_cache = self._burn_obstacles_into_grid(grid_2d)
 
-    def _points_near_ref(self, points, reference, max_dist=1):
+    def _points_near_ref(self, points: np.ndarray, reference: np.ndarray, max_dist: float = 1) -> Tuple[np.ndarray, np.ndarray]:
         """
         Get points near reference points and set linear distance as cost.
 
@@ -400,7 +416,7 @@ class ReplanPath:
 
         return (np.hstack([points, (dists / max_dist).reshape(-1, 1)]), mask)
 
-    def _split_ways(self, points, ways, max_dist=0.25):
+    def _split_ways(self, points: Dict[int, np.ndarray], ways: List, max_dist: float = 0.25) -> np.ndarray:
         """
         Equidistantly split ways into points with a maximal step size. Also only use footways from map data,
         as we are not allowed to leave the footways.
@@ -440,7 +456,7 @@ class ReplanPath:
 
         return np.array(waypoints)
 
-    def visualize(self, path, old_path=None):
+    def visualize(self, path: Optional[np.ndarray], old_path: Optional[np.ndarray] = None) -> None:
         """Visualize the grid, obstacles, and path using Matplotlib."""
         _, ax = plt.subplots()
 
@@ -543,7 +559,7 @@ if __name__ == "__main__":
     replanner = ReplanPath(args, obstacles)
     replanner.fill_grid(map_data, max_path_dist=args.max_path_dist)
 
-    new_path = replanner.replan(path_data[0])
+    new_path = replanner.replan(path_data[0], algorithm="astar")
 
     if args.save:
         new_wgs_path = utm_path_to_latlon(new_path, path_data[1], path_data[2])

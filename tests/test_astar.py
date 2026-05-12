@@ -154,6 +154,34 @@ def test_post_process_path_simplification():
     assert np.allclose(processed_path[-1], [5.0, 10.0])
 
 
+def test_astar_grid_goal_outside_boundary():
+    """Goal UTM outside the grid is clamped — path to the boundary is still found."""
+    args = Args()
+    replanner = ReplanPath(args, [])
+    replanner._reshaped_grid_cache = np.zeros((20, 20), dtype=float)
+
+    start = (1.0, 1.0)
+    goal = (15.0, 15.0)  # beyond 10×10 grid; clamped to far corner
+    path = replanner._astar(start, goal)
+
+    assert path is not None
+    assert len(path) >= 2
+
+
+def test_astar_grid_start_equals_goal_same_cell():
+    """Points that map to the same grid cell return a 2-point trivial path."""
+    args = Args()
+    replanner = ReplanPath(args, [])
+    replanner._reshaped_grid_cache = np.zeros((20, 20), dtype=float)
+
+    start = (5.0, 5.0)
+    goal = (5.05, 5.05)  # floor(5.05/0.5)=10 == floor(5.0/0.5)=10
+    path = replanner._astar(start, goal)
+
+    assert path is not None
+    assert len(path) == 2
+
+
 def test_post_process_path_very_close_points():
     args = Args()
     args.simplify_path = (

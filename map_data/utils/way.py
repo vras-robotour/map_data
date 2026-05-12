@@ -25,7 +25,7 @@ FOOTWAY_VALUES = frozenset(
 
 @dataclass
 class Way:
-    id: int = -1
+    id: Any = -1
     is_area: bool = False
     nodes: List[Any] = field(default_factory=list)
     tags: Dict[str, str] = field(default_factory=dict)
@@ -110,6 +110,3 @@ class Way:
     def _mask_points(points: List[Point], polygon: Polygon) -> filter:
         prepared = prep(polygon)
         return filter(prepared.contains, points)
-
-    def mask_points(self, points: List[Point], polygon: Polygon) -> filter:
-        return self._mask_points(points, polygon)

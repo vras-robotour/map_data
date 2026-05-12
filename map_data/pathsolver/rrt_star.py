@@ -1,7 +1,7 @@
 import random
 import numpy as np
 from scipy.spatial import cKDTree
-from typing import List, Tuple, Optional
+from typing import Iterator, List, Optional, Tuple
 from shapely.geometry import Point, LineString
 
 # Rebuild the spatial index after this many new nodes are added since the last build.
@@ -111,7 +111,7 @@ class RRTStar:
                     return True
         return False
 
-    def _bresenham(self, start, goal):
+    def _bresenham(self, start, goal) -> Iterator[Tuple[int, int]]:
         x0, y0 = start
         x1, y1 = goal
         dx, dy = abs(x1 - x0), abs(y1 - y0)
@@ -249,12 +249,12 @@ class RRTStar:
         return False, np.linalg.norm(end - start) * (1.0 + avg_c * 5.0)
 
     def find_path(self) -> Optional[np.ndarray]:
-        from .replan import _cancelled_transfers
+        from .replan import _is_cancelled
 
         goal_idx = None
 
         for _ in range(self.max_iter):
-            if self.transfer_id in _cancelled_transfers:
+            if _is_cancelled(self.transfer_id):
                 return None
 
             rand_point = self.goal if random.random() < 0.1 else self._sample_point()
@@ -332,7 +332,7 @@ class RRTStar:
             return self._simplify_path(path)
         return path
 
-    def _simplify_path(self, path):
+    def _simplify_path(self, path) -> List[np.ndarray]:
         if len(path) <= 2:
             return path
         simplified = [path[0]]

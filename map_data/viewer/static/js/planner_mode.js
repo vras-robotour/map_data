@@ -303,7 +303,7 @@ class PlannerMode {
   setupDragAndDrop() {
     const dropzone = document.getElementById('dropzone');
     window.addEventListener('dragenter', (e) => {
-        if (currentAppMode === 'planner') dropzone.classList.add('active');
+        dropzone.classList.add('active');
     });
     dropzone.addEventListener('dragleave', (e) => {
         if (e.target === dropzone) dropzone.classList.remove('active');
@@ -312,10 +312,16 @@ class PlannerMode {
     dropzone.addEventListener('drop', (e) => {
         e.preventDefault();
         dropzone.classList.remove('active');
-        if (currentAppMode !== 'planner') return;
+        
         const file = e.dataTransfer.files[0];
-        if (file && file.name.toLowerCase().endsWith('.gpx')) {
+        if (!file || !file.name.toLowerCase().endsWith('.gpx')) return;
+
+        if (currentAppMode === 'planner') {
             this.loadGpxFile(file);
+        } else {
+            if (typeof handleGpxMapCreation === 'function') {
+                handleGpxMapCreation(file);
+            }
         }
     });
   }
@@ -517,7 +523,7 @@ ${pts}
     };
     container.appendChild(delBtn);
     
-    L.popup({ minWidth: 120, className: 'planner-popup', offset: [0, -5] })
+    L.popup({ minWidth: 120, className: 'planner-popup', offset: [0, -5], closeButton: false })
       .setLatLng(latlng)
       .setContent(container)
       .openOn(map);

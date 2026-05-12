@@ -77,11 +77,27 @@ async function deleteWayApi(filename, wayId, cat, label) {
 }
 
 async function deleteNodeApi(filename, wayId, nodeId) {
-  return await fetch(`/api/way_node?file=${encodeURIComponent(filename)}&way_id=${wayId}&node_id=${nodeId}`, {
+  const res = await fetch(`/api/way_node?file=${encodeURIComponent(filename)}&way_id=${wayId}&node_id=${nodeId}`, {
     method: 'DELETE'
   });
+  return res;
 }
 
+async function splitWayApi(filename, wayId, nodeId) {
+  const res = await fetch(`/api/ways/split?file=${encodeURIComponent(filename)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ way_id: wayId, node_id: nodeId })
+  });
+  return res;
+}
+
+async function undoWaySplitApi(filename, wayId, nodeId) {
+  const res = await fetch(`/api/ways/split?file=${encodeURIComponent(filename)}&way_id=${wayId}&node_id=${nodeId}`, {
+    method: 'DELETE'
+  });
+  return res;
+}
 async function hideWayApi(filename, wayId, cat, label) {
   return await fetch(`/api/ways/${wayId}/hide?file=${encodeURIComponent(filename)}`, {
     method: 'PUT',
@@ -112,6 +128,12 @@ async function fetchWayApi(filename, wayId) {
   return await fetch(`/api/ways/${wayId}?file=${encodeURIComponent(filename)}`);
 }
 
+async function fetchWaySegmentsApi(filename, wayId) {
+  const res = await fetch(`/api/ways/${wayId}/segments?file=${encodeURIComponent(filename)}`);
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
+
 async function moveWayNodesApi(filename, wayId, nodes, category, label) {
   return await fetch(`/api/way_nodes/move?file=${encodeURIComponent(filename)}&way_id=${wayId}`, {
     method: 'PUT',
@@ -131,6 +153,15 @@ async function fetchAreaApi(params) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return await res.json();
+}
+
+async function uploadGpxApi(formData) {
+  const res = await fetch('/api/upload_gpx', {
+    method: 'POST',
+    body: formData,
   });
   if (!res.ok) throw new Error(await res.text());
   return await res.json();

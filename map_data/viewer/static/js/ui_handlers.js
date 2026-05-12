@@ -37,6 +37,8 @@ function setAppMode(mode) {
     // Enable annotation-related buttons
     document.querySelectorAll('.mode-btn[data-mode="edit"], .mode-btn[data-mode="add"], .mode-btn[data-mode="path"], .mode-btn[data-mode="delete"], .mode-btn[data-mode="fetch"]')
       .forEach(btn => btn.disabled = false);
+    const gpxBtn = document.getElementById('gpx-create-btn');
+    if (gpxBtn) gpxBtn.disabled = false;
 
     toggleMapInteractivity(true);
 
@@ -56,6 +58,8 @@ function setAppMode(mode) {
     // Disable annotation-related buttons
     document.querySelectorAll('.mode-btn[data-mode="edit"], .mode-btn[data-mode="add"], .mode-btn[data-mode="path"], .mode-btn[data-mode="delete"], .mode-btn[data-mode="fetch"]')
       .forEach(btn => btn.disabled = true);
+    const gpxBtn = document.getElementById('gpx-create-btn');
+    if (gpxBtn) gpxBtn.disabled = true;
 
     if (currentMode !== 'view') {
       setMode('view');
@@ -113,6 +117,105 @@ function renderSubtypeFilters(cat) {
   });
 }
 
+function deselectCurrent() {
+  if (currentClickedLayer) {
+    const oldCat = currentClickedLayer._osmCat;
+    currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options?._ann_id)));
+    currentClickedLayer = null;
+  }
+  currentClickedFeature = null;
+  document.getElementById('props-content').innerHTML = '<div class="text-secondary" style="font-style:italic;">Click a feature to inspect</div>';
+  clearNodes();
+}
+
+function selectWay(feature, layer, cat) {
+  if (currentClickedLayer === layer) return;
+  deselectCurrent();
+  layer._osmCat = cat;
+  currentClickedLayer = layer;
+  currentClickedFeature = feature;
+  layer.setStyle(HIGHLIGHT_STYLES[cat]);
+  showProps(feature.properties, feature);
+}
+
+function selectAnnotation(ann, layer) {
+  if (currentClickedLayer === layer) return;
+  deselectCurrent();
+  const cat = ann.type === 'path' ? 'path' : 'annotation';
+  layer._osmCat = cat;
+  currentClickedLayer = layer;
+  layer.setStyle(HIGHLIGHT_STYLES[cat]);
+  showAnnProps(ann);
+}
+
+function showWayContextMenu(feature, layer, latlng, cat) {
+  if (currentAppMode === 'planner') return;
+  // Select it first so sidebar matches
+  selectWay(feature, layer, cat);
+
+  const props = feature.properties;
+  const container = document.createElement('div');
+  container.className = 'context-menu';
+
+  if (['road', 'footway', 'barrier'].includes(props.category) && feature.geometry.type !== 'Point') {
+    const nodeBtn = document.createElement('button');
+    nodeBtn.innerHTML = nodeLayer ? '🙈 Hide Nodes' : '👁️ Show Nodes';
+    nodeBtn.onclick = () => { map.closePopup(); toggleNodes(); };
+    container.appendChild(nodeBtn);
+  }
+
+  const editBtn = document.createElement('button');
+  editBtn.innerHTML = '✎ Edit Properties';
+  editBtn.onclick = () => { map.closePopup(); openWayEditModal(); };
+  container.appendChild(editBtn);
+
+  if (hiddenWayIds.has(props.id)) {
+    const showBtn = document.createElement('button');
+    showBtn.innerHTML = '👁️ Show Object';
+    showBtn.onclick = () => { map.closePopup(); showWay(props.id); };
+    container.appendChild(showBtn);
+  } else {
+    const hideBtn = document.createElement('button');
+    hideBtn.innerHTML = '🙈 Hide Object';
+    hideBtn.onclick = () => { map.closePopup(); hideCurrentWay(); };
+    container.appendChild(hideBtn);
+
+    const delBtn = document.createElement('button');
+    delBtn.innerHTML = '🗑️ Delete Object';
+    delBtn.onclick = () => { map.closePopup(); deleteCurrentWay(); };
+    container.appendChild(delBtn);
+  }
+
+  L.popup({ minWidth: 150, className: 'planner-popup', offset: [0, -5], closeButton: false })
+    .setLatLng(latlng)
+    .setContent(container)
+    .openOn(map);
+}
+
+function showAnnotationContextMenu(ann, layer, latlng) {
+  if (currentAppMode === 'planner') return;
+  // Select it first so sidebar matches
+  selectAnnotation(ann, layer);
+
+  const container = document.createElement('div');
+  container.className = 'context-menu';
+
+  const editBtn = document.createElement('button');
+  editBtn.innerHTML = '✎ Edit Properties';
+  editBtn.onclick = () => { map.closePopup(); openAnnEditModal(ann.id); };
+  container.appendChild(editBtn);
+
+  const delBtn = document.createElement('button');
+  delBtn.innerHTML = '🗑️ Delete Annotation';
+  delBtn.onclick = () => { map.closePopup(); removeAnnotationById(ann.id); };
+  container.appendChild(delBtn);
+
+  L.popup({ minWidth: 150, className: 'planner-popup', offset: [0, -5], closeButton: false })
+    .setLatLng(latlng)
+    .setContent(container)
+    .openOn(map);
+}
+
 function showProps(props, feature = null) {
   if (feature !== currentClickedFeature) {
     clearNodes();
@@ -168,7 +271,7 @@ function showProps(props, feature = null) {
                                onclick="hideCurrentWay()">&#128065; Hide Object</button>`;
       el.innerHTML += `<button class="btn btn-sm btn-outline-danger mt-1"
                                style="font-size:0.72rem;width:100%;"
-                               onclick="deleteCurrentWay()">&#128465; Delete Way</button>`;
+                               onclick="deleteCurrentWay()">&#128465; Delete Object</button>`;
     }
   }
 }
@@ -290,9 +393,39 @@ function clickNode(index) {
 }
 
 function showOsmNodeProps(node, index, total) {
+  const wayFeature = currentClickedFeature;
+  const isPath = wayFeature && ['road', 'footway'].includes(wayFeature.properties.category);
+  // Simple heuristic for "not enclosed": check if it's a LineString and start != end
+  // Actually, we can just check if the backend would allow it.
+  // For UI, we'll show it if it's a road/footway and not the first/last node.
+  const canSplit = isPath && index > 0 && index < total - 1;
+
   const tagRows = Object.entries(node.tags || {})
     .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
     .join('') || '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No tags</td></tr>';
+  
+  let buttons = `
+    <div class="d-flex gap-1 mt-2">
+      <button class="btn btn-sm btn-outline-secondary" style="font-size:0.72rem;flex:1;"
+              onclick="showProps(currentClickedFeature.properties, currentClickedFeature)">
+        ← Back
+      </button>`;
+  
+  if (canSplit) {
+    buttons += `
+      <button class="btn btn-sm btn-outline-warning" style="font-size:0.72rem;" title="Split Way"
+              onclick="splitCurrentWay(currentClickedFeature.properties.id, ${node.id})">
+        ✂️
+      </button>`;
+  }
+
+  buttons += `
+      <button class="btn btn-sm btn-outline-danger" style="font-size:0.72rem;" title="Delete Node"
+              onclick="deleteCurrentNode(currentClickedFeature.properties.id, ${node.id})">
+        &#128465;
+      </button>
+    </div>`;
+
   document.getElementById('props-content').innerHTML = `
     <table><tbody>
       <tr><td>Type</td><td><span class="badge bg-secondary">node</span></td></tr>
@@ -302,16 +435,44 @@ function showOsmNodeProps(node, index, total) {
       <tr><td>Lon</td><td>${parseFloat(node.lon).toFixed(7)}</td></tr>
       ${tagRows}
     </tbody></table>
-    <div class="d-flex gap-1 mt-2">
-      <button class="btn btn-sm btn-outline-secondary" style="font-size:0.72rem;flex:1;"
-              onclick="showProps(currentClickedFeature.properties, currentClickedFeature)">
-        ← Back to Way
-      </button>
-      <button class="btn btn-sm btn-outline-danger" style="font-size:0.72rem;"
-              onclick="deleteCurrentNode(currentClickedFeature.properties.id, ${node.id})">
-        &#128465;
-      </button>
-    </div>`;
+    ${buttons}`;
+}
+
+async function splitCurrentWay(wayId, nodeId) {
+  if (!currentFile) return;
+  
+  const res = await splitWayApi(currentFile, wayId, nodeId);
+  if (res.ok) {
+    const data = await res.json();
+    setStatus('Way split successfully', 'text-success');
+    
+    // Surgical update
+    const originalWayId = String(wayId).split(':')[0];
+    const newLayer = updateWayWithSegments(originalWayId, data.segments);
+    
+    // Update selection to the first new segment if it exists
+    if (newLayer && newLayer._featureRef) {
+        currentClickedLayer = newLayer;
+        currentClickedFeature = newLayer._featureRef;
+        newLayer._osmCat = newLayer._featureRef.properties.category;
+        newLayer.setStyle(HIGHLIGHT_STYLES[newLayer._osmCat]);
+        showProps(newLayer._featureRef.properties, newLayer._featureRef);
+        // Clear nodes but immediately reload them for the new segment
+        clearNodes();
+        loadNodesForEditing(newLayer._featureRef, newLayer);
+    } else {
+        currentClickedLayer = null;
+        currentClickedFeature = null;
+        clearNodes();
+        document.getElementById('props-content').innerHTML = 
+          '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+    }
+    
+    // Refresh only metadata (changes list, etc.) without map flashing
+    refreshMetadata(currentFile);
+  } else {
+    setStatus('Split failed', 'text-danger');
+  }
 }
 
 async function toggleNodes() {
@@ -332,6 +493,10 @@ async function toggleNodes() {
       }).on('click', e => {
         L.DomEvent.stopPropagation(e);
         if (currentMode === 'view') clickNode(i);
+      }).on('contextmenu', e => {
+        L.DomEvent.stopPropagation(e);
+        L.DomEvent.preventDefault(e);
+        if (currentMode === 'view') showNodeContextMenu(node, i, e.latlng);
       }).addTo(nodeLayer);
       nodeMarkers.push(marker);
     });
@@ -341,6 +506,35 @@ async function toggleNodes() {
   } catch (err) {
     setStatus(`Node load failed: ${err.message}`, 'text-danger');
   }
+}
+
+function showNodeContextMenu(node, index, latlng) {
+  const wayFeature = currentClickedFeature;
+  if (!wayFeature) return;
+  const wayId = wayFeature.properties.id;
+  const total = currentNodes.length;
+  const isPath = ['road', 'footway'].includes(wayFeature.properties.category);
+  const canSplit = isPath && index > 0 && index < total - 1;
+
+  const container = document.createElement('div');
+  container.className = 'context-menu';
+
+  if (canSplit) {
+    const splitBtn = document.createElement('button');
+    splitBtn.innerHTML = '✂️ Split Way';
+    splitBtn.onclick = () => { map.closePopup(); splitCurrentWay(wayId, node.id); };
+    container.appendChild(splitBtn);
+  }
+
+  const delBtn = document.createElement('button');
+  delBtn.innerHTML = '&#128465; Delete Node';
+  delBtn.onclick = () => { map.closePopup(); deleteCurrentNode(wayId, node.id); };
+  container.appendChild(delBtn);
+
+  L.popup({ minWidth: 150, className: 'planner-popup', offset: [0, -5], closeButton: false })
+    .setLatLng(latlng)
+    .setContent(container)
+    .openOn(map);
 }
 
 function openWayEditModal() {
@@ -363,6 +557,54 @@ function _renderWayEditProps(obj) {
         <button type="button" class="btn btn-sm btn-outline-danger px-1"
                 onclick="this.closest('.d-flex').remove()">×</button>
       </div>`).join('');
+}
+
+document.getElementById('way-edit-save')?.addEventListener('click', async () => {
+  if (!currentFile || !editingWayId) return;
+  const keys = document.querySelectorAll('#way-edit-props .we-key');
+  const vals = document.querySelectorAll('#way-edit-props .we-val');
+  const tags = {};
+  keys.forEach((el, i) => {
+    const k = el.value.trim();
+    if (k) tags[k] = vals[i].value.trim();
+  });
+  const cat = currentClickedFeature?.properties?.category ?? 'unknown';
+  const lbl = currentClickedFeature?.properties?.tags?.highway
+            || currentClickedFeature?.properties?.tags?.barrier || '';
+  const res = await updateWayTagsApi(currentFile, editingWayId, tags, cat, lbl);
+  if (!res.ok) { setStatus('Save failed', 'text-danger'); return; }
+  bootstrap.Modal.getInstance(document.getElementById('way-edit-modal'))?.hide();
+  if (!changeLog.some(c => c.type === 'tag' && String(c.id) === String(editingWayId))) {
+    changeLog.push({ type: 'tag', id: editingWayId, category: cat, label: lbl });
+  }
+  await _reloadWay(editingWayId);
+  setStatus(`Tags saved for way ${editingWayId}`, 'text-success');
+  renderChangesPanel();
+});
+
+document.getElementById('way-edit-add-prop-btn')?.addEventListener('click', () => {
+  const container = document.getElementById('way-edit-props');
+  const row = document.createElement('div');
+  row.className = 'd-flex gap-1 mb-1';
+  row.innerHTML = `
+    <input class="form-control form-control-sm bg-dark text-light border-secondary we-key"
+           placeholder="key" style="flex:1;font-size:0.75rem;">
+    <input class="form-control form-control-sm bg-dark text-light border-secondary we-val"
+           placeholder="value" style="flex:1;font-size:0.75rem;">
+    <button type="button" class="btn btn-sm btn-outline-danger px-1"
+            onclick="this.closest('.d-flex').remove()">×</button>`;
+  container.appendChild(row);
+});
+
+async function undoTagOverride(wayId) {
+  if (!currentFile) return;
+  const res = await deleteWayTagsApi(currentFile, wayId);
+  if (res.ok) {
+    changeLog = changeLog.filter(c => !(c.type === 'tag' && String(c.id) === String(wayId)));
+    tagOverrides = tagOverrides.filter(t => String(t.id) !== String(wayId));
+    await _reloadWay(wayId);
+    renderChangesPanel();
+  }
 }
 
 async function deleteCurrentWay() {
@@ -492,47 +734,89 @@ function renderChangesPanel() {
   panel.style.display = '';
   count.textContent = `(${changeLog.length})`;
   list.innerHTML = [...changeLog].reverse().map(d => {
+    const wayIdJson = JSON.stringify(d.id || d.way_id);
     if (d.type === 'way') return `
-      <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
+      <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
         <div>
           <span>del ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
           <br><span class="change-id">#${d.id}</span>
         </div>
         <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Undo deletion" onclick="event.stopPropagation(); undoWayDeletion(${d.id})">&#8617;</button>
+                title="Undo deletion" onclick='event.stopPropagation(); undoWayDeletion(${wayIdJson})'>&#8617;</button>
       </div>`;
     if (d.type === 'node') return `
-      <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.way_id})">
+      <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
         <div>
           <span>del node in way</span>
           <br><span class="change-id">#${d.node_id} &rarr; #${d.way_id}</span>
         </div>
         <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Undo deletion" onclick="event.stopPropagation(); undoNodeDeletion(${d.way_id}, ${d.node_id})">&#8617;</button>
+                title="Undo deletion" onclick='event.stopPropagation(); undoNodeDeletion(${wayIdJson}, ${d.node_id})'>&#8617;</button>
       </div>`;
     if (d.type === 'tag') return `
-      <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
+      <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
         <div>
           <span>edit ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
           <br><span class="change-id">#${d.id}</span>
         </div>
         <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Undo tag edit" onclick="event.stopPropagation(); undoTagOverride(${d.id})">&#8617;</button>
+                title="Undo tag edit" onclick='event.stopPropagation(); undoTagOverride(${wayIdJson})'>&#8617;</button>
       </div>`;
     if (d.type === 'move') return `
-      <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
+      <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
         <div>
           <span>move ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
           <br><span class="change-id">#${d.id}</span>
         </div>
         <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Undo move" onclick="event.stopPropagation(); undoWayNodeMoves(${d.id})">&#8617;</button>
+                title="Undo move" onclick='event.stopPropagation(); undoWayNodeMoves(${wayIdJson})'>&#8617;</button>
+      </div>`;
+    if (d.type === 'split') return `
+      <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
+        <div>
+          <span>split way</span>
+          <br><span class="change-id">#${d.way_id} @ node #${d.node_id}</span>
+        </div>
+        <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
+                title="Undo split" onclick='event.stopPropagation(); undoWaySplit(${wayIdJson}, ${d.node_id})'>&#8617;</button>
       </div>`;
     return '';
-  }).join('');
-}
+    }).join('');
+    }
 
-function renderHiddenPanel() {
+    async function undoWaySplit(wayId, nodeId) {
+      if (!currentFile) return;
+      const res = await undoWaySplitApi(currentFile, wayId, nodeId);
+      if (res.ok) {
+        const data = await res.json();
+        setStatus('Split reverted', 'text-success');
+
+        // Surgical update
+        const newLayer = updateWayWithSegments(wayId, data.segments);
+
+        // If the split was focused, update focus to the merged way
+        if (currentClickedFeature && (String(currentClickedFeature.properties.id) === String(wayId) || String(currentClickedFeature.properties.id).startsWith(String(wayId) + ':'))) {
+            if (newLayer && newLayer._featureRef) {
+                currentClickedLayer = newLayer;
+                currentClickedFeature = newLayer._featureRef;
+                newLayer._osmCat = newLayer._featureRef.properties.category;
+                newLayer.setStyle(HIGHLIGHT_STYLES[newLayer._osmCat]);
+                showProps(newLayer._featureRef.properties, newLayer._featureRef);
+            } else {
+                currentClickedLayer = null;
+                currentClickedFeature = null;
+                document.getElementById('props-content').innerHTML = 
+                  '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+            }
+            clearNodes();
+        }
+        
+        // Refresh only metadata (changes list, etc.) without map flashing
+        refreshMetadata(currentFile);
+      } else {
+        setStatus('Undo failed', 'text-danger');
+      }
+    }function renderHiddenPanel() {
   const panel = document.getElementById('hidden-panel');
   const list  = document.getElementById('hidden-list');
   const count = document.getElementById('hidden-count');
@@ -540,15 +824,18 @@ function renderHiddenPanel() {
   if (!hiddenWays.length || currentAppMode === 'planner') { panel.style.display = 'none'; return; }
   panel.style.display = '';
   count.textContent = `(${hiddenWays.length})`;
-  list.innerHTML = [...hiddenWays].reverse().map(d => `
-    <div class="change-item" style="cursor:pointer;" onclick="focusFeatureById(${d.id})">
+  list.innerHTML = [...hiddenWays].reverse().map(d => {
+    const wayIdJson = JSON.stringify(d.id);
+    return `
+    <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
       <div>
         <span>${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
         <br><span class="change-id">#${d.id}</span>
       </div>
       <button class="btn btn-sm btn-outline-info py-0 px-1" style="font-size:0.7rem;"
-              title="Show object" onclick="event.stopPropagation(); showWay(${d.id})">&#128065;</button>
-    </div>`).join('');
+              title="Show object" onclick='event.stopPropagation(); showWay(${wayIdJson})'>&#128065;</button>
+    </div>`;
+  }).join('');
 }
 
 async function undoWayDeletion(wayId) {
@@ -564,25 +851,18 @@ async function undoNodeDeletion(wayId, nodeId) {
   if (!currentFile) return;
   const res = await restoreNodeApi(currentFile, wayId, nodeId);
   if (res.ok) {
-    changeLog = changeLog.filter(c => !(c.type === 'node' && c.way_id === wayId && c.node_id === nodeId));
-    await _reloadWay(wayId);
-  }
-}
-
-async function undoTagOverride(wayId) {
-  if (!currentFile) return;
-  const res = await deleteWayTagsApi(currentFile, wayId);
-  if (res.ok) {
-    changeLog = changeLog.filter(c => !(c.type === 'tag' && c.id === wayId));
+    changeLog = changeLog.filter(c => !(c.type === 'node' && String(c.way_id) === String(wayId) && c.node_id === nodeId));
     await _reloadWay(wayId);
   }
 }
 
 async function undoWayNodeMoves(wayId) {
   if (!currentFile) return;
-  const res = await undoWayNodeMovesApi(currentFile, wayId);
+  // Pass original way ID to backend, but use virtual ID for local state
+  const originalWayId = String(wayId).split(':')[0];
+  const res = await undoWayNodeMovesApi(currentFile, originalWayId);
   if (res.ok) {
-    changeLog = changeLog.filter(c => !(c.type === 'move' && c.id === wayId));
+    changeLog = changeLog.filter(c => !(c.type === 'move' && String(c.id) === String(wayId)));
     await _reloadWay(wayId);
   }
 }
@@ -597,6 +877,10 @@ function togglePanel(name) {
 }
 
 function showAnnProps(ann) {
+  if (currentClickedFeature) {
+    clearNodes();
+    currentClickedFeature = null;
+  }
   const props = ann.properties || {};
   const propRows = Object.entries(props)
     .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
@@ -643,9 +927,16 @@ async function deleteSelectedAnnotation() {
     if (editSelectedLayer.editing) editSelectedLayer.editing.disable();
     drawnItems.removeLayer(editSelectedLayer);
     annotations = annotations.filter(a => a.id !== annId);
+    if (currentClickedLayer === editSelectedLayer) {
+      currentClickedLayer = null;
+      const propsEl = document.getElementById('props-content');
+      if (propsEl) propsEl.innerHTML = '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+    }
     editSelectedLayer = null;
     renderAnnotationList();
     setStatus('Annotation deleted', 'text-success');
+  } else {
+    setStatus('Failed to delete annotation', 'text-danger');
   }
 }
 
@@ -653,9 +944,17 @@ async function removeAnnotationById(id) {
   if (!currentFile) return;
   const res = await deleteAnnotationApi(currentFile, id);
   if (res.ok) {
+    if (currentClickedLayer && currentClickedLayer.options && currentClickedLayer.options._ann_id === id) {
+      currentClickedLayer = null;
+      const propsEl = document.getElementById('props-content');
+      if (propsEl) propsEl.innerHTML = '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+    }
     annotations = annotations.filter(a => a.id !== id);
     renderAnnotationLayer();
     renderAnnotationList();
+    setStatus('Annotation deleted', 'text-success');
+  } else {
+    setStatus('Failed to delete annotation', 'text-danger');
   }
 }
 
@@ -731,3 +1030,50 @@ function openAnnEditModal(annId) {
   updateAnnTypeFields();
   new bootstrap.Modal(document.getElementById('ann-detail-modal')).show();
 }
+
+let pendingGpxFile = null;
+
+function handleGpxMapCreation(file) {
+  pendingGpxFile = file;
+  const nameInput = document.getElementById('gpx-name-input');
+  if (nameInput) {
+    nameInput.value = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_\-]/g, "_");
+  }
+  new bootstrap.Modal(document.getElementById('gpx-upload-modal')).show();
+}
+
+document.getElementById('gpx-upload-submit')?.addEventListener('click', async () => {
+  const name = document.getElementById('gpx-name-input').value.trim();
+  if (!name || !pendingGpxFile) {
+    document.getElementById('gpx-name-input').focus();
+    return;
+  }
+  bootstrap.Modal.getInstance(document.getElementById('gpx-upload-modal')).hide();
+  setStatus('Processing GPX and fetching OSM data... (may take 1–2 min)', 'text-warning');
+
+  const formData = new FormData();
+  formData.append('file', pendingGpxFile);
+  formData.append('name', name);
+
+  try {
+    const data = await uploadGpxApi(formData);
+    setStatus(
+      `GPX Processed: ${data.roads} roads, ${data.footways} footways, ${data.barriers} barriers`,
+      'text-success'
+    );
+    const sel = document.getElementById('file-select');
+    if (sel && ![...sel.options].some(o => o.value === data.filename)) {
+      sel.appendChild(new Option(data.filename, data.filename));
+    }
+    if (sel) sel.value = data.filename;
+    await loadMapData(data.filename);
+  } catch (err) {
+    setStatus(`GPX processing failed: ${err.message}`, 'text-danger');
+  } finally {
+    pendingGpxFile = null;
+  }
+});
+
+document.getElementById('gpx-name-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('gpx-upload-submit').click();
+});

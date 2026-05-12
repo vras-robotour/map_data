@@ -180,9 +180,9 @@ def combine_ways(ids: List[int], ways: Dict[int, Way]) -> List[int]:
             is_area = current_nodes[0] == current_nodes[-1]
             merged_line = linemerge(current_lines)
 
-            new_id = int(-(10**15) * np.random.random())
+            new_id = -1
             while new_id in ways:
-                new_id = int(-(10**15) * np.random.random())
+                new_id -= 1
 
             new_way = Way(
                 id=new_id,
