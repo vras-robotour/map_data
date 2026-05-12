@@ -48,6 +48,7 @@ const STYLES = {
   crossroad:  { color: '#7e22ce', weight: 1,   fillColor: '#9333ea', fillOpacity: 0.85 },
   annotation: { color: '#cc5500', weight: 2,   fillColor: '#ff8c00', fillOpacity: 0.35 },
   path:       { color: '#22c55e', weight: 3,   fillOpacity: 0, opacity: 0.7 },
+  waypoint:   { radius: 5, color: '#000', weight: 1, fillColor: '#50C2F6', fillOpacity: 0.9 },
 };
 
 const HIGHLIGHT_STYLES = {
@@ -57,4 +58,5 @@ const HIGHLIGHT_STYLES = {
   crossroad:  { color: '#f0f',   weight: 2.5, fillColor: '#a855f7', fillOpacity: 0.95 },
   annotation: { color: '#fff', weight: 3.5, fillColor: '#ff8c00', fillOpacity: 0.7 },
   path:       { color: '#fff', weight: 4.5, fillOpacity: 0, opacity: 1.0 },
+  waypoint:   { radius: 7, color: '#fff', weight: 2, fillColor: '#50C2F6', fillOpacity: 1.0 },
 };

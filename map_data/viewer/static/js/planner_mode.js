@@ -517,7 +517,7 @@ ${pts}
     };
     container.appendChild(delBtn);
     
-    L.popup({ minWidth: 120, className: 'planner-popup', offset: [0, -5] })
+    L.popup({ minWidth: 120, className: 'planner-popup', offset: [0, -5], closeButton: false })
       .setLatLng(latlng)
       .setContent(container)
       .openOn(map);

@@ -18,20 +18,24 @@ function addAnnotationToLayer(ann) {
   L.geoJSON(ann.geometry, { style: _annStyle(ann) }).eachLayer(layer => {
     layer.options._ann_id = ann.id;
     const cat = ann.type === 'path' ? 'path' : 'annotation';
+
     layer.on('click', e => {
       if (currentAppMode === 'planner') return;
       L.DomEvent.stopPropagation(e);
       if (currentMode === 'view') {
-        if (currentClickedLayer && currentClickedLayer !== layer) {
-          const oldCat = currentClickedLayer._osmCat;
-          currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
-        }
-        layer._osmCat = cat;
-        currentClickedLayer = layer;
-        layer.setStyle(HIGHLIGHT_STYLES[cat]);
-        showAnnProps(ann);
+        selectAnnotation(ann, layer);
       }
     });
+
+    layer.on('contextmenu', e => {
+      if (currentAppMode === 'planner') return;
+      L.DomEvent.stopPropagation(e);
+      L.DomEvent.preventDefault(e);
+      if (currentMode === 'view') {
+        showAnnotationContextMenu(ann, layer, e.latlng);
+      }
+    });
+
     drawnItems.addLayer(layer);
   });
 }
@@ -110,18 +114,12 @@ function setupWayLayer(feature, layer, cat) {
   subtypeLayers[cat][st].push(layer);
   layer._featureId  = feature.properties.id;
   layer._featureRef = feature;
+
   layer.on('click', e => {
     if (currentAppMode === 'planner') return;
     L.DomEvent.stopPropagation(e);
     if (currentMode === 'view') {
-      if (currentClickedLayer && currentClickedLayer !== layer) {
-        const oldCat = currentClickedLayer._osmCat;
-        currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
-      }
-      layer._osmCat = cat;
-      currentClickedLayer = layer;
-      layer.setStyle(HIGHLIGHT_STYLES[cat]);
-      showProps(feature.properties, feature);
+      selectWay(feature, layer, cat);
     } else if (currentMode === 'edit' && cat !== 'crossroad') {
       if (currentClickedLayer && currentClickedLayer !== layer) {
         const oldCat = currentClickedLayer._osmCat;
@@ -137,6 +135,15 @@ function setupWayLayer(feature, layer, cat) {
       currentClickedLayer   = layer;
       currentClickedFeature = feature;
       deleteCurrentWay();
+    }
+  });
+
+  layer.on('contextmenu', e => {
+    if (currentAppMode === 'planner') return;
+    L.DomEvent.stopPropagation(e);
+    L.DomEvent.preventDefault(e);
+    if (currentMode === 'view' && cat !== 'crossroad') {
+      showWayContextMenu(feature, layer, e.latlng, cat);
     }
   });
 }
@@ -312,23 +319,19 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
     geoLayers.waypoint = L.geoJSON(
       { type: 'FeatureCollection', features: byCategory.waypoint },
       {
-        pointToLayer: (_, latlng) =>
-          L.circleMarker(latlng, {
-            radius: 5, color: '#000', weight: 1, fillColor: '#50C2F6', fillOpacity: 0.9,
-          }),
+        pointToLayer: (_, latlng) => L.circleMarker(latlng, STYLES.waypoint),
         onEachFeature: (feature, layer) => {
           layer.on('click', e => {
             if (currentAppMode === 'planner') return;
             L.DomEvent.stopPropagation(e);
             if (currentMode === 'view') {
-              if (currentClickedLayer && currentClickedLayer !== layer) {
-                const oldCat = currentClickedLayer._osmCat;
-                currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
-              }
-              currentClickedLayer = layer;
-              // Waypoints don't have a highlight style yet, but we store them
-              showProps(feature.properties);
+              selectWay(feature, layer, 'waypoint');
             }
+          });
+          layer.on('contextmenu', e => {
+            if (currentAppMode === 'planner') return;
+            L.DomEvent.stopPropagation(e);
+            L.DomEvent.preventDefault(e);
           });
         },
       }

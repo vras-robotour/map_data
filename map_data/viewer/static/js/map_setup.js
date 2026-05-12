@@ -26,12 +26,7 @@ function setMode(newMode, commit = true) {
   const prev = currentMode;
   currentMode = newMode;
 
-  clearNodes();
-  if (currentClickedLayer) {
-    currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
-    currentClickedLayer = null;
-  }
-  currentClickedFeature = null;
+  deselectCurrent();
 
   // Commit / disable previous mode
   if (commit) {

@@ -113,6 +113,105 @@ function renderSubtypeFilters(cat) {
   });
 }
 
+function deselectCurrent() {
+  if (currentClickedLayer) {
+    const oldCat = currentClickedLayer._osmCat;
+    currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options?._ann_id)));
+    currentClickedLayer = null;
+  }
+  currentClickedFeature = null;
+  document.getElementById('props-content').innerHTML = '<div class="text-secondary" style="font-style:italic;">Click a feature to inspect</div>';
+  clearNodes();
+}
+
+function selectWay(feature, layer, cat) {
+  if (currentClickedLayer === layer) return;
+  deselectCurrent();
+  layer._osmCat = cat;
+  currentClickedLayer = layer;
+  currentClickedFeature = feature;
+  layer.setStyle(HIGHLIGHT_STYLES[cat]);
+  showProps(feature.properties, feature);
+}
+
+function selectAnnotation(ann, layer) {
+  if (currentClickedLayer === layer) return;
+  deselectCurrent();
+  const cat = ann.type === 'path' ? 'path' : 'annotation';
+  layer._osmCat = cat;
+  currentClickedLayer = layer;
+  layer.setStyle(HIGHLIGHT_STYLES[cat]);
+  showAnnProps(ann);
+}
+
+function showWayContextMenu(feature, layer, latlng, cat) {
+  if (currentAppMode === 'planner') return;
+  // Select it first so sidebar matches
+  selectWay(feature, layer, cat);
+
+  const props = feature.properties;
+  const container = document.createElement('div');
+  container.className = 'context-menu';
+
+  if (['road', 'footway', 'barrier'].includes(props.category) && feature.geometry.type !== 'Point') {
+    const nodeBtn = document.createElement('button');
+    nodeBtn.innerHTML = nodeLayer ? '🙈 Hide Nodes' : '👁️ Show Nodes';
+    nodeBtn.onclick = () => { map.closePopup(); toggleNodes(); };
+    container.appendChild(nodeBtn);
+  }
+
+  const editBtn = document.createElement('button');
+  editBtn.innerHTML = '✎ Edit Properties';
+  editBtn.onclick = () => { map.closePopup(); openWayEditModal(); };
+  container.appendChild(editBtn);
+
+  if (hiddenWayIds.has(props.id)) {
+    const showBtn = document.createElement('button');
+    showBtn.innerHTML = '👁️ Show Object';
+    showBtn.onclick = () => { map.closePopup(); showWay(props.id); };
+    container.appendChild(showBtn);
+  } else {
+    const hideBtn = document.createElement('button');
+    hideBtn.innerHTML = '🙈 Hide Object';
+    hideBtn.onclick = () => { map.closePopup(); hideCurrentWay(); };
+    container.appendChild(hideBtn);
+
+    const delBtn = document.createElement('button');
+    delBtn.innerHTML = '🗑️ Delete Object';
+    delBtn.onclick = () => { map.closePopup(); deleteCurrentWay(); };
+    container.appendChild(delBtn);
+  }
+
+  L.popup({ minWidth: 150, className: 'planner-popup', offset: [0, -5], closeButton: false })
+    .setLatLng(latlng)
+    .setContent(container)
+    .openOn(map);
+}
+
+function showAnnotationContextMenu(ann, layer, latlng) {
+  if (currentAppMode === 'planner') return;
+  // Select it first so sidebar matches
+  selectAnnotation(ann, layer);
+
+  const container = document.createElement('div');
+  container.className = 'context-menu';
+
+  const editBtn = document.createElement('button');
+  editBtn.innerHTML = '✎ Edit Properties';
+  editBtn.onclick = () => { map.closePopup(); openAnnEditModal(ann.id); };
+  container.appendChild(editBtn);
+
+  const delBtn = document.createElement('button');
+  delBtn.innerHTML = '🗑️ Delete Annotation';
+  delBtn.onclick = () => { map.closePopup(); removeAnnotationById(ann.id); };
+  container.appendChild(delBtn);
+
+  L.popup({ minWidth: 150, className: 'planner-popup', offset: [0, -5], closeButton: false })
+    .setLatLng(latlng)
+    .setContent(container)
+    .openOn(map);
+}
+
 function showProps(props, feature = null) {
   if (feature !== currentClickedFeature) {
     clearNodes();
@@ -168,7 +267,7 @@ function showProps(props, feature = null) {
                                onclick="hideCurrentWay()">&#128065; Hide Object</button>`;
       el.innerHTML += `<button class="btn btn-sm btn-outline-danger mt-1"
                                style="font-size:0.72rem;width:100%;"
-                               onclick="deleteCurrentWay()">&#128465; Delete Way</button>`;
+                               onclick="deleteCurrentWay()">&#128465; Delete Object</button>`;
     }
   }
 }
@@ -429,7 +528,7 @@ function showNodeContextMenu(node, index, latlng) {
   delBtn.onclick = () => { map.closePopup(); deleteCurrentNode(wayId, node.id); };
   container.appendChild(delBtn);
 
-  L.popup({ minWidth: 150, className: 'planner-popup', offset: [0, -5] })
+  L.popup({ minWidth: 150, className: 'planner-popup', offset: [0, -5], closeButton: false })
     .setLatLng(latlng)
     .setContent(container)
     .openOn(map);
