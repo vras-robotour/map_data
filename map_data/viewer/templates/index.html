@@ -60,6 +60,9 @@
     <div class="btn-group btn-group-sm me-2" style="flex-shrink:0;">
       <button class="btn btn-outline-info app-mode-btn active" data-app-mode="viewer" title="Map data viewer and editor">VIEWER</button>
       <button class="btn btn-outline-info app-mode-btn" data-app-mode="planner" title="Path planner and mission tool">PLANNER</button>
+      {% if ros_available %}
+      <button class="btn btn-outline-info app-mode-btn" data-app-mode="tracker" title="Real-time robot tracking">TRACKER</button>
+      {% endif %}
     </div>
 
     <div id="status" class="text-secondary ms-auto px-2" style="font-size:0.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
@@ -127,6 +130,15 @@
           <div class="layer-swatch" style="background:#50C2F6; border:1px solid #000;"></div>
           <span>Waypoints</span>
         </div>
+
+        {% if ros_available %}
+        <!-- Robot -->
+        <div class="layer-row">
+          <input type="checkbox" class="st-check" data-layer="robot" checked>
+          <div class="layer-swatch" style="background:#00ff00; border:1px solid #000;"></div>
+          <span>Robot</span>
+        </div>
+        {% endif %}
       </div>
 
       <!-- Properties panel -->
@@ -223,6 +235,21 @@
 
         <div class="mt-auto pt-3 text-center border-top border-secondary">
           <span id="point-count" class="text-secondary" style="font-size: 0.7rem;">Click map to start drawing</span>
+        </div>
+      </div>
+
+      <!-- Tracker panel (initially hidden) -->
+      <div id="tracker-sidebar-panel" class="panel" style="flex: 1; display:none; flex-direction: column;">
+        <div class="panel-title">ROBOT STATUS</div>
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <button id="tracker-center-robot" class="btn btn-sm btn-outline-info py-0 px-2" style="font-size: 0.7rem;">Center Robot</button>
+          <div class="form-check mb-0">
+            <input class="form-check-input bg-dark border-secondary" type="checkbox" id="tracker-follow-robot">
+            <label class="form-check-label text-secondary" for="tracker-follow-robot" style="font-size: 0.7rem;">Follow</label>
+          </div>
+        </div>
+        <div id="tracker-status-content" class="mt-2" style="overflow-y: auto; font-size: 0.8rem;">
+          <div class="text-secondary italic">Waiting for telemetry...</div>
         </div>
       </div>
 
@@ -413,6 +440,10 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <!-- Custom JS modules -->
+<script>
+  const ros_available = {{ ros_available | tojson }};
+</script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 <script src="{{ url_for('static', filename='js/state.js') }}"></script>
 <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/api.js') }}"></script>
@@ -421,6 +452,7 @@
 <script src="{{ url_for('static', filename='js/draw_handlers.js') }}"></script>
 <script src="{{ url_for('static', filename='js/map_setup.js') }}"></script>
 <script src="{{ url_for('static', filename='js/planner_mode.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tracker_mode.js') }}"></script>
 
 </body>
 </html>
