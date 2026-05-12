@@ -1,5 +1,8 @@
 import os
-from typing import Any, List, Optional
+from typing import Any, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from map_data.map_data import CoordsData
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,7 +14,7 @@ from map_data.utils.background_map import get_background_image
 from map_data.utils.way import Way
 
 
-def plot_background_map(ax: Axes, image: Image.Image, coords_data: Any):
+def plot_background_map(ax: Axes, image: Image.Image, coords_data: "CoordsData"):
     """
     Plot background map.
     """

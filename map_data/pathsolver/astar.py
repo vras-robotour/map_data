@@ -1,7 +1,15 @@
 import heapq
+from typing import Callable, Iterable, List, Optional, Tuple, TypeVar
+
+_N = TypeVar("_N")
 
 
-def astar_search(start_node, goal_node, get_neighbors_func, heuristic_func):
+def astar_search(
+    start_node: _N,
+    goal_node: _N,
+    get_neighbors_func: Callable[[_N], Iterable[Tuple[_N, float]]],
+    heuristic_func: Callable[[_N], float],
+) -> Optional[List[_N]]:
     """
     A generic A* search implementation.
 

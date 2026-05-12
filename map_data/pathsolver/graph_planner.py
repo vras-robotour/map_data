@@ -2,17 +2,21 @@ import numpy as np
 from shapely.geometry import Point, LineString
 from shapely.strtree import STRtree
 from map_data.pathsolver.astar import astar_search
+from typing import Dict, List, Optional, Tuple, Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from map_data.map_data import MapData
 
 
 class GraphPlanner:
-    def __init__(self, map_data, highway_types=None):
+    def __init__(self, map_data: "MapData", highway_types: Optional[List[str]] = None) -> None:
         self.map_data = map_data
         self.highway_types = highway_types or ["footway"]
-        self.nodes = self.map_data.get_points()  # Dict[int, np.ndarray (3,1)]
-        self.graph = {}  # node_id -> [(neighbor_id, distance)]
+        self.nodes: Dict[int, np.ndarray] = self.map_data.get_points()
+        self.graph: Dict[int, List[Tuple[int, float]]] = {}
         self._build_graph()
 
-    def _build_graph(self):
+    def _build_graph(self) -> None:
         self.graph = {}
         self._allowed_ways = []
         if "footway" in self.highway_types:
@@ -114,11 +118,11 @@ class GraphPlanner:
         self._edge_node_pairs = final_edge_node_pairs
         self._edge_tree = STRtree(final_edge_segments) if final_edge_segments else None
 
-    def _add_edge(self, u, v, d):
+    def _add_edge(self, u: int, v: int, d: float) -> None:
         self.graph.setdefault(u, []).append((v, d))
         self.graph.setdefault(v, []).append((u, d))
 
-    def _find_closest_edge(self, point_utm):
+    def _find_closest_edge(self, point_utm: np.ndarray) -> Tuple[Optional[Tuple[int, int, np.ndarray]], float]:
         """Find the closest edge using an STRtree spatial index."""
         if self._edge_tree is None:
             return None, float("inf")
@@ -135,7 +139,7 @@ class GraphPlanner:
         projected_point = np.array(line.interpolate(proj_dist).coords[0])
         return (n1, n2, projected_point), min_dist
 
-    def a_star(self, start_node, goal_node, extra_nodes=None):
+    def a_star(self, start_node, goal_node, extra_nodes: Optional[Dict] = None) -> Optional[List[np.ndarray]]:
         """
         Standard A* between two nodes.
         extra_nodes: dict for temporary nodes (e.g. snapped points)
@@ -162,12 +166,12 @@ class GraphPlanner:
 
         return [self._get_node_pos(node, extra_nodes) for node in node_path]
 
-    def _get_node_pos(self, node_id, extra_nodes_data=None):
+    def _get_node_pos(self, node_id: Union[int, str], extra_nodes_data: Optional[Dict] = None) -> np.ndarray:
         if isinstance(node_id, str) and node_id.startswith("temp_"):
             return extra_nodes_data["positions"][node_id]
         return self.nodes[node_id].ravel()[:2]
 
-    def plan(self, path_utm):
+    def plan(self, path_utm: np.ndarray) -> Union[np.ndarray, bool]:
         """
         Plan path between multiple UTM points.
         Connects clicked points to the nearest point on the nearest edge.

@@ -1,9 +1,17 @@
 import heapq
 import numpy as np
 from shapely.geometry import LineString
+from typing import Optional, Tuple, Union
 
 
-def grid_astar(grid, start_utm, goal_utm, low, cs, simplify_path=True):
+def grid_astar(
+    grid: np.ndarray,
+    start_utm: Union[Tuple[float, float], np.ndarray],
+    goal_utm: Union[Tuple[float, float], np.ndarray],
+    low: Tuple[float, float],
+    cs: float,
+    simplify_path: bool = True,
+) -> Optional[np.ndarray]:
     """
     Optimized A* search on a 2D grid.
 
