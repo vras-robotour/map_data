@@ -25,7 +25,7 @@ FOOTWAY_VALUES = frozenset(
 
 @dataclass
 class Way:
-    id: int = -1
+    id: Any = -1
     is_area: bool = False
     nodes: List[Any] = field(default_factory=list)
     tags: Dict[str, str] = field(default_factory=dict)

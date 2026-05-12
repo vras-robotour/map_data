@@ -41,7 +41,9 @@ class GraphPlanner:
         if tree:
             threshold = 5.0
             for way in self._allowed_ways:
-                if way.id >= 0:
+                # way.id >= 0 check fails if way.id is a string (virtual ID for split ways).
+                # All split ways (strings) and OSM ways (positive ints) should be skipped here.
+                if not isinstance(way.id, int) or way.id >= 0:
                     continue
                 if not way.nodes:
                     continue
