@@ -52,6 +52,72 @@ from .helpers import (
 bp = Blueprint("viewer", __name__)
 logger = logging.getLogger(__name__)
 
+_CAT_FOR_LIST = {
+    "roads_list": "road",
+    "footways_list": "footway",
+    "barriers_list": "barrier",
+}
+
+
+def _apply_way_edits(md, store):
+    """Apply deletions, node deletions, splits, and position overrides to md in-place."""
+    zn, zl = md.zone_number, md.zone_letter
+    nodes_cache = getattr(md, "nodes_cache", {})
+
+    deleted_way_ids = get_deleted_way_ids(store)
+    has_node_dels = bool(store.get("deleted_nodes"))
+    has_splits = bool(store.get("split_ways"))
+
+    if deleted_way_ids or has_node_dels or has_splits:
+        for lst_name in ("roads_list", "footways_list", "barriers_list"):
+            cat = _CAT_FOR_LIST[lst_name]
+            new_lst = []
+            for w in getattr(md, lst_name):
+                if w.id in deleted_way_ids:
+                    continue
+                del_nids = get_deleted_node_ids(store, w.id)
+                if del_nids:
+                    w = rebuild_way_without_nodes(w, del_nids, zn, zl, nodes_cache, category=cat)
+                    if w is None:
+                        continue
+                split_nids = get_split_node_ids(store, w.id)
+                if split_nids:
+                    segments = split_way(w, split_nids, zn, zl, nodes_cache)
+                    for i, seg in enumerate(segments):
+                        virtual_id = f"{w.id}:{i}"
+                        seg.id = virtual_id
+                        seg_del_nids = get_deleted_node_ids(store, virtual_id)
+                        if seg_del_nids:
+                            seg = rebuild_way_without_nodes(
+                                seg, seg_del_nids, zn, zl, nodes_cache, category=cat
+                            )
+                            if seg is None:
+                                continue
+                        new_lst.append(seg)
+                else:
+                    new_lst.append(w)
+            setattr(md, lst_name, new_lst)
+        md.crossroads_list = md.parse_intersections(
+            {str(w.id): w for w in md.footways_list}
+        )
+
+    node_pos_store = store.get("node_position_overrides", {})
+    if node_pos_store:
+        for lst_name in ("roads_list", "footways_list", "barriers_list"):
+            new_lst = []
+            for w in getattr(md, lst_name):
+                ov = get_node_position_overrides(store, w.id)
+                if ov:
+                    w = (
+                        apply_node_position_overrides(
+                            w, ov, zn, zl, nodes_cache,
+                            category=_CAT_FOR_LIST[lst_name],
+                        )
+                        or w
+                    )
+                new_lst.append(w)
+            setattr(md, lst_name, new_lst)
+
 
 def _get_data_dir():
     if current_app.config.get("DATA_DIR"):
@@ -108,90 +174,8 @@ def get_mapdata():
         abort(404, f"File not found: {filename}")
     map_data = copy.copy(load_mapdata_cached(path))
     store = load_annotations(_annotation_path(filename))
-    deleted_way_ids = get_deleted_way_ids(store)
-    has_node_dels = bool(store.get("deleted_nodes"))
-    has_splits = bool(store.get("split_ways"))
 
-    _cat_for_list = {
-        "roads_list": "road",
-        "footways_list": "footway",
-        "barriers_list": "barrier",
-    }
-
-    if deleted_way_ids or has_node_dels or has_splits:
-        for lst_name in ("roads_list", "footways_list", "barriers_list"):
-            cat = _cat_for_list[lst_name]
-            new_lst = []
-            for w in getattr(map_data, lst_name):
-                if w.id in deleted_way_ids:
-                    continue
-                del_nids = get_deleted_node_ids(store, w.id)
-                if del_nids:
-                    w = rebuild_way_without_nodes(
-                        w,
-                        del_nids,
-                        map_data.zone_number,
-                        map_data.zone_letter,
-                        getattr(map_data, "nodes_cache", {}),
-                        category=cat,
-                    )
-                    if w is None:
-                        continue
-
-                # Apply splits
-                split_nids = get_split_node_ids(store, w.id)
-                if split_nids:
-                    segments = split_way(
-                        w,
-                        split_nids,
-                        map_data.zone_number,
-                        map_data.zone_letter,
-                        getattr(map_data, "nodes_cache", {}),
-                    )
-                    for i, seg in enumerate(segments):
-                        virtual_id = f"{w.id}:{i}"
-                        seg.id = virtual_id
-                        # Apply segment-specific deletions
-                        seg_del_nids = get_deleted_node_ids(store, virtual_id)
-                        if seg_del_nids:
-                            seg = rebuild_way_without_nodes(
-                                seg,
-                                seg_del_nids,
-                                map_data.zone_number,
-                                map_data.zone_letter,
-                                getattr(map_data, "nodes_cache", {}),
-                                category=cat,
-                            )
-                            if seg is None:
-                                continue
-                        new_lst.append(seg)
-                else:
-                    new_lst.append(w)
-            setattr(map_data, lst_name, new_lst)
-        map_data.crossroads_list = map_data.parse_intersections(
-            {str(w.id): w for w in map_data.footways_list}
-        )
-    node_pos_store = store.get("node_position_overrides", {})
-    if node_pos_store:
-        zn, zl = map_data.zone_number, map_data.zone_letter
-        for lst_name in ("roads_list", "footways_list", "barriers_list"):
-            new_lst = []
-            for w in getattr(map_data, lst_name):
-                ov = get_node_position_overrides(store, w.id)
-                if ov:
-                    w = (
-                        apply_node_position_overrides(
-                            w,
-                            ov,
-                            zn,
-                            zl,
-                            getattr(map_data, "nodes_cache", {}),
-                            category=_cat_for_list[lst_name],
-                        )
-                        or w
-                    )
-                new_lst.append(w)
-            setattr(map_data, lst_name, new_lst)
+    _apply_way_edits(map_data, store)
 
     geojson = mapdata_to_geojson(map_data)
     tag_overrides = store.get("tag_overrides", {})
@@ -512,6 +496,7 @@ def get_way(way_id):
 
     md = load_mapdata_cached(path)
     store = load_annotations(_annotation_path(filename))
+    nodes_cache = getattr(md, "nodes_cache", {})
 
     way = None
     category = None
@@ -1133,87 +1118,7 @@ def get_merged_mapdata(filename):
     md = copy.deepcopy(load_mapdata_cached(path))
     zn, zl = md.zone_number, md.zone_letter
 
-    deleted_way_ids = get_deleted_way_ids(store)
-    has_node_dels = bool(store.get("deleted_nodes"))
-    has_splits = bool(store.get("split_ways"))
-
-    _cat_for_list = {
-        "roads_list": "road",
-        "footways_list": "footway",
-        "barriers_list": "barrier",
-    }
-
-    if deleted_way_ids or has_node_dels or has_splits:
-        for lst_name in ("roads_list", "footways_list", "barriers_list"):
-            cat = _cat_for_list[lst_name]
-            new_lst = []
-            for w in getattr(md, lst_name):
-                if w.id in deleted_way_ids:
-                    continue
-                del_nids = get_deleted_node_ids(store, w.id)
-                if del_nids:
-                    w = rebuild_way_without_nodes(
-                        w,
-                        del_nids,
-                        zn,
-                        zl,
-                        getattr(md, "nodes_cache", {}),
-                        category=cat,
-                    )
-                    if w is None:
-                        continue
-
-                # Apply splits
-                split_nids = get_split_node_ids(store, w.id)
-                if split_nids:
-                    segments = split_way(
-                        w,
-                        split_nids,
-                        zn,
-                        zl,
-                        getattr(md, "nodes_cache", {}),
-                    )
-                    for i, seg in enumerate(segments):
-                        virtual_id = f"{w.id}:{i}"
-                        seg.id = virtual_id
-                        # Apply segment-specific deletions
-                        seg_del_nids = get_deleted_node_ids(store, virtual_id)
-                        if seg_del_nids:
-                            seg = rebuild_way_without_nodes(
-                                seg,
-                                seg_del_nids,
-                                zn,
-                                zl,
-                                getattr(md, "nodes_cache", {}),
-                                category=cat,
-                            )
-                            if seg is None:
-                                continue
-                        new_lst.append(seg)
-                else:
-                    new_lst.append(w)
-            setattr(md, lst_name, new_lst)
-
-    node_pos_store = store.get("node_position_overrides", {})
-    if node_pos_store:
-        for lst_name in ("roads_list", "footways_list", "barriers_list"):
-            new_lst = []
-            for w in getattr(md, lst_name):
-                ov = get_node_position_overrides(store, w.id)
-                if ov:
-                    w = (
-                        apply_node_position_overrides(
-                            w,
-                            ov,
-                            zn,
-                            zl,
-                            getattr(md, "nodes_cache", {}),
-                            category=_cat_for_list[lst_name],
-                        )
-                        or w
-                    )
-                new_lst.append(w)
-            setattr(md, lst_name, new_lst)
+    _apply_way_edits(md, store)
 
     tag_overrides = store.get("tag_overrides", {})
     if tag_overrides:
@@ -1229,8 +1134,6 @@ def get_merged_mapdata(filename):
         for w in md.footways_list:
             (new_roads if w.is_road() else new_footways).append(w)
         md.roads_list, md.footways_list = new_roads, new_footways
-
-    if deleted_way_ids or has_node_dels or tag_overrides or has_splits:
         md.crossroads_list = md.parse_intersections(
             {str(w.id): w for w in md.footways_list}
         )
@@ -1526,7 +1429,7 @@ def create_replan():
         obstacles = ways_to_shapely(filtered_barriers)
         replanner = ReplanPath(args, obstacles, transfer_id=transfer_id)
         replanner.fill_grid(md, highway_types=highway_types)
-        res = replanner.replan_rrt(utm_path, algorithm=sub_algorithm)
+        res = replanner.replan(utm_path, algorithm=sub_algorithm)
 
     if res is None:
         return jsonify({"retrieveNum": 1, "newPath": None, "status": "cancelled"})
