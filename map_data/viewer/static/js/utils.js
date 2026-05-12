@@ -34,6 +34,7 @@ function escHtml(s) {
 }
 
 function _annStyle(ann) {
+  if (!ann) return STYLES.annotation;
   return ann.type === 'path' ? STYLES.path : STYLES.annotation;
 }
 

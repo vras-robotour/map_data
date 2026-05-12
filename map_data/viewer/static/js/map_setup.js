@@ -348,14 +348,24 @@ async function initApp() {
         break;
       case 'Delete':
       case 'Backspace':
-        if (currentMode === 'edit') { e.preventDefault(); deleteSelectedAnnotation(); }
-        else if (currentMode === 'view' && currentClickedFeature &&
-                 ['road', 'footway', 'barrier'].includes(currentClickedFeature.properties.category)) {
+        if (currentMode === 'edit') {
           e.preventDefault();
-          if (selectedNodeIndex >= 0 && currentNodes[selectedNodeIndex]) {
-            deleteCurrentNode(currentClickedFeature.properties.id, currentNodes[selectedNodeIndex].id);
-          } else {
-            deleteCurrentWay();
+          deleteSelectedAnnotation();
+        } else if (currentMode === 'view') {
+          if (currentClickedLayer && currentClickedLayer.options && currentClickedLayer.options._ann_id) {
+            e.preventDefault();
+            removeAnnotationById(currentClickedLayer.options._ann_id);
+            currentClickedLayer = null;
+            const propsEl = document.getElementById('props-content');
+            if (propsEl) propsEl.innerHTML = '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+          } else if (currentClickedFeature &&
+                   ['road', 'footway', 'barrier'].includes(currentClickedFeature.properties.category)) {
+            e.preventDefault();
+            if (selectedNodeIndex >= 0 && currentNodes[selectedNodeIndex]) {
+              deleteCurrentNode(currentClickedFeature.properties.id, currentNodes[selectedNodeIndex].id);
+            } else {
+              deleteCurrentWay();
+            }
           }
         }
         break;

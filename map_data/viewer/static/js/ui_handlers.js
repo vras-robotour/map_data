@@ -597,6 +597,10 @@ function togglePanel(name) {
 }
 
 function showAnnProps(ann) {
+  if (currentClickedFeature) {
+    clearNodes();
+    currentClickedFeature = null;
+  }
   const props = ann.properties || {};
   const propRows = Object.entries(props)
     .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
@@ -643,9 +647,16 @@ async function deleteSelectedAnnotation() {
     if (editSelectedLayer.editing) editSelectedLayer.editing.disable();
     drawnItems.removeLayer(editSelectedLayer);
     annotations = annotations.filter(a => a.id !== annId);
+    if (currentClickedLayer === editSelectedLayer) {
+      currentClickedLayer = null;
+      const propsEl = document.getElementById('props-content');
+      if (propsEl) propsEl.innerHTML = '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+    }
     editSelectedLayer = null;
     renderAnnotationList();
     setStatus('Annotation deleted', 'text-success');
+  } else {
+    setStatus('Failed to delete annotation', 'text-danger');
   }
 }
 
@@ -653,9 +664,17 @@ async function removeAnnotationById(id) {
   if (!currentFile) return;
   const res = await deleteAnnotationApi(currentFile, id);
   if (res.ok) {
+    if (currentClickedLayer && currentClickedLayer.options && currentClickedLayer.options._ann_id === id) {
+      currentClickedLayer = null;
+      const propsEl = document.getElementById('props-content');
+      if (propsEl) propsEl.innerHTML = '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+    }
     annotations = annotations.filter(a => a.id !== id);
     renderAnnotationLayer();
     renderAnnotationList();
+    setStatus('Annotation deleted', 'text-success');
+  } else {
+    setStatus('Failed to delete annotation', 'text-danger');
   }
 }
 
