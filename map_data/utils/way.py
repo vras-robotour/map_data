@@ -110,6 +110,3 @@ class Way:
     def _mask_points(points: List[Point], polygon: Polygon) -> filter:
         prepared = prep(polygon)
         return filter(prepared.contains, points)
-
-    def mask_points(self, points: List[Point], polygon: Polygon) -> filter:
-        return self._mask_points(points, polygon)
