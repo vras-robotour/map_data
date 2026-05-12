@@ -15,11 +15,13 @@ setup(
         (os.path.join("share", package_name, "launch"), glob("launch/*.launch.py")),
         (os.path.join("share", package_name, "data"), glob("data/*.gpx")),
         (os.path.join("share", package_name, "data"), glob("data/*.mapdata")),
+        (os.path.join("share", package_name, "data"), glob("data/*.annotations.json")),
         (os.path.join("share", package_name, "parameters"), glob("parameters/*.csv")),
     ],
     install_requires=[
         "setuptools",
         "flask",
+        "flask-socketio",
         "gpxpy",
         "numpy",
         "overpy",

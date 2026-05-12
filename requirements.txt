@@ -2,6 +2,7 @@ blinker
 click
 colorama
 flask
+flask_socketio
 gpxpy
 itsdangerous
 jinja2
