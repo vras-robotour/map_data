@@ -69,18 +69,18 @@ topic (cost-aware footway grid) and optionally publishes intersections as a
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `utm_frame` | `"utm"` | TF frame name for UTM coordinates |
-| `local_frame` | `"map"` | TF frame name for the local robot frame |
+| `local_frame` | `"local_utm"` | TF frame name for the local robot frame |
 | `utm_to_local` | `None` | 4×4 transform matrix; looked up from TF if not set |
 | `mapdata_file` | `None` | Absolute path to a `.mapdata` file |
 | `gpx_file` | `None` | Absolute path to a `.gpx` file (used if no `.mapdata`) |
 | `save_mapdata` | `false` | Save generated mapdata when loading from a `.gpx` |
 | `max_path_dist` | `1.0` | Max distance (m) at which a grid point receives a cost |
-| `neighbor_cost` | `"linear"` | Cost function: `linear`, `quadratic`, or `zero` |
+| `neighbor_cost` | `"linear"` | Cost falloff for cells near ways: `"linear"` = proportional to distance, `"quadratic"` = distance squared, `"zero"` = constant regardless of distance |
 | `grid_res` | `0.25` | Grid point spacing (m) |
 | `grid_max` | `[0.0, 0.0]` | Upper bounds of the local-frame grid (m). `[0, 0]` triggers auto-calc. |
 | `grid_min` | `[0.0, 0.0]` | Lower bounds of the local-frame grid (m). `[0, 0]` triggers auto-calc. |
 | `auto_utm` | `false` | Auto-calculate UTM-to-local transform from map center |
-| `publish_intersections` | `false` | Whether to publish footway intersections |
+| `publish_intersections` | `true` | Whether to publish footway intersections |
 
 ### Launching
 
