@@ -1,39 +1,44 @@
 #!/usr/bin/env python3
 
+import os
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
-def generate_launch_description():
-    # Declare launch arguments
-    mapdata_path = DeclareLaunchArgument(
-        "mapdata_path",
-        default_value=PathJoinSubstitution([FindPackageShare("map_data"), "data"]),
-        description="Path to the directory with map data.",
-    )
-    mapdata_file = DeclareLaunchArgument(
-        "mapdata_file",
-        default_value="stromovka.mapdata",
-        description="File with preprocessed OSM map data.",
-    )
-    gpx_file = DeclareLaunchArgument(
-        "gpx_file",
-        default_value="stromovka.gpx",
-        description="File with gpx coords denoting area to be processed.",
-    )
-    grid_topic = DeclareLaunchArgument(
-        "grid_topic",
-        default_value="osm_grid",
-        description="Name of the topic to which the grid will be published.",
-    )
-    publish_static_tf = DeclareLaunchArgument(
-        "publish_static_tf",
-        default_value="false",
-        description="Whether to publish static transforms for utm and map.",
-    )
+def launch_setup(context, *args, **kwargs):
+    mapdata_path = LaunchConfiguration("mapdata_path")
+    mapdata_file = LaunchConfiguration("mapdata_file")
+    gpx_file = LaunchConfiguration("gpx_file")
+    config_file = LaunchConfiguration("config_file").perform(context)
+    osm_grid_params = LaunchConfiguration("osm_grid_params").perform(context)
+
+    # Resolve config_file if it's just a filename
+    if not os.path.isabs(config_file):
+        package_share = get_package_share_directory("map_data")
+        potential_path = os.path.join(package_share, "config", config_file)
+        if os.path.exists(potential_path):
+            config_file = potential_path
+        else:
+            # Try in current directory
+            potential_path = os.path.abspath(config_file)
+            if os.path.exists(potential_path):
+                config_file = potential_path
+
+    # Resolve osm_grid_params if it's just a filename
+    if not os.path.isabs(osm_grid_params):
+        package_share = get_package_share_directory("map_data")
+        potential_path = os.path.join(package_share, "config", osm_grid_params)
+        if os.path.exists(potential_path):
+            osm_grid_params = potential_path
+        else:
+            # Try in current directory
+            potential_path = os.path.abspath(osm_grid_params)
+            if os.path.exists(potential_path):
+                osm_grid_params = potential_path
 
     # Define the osm_cloud node
     osm_cloud_node = Node(
@@ -43,41 +48,72 @@ def generate_launch_description():
         output="screen",
         respawn=True,
         respawn_delay=1.0,
-        remappings=[("grid", LaunchConfiguration("grid_topic"))],
         parameters=[
+            config_file,
+            osm_grid_params,
             {
-                "utm_frame": "utm",
-                "local_frame": "local_utm",
                 "mapdata_file": PathJoinSubstitution(
-                    [
-                        LaunchConfiguration("mapdata_path"),
-                        LaunchConfiguration("mapdata_file"),
-                    ]
+                    [mapdata_path, mapdata_file]
                 ),
                 "gpx_file": PathJoinSubstitution(
-                    [
-                        LaunchConfiguration("mapdata_path"),
-                        LaunchConfiguration("gpx_file"),
-                    ]
+                    [mapdata_path, gpx_file]
                 ),
-                "save_mapdata": False,
-                "max_path_dist": 2.5,
-                "neighbor_cost": "linear",  # zero, linear, quadratic
-                "grid_res": 0.4,
-                "grid_max": [0.0, 0.0],
-                "grid_min": [0.0, 0.0],
-                "publish_intersections": True,
             }
         ],
     )
 
+    return [osm_cloud_node]
+
+
+def generate_launch_description():
+    # Declare launch arguments
+    mapdata_path_arg = DeclareLaunchArgument(
+        "mapdata_path",
+        default_value=PathJoinSubstitution([FindPackageShare("map_data"), "data"]),
+        description="Path to the directory with map data.",
+    )
+    mapdata_file_arg = DeclareLaunchArgument(
+        "mapdata_file",
+        default_value="stromovka.mapdata",
+        description="File with preprocessed OSM map data.",
+    )
+    gpx_file_arg = DeclareLaunchArgument(
+        "gpx_file",
+        default_value="stromovka.gpx",
+        description="File with gpx coords denoting area to be processed.",
+    )
+    grid_topic_arg = DeclareLaunchArgument(
+        "grid_topic",
+        default_value="osm_grid",
+        description="Name of the topic to which the grid will be published.",
+    )
+    publish_static_tf_arg = DeclareLaunchArgument(
+        "publish_static_tf",
+        default_value="false",
+        description="Whether to publish static transforms for utm and map.",
+    )
+    config_file_arg = DeclareLaunchArgument(
+        "config_file",
+        default_value="helhest.yaml",
+        description="Path or name (in config/) of the yaml file with topic names.",
+    )
+    osm_grid_params_arg = DeclareLaunchArgument(
+        "osm_grid_params",
+        default_value="osm_grid.yaml",
+        description="Path or name (in config/) of the yaml file with OSM grid parameters.",
+    )
+
     return LaunchDescription(
         [
-            mapdata_path,
-            mapdata_file,
-            gpx_file,
-            grid_topic,
-            publish_static_tf,
-            osm_cloud_node,
+            mapdata_path_arg,
+            mapdata_file_arg,
+            gpx_file_arg,
+            grid_topic_arg,
+            publish_static_tf_arg,
+            config_file_arg,
+            osm_grid_params_arg,
+            OpaqueFunction(function=launch_setup),
         ]
     )
+
+
