@@ -48,7 +48,11 @@ nav:
   - Home: index.md
   - Usage:
       - Overview: usage.md
-      - Interactive Viewer: viewer.md
+      - Interactive Viewer:
+          - Overview: viewer.md
+          - Viewer: viewer_view.md
+          - Planner: viewer_planner.md
+          - Tracker: viewer_tracker.md
       - Path Planning: planning.md
   - API Reference:
       - MapData: api/map_data.md
