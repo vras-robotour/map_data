@@ -21,12 +21,67 @@ python3 -m map_data.pathsolver.replan \
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--path <file>` | — | Input `.gpx` file containing the initial path |
+| `--path <file>` | — | Input `.gpx` or `.yaml` file containing the initial path |
 | `--file <file>` | — | `.mapdata` file used for obstacle and footway information |
 | `--cell_size <meters>` | `0.25` | Grid resolution for all-terrain planning |
 | `--inflate_obstacles <meters>` | `0.25` | Safety buffer added around barrier polygons |
+| `--max_path_dist <meters>` | `2.0` | Max distance from a known way at which a cell receives a way-influenced cost |
+| `--simplify_path` | `false` | Remove redundant waypoints using Douglas-Peucker simplification |
+| `--smooth_path` | `false` | Apply gradient-descent smoothing to the planned path |
 | `--visualize` | `false` | Show a matplotlib plot of the planned path and obstacles |
 | `--save <file>` | — | Save the resulting path as a GPX file |
+
+## Python Library
+
+All planners work standalone — no ROS2 context required.
+
+### GraphPlanner
+
+Plans a route constrained to the OSM road and footway network using A*.
+
+```python
+from map_data.map_data import MapData
+from map_data.pathsolver.graph_planner import GraphPlanner
+import numpy as np
+
+md = MapData.load("coords.mapdata")
+
+start = np.array([md.min_x + 10, md.min_y + 10])
+goal  = np.array([md.max_x - 10, md.max_y - 10])
+
+planner = GraphPlanner(md, highway_types=["footway", "road"])
+result  = planner.plan(np.array([start, goal]))  # np.ndarray or None
+```
+
+### ReplanPath
+
+Grid-based local replanning around OSM barriers. See the [ReplanPath API reference](api/pathsolver.md#replanpath) for full details.
+
+```python
+from map_data.map_data import MapData
+from map_data.pathsolver.replan import ReplanPath, parse_args
+from map_data.utils.parsing import ways_to_shapely
+from map_data.utils.gpx import parse_path, utm_path_to_latlon, create_gpx_content
+
+md = MapData.load("coords.mapdata")
+path_data = parse_path("waypoints.gpx")   # returns (utm_array, zone_num, zone_let)
+
+args = parse_args([])
+args.low  = (md.min_x, md.min_y)
+args.high = (md.max_x, md.max_y)
+args.cell_size = 0.25
+args.inflate_obstacles = 0.25
+args.simplify_path = True
+args.smooth_path = False
+
+replanner = ReplanPath(args, ways_to_shapely(md.barriers_list))
+replanner.fill_grid(md, highway_types=["footway"], max_path_dist=2.0)
+new_path = replanner.replan(path_data[0], algorithm="astar")
+
+wgs84 = utm_path_to_latlon(new_path, path_data[1], path_data[2])
+with open("planned.gpx", "w") as f:
+    f.write(create_gpx_content(wgs84))
+```
 
 ## Available Algorithms
 
