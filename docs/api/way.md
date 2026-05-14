@@ -27,15 +27,19 @@
 ::: map_data.utils.way.Way.is_road
     options:
       show_source: true
+      heading_level: 3
 
 ::: map_data.utils.way.Way.is_footway
     options:
       show_source: true
+      heading_level: 3
 
 ::: map_data.utils.way.Way.is_barrier
     options:
       show_source: true
+      heading_level: 3
 
 ::: map_data.utils.way.Way.to_pcd_points
     options:
       show_source: true
+      heading_level: 3
