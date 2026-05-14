@@ -80,10 +80,10 @@ class PlannerMode {
     document.getElementById('export-wormhole-path-btn').addEventListener('click', () => this.shareViaWormhole());
 
     document.querySelectorAll('input[name="plan-mode"]').forEach(radio => {
-        radio.addEventListener('change', () => {
-            this.drawPathLine();
-            this.updateUI();
-        });
+      radio.addEventListener('change', () => {
+        this.drawPathLine();
+        this.updateUI();
+      });
     });
 
     document.getElementById('planner-simplify').addEventListener('change', () => this.drawPathLine());
@@ -347,12 +347,12 @@ class PlannerMode {
     const latlngs = [];
     this.points.forEach((p, i) => {
       latlngs.push([p.lat, p.lon]);
-      
+
       // Create marker
       const isStart = i === 0;
       const isEnd = i === this.points.length - 1;
       const color = isStart ? '#2ecc71' : (isEnd ? '#e74c3c' : '#3498db');
-      
+
       const marker = L.circleMarker([p.lat, p.lon], {
         radius: 6,
         fillColor: color,
@@ -428,27 +428,27 @@ class PlannerMode {
       opacity: 0.7,
       dashArray: algorithm === 'rrt' && !this.hasPlannedPath ? '5, 10' : ''
     }).addTo(map);
-    
+
     this.pathPolyline.on('click', (e) => {
-        L.DomEvent.stopPropagation(e);
-        // Find where to insert
-        // Simple heuristic: find closest segment
-        let bestIdx = 0;
-        let minDist = Infinity;
-        for (let i = 0; i < this.points.length - 1; i++) {
-            const d = L.LineUtil.pointToSegmentDistance(
-                map.latLngToLayerPoint(e.latlng),
-                map.latLngToLayerPoint([this.points[i].lat, this.points[i].lon]),
-                map.latLngToLayerPoint([this.points[i+1].lat, this.points[i+1].lon])
-            );
-            if (d < minDist) {
-                minDist = d;
-                bestIdx = i + 1;
-            }
+      L.DomEvent.stopPropagation(e);
+      // Find where to insert
+      // Simple heuristic: find closest segment
+      let bestIdx = 0;
+      let minDist = Infinity;
+      for (let i = 0; i < this.points.length - 1; i++) {
+        const d = L.LineUtil.pointToSegmentDistance(
+          map.latLngToLayerPoint(e.latlng),
+          map.latLngToLayerPoint([this.points[i].lat, this.points[i].lon]),
+          map.latLngToLayerPoint([this.points[i + 1].lat, this.points[i + 1].lon])
+        );
+        if (d < minDist) {
+          minDist = d;
+          bestIdx = i + 1;
         }
-        this.points.splice(bestIdx, 0, { lat: e.latlng.lat, lon: e.latlng.lng, marker: null });
-        this.redraw();
-        this.updateUI();
+      }
+      this.points.splice(bestIdx, 0, { lat: e.latlng.lat, lon: e.latlng.lng, marker: null });
+      this.redraw();
+      this.updateUI();
     });
   }
 
@@ -464,12 +464,12 @@ class PlannerMode {
       let totalDist = 0;
       for (let i = 0; i < this.points.length - 1; i++) {
         const p1 = L.latLng(this.points[i].lat, this.points[i].lon);
-        const p2 = L.latLng(this.points[i+1].lat, this.points[i+1].lon);
+        const p2 = L.latLng(this.points[i + 1].lat, this.points[i + 1].lon);
         totalDist += p1.distanceTo(p2);
       }
-      
-      let distStr = totalDist > 1000 
-        ? `${(totalDist / 1000).toFixed(2)} km` 
+
+      let distStr = totalDist > 1000
+        ? `${(totalDist / 1000).toFixed(2)} km`
         : `${totalDist.toFixed(1)} m`;
 
       countEl.textContent = `${this.points.length} points | ${distStr}`;
@@ -527,7 +527,7 @@ class PlannerMode {
       const wpts = xml.getElementsByTagName('wpt');
       const trkpts = xml.getElementsByTagName('trkpt');
       const points = [];
-      
+
       const nodes = wpts.length > 0 ? wpts : trkpts;
       for (let i = 0; i < nodes.length; i++) {
         points.push({
@@ -546,7 +546,7 @@ class PlannerMode {
       this.redraw();
       this.updateUI();
       setStatus(`Imported ${points.length} points`, 'text-success');
-      
+
       // Zoom to fit
       const bounds = L.latLngBounds(this.points.map(p => [p.lat, p.lon]));
       map.fitBounds(bounds, { padding: [50, 50] });
@@ -560,26 +560,26 @@ class PlannerMode {
   setupDragAndDrop() {
     const dropzone = document.getElementById('dropzone');
     window.addEventListener('dragenter', (e) => {
-        dropzone.classList.add('active');
+      dropzone.classList.add('active');
     });
     dropzone.addEventListener('dragleave', (e) => {
-        if (e.target === dropzone) dropzone.classList.remove('active');
+      if (e.target === dropzone) dropzone.classList.remove('active');
     });
     dropzone.addEventListener('dragover', (e) => e.preventDefault());
     dropzone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropzone.classList.remove('active');
-        
-        const file = e.dataTransfer.files[0];
-        if (!file || !file.name.toLowerCase().endsWith('.gpx')) return;
+      e.preventDefault();
+      dropzone.classList.remove('active');
 
-        if (currentAppMode === 'planner') {
-            this.loadGpxFile(file);
-        } else {
-            if (typeof handleGpxMapCreation === 'function') {
-                handleGpxMapCreation(file);
-            }
+      const file = e.dataTransfer.files[0];
+      if (!file || !file.name.toLowerCase().endsWith('.gpx')) return;
+
+      if (currentAppMode === 'planner') {
+        this.loadGpxFile(file);
+      } else {
+        if (typeof handleGpxMapCreation === 'function') {
+          handleGpxMapCreation(file);
         }
+      }
     });
   }
 
@@ -597,9 +597,8 @@ class PlannerMode {
       return;
     }
     if (!currentFile) {
-        const modal = new bootstrap.Modal(document.getElementById('planner-fetch-modal'));
-        modal.show();
-        return;
+      setStatus('Please load a map file first', 'text-warning');
+      return;
     }
 
     this.isProcessing = true;
@@ -628,14 +627,14 @@ class PlannerMode {
           points: this.points.map(p => [p.lat, p.lon]),
           file: currentFile,
           allowed_ways: allowedWays,
-          highway_costs: this.highwayCosts,
-          surface_costs: this.surfaceCosts,
           algorithm: algorithm,
           sub_algorithm: subAlgorithm,
           cell_size: cellSize,
           inflate_obstacles: inflate,
           simplify_path: simplify,
           smooth_path: smooth,
+          highway_costs: this.highwayCosts,
+          surface_costs: this.surfaceCosts,
           transfer_id: this.currentReplanId
         })
       });
@@ -645,9 +644,9 @@ class PlannerMode {
 
       if (data.retrieveNum === 1) {
         if (data.status === 'cancelled') {
-            setStatus('Replanning cancelled', 'text-info');
+          setStatus('Replanning cancelled', 'text-info');
         } else {
-            setStatus('Replanning failed: path not found', 'text-danger');
+          setStatus('Replanning failed: path not found', 'text-danger');
         }
       } else if (data.retrieveNum === -1) {
         setStatus('Path is already optimal', 'text-success');
@@ -691,7 +690,7 @@ class PlannerMode {
     const btn = document.getElementById('replan-btn');
     btn.classList.toggle('btn-primary', !processing);
     btn.classList.toggle('btn-danger', processing);
-    
+
     if (processing) {
       btn.innerHTML = `
         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
@@ -784,7 +783,7 @@ ${pts}
       map.closePopup();
     };
     container.appendChild(delBtn);
-    
+
     L.popup({ minWidth: 120, className: 'planner-popup', offset: [0, -5], closeButton: false })
       .setLatLng(latlng)
       .setContent(container)

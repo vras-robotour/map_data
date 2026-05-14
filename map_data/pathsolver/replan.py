@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import yaml
 import json
 import argparse
 import threading
@@ -665,4 +666,3 @@ if __name__ == "__main__":
 
     if args.visualize:
         replanner.visualize(new_path, path_data[0])
-path_data[0])
