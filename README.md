@@ -2,54 +2,36 @@
 
 ROS2 tools to work with OSM data and perform path planning.
 
-- [Overview](#overview)
-- [How to use](#how-to-use)
-  - [Parsing and creating files](#parsing-and-creating-files)
-  - [Interactive viewer](#interactive-viewer)
-  - [Path planning](#path-planning)
-  - [Visualizing the parsed data](#visualizing-the-parsed-data)
-  - [Publishing a point cloud of footways](#publishing-a-point-cloud-of-footways)
-- [Importing as a Python package](#importing-as-a-python-package)
-  - [Files](#files)
-  - [Examples](#examples)
-- [License](#license)
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://vras-robotour.github.io/map_data/)
+[![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://github.com/vras-robotour/map_data/blob/master/LICENSE)
 
 ## Overview
 
-This package parses a `.gpx` file with GPS waypoints into a Python class, queries
-[OpenStreetMap](https://www.openstreetmap.org) for map features within the area, and
-serializes the result as a `.mapdata` file.
+This package parses a `.gpx` file with GPS waypoints into a Python class, queries [OpenStreetMap](https://www.openstreetmap.org) for map features, and performs path planning. It provides both ROS2 nodes and standalone Python tools.
 
-Parsed features are classified into three categories:
+## Documentation
 
-- **barriers** — obstacles assumed to be untraversable (walls, buildings, fences, water…)
-- **footways** — paths intended for pedestrians
-- **roads** — areas intended for vehicles
+Full documentation, including installation guides, CLI usage, and API reference, is available at:
 
-Additional tools let you visualize the data, annotate it interactively, perform path planning, and publish a
-cost-aware footway point cloud for use in autonomous navigation.
+👉 **[https://vras-robotour.github.io/map_data/](https://vras-robotour.github.io/map_data/)**
 
-The `MapData` class, the path planning modules, and the interactive viewer work **standalone** — no running ROS2
-context is required for data parsing, annotation, or planning. ROS2 is only needed for the
-`osm_cloud` publisher and the `create_mapdata` / `visualize_mapdata` CLI nodes.
+## Quick Start
 
-The package targets **ROS2 Humble** or later on Ubuntu 22.04.
+### Installation
 
-Sample `.gpx` files are provided in `./data/`.
+```bash
+# Clone the repository
+git clone https://github.com/vras-robotour/map_data.git
+cd map_data
 
-## How to use
+# Install dependencies
+pip install -r requirements.txt
 
-### Parsing and creating files
+# (Optional) Build with colcon if using ROS2
+colcon build --packages-select map_data
+```
 
-`create_mapdata` creates a `.mapdata` file from a `.gpx` file, or re-parses an existing
-`.mapdata` with the current tag configuration.
-
-| Flag | Description |
-|------|-------------|
-| `-d` | Download fresh OSM data from the `.gpx` bounds and parse it |
-| `-f <filename>` | `.gpx` file to parse (with `-d`), or `.mapdata` file to re-parse (without `-d`) |
-
-Default input file when `-f` is omitted: `buchlovice.gpx`.
+### Basic Usage
 
 Download and parse OSM data for a GPX file:
 
@@ -57,220 +39,12 @@ Download and parse OSM data for a GPX file:
 ros2 run map_data create_mapdata -d -f coords.gpx
 ```
 
-This creates `coords.mapdata` in the package data directory.
-
-Re-parse an existing `.mapdata` file (e.g. after editing tag CSVs):
+Launch the interactive viewer:
 
 ```bash
-ros2 run map_data create_mapdata -f coords.mapdata
-```
-
-### Interactive viewer
-
-`map_data_viewer` launches a local Flask web server with a Leaflet-based map UI.
-It lets you inspect parsed features, view their OSM tags, draw manual annotations,
-and even fetch new areas directly from the UI — without needing ROS2.
-
-```bash
-# After colcon build and sourcing the workspace:
 map_data_viewer
-
-# Explicit data directory and port:
-map_data_viewer --data-dir /path/to/data --port 8080
-
-# Standalone (outside a colcon workspace):
-python -m map_data.viewer.app --data-dir ./data
-```
-
-Then open `http://127.0.0.1:5000` in a browser.
-
-**Main Modes** (tabs in the top-right):
-
-- **VIEWER**: Inspect map features, manage layers, and draw manual annotations.
-- **PLANNER**: Design missions and plan paths using graph-based or all-terrain algorithms.
-
-**Viewer Tools** (toolbar at the top):
-
-| Mode | Shortcut | Action |
-|------|:---:|--------|
-| **View** | `v` | Inspect map features. Click any object to see its properties in the sidebar. |
-| **Edit** | `e` | Selection and reshaping of custom annotations. |
-| **+ Obs** | `a` | Draw rectangles, polygons, or circles to add manual obstacles. |
-| **+ Path** | `p` | Draw custom paths or footways. |
-| **Del** | `d` | Remove custom annotations. |
-| **Fetch** | `f` | Draw a bounding box to download and parse a new OSM area. |
-
-**Planner Features:**
-
-- **Interactive Waypoints:** Click on the map to add waypoints. Drag them to adjust the route.
-- **Graph Planning:** Automatically snaps paths to the OSM road and footway network.
-- **All-Terrain Planning:** Uses Grid A* or RRT* to find the shortest path while avoiding both OSM barriers and manual obstacle annotations.
-- **GPX Support:** Import existing GPX tracks for refinement or export planned missions.
-- **Live Replanning:** Adjust planning parameters (inflation, cell size, path simplification) and see the results instantly.
-
-### Path planning
-
-The `pathsolver` module provides standalone planning capabilities. You can use the `replan` CLI tool to process existing GPX tracks.
-
-```bash
-# Replan a GPX track using Grid A* and save the result
-python3 -m map_data.pathsolver.replan --path data/coords.gpx --file coords.mapdata --save data/planned.gpx --visualize
-```
-
-| Flag | Description |
-|------|-------------|
-| `--path <file>` | Input `.gpx` file containing the initial path |
-| `--file <file>` | `.mapdata` file used for obstacle information |
-| `--cell_size` | Grid resolution for all-terrain planning (default: 0.25m) |
-| `--inflate_obstacles` | Safety buffer around barriers (default: 0.25m) |
-| `--visualize` | Show a matplotlib plot of the planned path and obstacles |
-| `--save <file>` | Save the resulting path as a GPX file |
-
-### Visualizing the parsed data
-
-`visualize_mapdata` generates static matplotlib plots from a `.mapdata` file.
-It shows two figures: one with all parsed features (barriers, footways, roads) and
-one with footways only.
-
-| Flag | Description |
-|------|-------------|
-| `-f <filename>` | `.mapdata` file to visualize (default: `buchlovice.mapdata`) |
-| `-sm` | Save the main map plot (default filename: `map.png`) |
-| `-if <filename>` | Custom filename for the main plot (requires `-sm`) |
-| `-sb` | Save the background tile image (default filename: `bgd_map.png`) |
-| `-bf <filename>` | Custom filename for the background image (requires `-sb`) |
-
-All saved images are written to the `./data/` directory.
-
-Visualize and display interactively:
-
-```bash
-ros2 run map_data visualize_mapdata -f coords.mapdata
-```
-
-Visualize and save both images:
-
-```bash
-ros2 run map_data visualize_mapdata -f coords.mapdata -sm -sb
-```
-
-### Publishing a point cloud of footways and intersections
-
-`osm_cloud` is a ROS2 node that publishes a `sensor_msgs/PointCloud2` on the `grid`
-topic (cost-aware footway grid) and optionally publishes intersections as a
-`geometry_msgs/PoseArray` and `visualization_msgs/MarkerArray`.
-
-**ROS2 parameters:**
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `utm_frame` | `"utm"` | TF frame name for UTM coordinates |
-| `local_frame` | `"map"` | TF frame name for the local robot frame |
-| `utm_to_local` | `None` | 4×4 transform matrix; looked up from TF if not set |
-| `mapdata_file` | `None` | Absolute path to a `.mapdata` file |
-| `gpx_file` | `None` | Absolute path to a `.gpx` file (used if no `.mapdata`) |
-| `save_mapdata` | `false` | Save generated mapdata when loading from a `.gpx` |
-| `max_path_dist` | `1.0` | Max distance (m) at which a grid point receives a cost |
-| `neighbor_cost` | `"linear"` | Cost function: `linear`, `quadratic`, or `zero` |
-| `grid_res` | `0.25` | Grid point spacing (m) |
-| `grid_max` | `[0.0, 0.0]` | Upper bounds of the local-frame grid (m). `[0,0]` triggers auto-calc. |
-| `grid_min` | `[0.0, 0.0]` | Lower bounds of the local-frame grid (m). `[0,0]` triggers auto-calc. |
-| `auto_utm` | `false` | Auto-calculate UTM-to-local transform from map center |
-| `publish_intersections` | `false` | Whether to publish footway intersections |
-
-The recommended way to run the node is via the provided launch file, which also sets
-up the required static transforms and enables intersection publishing by default:
-
-```bash
-ros2 launch map_data osm_cloud.launch.py \
-    mapdata_file:=/path/to/coords.mapdata \
-    grid_topic:=osm_cloud
-```
-
-Launch file arguments:
-
-| Argument | Default | Description |
-|----------|---------|-------------|
-| `mapdata_path` | package share/data | Directory containing the map file |
-| `mapdata_file` | `stromovka.mapdata` | Map data filename |
-| `gpx_file` | `stromovka.gpx` | GPX fallback filename |
-| `grid_topic` | `osm_grid` | Topic name for the published point cloud |
-| `publish_static_tf` | `false` | Whether to publish static transforms for utm/map |
-
-## Importing as a Python package
-
-`MapData` and `Way` can be used directly in Python without a running ROS2 node.
-The only requirement is that the package is installed (e.g. via `pip install -e .`
-or a `colcon build`) so the `parameters/` CSV files are accessible.
-
-### Files
-
-```
-map_data/
-├── map_data.py              # MapData class — parses GPX + OSM into roads/footways/barriers
-├── info.py                  # CLI tool to print information about a .mapdata file
-├── create_mapdata.py        # ROS2 node / CLI: download and parse OSM data
-├── visualize_mapdata.py     # ROS2 node / CLI: static matplotlib plots
-├── osm_cloud.py             # ROS2 node: publishes footway grid and intersections
-├── pathsolver/              # Path planning algorithms
-│   ├── graph_planner.py     # Global A* planning on OSM ways
-│   ├── replan.py            # Local/Grid-based replanning (Grid A*, RRT*)
-│   ├── grid_astar.py        # Grid-based A* implementation
-│   ├── rrt_star.py          # RRT* implementation
-│   └── astar.py             # Generic A* search logic
-├── utils/                   # Shared utility functions
-│   ├── way.py               # Way class — represents a single OSM feature with geometry
-│   ├── overpass.py          # OSM Overpass API client
-│   ├── parsing.py           # OSM XML/JSON parsing logic
-│   ├── serialization.py     # .mapdata file I/O
-│   ├── background_map.py    # Raster map tile fetching
-│   ├── vis_utils.py         # matplotlib plotting helpers
-│   └── points_to_graph_points.py # Equidistant point interpolation
-└── viewer/                  # Modular interactive viewer (Flask + Leaflet)
-    ├── app.py               # App factory and server entry point
-    ├── routes.py            # REST API endpoints and GeoJSON conversion
-    ├── helpers.py           # Geometry and annotation utility functions
-    ├── cache.py             # MapData object caching
-    ├── templates/           # HTML templates
-    └── static/              # External CSS and Modular JS assets
-```
-
-### Examples
-
-Parse a GPX file and save a `.mapdata` file:
-
-```python
-from map_data.map_data import MapData
-
-md = MapData("./data/coords.gpx")
-md.run_all(save=True)  # queries OSM, parses, saves coords.mapdata
-```
-
-Load an existing `.mapdata` file and access parsed features:
-
-```python
-from map_data.map_data import MapData
-
-md = MapData.load("coords.mapdata")
-
-print(len(md.roads_list))    # list of Way objects
-print(len(md.footways_list))
-print(len(md.barriers_list))
-```
-
-Plot the parsed data:
-
-```python
-from map_data.map_data import MapData
-from map_data.vis_utils import plot_map
-import matplotlib.pyplot as plt
-
-md = MapData.load("coords.mapdata")
-
-plot_map(md)
-plt.show()
 ```
 
 ## License
 
-[![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://github.com/vras-robotour/map_data/blob/master/LICENSE)
+BSD 3-Clause License. See [LICENSE](LICENSE) for more information.

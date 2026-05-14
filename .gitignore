@@ -8,3 +8,4 @@ paths/*
 pyproject.toml
 uv.lock
 *.json
+venv/*

@@ -1,0 +1,51 @@
+site_name: map_data
+site_description: ROS2 tools to work with OSM data and perform path planning.
+repo_url: https://github.com/vras-robotour/map_data
+edit_uri: edit/master/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.] # Path to your source code
+          options:
+            show_source: true
+            show_root_heading: true
+
+nav:
+  - Home: index.md
+  - Usage:
+      - Overview: usage.md
+      - Interactive Viewer: viewer.md
+      - Path Planning: planning.md
+  - API Reference:
+      - MapData: api/map_data.md
+      - Way: api/way.md
+      - Pathsolvers: api/pathsolver.md
