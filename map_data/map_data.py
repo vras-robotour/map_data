@@ -1,7 +1,7 @@
 import concurrent.futures
 import logging
 import os
-import json
+import yaml
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -22,20 +22,23 @@ from map_data.utils.way import Way
 logger = logging.getLogger(__name__)
 
 
+import yaml
+
+
 def load_map_defaults():
-    """Load default map configuration from config/planner_defaults.json."""
+    """Load default map configuration from config/planner_defaults.yaml."""
     try:
         from ament_index_python.resources import get_resource
         _, package_path = get_resource("packages", "map_data")
-        config_path = os.path.join(package_path, "share", "map_data", "config", "planner_defaults.json")
+        config_path = os.path.join(package_path, "share", "map_data", "config", "planner_defaults.yaml")
     except Exception:
         config_path = os.path.realpath(
-            os.path.join(os.path.dirname(__file__), "..", "config", "planner_defaults.json")
+            os.path.join(os.path.dirname(__file__), "..", "config", "planner_defaults.yaml")
         )
 
     if os.path.exists(config_path):
         with open(config_path, "r") as f:
-            return json.load(f)
+            return yaml.safe_load(f)
     return {}
 
 

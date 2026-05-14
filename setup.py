@@ -16,7 +16,7 @@ setup(
         (os.path.join("share", package_name, "data"), glob("data/*.gpx")),
         (os.path.join("share", package_name, "data"), glob("data/*.mapdata")),
         (os.path.join("share", package_name, "parameters"), glob("parameters/*.csv")),
-        (os.path.join("share", package_name, "config"), glob("config/*.json")),
+        (os.path.join("share", package_name, "config"), glob("config/*.yaml")),
     ],
     install_requires=[
         "setuptools",

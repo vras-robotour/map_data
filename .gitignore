@@ -2,9 +2,9 @@
 *.png
 paths/*
 *.mapdata
-*.json
 *.DS_Store
 
 .python-version
 pyproject.toml
 uv.lock
+*.json
