@@ -1,0 +1,30 @@
+map_data_tracker:
+  ros__parameters:
+    robot_id: "robot"
+    path_topic: "/path"
+    gps_fix_topic: "/gps/fix"
+    gps_filtered_topic: "/gps/filtered"
+    bus_voltage_topic: "/bus_voltage"
+    bus_current_topic: "/bus_current"
+    teensy_temp_topic: "/teensy_temp"
+    odrv_error_topic: "/odrv_error"
+    azimuth_topic: "/gps/azimuth_imu"
+    odom_topic: "/odom_2d"
+    motors_enabled_topic: "/motors_enabled"
+    speed_limit_topic: "/speed_limit"
+    collision_monitor_state_topic: "/collision_monitor_state"
+    recovery_heartbeat_topic: "/recovery/heartbeat"
+    bt_log_topic: "/behavior_tree_log"
+    teleop_topic: "/cmd_vel_teleop"
+    speak_info_topic: "/speak/info"
+    speak_warn_topic: "/speak/warn"
+    speak_error_topic: "/speak/err"
+    nav_through_poses_feedback_topic: "/navigate_through_poses/_action/feedback"
+    follow_gps_waypoints_feedback_topic: "/follow_gps_waypoints/_action/feedback"
+    follow_waypoints_feedback_topic: "/follow_waypoints/_action/feedback"
+
+osm_cloud:
+  ros__parameters:
+    grid_topic: "grid"
+    intersections_topic: "intersections"
+    intersection_markers_topic: "intersection_markers"

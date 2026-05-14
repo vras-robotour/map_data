@@ -38,19 +38,43 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
 
         self.declare_parameter("robot_id", "robot")
         self.declare_parameter("path_topic", "/path")
-        self.declare_parameter("subscribe_path", True)
-        self.declare_parameter("subscribe_actions", False)
 
-        # Optional feature groups
-        self.declare_parameter("subscribe_hardware", True)
-        self.declare_parameter("subscribe_heading", True)
-        self.declare_parameter("subscribe_speed", True)
-        self.declare_parameter("subscribe_navigation_state", True)
-        self.declare_parameter("subscribe_teleop_detection", True)
-        self.declare_parameter("subscribe_speech", True)
+        # New topic parameters
+        self.declare_parameter("gps_fix_topic", "/gps/fix")
+        self.declare_parameter("gps_filtered_topic", "/gps/filtered")
+        self.declare_parameter("bus_voltage_topic", "/bus_voltage")
+        self.declare_parameter("bus_current_topic", "/bus_current")
+        self.declare_parameter("teensy_temp_topic", "/teensy_temp")
+        self.declare_parameter("odrv_error_topic", "/odrv_error")
+        self.declare_parameter("azimuth_topic", "/gps/azimuth_imu")
+        self.declare_parameter("odom_topic", "/odom_2d")
+        self.declare_parameter("motors_enabled_topic", "/motors_enabled")
+        self.declare_parameter("speed_limit_topic", "/speed_limit")
+        self.declare_parameter(
+            "collision_monitor_state_topic", "/collision_monitor_state"
+        )
+        self.declare_parameter("recovery_heartbeat_topic", "/recovery/heartbeat")
+        self.declare_parameter("bt_log_topic", "/behavior_tree_log")
+        self.declare_parameter("teleop_topic", "/cmd_vel_teleop")
+        self.declare_parameter("speak_info_topic", "/speak/info")
+        self.declare_parameter("speak_warn_topic", "/speak/warn")
+        self.declare_parameter("speak_error_topic", "/speak/err")
+        self.declare_parameter(
+            "nav_through_poses_feedback_topic",
+            "/navigate_through_poses/_action/feedback",
+        )
+        self.declare_parameter(
+            "follow_gps_waypoints_feedback_topic",
+            "/follow_gps_waypoints/_action/feedback",
+        )
+        self.declare_parameter(
+            "follow_waypoints_feedback_topic", "/follow_waypoints/_action/feedback"
+        )
 
         self.robot_id = self.get_parameter("robot_id").value
-        path_topic = self.get_parameter("path_topic").value
+
+        # Track which features are enabled (topic name is not empty)
+        self.enabled_features = {}
 
         self.current_waypoint = 0
         self.num_waypoints = 0
@@ -89,102 +113,144 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
             depth=10,
         )
 
-        if self.get_parameter("subscribe_path").value:
-            self.create_subscription(Path, path_topic, self._path_callback, 10)
+        def subscribe_if_enabled(
+            topic_param, msg_type, callback, qos=10, feature_name=None
+        ):
+            topic = self.get_parameter(topic_param).value
+            if topic:
+                self.create_subscription(msg_type, topic, callback, qos)
+                if feature_name:
+                    self.enabled_features[feature_name] = True
+                return True
+            else:
+                if feature_name:
+                    self.enabled_features[feature_name] = False
+                return False
 
-        self.create_subscription(
-            NavSatFix, "/gps/fix", self._gps_callback, qos_best_effort
+        subscribe_if_enabled("path_topic", Path, self._path_callback, 10, "path")
+
+        subscribe_if_enabled(
+            "gps_fix_topic", NavSatFix, self._gps_callback, qos_best_effort, "gps_fix"
         )
-        self.create_subscription(
-            NavSatFix, "/gps/filtered", self._ekf_callback, qos_best_effort
+        subscribe_if_enabled(
+            "gps_filtered_topic",
+            NavSatFix,
+            self._ekf_callback,
+            qos_best_effort,
+            "gps_ekf",
         )
 
-        if self.get_parameter("subscribe_hardware").value:
-            self.create_subscription(
-                Float32, "/bus_voltage", self._voltage_callback, qos_best_effort
-            )
-            self.create_subscription(
-                Float32, "/bus_current", self._current_callback, qos_best_effort
-            )
-            self.create_subscription(
-                Float32, "/teensy_temp", self._temp_callback, qos_best_effort
-            )
-            self.create_subscription(
-                UInt64, "/odrv_error", self._odrv_error_callback, qos_best_effort
-            )
-        if self.get_parameter("subscribe_heading").value:
-            self.create_subscription(
-                Imu, "/gps/azimuth_imu", self._azimuth_callback, qos_best_effort
-            )
-        if self.get_parameter("subscribe_speed").value:
-            self.create_subscription(
-                Odometry, "/odom_2d", self._odom_speed_callback, qos_best_effort
-            )
-        if self.get_parameter("subscribe_navigation_state").value:
-            self.create_subscription(
-                Bool, "/motors_enabled", self._motors_callback, qos_best_effort
-            )
-            self.create_subscription(
-                SpeedLimit, "/speed_limit", self._speed_limit_callback, qos_best_effort
-            )
-            self.create_subscription(
-                CollisionMonitorState,
-                "/collision_monitor_state",
-                self._collision_callback,
-                qos_best_effort,
-            )
-            self.create_subscription(
-                Header, "/recovery/heartbeat", self._recovery_callback, qos_best_effort
-            )
-            self.create_subscription(
-                BehaviorTreeLog,
-                "/behavior_tree_log",
-                self._bt_callback,
-                qos_best_effort,
-            )
-        if self.get_parameter("subscribe_teleop_detection").value:
-            self.create_subscription(
-                TwistStamped, "/cmd_vel_teleop", self._teleop_callback, qos_best_effort
-            )
-        if self.get_parameter("subscribe_speech").value:
-            self.create_subscription(
+        subscribe_if_enabled(
+            "bus_voltage_topic",
+            Float32,
+            self._voltage_callback,
+            qos_best_effort,
+            "battery",
+        )
+        subscribe_if_enabled(
+            "bus_current_topic", Float32, self._current_callback, qos_best_effort
+        )
+        subscribe_if_enabled(
+            "teensy_temp_topic", Float32, self._temp_callback, qos_best_effort, "temp"
+        )
+        subscribe_if_enabled(
+            "odrv_error_topic",
+            UInt64,
+            self._odrv_error_callback,
+            qos_best_effort,
+            "motor_error",
+        )
+
+        subscribe_if_enabled(
+            "azimuth_topic", Imu, self._azimuth_callback, qos_best_effort, "heading"
+        )
+        subscribe_if_enabled(
+            "odom_topic", Odometry, self._odom_speed_callback, qos_best_effort, "speed"
+        )
+
+        subscribe_if_enabled(
+            "motors_enabled_topic",
+            Bool,
+            self._motors_callback,
+            qos_best_effort,
+            "motors",
+        )
+        subscribe_if_enabled(
+            "speed_limit_topic",
+            SpeedLimit,
+            self._speed_limit_callback,
+            qos_best_effort,
+            "speed_limit",
+        )
+        subscribe_if_enabled(
+            "collision_monitor_state_topic",
+            CollisionMonitorState,
+            self._collision_callback,
+            qos_best_effort,
+            "collision",
+        )
+        subscribe_if_enabled(
+            "recovery_heartbeat_topic",
+            Header,
+            self._recovery_callback,
+            qos_best_effort,
+            "recovery",
+        )
+        subscribe_if_enabled(
+            "bt_log_topic",
+            BehaviorTreeLog,
+            self._bt_callback,
+            qos_best_effort,
+            "nav_state",
+        )
+
+        subscribe_if_enabled(
+            "teleop_topic",
+            TwistStamped,
+            self._teleop_callback,
+            qos_best_effort,
+            "teleop",
+        )
+
+        if subscribe_if_enabled(
+            "speak_info_topic",
+            String,
+            lambda m: self._speech_callback(m, "info"),
+            qos_best_effort,
+            "speech",
+        ):
+            subscribe_if_enabled(
+                "speak_warn_topic",
                 String,
-                "/speak/info",
-                lambda m: self._speech_callback(m, "info"),
-                qos_best_effort,
-            )
-            self.create_subscription(
-                String,
-                "/speak/warn",
                 lambda m: self._speech_callback(m, "warn"),
                 qos_best_effort,
             )
-            self.create_subscription(
+            subscribe_if_enabled(
+                "speak_error_topic",
                 String,
-                "/speak/err",
                 lambda m: self._speech_callback(m, "error"),
                 qos_best_effort,
             )
 
-        if self.get_parameter("subscribe_actions").value:
-            self.create_subscription(
-                NavigateThroughPoses.Feedback,
-                "/navigate_through_poses/_action/feedback",
-                self._feedback_callback,
-                10,
-            )
-            self.create_subscription(
-                FollowGPSWaypoints.Feedback,
-                "/follow_gps_waypoints/_action/feedback",
-                self._feedback_callback,
-                10,
-            )
-            self.create_subscription(
-                FollowWaypoints.Feedback,
-                "/follow_waypoints/_action/feedback",
-                self._feedback_callback,
-                10,
-            )
+        subscribe_if_enabled(
+            "nav_through_poses_feedback_topic",
+            NavigateThroughPoses.Feedback,
+            self._feedback_callback,
+            10,
+            "actions",
+        )
+        subscribe_if_enabled(
+            "follow_gps_waypoints_feedback_topic",
+            FollowGPSWaypoints.Feedback,
+            self._feedback_callback,
+            10,
+        )
+        subscribe_if_enabled(
+            "follow_waypoints_feedback_topic",
+            FollowWaypoints.Feedback,
+            self._feedback_callback,
+            10,
+        )
 
     _COLLISION_ACTIONS = {0: "STOP", 1: "SLOWDOWN", 2: "LIMIT", 3: "PASSTHROUGH"}
 
@@ -221,6 +287,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
             self._dirty = False
             return {
                 "robot_id": self.robot_id,
+                "enabled_features": self.enabled_features,
                 "position": {
                     "gps": dict(self.pose_gps) if self.pose_gps else {},
                     "ekf": dict(self.pose_ekf) if self.pose_ekf else {},
@@ -340,7 +407,9 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
             return
         with self._lock:
             if isinstance(msg, NavigateThroughPoses.Feedback):
-                self.current_waypoint = self.num_waypoints - msg.number_of_poses_remaining
+                self.current_waypoint = (
+                    self.num_waypoints - msg.number_of_poses_remaining
+                )
             else:
                 self.current_waypoint = msg.current_waypoint
             self._dirty = True

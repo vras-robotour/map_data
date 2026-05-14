@@ -50,16 +50,27 @@ class OSMCloud(Node):
             "publish_intersections", False
         ).value
 
+        # Topic parameters
+        self.grid_topic: str = self.declare_parameter("grid_topic", "grid").value
+        self.intersections_topic: str = self.declare_parameter(
+            "intersections_topic", "intersections"
+        ).value
+        self.intersection_markers_topic: str = self.declare_parameter(
+            "intersection_markers_topic", "intersection_markers"
+        ).value
+
         # Register parameter callback
         self.add_on_set_parameters_callback(self.parameter_callback)
 
         qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
-        self.pub_grid = self.create_publisher(PointCloud2, "grid", qos)
+        self.pub_grid = self.create_publisher(PointCloud2, self.grid_topic, qos)
 
         if self.publish_intersections:
-            self.pub_poses = self.create_publisher(PoseArray, "intersections", qos)
+            self.pub_poses = self.create_publisher(
+                PoseArray, self.intersections_topic, qos
+            )
             self.pub_markers = self.create_publisher(
-                MarkerArray, "intersection_markers", qos
+                MarkerArray, self.intersection_markers_topic, qos
             )
 
         self.tf = Buffer()

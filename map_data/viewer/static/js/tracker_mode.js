@@ -128,35 +128,39 @@ const trackerMode = (() => {
 
     function _initUI(container) {
         container.innerHTML = `
-      <div class="mb-3">
-        <div class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+      <div id="tsi-section-hardware" class="mb-3">
+        <div id="tsi-row-battery" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
           <span class="text-secondary fw-bold">BATTERY</span>
           <span id="tsi-battery" class="text-light">—</span>
         </div>
-        <div class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+        <div id="tsi-row-motors" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
           <span class="text-secondary fw-bold">MOTORS</span>
           <span id="tsi-motors">—</span>
         </div>
         <div id="tsi-motor-error" class="text-danger small" style="display:none"></div>
+        <div id="tsi-row-temp" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+          <span class="text-secondary fw-bold">TEMP</span>
+          <span id="tsi-temp" class="text-light">—</span>
+        </div>
       </div>
-      <div class="mb-3">
-        <div class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+      <div id="tsi-section-localization" class="mb-3">
+        <div id="tsi-row-gps" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
           <span class="text-secondary fw-bold">LOCALIZATION</span>
           <span id="tsi-gps-fix">—</span>
         </div>
-        <div class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+        <div id="tsi-row-speed" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
           <span class="text-secondary fw-bold">SPEED</span>
           <span id="tsi-speed">—</span>
         </div>
-        <div class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+        <div id="tsi-row-speed-limit" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
           <span class="text-secondary fw-bold">LIMIT</span>
           <span id="tsi-speed-limit">—</span>
         </div>
       </div>
-      <div class="mb-3">
+      <div id="tsi-section-navigation" class="mb-3">
         <div class="panel-title mb-1" style="font-size:0.6rem;">NAVIGATION</div>
         <div class="small">
-          <div>State: <span id="tsi-nav-state" class="text-info">IDLE</span></div>
+          <div id="tsi-row-nav-state">State: <span id="tsi-nav-state" class="text-info">IDLE</span></div>
           <div id="tsi-collision" style="display:none">Collision: <span id="tsi-collision-val" class="text-warning"></span></div>
           <div id="tsi-recovery" class="text-danger fw-bold" style="display:none">RECOVERY ACTIVE</div>
           <div id="tsi-teleop" class="text-warning fw-bold" style="display:none">TELEOP ACTIVE</div>
@@ -168,20 +172,34 @@ const trackerMode = (() => {
       </div>`;
 
         _uiRefs = {
-            battery:      document.getElementById('tsi-battery'),
-            motors:       document.getElementById('tsi-motors'),
-            motorError:   document.getElementById('tsi-motor-error'),
-            gpsFix:       document.getElementById('tsi-gps-fix'),
-            speed:        document.getElementById('tsi-speed'),
-            speedLimit:   document.getElementById('tsi-speed-limit'),
-            navState:     document.getElementById('tsi-nav-state'),
-            collision:    document.getElementById('tsi-collision'),
+            sectionHardware: document.getElementById('tsi-section-hardware'),
+            rowBattery: document.getElementById('tsi-row-battery'),
+            battery: document.getElementById('tsi-battery'),
+            rowMotors: document.getElementById('tsi-row-motors'),
+            motors: document.getElementById('tsi-motors'),
+            motorError: document.getElementById('tsi-motor-error'),
+            rowTemp: document.getElementById('tsi-row-temp'),
+            temp: document.getElementById('tsi-temp'),
+
+            sectionLocalization: document.getElementById('tsi-section-localization'),
+            rowGps: document.getElementById('tsi-row-gps'),
+            gpsFix: document.getElementById('tsi-gps-fix'),
+            rowSpeed: document.getElementById('tsi-row-speed'),
+            speed: document.getElementById('tsi-speed'),
+            rowSpeedLimit: document.getElementById('tsi-row-speed-limit'),
+            speedLimit: document.getElementById('tsi-speed-limit'),
+
+            sectionNavigation: document.getElementById('tsi-section-navigation'),
+            rowNavState: document.getElementById('tsi-row-nav-state'),
+            navState: document.getElementById('tsi-nav-state'),
+            collision: document.getElementById('tsi-collision'),
             collisionVal: document.getElementById('tsi-collision-val'),
-            recovery:     document.getElementById('tsi-recovery'),
-            teleop:       document.getElementById('tsi-teleop'),
-            speechBox:    document.getElementById('tsi-speech-box'),
-            speechLevel:  document.getElementById('tsi-speech-level'),
-            speechText:   document.getElementById('tsi-speech-text'),
+            recovery: document.getElementById('tsi-recovery'),
+            teleop: document.getElementById('tsi-teleop'),
+
+            speechBox: document.getElementById('tsi-speech-box'),
+            speechLevel: document.getElementById('tsi-speech-level'),
+            speechText: document.getElementById('tsi-speech-text'),
         };
     }
 
@@ -193,53 +211,97 @@ const trackerMode = (() => {
 
         const s = data.status || {};
         const b = s.battery || {};
+        const feat = data.enabled_features || {};
 
-        // Battery
-        const battV = b.voltage != null ? b.voltage : '—';
-        const battA = b.current != null ? b.current : '—';
-        _uiRefs.battery.textContent = `${battV} V / ${battA} A`;
-        _uiRefs.battery.className = (b.voltage && b.voltage < 22.0) ? 'text-danger' : 'text-light';
+        // Hardware section
+        const hasBattery = feat.battery !== false;
+        const hasMotors = feat.motors !== false;
+        const hasTemp = feat.temp !== false;
+        const hasMotorError = feat.motor_error !== false;
 
-        // Motors
-        _uiRefs.motors.textContent = s.motors_enabled ? 'ENABLED' : 'DISABLED';
-        _uiRefs.motors.className = s.motors_enabled ? 'text-success' : 'text-danger';
+        _uiRefs.rowBattery.style.display = hasBattery ? '' : 'none';
+        _uiRefs.rowMotors.style.display = hasMotors ? '' : 'none';
+        _uiRefs.rowTemp.style.display = hasTemp ? '' : 'none';
+        _uiRefs.sectionHardware.style.display = (hasBattery || hasMotors || hasTemp || hasMotorError) ? '' : 'none';
 
-        // Motor error
-        if (s.motor_error) {
+        if (hasBattery) {
+            const battV = b.voltage != null ? b.voltage : '—';
+            const battA = b.current != null ? b.current : '—';
+            _uiRefs.battery.textContent = `${battV} V / ${battA} A`;
+            _uiRefs.battery.className = (b.voltage && b.voltage < 22.0) ? 'text-danger' : 'text-light';
+        }
+
+        if (hasMotors) {
+            _uiRefs.motors.textContent = s.motors_enabled ? 'ENABLED' : 'DISABLED';
+            _uiRefs.motors.className = s.motors_enabled ? 'text-success' : 'text-danger';
+        }
+
+        if (hasMotorError && s.motor_error) {
             _uiRefs.motorError.textContent = `Error: 0x${s.motor_error.toString(16)}`;
             _uiRefs.motorError.style.display = '';
         } else {
             _uiRefs.motorError.style.display = 'none';
         }
 
-        // GPS fix
-        let fixStr = 'No Fix', fixClass = 'text-danger';
-        if (s.gps_fix === 0)      { fixStr = 'Fix';   fixClass = 'text-success'; }
-        else if (s.gps_fix === 1) { fixStr = 'Float'; fixClass = 'text-warning'; }
-        else if (s.gps_fix === 2) { fixStr = 'Fixed'; fixClass = 'text-info'; }
-        _uiRefs.gpsFix.textContent = fixStr;
-        _uiRefs.gpsFix.className = fixClass;
+        if (hasTemp) {
+            _uiRefs.temp.textContent = s.teensy_temp != null ? `${s.teensy_temp} °C` : '—';
+        }
 
-        // Speed / limit
-        _uiRefs.speed.textContent = s.speed != null ? `${s.speed} m/s` : '—';
-        _uiRefs.speedLimit.textContent = s.speed_limit
-            ? `${s.speed_limit.value} ${s.speed_limit.percentage ? '%' : 'm/s'}`
-            : '—';
+        // Localization section
+        const hasGps = feat.gps_fix !== false || feat.gps_ekf !== false;
+        const hasSpeed = feat.speed !== false;
+        const hasSpeedLimit = feat.speed_limit !== false;
 
-        // Navigation state
-        _uiRefs.navState.textContent = s.nav_state || 'IDLE';
+        _uiRefs.rowGps.style.display = (feat.gps_fix !== false) ? '' : 'none';
+        _uiRefs.rowSpeed.style.display = hasSpeed ? '' : 'none';
+        _uiRefs.rowSpeedLimit.style.display = hasSpeedLimit ? '' : 'none';
+        _uiRefs.sectionLocalization.style.display = (hasGps || hasSpeed || hasSpeedLimit) ? '' : 'none';
 
-        // Collision monitor
-        const showCollision = s.collision_action && s.collision_action !== 'PASSTHROUGH';
-        _uiRefs.collision.style.display = showCollision ? '' : 'none';
-        if (showCollision) _uiRefs.collisionVal.textContent = s.collision_action;
+        if (feat.gps_fix !== false) {
+            let fixStr = 'No Fix', fixClass = 'text-danger';
+            if (s.gps_fix === 0) { fixStr = 'Fix'; fixClass = 'text-success'; }
+            else if (s.gps_fix === 1) { fixStr = 'Float'; fixClass = 'text-warning'; }
+            else if (s.gps_fix === 2) { fixStr = 'Fixed'; fixClass = 'text-info'; }
+            _uiRefs.gpsFix.textContent = fixStr;
+            _uiRefs.gpsFix.className = fixClass;
+        }
 
-        // Active-state banners
-        _uiRefs.recovery.style.display = s.recovery_active ? '' : 'none';
-        _uiRefs.teleop.style.display = s.teleop_active ? '' : 'none';
+        if (hasSpeed) {
+            _uiRefs.speed.textContent = s.speed != null ? `${s.speed} m/s` : '—';
+        }
+
+        if (hasSpeedLimit) {
+            _uiRefs.speedLimit.textContent = s.speed_limit
+                ? `${s.speed_limit.value} ${s.speed_limit.percentage ? '%' : 'm/s'}`
+                : '—';
+        }
+
+        // Navigation section
+        const hasNavState = feat.nav_state !== false;
+        const hasCollision = feat.collision !== false;
+        const hasRecovery = feat.recovery !== false;
+        const hasTeleop = feat.teleop !== false;
+
+        _uiRefs.rowNavState.style.display = hasNavState ? '' : 'none';
+        _uiRefs.sectionNavigation.style.display = (hasNavState || hasCollision || hasRecovery || hasTeleop) ? '' : 'none';
+
+        if (hasNavState) {
+            _uiRefs.navState.textContent = s.nav_state || 'IDLE';
+        }
+
+        if (hasCollision) {
+            const showCollision = s.collision_action && s.collision_action !== 'PASSTHROUGH';
+            _uiRefs.collision.style.display = showCollision ? '' : 'none';
+            if (showCollision) _uiRefs.collisionVal.textContent = s.collision_action;
+        } else {
+            _uiRefs.collision.style.display = 'none';
+        }
+
+        _uiRefs.recovery.style.display = (hasRecovery && s.recovery_active) ? '' : 'none';
+        _uiRefs.teleop.style.display = (hasTeleop && s.teleop_active) ? '' : 'none';
 
         // Last speech
-        if (s.last_speech) {
+        if (feat.speech !== false && s.last_speech) {
             const levelClass = s.last_speech.level === 'error' ? 'text-danger'
                 : (s.last_speech.level === 'warn' ? 'text-warning' : 'text-info');
             _uiRefs.speechLevel.textContent = s.last_speech.level;
@@ -249,7 +311,24 @@ const trackerMode = (() => {
         } else {
             _uiRefs.speechBox.style.display = 'none';
         }
+
+        // Hide Robot layer checkbox if robot positioning is disabled
+        const robotCb = document.querySelector('[data-layer="robot"]');
+        if (feat.gps_fix === false && feat.gps_ekf === false) {
+            if (robotCb) {
+                const row = robotCb.closest('.layer-row');
+                if (row) row.style.display = 'none';
+            }
+            hideRobot();
+        } else {
+            if (robotCb) {
+                const row = robotCb.closest('.layer-row');
+                if (row) row.style.display = '';
+            }
+        }
+
     }
+
 
     // Auto-connect if ROS is available to show robot in other modes
     if (typeof ros_available !== 'undefined' && ros_available) {

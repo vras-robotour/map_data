@@ -88,9 +88,20 @@ def main():
     parser.add_argument("--data-dir", help="Directory containing .mapdata files")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5000)
-    args = parser.parse_args()
+    
+    # Filter out ROS-specific arguments before parsing
+    import sys
+    ros_args = []
+    try:
+        from rclpy.utilities import remove_ros_args
+        ros_args = remove_ros_args(args=sys.argv[1:])
+    except ImportError:
+        ros_args = sys.argv[1:]
+
+    args, unknown = parser.parse_known_args(args=ros_args)
 
     data_dir = None
+
     if args.data_dir:
         data_dir = os.path.realpath(args.data_dir)
 
