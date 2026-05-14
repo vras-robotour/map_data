@@ -10,6 +10,24 @@ _KDTREE_REBUILD_INTERVAL = 50
 
 
 class RRTStar:
+    """Rapidly-exploring Random Tree Star (RRT*) path planner.
+
+    Builds a collision-free tree by randomly sampling the free space and
+    rewiring edges to minimise path cost. The planner is asymptotically
+    optimal: given enough iterations it converges to the shortest feasible
+    path.
+
+    Collision checking uses two sources simultaneously:
+
+    - A Shapely STRtree of barrier polygons (hard obstacles).
+    - A 2-D cost grid where cells at or above *traversability_threshold*
+      are treated as blocked.
+
+    Traversable cells contribute a weighted cost to the edge cost, so the
+    planner naturally prefers low-cost corridors (e.g. footways) over open
+    terrain.
+    """
+
     def __init__(
         self,
         start: np.ndarray,
@@ -27,6 +45,51 @@ class RRTStar:
         transfer_id: Optional[str] = None,
         improve_after_goal: bool = False,
     ):
+        """
+        Parameters
+        ----------
+        start : np.ndarray
+            Starting position as a 2-element array ``[x, y]`` in world
+            (UTM) coordinates.
+        goal : np.ndarray
+            Goal position as a 2-element array ``[x, y]`` in world
+            coordinates.
+        obstacles : list
+            List of Shapely geometries representing hard barriers. Used
+            together with *obstacles_tree* for fast spatial queries.
+        obstacles_tree : STRtree or None
+            Pre-built Shapely STRtree index over *obstacles*. Pass ``None``
+            to skip polygon-based collision checking (grid only).
+        grid : np.ndarray
+            2-D cost array with shape ``(Y, X)``. A value of ``0.0`` means
+            fully free; values at or above *traversability_threshold* are
+            blocked. Intermediate values increase edge cost.
+        low : tuple of float
+            ``(min_x, min_y)`` corner of the grid in world coordinates.
+        grid_scale : float
+            Metres per grid cell (default ``1.0``).
+        max_iter : int
+            Maximum number of RRT* iterations (default ``2000``).
+        step_size : float
+            Maximum distance the tree extends toward a sampled point per
+            iteration in metres (default ``2.0``).
+        neighbor_radius : float
+            Radius in metres within which nearby nodes are considered for
+            rewiring (default ``5.0``).
+        traversability_threshold : float
+            Grid cost at which a cell is considered an obstacle
+            (default ``10.0``). ``np.inf`` marks cells as hard obstacles.
+        simplify : bool
+            If ``True``, post-process the raw node path with a greedy
+            line-of-sight simplification before returning (default ``True``).
+        transfer_id : str or None
+            Optional identifier used to check for external cancellation
+            signals during planning. Pass ``None`` to disable.
+        improve_after_goal : bool
+            If ``True``, continue iterating after the goal is first reached
+            to find a lower-cost path. If ``False`` (default), return as
+            soon as the goal is reached.
+        """
         self.start = start
         self.goal = goal
         self.obstacles = obstacles
@@ -88,6 +151,13 @@ class RRTStar:
     def _is_collision(
         self, point1: np.ndarray, point2: Optional[np.ndarray] = None
     ) -> bool:
+        """Return ``True`` if a point or segment intersects an obstacle.
+
+        Checks both the Shapely obstacle polygons (via STRtree) and the cost
+        grid (via Bresenham rasterisation). A point is in collision if its
+        grid cost meets or exceeds *traversability_threshold*; a segment is
+        in collision if any traversed cell does.
+        """
         if self.obstacles_tree:
             geom = Point(point1) if point2 is None else LineString([point1, point2])
             if len(self.obstacles_tree.query(geom, predicate="intersects")) > 0:
@@ -112,6 +182,7 @@ class RRTStar:
         return False
 
     def _bresenham(self, start, goal) -> Iterator[Tuple[int, int]]:
+        """Yield integer grid cells along the line from *start* to *goal* (Bresenham)."""
         x0, y0 = start
         x1, y1 = goal
         dx, dy = abs(x1 - x0), abs(y1 - y0)
@@ -139,6 +210,7 @@ class RRTStar:
         yield (x1, y1)
 
     def _get_grid_cost(self, point: np.ndarray) -> float:
+        """Return the grid cost at *point*, clamped to grid bounds."""
         ix = int((point[0] - self.low[0]) / self.grid_scale)
         iy = int((point[1] - self.low[1]) / self.grid_scale)
         ix = np.clip(ix, 0, self.grid_shape[1] - 1)
@@ -146,6 +218,7 @@ class RRTStar:
         return float(self.grid[iy, ix])
 
     def _sample_point(self) -> np.ndarray:
+        """Sample a random point, biased toward traversable grid cells (90 % of the time)."""
         if self._trav_xs is not None and random.random() > 0.1:
             idx = random.randrange(len(self._trav_xs))
             return np.array(
@@ -164,6 +237,11 @@ class RRTStar:
         )
 
     def _nearest_node(self, point: np.ndarray) -> int:
+        """Return the index of the tree node closest to *point*.
+
+        Uses a lazily rebuilt KD-tree for the bulk of the tree, plus a
+        linear scan over nodes added since the last rebuild.
+        """
         n = len(self.nodes)
         if self._kdtree is None or n - self._kdtree_n >= _KDTREE_REBUILD_INTERVAL:
             self._kdtree = cKDTree(self._nodes_buf[:n])
@@ -182,6 +260,7 @@ class RRTStar:
         return int(best_idx)
 
     def _steer(self, start: np.ndarray, target: np.ndarray) -> np.ndarray:
+        """Return a point at most *step_size* metres from *start* toward *target*."""
         direction = target - start
         dist = np.linalg.norm(direction)
         if dist < self.step_size:
@@ -189,6 +268,7 @@ class RRTStar:
         return start + (direction / dist) * self.step_size
 
     def _get_near_nodes(self, new_point: np.ndarray) -> List[int]:
+        """Return indices of all tree nodes within *neighbor_radius* of *new_point*."""
         n = len(self.nodes)
         new_idx = n - 1  # node just appended by the caller
         r2 = self.neighbor_radius ** 2
@@ -212,6 +292,16 @@ class RRTStar:
         return result
 
     def _segment_cost(self, start: np.ndarray, end: np.ndarray) -> Tuple[bool, float]:
+        """Compute the cost of the segment from *start* to *end*.
+
+        Returns
+        -------
+        tuple of (bool, float)
+            ``(collision, cost)`` where *collision* is ``True`` if the
+            segment intersects an obstacle or blocked grid cell, and *cost*
+            is the weighted traversal cost ``dist * (1 + avg_grid_cost * 5)``.
+            Returns ``(True, inf)`` on collision.
+        """
         if self.obstacles_tree:
             if (
                 len(
@@ -249,6 +339,20 @@ class RRTStar:
         return False, np.linalg.norm(end - start) * (1.0 + avg_c * 5.0)
 
     def find_path(self) -> Optional[np.ndarray]:
+        """Run the RRT* algorithm and return the planned path.
+
+        Iterates up to *max_iter* times, growing the tree from ``start``
+        toward randomly sampled points and rewiring edges to reduce cost.
+        The goal is sampled directly 10 % of the time to encourage
+        convergence.
+
+        Returns
+        -------
+        np.ndarray or None
+            Path as an ``(N, 2)`` array of ``[x, y]`` world coordinates,
+            or ``None`` if no collision-free path was found within the
+            iteration budget or if planning was cancelled via *transfer_id*.
+        """
         from .replan import _is_cancelled
 
         goal_idx = None
@@ -322,6 +426,7 @@ class RRTStar:
         return None
 
     def _reconstruct_path(self, goal_idx: int) -> List[np.ndarray]:
+        """Walk the parent chain from *goal_idx* back to the root and return the path."""
         path = []
         curr = goal_idx
         while curr is not None:
@@ -333,6 +438,7 @@ class RRTStar:
         return path
 
     def _simplify_path(self, path) -> List[np.ndarray]:
+        """Greedily remove intermediate waypoints that have line-of-sight to a later node."""
         if len(path) <= 2:
             return path
         simplified = [path[0]]

@@ -29,7 +29,7 @@ browser, using the same algorithms as the `replan` CLI tool.
 |------|-------------|
 | **All terrain — A\*** | Grid-based A\* that finds the optimal path while avoiding OSM barriers and manual annotations. Recommended for most use cases. |
 | **All terrain — RRT\*** | Sampling-based planner. Faster in large open areas; converges to optimal asymptotically. |
-| **Paths only (OSM)** | Constrains the route to the OSM road and footway network, including manually annotated paths. Produces clean, on-path results but cannot leave designated ways. |
+| **Paths only** | Constrains the route to the OSM road and footway network, including manually annotated paths. Produces clean, on-path results but cannot leave designated ways. |
 
 !!! info "Path priority"
     Both OSM ways and manually annotated paths take **priority over obstacles**. A path that
