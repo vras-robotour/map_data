@@ -1,0 +1,183 @@
+/* ── Catppuccin Latte (light) ─────────────────────────────────────────────── */
+[data-md-color-scheme="catppuccin-latte"] {
+  /* Palette */
+  --cat-base:      #eff1f5;
+  --cat-mantle:    #e6e9ef;
+  --cat-crust:     #dce0e8;
+  --cat-surface0:  #ccd0da;
+  --cat-surface1:  #bcc0cc;
+  --cat-surface2:  #acb0be;
+  --cat-overlay0:  #9ca0b0;
+  --cat-overlay1:  #8c8fa1;
+  --cat-overlay2:  #7c7f93;
+  --cat-subtext0:  #6c6f85;
+  --cat-subtext1:  #5c5f77;
+  --cat-text:      #4c4f69;
+  --cat-lavender:  #7287fd;
+  --cat-blue:      #1e66f5;
+  --cat-sapphire:  #209fb5;
+  --cat-sky:       #04a5e5;
+  --cat-teal:      #179299;
+  --cat-green:     #40a02b;
+  --cat-yellow:    #df8e1d;
+  --cat-peach:     #fe640b;
+  --cat-maroon:    #e64553;
+  --cat-red:       #d20f39;
+  --cat-mauve:     #8839ef;
+  --cat-pink:      #ea76cb;
+  --cat-flamingo:  #dd7878;
+  --cat-rosewater: #dc8a78;
+
+  /* Foreground */
+  --md-default-fg-color:           var(--cat-text);
+  --md-default-fg-color--light:    var(--cat-subtext1);
+  --md-default-fg-color--lighter:  var(--cat-overlay1);
+  --md-default-fg-color--lightest: var(--cat-overlay0);
+
+  /* Background */
+  --md-default-bg-color:           var(--cat-base);
+  --md-default-bg-color--light:    var(--cat-mantle);
+  --md-default-bg-color--lighter:  var(--cat-crust);
+  --md-default-bg-color--lightest: var(--cat-surface0);
+
+  /* Primary (header / nav) */
+  --md-primary-fg-color:        var(--cat-mauve);
+  --md-primary-fg-color--light: #9950f0;
+  --md-primary-fg-color--dark:  #6c22d4;
+  --md-primary-bg-color:        #ffffff;
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
+
+  /* Accent (hover, active links) */
+  --md-accent-fg-color:              var(--cat-blue);
+  --md-accent-fg-color--transparent: rgba(30, 102, 245, 0.1);
+  --md-accent-bg-color:              #ffffff;
+  --md-accent-bg-color--light:       rgba(255, 255, 255, 0.7);
+
+  /* Links */
+  --md-typeset-a-color: var(--cat-blue);
+
+  /* Code blocks */
+  --md-code-fg-color: var(--cat-text);
+  --md-code-bg-color: var(--cat-mantle);
+
+  /* Syntax highlighting */
+  --md-code-hl-color:             rgba(136, 57, 239, 0.1);
+  --md-code-hl-number-color:      var(--cat-peach);
+  --md-code-hl-special-color:     var(--cat-pink);
+  --md-code-hl-function-color:    var(--cat-blue);
+  --md-code-hl-constant-color:    var(--cat-mauve);
+  --md-code-hl-keyword-color:     var(--cat-mauve);
+  --md-code-hl-string-color:      var(--cat-green);
+  --md-code-hl-name-color:        var(--cat-text);
+  --md-code-hl-operator-color:    var(--cat-sky);
+  --md-code-hl-punctuation-color: var(--cat-subtext1);
+  --md-code-hl-comment-color:     var(--cat-overlay1);
+  --md-code-hl-generic-color:     var(--cat-subtext0);
+
+  /* Footer */
+  --md-footer-bg-color:       var(--cat-crust);
+  --md-footer-bg-color--dark: var(--cat-mantle);
+  --md-footer-fg-color:            var(--cat-subtext1);
+  --md-footer-fg-color--light:     var(--cat-overlay1);
+  --md-footer-fg-color--lighter:   var(--cat-overlay0);
+
+  /* Admonitions */
+  --md-admonition-fg-color: var(--cat-text);
+  --md-admonition-bg-color: var(--cat-mantle);
+
+  /* Tables */
+  --md-typeset-table-color:       var(--cat-surface0);
+  --md-typeset-table-color--light: rgba(204, 208, 218, 0.5);
+}
+
+/* ── Catppuccin Mocha (dark) ──────────────────────────────────────────────── */
+[data-md-color-scheme="slate"] {
+  /* Palette */
+  --cat-base:      #1e1e2e;
+  --cat-mantle:    #181825;
+  --cat-crust:     #11111b;
+  --cat-surface0:  #313244;
+  --cat-surface1:  #45475a;
+  --cat-surface2:  #585b70;
+  --cat-overlay0:  #6c7086;
+  --cat-overlay1:  #7f849c;
+  --cat-overlay2:  #9399b2;
+  --cat-subtext0:  #a6adc8;
+  --cat-subtext1:  #bac2de;
+  --cat-text:      #cdd6f4;
+  --cat-lavender:  #b4befe;
+  --cat-blue:      #89b4fa;
+  --cat-sapphire:  #74c7ec;
+  --cat-sky:       #89dceb;
+  --cat-teal:      #94e2d5;
+  --cat-green:     #a6e3a1;
+  --cat-yellow:    #f9e2af;
+  --cat-peach:     #fab387;
+  --cat-maroon:    #eba0ac;
+  --cat-red:       #f38ba8;
+  --cat-mauve:     #cba6f7;
+  --cat-pink:      #f5c2e7;
+  --cat-flamingo:  #f2cdcd;
+  --cat-rosewater: #f5e0dc;
+
+  /* Foreground */
+  --md-default-fg-color:           var(--cat-text);
+  --md-default-fg-color--light:    var(--cat-subtext1);
+  --md-default-fg-color--lighter:  var(--cat-overlay1);
+  --md-default-fg-color--lightest: var(--cat-overlay0);
+
+  /* Background */
+  --md-default-bg-color:           var(--cat-base);
+  --md-default-bg-color--light:    var(--cat-mantle);
+  --md-default-bg-color--lighter:  var(--cat-crust);
+  --md-default-bg-color--lightest: var(--cat-surface0);
+
+  /* Primary (header / nav) */
+  --md-primary-fg-color:        var(--cat-mauve);
+  --md-primary-fg-color--light: #d4b5fb;
+  --md-primary-fg-color--dark:  #b891f5;
+  --md-primary-bg-color:        var(--cat-crust);
+  --md-primary-bg-color--light: rgba(17, 17, 27, 0.7);
+
+  /* Accent (hover, active links) */
+  --md-accent-fg-color:              var(--cat-blue);
+  --md-accent-fg-color--transparent: rgba(137, 180, 250, 0.1);
+  --md-accent-bg-color:              var(--cat-crust);
+  --md-accent-bg-color--light:       rgba(17, 17, 27, 0.7);
+
+  /* Links */
+  --md-typeset-a-color: var(--cat-blue);
+
+  /* Code blocks */
+  --md-code-fg-color: var(--cat-text);
+  --md-code-bg-color: var(--cat-mantle);
+
+  /* Syntax highlighting */
+  --md-code-hl-color:             rgba(203, 166, 247, 0.15);
+  --md-code-hl-number-color:      var(--cat-peach);
+  --md-code-hl-special-color:     var(--cat-pink);
+  --md-code-hl-function-color:    var(--cat-blue);
+  --md-code-hl-constant-color:    var(--cat-mauve);
+  --md-code-hl-keyword-color:     var(--cat-mauve);
+  --md-code-hl-string-color:      var(--cat-green);
+  --md-code-hl-name-color:        var(--cat-text);
+  --md-code-hl-operator-color:    var(--cat-sky);
+  --md-code-hl-punctuation-color: var(--cat-subtext1);
+  --md-code-hl-comment-color:     var(--cat-overlay1);
+  --md-code-hl-generic-color:     var(--cat-subtext0);
+
+  /* Footer */
+  --md-footer-bg-color:       var(--cat-crust);
+  --md-footer-bg-color--dark: var(--cat-mantle);
+  --md-footer-fg-color:          var(--cat-subtext1);
+  --md-footer-fg-color--light:   var(--cat-overlay1);
+  --md-footer-fg-color--lighter: var(--cat-overlay0);
+
+  /* Admonitions */
+  --md-admonition-fg-color: var(--cat-text);
+  --md-admonition-bg-color: var(--cat-surface0);
+
+  /* Tables */
+  --md-typeset-table-color:        var(--cat-surface0);
+  --md-typeset-table-color--light: rgba(49, 50, 68, 0.5);
+}
