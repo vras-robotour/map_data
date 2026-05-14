@@ -15,25 +15,25 @@ def grid_astar(
     """
     Optimized A* search on a 2D grid.
 
-    Parameters:
-    -----------
-    grid : np.array
-        2D grid of costs (Y, X). infinity means blocked.
-    start_utm : tuple/array
+    Parameters
+    ----------
+    grid : np.ndarray
+        2D grid of costs (Y, X). ``inf`` means blocked.
+    start_utm : tuple or np.ndarray
         Starting point in UTM coordinates.
-    goal_utm : tuple/array
+    goal_utm : tuple or np.ndarray
         Goal point in UTM coordinates.
     low : tuple
-        (min_x, min_y) of the grid in UTM.
+        ``(min_x, min_y)`` of the grid in UTM metres.
     cs : float
-        Cell size of the grid.
+        Cell size of the grid in metres.
     simplify_path : bool
-        Whether to simplify the resulting path.
+        Whether to simplify the resulting path with Douglas-Peucker.
 
-    Returns:
-    --------
-    path : np.array or None
-        Found path in UTM coordinates, or None.
+    Returns
+    -------
+    np.ndarray or None
+        Found path as UTM coordinate array, or ``None`` if no path exists.
     """
     ny, nx = grid.shape
 
