@@ -6,15 +6,60 @@ This page covers the core CLI tools and ROS2 nodes for parsing, visualizing, and
     `create_mapdata`, `visualize_mapdata`, and `osm_cloud` require a sourced ROS2 workspace.
     The `MapData` class, path planning modules, and the interactive viewer work **standalone**.
 
+## Inspecting a .mapdata file
+
+`map_data_info` prints statistics about a `.mapdata` file — feature counts, total footway
+distance, covered area, UTM zone, and any stored annotations.
+
+```bash
+map_data_info coords.mapdata
+```
+
+Example output:
+
+```text
+========================================
+MAP DATA STATISTICS: coords.mapdata
+========================================
+Source:      File: coords.gpx
+UTM Zone:    33U
+Bounds X:    [458200.0, 458900.0]
+Bounds Y:    [5550100.0, 5550700.0]
+Total Area:  420,000 m²
+----------------------------------------
+Roads:       12
+Footways:    47
+Barriers:    83
+Total Footway Distance: 4823.6 m
+Annotations: 3 (manual edits)
+========================================
+```
+
+`map_data_info` is available after installing the package (standalone `pip install -e .` or `colcon build`).
+
 ## Parsing and creating files
 
-`create_mapdata` creates a `.mapdata` file from a `.gpx` file, or re-parses an existing
-`.mapdata` with the current tag configuration.
+`create_mapdata` creates a `.mapdata` file from a `.gpx` or `.yaml` waypoint file, or
+re-parses an existing `.mapdata` with the current tag configuration.
 
 | Flag | Description |
 |------|-------------|
-| `-d` | Download fresh OSM data from the `.gpx` bounds and parse it |
-| `-f <filename>` | `.gpx` file to parse (with `-d`), or `.mapdata` file to re-parse (without `-d`) |
+| `-d` | Download fresh OSM data from the input file's bounds and parse it |
+| `-f <filename>` | `.gpx` or `.yaml` waypoint file to parse (with `-d`), or `.mapdata` file to re-parse (without `-d`) |
+
+!!! tip "YAML waypoint format"
+    Besides `.gpx` files, `create_mapdata` and `MapData` also accept a simple YAML format:
+
+    ```yaml
+    waypoints:
+      - latitude: 50.1234
+        longitude: 14.5678
+        elevation: 200.0   # optional, defaults to 0
+      - latitude: 50.1240
+        longitude: 14.5690
+    ```
+
+    Save the file with a `.yaml` extension and use it wherever a `.gpx` file is accepted.
 
 Download and parse OSM data for a GPX file:
 
