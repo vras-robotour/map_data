@@ -1,0 +1,30 @@
+highway_costs:
+  pedestrian: 0.0
+  footway: 0.0
+  path: 0.1
+  living_street: 0.1
+  track: 0.3
+  service: 0.3
+  residential: 0.5
+  unclassified: 0.5
+  tertiary: 0.7
+  secondary: 0.9
+  primary: 1.0
+surface_costs:
+  asphalt: 0.0
+  paving_stones: 0.0
+  concrete: 0.0
+  fine_gravel: 0.1
+  gravel: 0.2
+  dirt: 0.3
+  grass: 0.5
+  sand: 0.4
+default_off_path_cost: 0.9
+max_path_dist: 2.0
+cell_size: 0.25
+inflate_obstacles: 0.25
+simplify_path: true
+smooth_path: false
+osm_margin: 100
+reserve_margin: 50
+path_cost_cap: 0.85

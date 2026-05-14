@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import json
 import argparse
 import threading
 
@@ -50,7 +51,38 @@ def _discard_cancelled(transfer_id):
             _cancelled_transfers.discard(transfer_id)
 
 
+def load_planner_defaults():
+    """Load default planner configuration from config/planner_defaults.yaml."""
+    try:
+        from ament_index_python.resources import get_resource
+        _, package_path = get_resource("packages", "map_data")
+        config_path = os.path.join(package_path, "share", "map_data", "config", "planner_defaults.yaml")
+    except Exception:
+        config_path = os.path.realpath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "config", "planner_defaults.yaml")
+        )
+
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            return yaml.safe_load(f)
+    return {}
+
+
 class ReplanPath:
+    # These will be populated from config or fallback to hardcoded defaults if config missing
+    _DEFAULTS = load_planner_defaults()
+    HIGHWAY_COSTS = _DEFAULTS.get("highway_costs", {
+        "pedestrian": 0.0, "footway": 0.0, "path": 0.1, "living_street": 0.1,
+        "track": 0.3, "service": 0.3, "residential": 0.5, "unclassified": 0.5,
+        "tertiary": 0.7, "secondary": 0.9, "primary": 1.0,
+    })
+    SURFACE_COSTS = _DEFAULTS.get("surface_costs", {
+        "asphalt": 0.0, "paving_stones": 0.0, "concrete": 0.0, "fine_gravel": 0.1,
+        "gravel": 0.2, "dirt": 0.3, "grass": 0.5, "sand": 0.7,
+    })
+    DEFAULT_OFF_PATH_COST = _DEFAULTS.get("default_off_path_cost", 0.9)
+    PATH_COST_CAP = _DEFAULTS.get("path_cost_cap", 0.85)
+
     def __init__(self, args, obstacles=None, transfer_id=None) -> None:
         self.args = args
         self.transfer_id = transfer_id
@@ -114,7 +146,7 @@ class ReplanPath:
 
     def _post_process_path(self, path: np.ndarray) -> np.ndarray:
         """
-        Simplify the final path by removing redundant points.
+        Simplify and optionally smooth the final path.
         """
         if path is None or len(path) <= 2:
             return path
@@ -129,12 +161,40 @@ class ReplanPath:
         if len(path) <= 2:
             return path
 
-        # 2. Final Douglas-Peucker simplification on the whole path
+        # 2. Smooth path if requested
+        if getattr(self.args, "smooth_path", False):
+            path = self._smooth_path(path)
+
+        # 3. Final Douglas-Peucker simplification on the whole path
         if self.args.simplify_path:
             # Use cell_size as tolerance for the whole path
             path = np.array(LineString(path).simplify(self.args.cell_size).coords)
 
         return path
+
+    def _smooth_path(self, path: np.ndarray, weight_data: float = 0.5, weight_smooth: float = 0.3, tolerance: float = 0.001) -> np.ndarray:
+        """
+        Gradient descent path smoothing.
+        """
+        new_path = np.copy(path)
+        change = tolerance
+        while change >= tolerance:
+            change = 0.0
+            for i in range(1, len(path) - 1):
+                for j in range(len(path[i])):
+                    aux = new_path[i][j]
+                    new_path[i][j] += weight_data * (path[i][j] - new_path[i][j]) + \
+                                     weight_smooth * (new_path[i-1][j] + new_path[i+1][j] - 2.0 * new_path[i][j])
+                    change += abs(aux - new_path[i][j])
+            
+            # Check for collisions after each iteration (simplified)
+            # If smoothing causes collision, we might want to revert or constrain it
+            # For now, let's just check the whole new path at the end or every few iterations
+            if self._colides(LineString(new_path)):
+                # If it collides, we could try to pull it back or just stop smoothing
+                # A better way would be to incorporate obstacle avoidance into the smoothing objective
+                return path # Return original path if smoothing failed safely
+        return new_path
 
     def _rrt_star(self, start: np.ndarray, goal: np.ndarray) -> Optional[np.ndarray]:
         if self._reshaped_grid_cache is None:
@@ -302,84 +362,119 @@ class ReplanPath:
         )
         return grid
 
-    def fill_grid(self, map_data: Any, highway_types: Optional[List[str]] = None, max_path_dist: float = 20.0) -> None:
+    def fill_grid(self, map_data: Any, highway_types: Optional[List[str]] = None, max_path_dist: float = 2.0) -> None:
         if highway_types is None:
             highway_types = ["footway"]
 
         points = map_data.get_points()
-        path_grid = self.grid
+        
+        # 1. Initialize path_grid with default off-path cost (e.g. grass/all-terrain)
+        # 1.0 will be reserved for hard obstacles.
+        default_off_path_cost = self.DEFAULT_OFF_PATH_COST
+        path_grid = np.pad(self.grid[:, :2], ((0, 0), (0, 1)))
+        path_grid[:, 2] = 0.0 # Placeholder for height or other data
+        path_grid = np.pad(path_grid, ((0, 0), (0, 1)))
+        path_grid[:, 3] = default_off_path_cost
 
         bbox = sh.box(
             self.args.low[0], self.args.low[1], self.args.high[0], self.args.high[1]
         )
-        # Add a bit of margin for ways that might pass nearby
         bbox_buffered = bbox.buffer(max_path_dist)
 
-        allowed_ways = []
+        # We need to process ways individually to apply their specific costs
+        all_ways = []
         if "footway" in highway_types:
-            allowed_ways.extend(
-                [
-                    w
-                    for w in map_data.footways_list
-                    if w.line and w.line.intersects(bbox_buffered)
-                ]
-            )
+            all_ways.extend([w for w in map_data.footways_list if w.line and w.line.intersects(bbox_buffered)])
         if "road" in highway_types:
-            allowed_ways.extend(
-                [
-                    w
-                    for w in map_data.roads_list
-                    if w.line and w.line.intersects(bbox_buffered)
-                ]
-            )
-
-        if not allowed_ways:
-            path_grid = np.pad(path_grid, ((0, 0), (0, 1)))
-            path_grid[:, 3] = 0.5
-            self.grid = path_grid
-            return
+            all_ways.extend([w for w in map_data.roads_list if w.line and w.line.intersects(bbox_buffered)])
 
         # PRIORITIZE PATHS OVER OBSTACLES:
         # Subtract path geometries from obstacles so that paths are always traversable.
-        path_geoms = [w.line for w in allowed_ways if w.line]
+        path_geoms = [w.line for w in all_ways]
         if path_geoms and self.obstacles:
             unioned_paths = sh.unary_union(path_geoms)
             new_obstacles = []
             for obstacle in self.obstacles:
-                # Subtract paths from the obstacle
                 diff = obstacle.difference(unioned_paths)
                 if not diff.is_empty:
-                    # difference might return a MultiPolygon
                     if diff.geom_type == "MultiPolygon":
                         new_obstacles.extend(list(diff.geoms))
                     else:
                         new_obstacles.append(diff)
-
             self.obstacles = new_obstacles
-            # Rebuild STRtree
             self.obstacles_tree = sh.STRtree(self.obstacles) if self.obstacles else None
 
-        paths = np.pad(
-            self._split_ways(points, allowed_ways, self.args.cell_size),
-            ((0, 0), (0, 1)),
-        )
-        neighbor_cost = "quadratic"
-        tmp, mask = self._points_near_ref(path_grid, paths, max_path_dist)
-        # Initialize path_grid cost to 1.0 (un-traversable/high cost)
-        path_grid = np.pad(path_grid, ((0, 0), (0, 1)))
-        path_grid[:, 3] = 1.0
+        # 2. Mark hard obstacles in the point grid (for visualization)
+        if self.obstacles:
+            for obstacle in self.obstacles:
+                minx, miny, maxx, maxy = obstacle.bounds
+                mask_bbox = (path_grid[:, 0] >= minx) & (path_grid[:, 0] <= maxx) & \
+                            (path_grid[:, 1] >= miny) & (path_grid[:, 1] <= maxy)
+                if not np.any(mask_bbox):
+                    continue
+                
+                if obstacle.geom_type == 'Polygon':
+                    poly_path = Path(np.array(obstacle.exterior.coords))
+                    mask_inside = poly_path.contains_points(path_grid[mask_bbox, :2])
+                    path_grid[mask_bbox, 3] = np.where(mask_inside, 1.0, path_grid[mask_bbox, 3])
+                elif obstacle.geom_type == 'MultiPolygon':
+                    for poly in obstacle.geoms:
+                        poly_path = Path(np.array(poly.exterior.coords))
+                        mask_inside = poly_path.contains_points(path_grid[mask_bbox, :2])
+                        path_grid[mask_bbox, 3] = np.where(mask_inside, 1.0, path_grid[mask_bbox, 3])
 
-        if neighbor_cost == "linear":
-            pass
-        elif neighbor_cost == "quadratic":
-            tmp[:, 3] = tmp[:, 3] ** 2
-        elif neighbor_cost == "zero":
-            tmp[:, 3] = 0
-        else:
-            print(f"Unknown neighbor cost: {neighbor_cost}")
+        # 3. Process ways to set their costs and nearby area costs
+        path_points = []
+        path_point_costs = []
 
-        # Set points near paths to their calculated cost (0.0 to 1.0)
-        path_grid[mask, 3] = tmp[:, 3]
+        for way in all_ways:
+            # Calculate base cost for this way
+            hw = way.tags.get("highway", "path")
+            surface = way.tags.get("surface", "asphalt")
+            
+            base_cost = self.HIGHWAY_COSTS.get(hw, 0.5)
+            surface_cost = self.SURFACE_COSTS.get(surface, 0.0)
+            # Cap so it's always lower than default_off_path_cost
+            # and stays in the "path" color range.
+            way_cost = min(self.PATH_COST_CAP, base_cost + surface_cost)
+
+            # Split way into points
+            waypoints = []
+            for i in range(len(way.nodes) - 1):
+                p0 = points[way.nodes[i]].ravel()[:2]
+                p1 = points[way.nodes[i+1]].ravel()[:2]
+                dist = np.linalg.norm(p1 - p0)
+                if i == 0:
+                    waypoints.append(p0)
+                if dist <= 1e-3:
+                    waypoints.append(p1)
+                    continue
+                vec = (p1 - p0) / dist
+                num = int(np.ceil(dist / self.args.cell_size))
+                step = dist / num
+                for j in range(num):
+                    waypoints.append(p0 + (j + 1) * step * vec)
+            
+            path_points.extend(waypoints)
+            path_point_costs.extend([way_cost] * len(waypoints))
+
+        if path_points:
+            path_points = np.array(path_points)
+            path_point_costs = np.array(path_point_costs)
+
+            tree = cKDTree(path_points, compact_nodes=False, balanced_tree=False)
+            dists, indices = tree.query(path_grid[:, :2], distance_upper_bound=max_path_dist)
+            mask = dists < max_path_dist
+            
+            # Calculate final cost: base way cost + distance-based penalty
+            # We use default_off_path_cost as the maximum cost for off-path but traversable areas.
+            found_dists = dists[mask]
+            found_indices = indices[mask]
+            way_costs = path_point_costs[found_indices]
+            
+            final_costs = way_costs + (default_off_path_cost - way_costs) * (found_dists / max_path_dist)**2
+            # Only update if the new cost is lower than existing (which might be an obstacle at 1.0)
+            path_grid[mask, 3] = np.minimum(path_grid[mask, 3], final_costs)
 
         self.grid = path_grid
         grid_2d = self._reshape_grid()
@@ -523,10 +618,11 @@ def parse_args(args=None):
         default=0.25,
         help="Inflate obstacles by this amount",
     )
+    parser.add_argument("--smooth_path", action="store_true", help="Smooth path")
     parser.add_argument(
         "--max_path_dist",
         type=float,
-        default=20.0,
+        default=2.0,
         help="Maximum distance from path to be traversable",
     )
     parser.add_argument("--save", type=str, default=None, help="Save path to file")
@@ -569,3 +665,4 @@ if __name__ == "__main__":
 
     if args.visualize:
         replanner.visualize(new_path, path_data[0])
+path_data[0])

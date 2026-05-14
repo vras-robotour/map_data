@@ -116,9 +116,13 @@ async function initApp() {
         if (file) loadMapData(file);
     });
 
-    document.getElementById('feature-search')?.addEventListener('input', e => {
-        filterLayers(e.target.value);
-    });
+  document.getElementById('clear-btn')?.addEventListener('click', () => {
+    clearMapData();
+  });
+
+  document.getElementById('feature-search')?.addEventListener('input', e => {
+    filterLayers(e.target.value);
+  });
 
     document.querySelectorAll('.mode-btn').forEach(btn => {
         btn.addEventListener('click', () => setMode(btn.dataset.mode));

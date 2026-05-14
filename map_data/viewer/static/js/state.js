@@ -1,6 +1,7 @@
 // ── State ────────────────────────────────────────────────────────────────────
 let currentAppMode = 'viewer'; // 'viewer' or 'planner'
 let plannerMode = null; // Will hold the PlannerMode instance
+let currentFile = '';
 let currentMode = 'view';
 let annotations = [];
 let pendingBbox = null;
@@ -26,7 +27,7 @@ let editingAnnId = null;      // annotation ID being edited in the modal
 let editingWayId = null;      // OSM way ID being edited in the way-edit modal
 
 // ── Layers ───────────────────────────────────────────────────────────────────
-const geoLayers = { road: null, footway: null, barrier: null, waypoint: null, crossroad: null, robot: null };
+const geoLayers = { road: null, footway: null, barrier: null, waypoint: null, crossroad: null, robot: null, costGrid: null };
 
 // subtypeLayers[cat][subtype] = array of individual L.Path layers inside geoLayers[cat]
 const subtypeLayers = { road: {}, footway: {}, barrier: {}, crossroad: {} };

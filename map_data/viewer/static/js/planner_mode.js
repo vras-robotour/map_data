@@ -4,18 +4,68 @@
  */
 
 class PlannerMode {
-    constructor() {
-        this.points = []; // [{lat, lon, marker}]
-        this.active = false;
-        this.isProcessing = false;
-        this.isDragging = false;
-        this.lastDragEndTime = 0;
-        this.currentReplanId = null;
-        this.currentWormholeId = null;
-        this.pathPolyline = null;
-        this.markerLayer = L.layerGroup();
+  constructor() {
+    this.points = []; // [{lat, lon, marker}]
+    this.active = false;
+    this.isProcessing = false;
+    this.isDragging = false;
+    this.lastDragEndTime = 0;
+    this.currentReplanId = null;
+    this.currentWormholeId = null;
+    this.pathPolyline = null;
+    this.markerLayer = L.layerGroup();
+    this.highwayCosts = {};
+    this.surfaceCosts = {};
+    this.defaults = {};
 
-        this.init();
+    this.init();
+  }
+
+  async init() {
+    this.bindEvents();
+    this.setupDragAndDrop();
+    await this.fetchDefaults();
+  }
+
+  async fetchDefaults() {
+    try {
+      const res = await fetch('/api/planner_defaults');
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      this.defaults = data;
+      this.highwayCosts = { ...data.highway_costs };
+      this.surfaceCosts = { ...data.surface_costs };
+      
+      // Update UI fields if they exist
+      if (data.cell_size) document.getElementById('planner-cell-size').value = data.cell_size;
+      if (data.inflate_obstacles) document.getElementById('planner-inflate').value = data.inflate_obstacles;
+      if (data.simplify_path !== undefined) document.getElementById('planner-simplify').checked = data.simplify_path;
+      if (data.smooth_path !== undefined) document.getElementById('planner-smooth').checked = data.smooth_path;
+      
+    } catch (err) {
+      console.error('Failed to fetch planner defaults:', err);
+      // Fallback
+      this.resetCosts();
+    }
+  }
+
+  enable() {
+    this.active = true;
+    this.markerLayer.addTo(map);
+    this.redraw();
+    this.updateUI(); // Ensure UI state is correct
+    // Enable map click for adding points
+    map.on('click', this.handleMapClick, this);
+  }
+
+  disable() {
+    this.active = false;
+    map.off('click', this.handleMapClick, this);
+    this.clearMarkers();
+    map.removeLayer(this.markerLayer);
+    if (this.pathPolyline) {
+      map.removeLayer(this.pathPolyline);
+      this.pathPolyline = null;
     }
 
     init() {
@@ -59,7 +109,239 @@ class PlannerMode {
                 this.updateUI();
             });
         });
+    });
+
+    document.getElementById('planner-simplify').addEventListener('change', () => this.drawPathLine());
+    document.getElementById('planner-smooth').addEventListener('change', () => this.drawPathLine());
+    document.getElementById('planner-show-grid').addEventListener('change', (e) => this.toggleCostGrid(e.target.checked));
+    document.getElementById('planner-costs-btn').addEventListener('click', () => this.showCostsModal());
+    document.getElementById('planner-costs-save').addEventListener('click', () => this.saveCosts());
+    document.getElementById('planner-costs-reset').addEventListener('click', () => this.resetCosts());
+
+    document.getElementById('planner-fetch-submit').addEventListener('click', () => this.handlePlannerAutoFetch());
+    document.getElementById('planner-fetch-name-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') this.handlePlannerAutoFetch();
+    });
+  }
+
+  async handlePlannerAutoFetch() {
+    const name = document.getElementById('planner-fetch-name-input').value.trim();
+    if (!name) {
+      document.getElementById('planner-fetch-name-input').focus();
+      return;
     }
+    bootstrap.Modal.getInstance(document.getElementById('planner-fetch-modal')).hide();
+
+    // Calculate BBox for the current points
+    let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+    this.points.forEach(p => {
+      if (p.lat < minLat) minLat = p.lat;
+      if (p.lat > maxLat) maxLat = p.lat;
+      if (p.lon < minLon) minLon = p.lon;
+      if (p.lon > maxLon) maxLon = p.lon;
+    });
+
+    // Add a small margin (approx 50m in degrees)
+    const margin = 0.0005; 
+    const bbox = {
+      min_lat: minLat - margin,
+      max_lat: maxLat + margin,
+      min_lon: minLon - margin,
+      max_lon: maxLon + margin,
+      name: name
+    };
+
+    setStatus('Fetching & parsing OSM data for the area...', 'text-warning');
+    this.updateProcessingUI(true);
+    this.isProcessing = true;
+
+    try {
+      const data = await fetchAreaApi(bbox);
+      setStatus(`Map created: ${data.filename}. Loading and planning...`, 'text-success');
+
+      // Add to file select if it's there
+      const sel = document.getElementById('file-select');
+      if (sel && ![...sel.options].some(o => o.value === data.filename)) {
+        sel.appendChild(new Option(data.filename, data.filename));
+      }
+      if (sel) sel.value = data.filename;
+
+      // Load the map data
+      await loadMapData(data.filename, { preserveView: true });
+
+      // After loading, proceed with replan
+      this.isProcessing = false; // Reset so replanPath can proceed
+      this.replanPath();
+    } catch (err) {
+      setStatus(`Fetch failed: ${err.message}`, 'text-danger');
+      this.updateProcessingUI(false);
+      this.isProcessing = false;
+    }
+  }
+
+  showCostsModal() {
+    const hwContainer = document.getElementById('highway-costs-container');
+    hwContainer.innerHTML = '';
+    Object.entries(this.highwayCosts).sort((a,b) => a[1]-b[1]).forEach(([type, cost]) => {
+      hwContainer.appendChild(this._createCostInputRow(type, cost, 'highway-cost-input'));
+    });
+
+    const surfContainer = document.getElementById('surface-costs-container');
+    surfContainer.innerHTML = '';
+    Object.entries(this.surfaceCosts).sort((a,b) => a[1]-b[1]).forEach(([type, cost]) => {
+      surfContainer.appendChild(this._createCostInputRow(type, cost, 'surface-cost-input'));
+    });
+    
+    const modal = new bootstrap.Modal(document.getElementById('planner-costs-modal'));
+    modal.show();
+  }
+
+  _createCostInputRow(label, value, className) {
+    const div = document.createElement('div');
+    div.className = 'd-flex align-items-center gap-2';
+    div.innerHTML = `
+      <span class="text-secondary" style="font-size:0.75rem; width:80px; overflow:hidden; text-overflow:ellipsis;">${label}</span>
+      <input type="number" class="form-control form-control-sm bg-dark text-light border-secondary ${className}" 
+             data-type="${label}" value="${value}" step="0.05" min="0" max="1" style="font-size:0.7rem; height:24px;">
+    `;
+    return div;
+  }
+
+  saveCosts() {
+    const hwInputs = document.querySelectorAll('.highway-cost-input');
+    const surfInputs = document.querySelectorAll('.surface-cost-input');
+    
+    const newHwCosts = {};
+    const newSurfCosts = {};
+    let valid = true;
+    
+    const parse = (inputs, target) => {
+      inputs.forEach(input => {
+        const val = parseFloat(input.value);
+        if (isNaN(val) || val < 0 || val > 1) {
+          input.classList.add('border-danger');
+          valid = false;
+        } else {
+          input.classList.remove('border-danger');
+          target[input.dataset.type] = val;
+        }
+      });
+    };
+
+    parse(hwInputs, newHwCosts);
+    parse(surfInputs, newSurfCosts);
+    
+    if (!valid) {
+      alert('All costs must be between 0.0 and 1.0');
+      return;
+    }
+    
+    this.highwayCosts = newHwCosts;
+    this.surfaceCosts = newSurfCosts;
+    bootstrap.Modal.getInstance(document.getElementById('planner-costs-modal')).hide();
+    
+    // If grid is visible, refresh it
+    if (document.getElementById('planner-show-grid').checked) {
+      this.fetchCostGrid();
+    }
+    setStatus('Planner costs updated', 'text-success');
+  }
+
+  resetCosts() {
+    if (this.defaults && this.defaults.highway_costs) {
+      this.highwayCosts = { ...this.defaults.highway_costs };
+      this.surfaceCosts = { ...this.defaults.surface_costs };
+    } else {
+      // Hardcoded fallback if everything else fails
+      this.highwayCosts = {
+        "pedestrian": 0.0, "footway": 0.0, "path": 0.1, "living_street": 0.1,
+        "track": 0.3, "service": 0.3, "residential": 0.5, "unclassified": 0.5,
+        "tertiary": 0.7, "secondary": 0.9, "primary": 1.0,
+      };
+      this.surfaceCosts = {
+        "asphalt": 0.0, "paving_stones": 0.0, "concrete": 0.0, "fine_gravel": 0.1,
+        "gravel": 0.2, "dirt": 0.3, "grass": 0.5, "sand": 0.7,
+      };
+    }
+    this.showCostsModal();
+  }
+
+  async toggleCostGrid(show) {
+    if (!show) {
+      if (geoLayers.costGrid) {
+        map.removeLayer(geoLayers.costGrid);
+        geoLayers.costGrid = null;
+      }
+      return;
+    }
+    if (!currentFile) {
+      document.getElementById('planner-show-grid').checked = false;
+      setStatus('Load a map first', 'text-warning');
+      return;
+    }
+    this.fetchCostGrid();
+  }
+
+  async fetchCostGrid() {
+    if (!currentFile) return;
+    const bounds = map.getBounds();
+    setStatus('Fetching cost grid...', 'text-warning');
+    
+    try {
+      const costsJson = JSON.stringify(this.highwayCosts);
+      const surfaceJson = JSON.stringify(this.surfaceCosts);
+      const res = await fetch(`/api/cost_grid?file=${currentFile}&min_lat=${bounds.getSouth()}&min_lon=${bounds.getWest()}&max_lat=${bounds.getNorth()}&max_lon=${bounds.getEast()}&highway_costs=${encodeURIComponent(costsJson)}&surface_costs=${encodeURIComponent(surfaceJson)}`);
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      
+      if (geoLayers.costGrid) map.removeLayer(geoLayers.costGrid);
+      
+      geoLayers.costGrid = L.geoJSON(data, {
+        pointToLayer: (feature, latlng) => {
+          const cost = feature.properties.cost;
+          if (cost >= 1.0) {
+            // Hard Obstacle style: black marker
+            return L.circleMarker(latlng, {
+              radius: 4,
+              fillColor: '#000',
+              color: '#000',
+              weight: 1,
+              fillOpacity: 1
+            });
+          }
+          const offPathThreshold = this.defaults.default_off_path_cost || 0.9;
+          const pathCap = this.defaults.path_cost_cap || 0.85;
+
+          if (cost >= offPathThreshold) {
+             // Off-path / All-terrain style: dark gray/brown
+             return L.circleMarker(latlng, {
+                radius: 2,
+                fillColor: '#444',
+                color: '#444',
+                weight: 0,
+                fillOpacity: 0.4
+             });
+          }
+          // Interpolate color from green (0) to red (pathCap)
+          const normalizedCost = cost / pathCap;
+          const r = Math.floor(255 * Math.min(1, normalizedCost));
+          const g = Math.floor(255 * Math.max(0, 1 - normalizedCost));
+          return L.circleMarker(latlng, {
+            radius: 3,
+            fillColor: `rgb(${r},${g},0)`,
+            color: '#000',
+            weight: 0.2,
+            fillOpacity: 0.6
+          });
+        }
+      }).addTo(map);
+      
+      setStatus('Cost grid loaded', 'text-success');
+    } catch (err) {
+      setStatus(`Failed to fetch cost grid: ${err.message}`, 'text-danger');
+      document.getElementById('planner-show-grid').checked = false;
+    }
+  }
 
     handleMapClick(e) {
         if (!this.active || this.isProcessing || this.isDragging || Date.now() - this.lastDragEndTime < 200) {

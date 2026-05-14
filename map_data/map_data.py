@@ -1,6 +1,7 @@
 import concurrent.futures
 import logging
 import os
+import yaml
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -20,8 +21,30 @@ from map_data.utils.way import Way
 
 logger = logging.getLogger(__name__)
 
-OSM_MARGIN = 100  # meters, expansion margin for OSM bounding box query
-RESERVE = 50  # meters, safety margin added to waypoint bounds
+
+import yaml
+
+
+def load_map_defaults():
+    """Load default map configuration from config/planner_defaults.yaml."""
+    try:
+        from ament_index_python.resources import get_resource
+        _, package_path = get_resource("packages", "map_data")
+        config_path = os.path.join(package_path, "share", "map_data", "config", "planner_defaults.yaml")
+    except Exception:
+        config_path = os.path.realpath(
+            os.path.join(os.path.dirname(__file__), "..", "config", "planner_defaults.yaml")
+        )
+
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            return yaml.safe_load(f)
+    return {}
+
+
+_DEFAULTS = load_map_defaults()
+OSM_MARGIN = _DEFAULTS.get("osm_margin", 100)
+RESERVE = _DEFAULTS.get("reserve_margin", 50)
 
 
 class CoordsData:
