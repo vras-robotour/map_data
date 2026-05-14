@@ -62,3 +62,9 @@ nav:
       - MapData: api/map_data.md
       - Way: api/way.md
       - Pathsolvers: api/pathsolver.md
+      - Viewer REST API: api/viewer_routes.md
+  - Developer Guide:
+      - Architecture: dev/architecture.md
+      - Tag Configuration: dev/tag_configuration.md
+      - Planner Configuration: dev/planner_config.md
+      - Data Formats: dev/data_formats.md
