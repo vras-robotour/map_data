@@ -31,7 +31,6 @@ from map_data.pathsolver.graph_planner import GraphPlanner
 from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.serialization import map_data_to_dict
 from map_data.utils.way import FOOTWAY_VALUES, Way
-
 from .cache import load_mapdata_cached
 from .helpers import (
     apply_node_position_overrides,
@@ -48,9 +47,15 @@ from .helpers import (
     save_annotations,
     split_way,
 )
+from map_data.pathsolver.replan import load_planner_defaults
 
 bp = Blueprint("viewer", __name__)
-logger = logging.getLogger(__name__)
+
+
+@bp.route("/api/planner_defaults")
+def get_planner_defaults():
+    return jsonify(load_planner_defaults())
+
 
 _CAT_FOR_LIST = {
     "roads_list": "road",
@@ -1206,6 +1211,74 @@ def export_mapdata():
     )
 
 
+@bp.route("/api/cost_grid")
+def get_cost_grid():
+    filename = request.args.get("file")
+    min_lat = request.args.get("min_lat", type=float)
+    min_lon = request.args.get("min_lon", type=float)
+    max_lat = request.args.get("max_lat", type=float)
+    max_lon = request.args.get("max_lon", type=float)
+
+    if not all([filename, min_lat, min_lon, max_lat, max_lon]):
+        abort(400, "Missing required parameters")
+
+    md, _ = get_merged_mapdata(filename)
+    if md is None:
+        abort(404, f"File {filename} not found")
+
+    zn, zl = md.zone_number, md.zone_letter
+    p1 = utm.from_latlon(min_lat, min_lon, zn, zl)
+    p2 = utm.from_latlon(max_lat, max_lon, zn, zl)
+
+    low = (min(p1[0], p2[0]), min(p1[1], p2[1]))
+    high = (max(p1[0], p2[0]), max(p1[1], p2[1]))
+
+    args = parse_args([])
+    args.low = low
+    args.high = high
+    args.cell_size = 1.0  # Use a coarser grid for visualization performance
+    args.inflate_obstacles = 0.0
+
+    obstacles = ways_to_shapely(md.barriers_list)
+    replanner = ReplanPath(args, obstacles)
+    
+    # Get custom highway costs from request if provided
+    highway_costs = request.args.get("highway_costs")
+    if highway_costs:
+        try:
+            custom_costs = json.loads(highway_costs)
+            replanner.HIGHWAY_COSTS = custom_costs
+        except Exception as e:
+            logger.warning(f"Failed to parse custom highway costs: {e}")
+
+    surface_costs = request.args.get("surface_costs")
+    if surface_costs:
+        try:
+            custom_surf_costs = json.loads(surface_costs)
+            replanner.SURFACE_COSTS = custom_surf_costs
+        except Exception as e:
+            logger.warning(f"Failed to parse custom surface costs: {e}")
+
+    replanner.fill_grid(md, highway_types=["footway", "road"])
+
+    grid = replanner.grid  # [N, 4] -> [x, y, 0, cost]
+    # Do not filter out obstacles (cost >= 1.0) so they can be visualized
+    visible_grid = grid
+
+    features = []
+    for row in visible_grid:
+        lat, lon = utm.to_latlon(row[0], row[1], zn, zl)
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "properties": {"cost": float(row[3])},
+            }
+        )
+
+    return jsonify({"type": "FeatureCollection", "features": features})
+
+
 @bp.route("/api/cancel_replan", methods=["POST"])
 def cancel_replan_route():
     transfer_id = request.json.get("transfer_id")
@@ -1378,10 +1451,13 @@ def create_replan():
     transfer_id = body.get("transfer_id")
     algorithm = body.get("algorithm", "rrt")
     sub_algorithm = body.get("sub_algorithm", "astar")
+    highway_costs = body.get("highway_costs")
+    surface_costs = body.get("surface_costs")
 
     cell_size = body.get("cell_size", 0.25)
     inflate_obstacles = body.get("inflate_obstacles", 0.25)
     simplify_path = body.get("simplify_path", True)
+    smooth_path = body.get("smooth_path", False)
 
     if not path_data or not filename:
         abort(400, "Missing points or file parameter")
@@ -1414,6 +1490,7 @@ def create_replan():
     else:
         args = parse_args([])
         args.simplify_path = simplify_path
+        args.smooth_path = smooth_path
         args.cell_size = cell_size
         args.inflate_obstacles = inflate_obstacles
         args.visualize = False
@@ -1428,6 +1505,16 @@ def create_replan():
 
         obstacles = ways_to_shapely(filtered_barriers)
         replanner = ReplanPath(args, obstacles, transfer_id=transfer_id)
+        if highway_costs:
+            try:
+                replanner.HIGHWAY_COSTS = highway_costs
+            except Exception as e:
+                logger.warning(f"Failed to set custom highway costs: {e}")
+        if surface_costs:
+            try:
+                replanner.SURFACE_COSTS = surface_costs
+            except Exception as e:
+                logger.warning(f"Failed to set custom surface costs: {e}")
         replanner.fill_grid(md, highway_types=highway_types)
         res = replanner.replan(utm_path, algorithm=sub_algorithm)
 
