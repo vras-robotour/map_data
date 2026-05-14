@@ -858,7 +858,9 @@ async function undoWaySplit(wayId, nodeId) {
     } else {
         setStatus('Undo failed', 'text-danger');
     }
-} function renderHiddenPanel() {
+}
+
+function renderHiddenPanel() {
     const panel = document.getElementById('hidden-panel');
     const list = document.getElementById('hidden-list');
     const count = document.getElementById('hidden-count');
