@@ -112,6 +112,10 @@ async function initApp() {
     if (file) loadMapData(file);
   });
 
+  document.getElementById('clear-btn')?.addEventListener('click', () => {
+    clearMapData();
+  });
+
   document.getElementById('feature-search')?.addEventListener('input', e => {
     filterLayers(e.target.value);
   });
