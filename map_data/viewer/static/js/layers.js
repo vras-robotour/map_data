@@ -411,6 +411,52 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
   }
 }
 
+function clearMapData() {
+  deselectCurrent();
+  clearNodes();
+  if (plannerMode) plannerMode.clearAll();
+
+  currentFile = "";
+  
+  // Clear all geo layers from map and reset state
+  Object.values(geoLayers).forEach(l => {
+    if (l) {
+      map.removeLayer(l);
+    }
+  });
+  drawnItems.clearLayers();
+  
+  // Reset layers state
+  ['road', 'footway', 'barrier', 'crossroad', 'waypoint'].forEach(cat => {
+    geoLayers[cat] = null;
+    if (cat !== 'waypoint') {
+      subtypeLayers[cat] = {};
+      subtypeFilters[cat] = {};
+      renderSubtypeFilters(cat);
+    }
+  });
+
+  // Reset data state
+  annotations = [];
+  deletedWays = [];
+  deletedNodes = [];
+  tagOverrides = [];
+  hiddenWays = [];
+  hiddenWayIds.clear();
+  changeLog = [];
+
+  // Reset UI elements
+  document.getElementById('file-select').value = "";
+  document.getElementById('export-btn').disabled = true;
+  document.getElementById('feature-search').value = "";
+  
+  renderAnnotationList();
+  renderChangesPanel();
+  renderHiddenPanel();
+
+  setStatus('Map cleared', 'text-secondary');
+}
+
 async function _reloadWay(wayId) {
   if (!currentFile) return;
 
