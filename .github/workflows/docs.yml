@@ -2,14 +2,13 @@ name: Docs
 on:
   push:
     branches:
-      - master # Adjust this if your default branch is 'main'
+      - master
     paths:
-      - 'docs/**'
-      - 'mkdocs.yml'
-      - 'map_data/**'
-      - 'README.md'
-      - '.github/workflows/docs.yml'
-      - 'requirements.txt'
+      - "docs/**"
+      - "mkdocs.yml"
+      - "map_data/**"
+      - ".github/workflows/docs.yml"
+      - "requirements.txt"
 
 permissions:
   contents: write
@@ -25,7 +24,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.10"
 
       - name: Install dependencies
         run: |

@@ -2,6 +2,10 @@
 
 This page covers the core CLI tools and ROS2 nodes for parsing, visualizing, and publishing map data.
 
+!!! note "ROS2 requirement"
+    `create_mapdata`, `visualize_mapdata`, and `osm_cloud` require a sourced ROS2 workspace.
+    The `MapData` class, path planning modules, and the interactive viewer work **standalone**.
+
 ## Parsing and creating files
 
 `create_mapdata` creates a `.mapdata` file from a `.gpx` file, or re-parses an existing
@@ -11,8 +15,6 @@ This page covers the core CLI tools and ROS2 nodes for parsing, visualizing, and
 |------|-------------|
 | `-d` | Download fresh OSM data from the `.gpx` bounds and parse it |
 | `-f <filename>` | `.gpx` file to parse (with `-d`), or `.mapdata` file to re-parse (without `-d`) |
-
-Default input file when `-f` is omitted: `buchlovice.gpx`.
 
 Download and parse OSM data for a GPX file:
 
@@ -36,7 +38,7 @@ one with footways only.
 
 | Flag | Description |
 |------|-------------|
-| `-f <filename>` | `.mapdata` file to visualize (default: `buchlovice.mapdata`) |
+| `-f <filename>` | `.mapdata` file to visualize |
 | `-sm` | Save the main map plot (default filename: `map.png`) |
 | `-if <filename>` | Custom filename for the main plot (requires `-sm`) |
 | `-sb` | Save the background tile image (default filename: `bgd_map.png`) |
@@ -75,8 +77,8 @@ topic (cost-aware footway grid) and optionally publishes intersections as a
 | `max_path_dist` | `1.0` | Max distance (m) at which a grid point receives a cost |
 | `neighbor_cost` | `"linear"` | Cost function: `linear`, `quadratic`, or `zero` |
 | `grid_res` | `0.25` | Grid point spacing (m) |
-| `grid_max` | `[0.0, 0.0]` | Upper bounds of the local-frame grid (m). `[0,0]` triggers auto-calc. |
-| `grid_min` | `[0.0, 0.0]` | Lower bounds of the local-frame grid (m). `[0,0]` triggers auto-calc. |
+| `grid_max` | `[0.0, 0.0]` | Upper bounds of the local-frame grid (m). `[0, 0]` triggers auto-calc. |
+| `grid_min` | `[0.0, 0.0]` | Lower bounds of the local-frame grid (m). `[0, 0]` triggers auto-calc. |
 | `auto_utm` | `false` | Auto-calculate UTM-to-local transform from map center |
 | `publish_intersections` | `false` | Whether to publish footway intersections |
 

@@ -9,13 +9,27 @@ ROS2 tools to work with OSM data and perform path planning.
 
 This package parses a `.gpx` file with GPS waypoints into a Python class, queries [OpenStreetMap](https://www.openstreetmap.org) for map features, and performs path planning. It provides both ROS2 nodes and standalone Python tools.
 
+## Features
+
+- Parse GPX waypoints and download OSM map features (barriers, footways, roads)
+- Serialize and reload map data as `.mapdata` files
+- Interactive web-based viewer for inspection, annotation, and mission planning
+- Path planning via Graph A\*, Grid A\*, and RRT\*
+- ROS2 node for publishing cost-aware footway point clouds
+- Standalone Python library — no ROS2 context required for parsing and planning
+
 ## Documentation
 
 Full documentation, including installation guides, CLI usage, and API reference, is available at:
 
-👉 **[https://vras-robotour.github.io/map_data/](https://vras-robotour.github.io/map_data/)**
+**[https://vras-robotour.github.io/map_data/](https://vras-robotour.github.io/map_data/)**
 
 ## Quick Start
+
+### Prerequisites
+
+- Python 3.10+
+- ROS2 Humble or later (required only for `create_mapdata`, `visualize_mapdata`, and `osm_cloud`)
 
 ### Installation
 
@@ -24,8 +38,8 @@ Full documentation, including installation guides, CLI usage, and API reference,
 git clone https://github.com/vras-robotour/map_data.git
 cd map_data
 
-# Install dependencies
-pip install -r requirements.txt
+# Install as an editable package (includes all dependencies)
+pip install -e .
 
 # (Optional) Build with colcon if using ROS2
 colcon build --packages-select map_data

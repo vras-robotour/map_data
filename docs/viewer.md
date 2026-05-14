@@ -19,6 +19,14 @@ python -m map_data.viewer.app --data-dir ./data
 
 Then open `http://127.0.0.1:5000` in a browser.
 
+## Loading Map Data
+
+The viewer loads files from its data directory (default: the package `data/` folder,
+overridable with `--data-dir`). Supported file formats:
+
+- **`.mapdata`** — pre-parsed map files created by `create_mapdata`. Loaded immediately with no network request.
+- **`.gpx`** — raw GPS tracks. The viewer parses them on load by fetching OSM data for the track bounds.
+
 ## Main Modes
 
 The modes can be switched using the tabs in the top-right corner:
@@ -43,6 +51,6 @@ The toolbar at the top provides the following tools:
 
 - **Interactive Waypoints:** Click on the map to add waypoints. Drag them to adjust the route.
 - **Graph Planning:** Automatically snaps paths to the OSM road and footway network.
-- **All-Terrain Planning:** Uses Grid A* or RRT* to find the shortest path while avoiding both OSM barriers and manual obstacle annotations.
+- **All-Terrain Planning:** Uses Grid A\* or RRT\* to find the shortest path while avoiding both OSM barriers and manual obstacle annotations.
 - **GPX Support:** Import existing GPX tracks for refinement or export planned missions.
 - **Live Replanning:** Adjust planning parameters (inflation, cell size, path simplification) and see the results instantly.

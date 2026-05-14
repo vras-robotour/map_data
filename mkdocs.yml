@@ -1,7 +1,10 @@
 site_name: map_data
 site_description: ROS2 tools to work with OSM data and perform path planning.
+site_author: Jan Vlk
 repo_url: https://github.com/vras-robotour/map_data
+repo_name: vras-robotour/map_data
 edit_uri: edit/master/docs/
+copyright: Copyright &copy; 2024 VRAS
 
 theme:
   name: material
@@ -21,10 +24,12 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
   features:
+    - navigation.instant
     - navigation.tabs
     - navigation.sections
     - navigation.expand
     - navigation.top
+    - toc.follow
     - search.suggest
     - search.highlight
     - content.code.copy

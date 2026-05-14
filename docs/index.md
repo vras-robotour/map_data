@@ -1,8 +1,8 @@
-# map_data
+# Overview
 
 ROS2 tools to work with OSM data and perform path planning.
 
-## Overview
+## About
 
 This package parses a `.gpx` file with GPS waypoints into a Python class, queries
 [OpenStreetMap](https://www.openstreetmap.org) for map features within the area, and
@@ -25,7 +25,26 @@ The package targets **ROS2 Humble** or later on Ubuntu 22.04.
 
 Sample `.gpx` files are provided in `./data/`.
 
-## Using as a Python Library
+## Installation
+
+### As a standalone Python package
+
+```bash
+git clone https://github.com/vras-robotour/map_data.git
+cd map_data
+pip install -e .
+```
+
+### With ROS2 (colcon)
+
+```bash
+git clone https://github.com/vras-robotour/map_data.git
+cd map_data
+colcon build --packages-select map_data
+source install/setup.bash
+```
+
+## Python Library
 
 `MapData` and `Way` can be used directly in Python without a running ROS2 node.
 The only requirement is that the package is installed (e.g. via `pip install -e .`
@@ -101,4 +120,4 @@ map_data/
 
 ## License
 
-This project is licensed under the BSD 3-Clause License - see the [LICENSE](https://github.com/vras-robotour/map_data/blob/master/LICENSE) file for details.
+This project is licensed under the BSD 3-Clause License — see the [LICENSE](https://github.com/vras-robotour/map_data/blob/master/LICENSE) file for details.
