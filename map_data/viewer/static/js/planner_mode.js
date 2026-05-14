@@ -59,6 +59,66 @@ class PlannerMode {
             this.updateUI();
         });
     });
+
+    document.getElementById('planner-fetch-submit').addEventListener('click', () => this.handlePlannerAutoFetch());
+    document.getElementById('planner-fetch-name-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') this.handlePlannerAutoFetch();
+    });
+  }
+
+  async handlePlannerAutoFetch() {
+    const name = document.getElementById('planner-fetch-name-input').value.trim();
+    if (!name) {
+      document.getElementById('planner-fetch-name-input').focus();
+      return;
+    }
+    bootstrap.Modal.getInstance(document.getElementById('planner-fetch-modal')).hide();
+
+    // Calculate BBox for the current points
+    let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+    this.points.forEach(p => {
+      if (p.lat < minLat) minLat = p.lat;
+      if (p.lat > maxLat) maxLat = p.lat;
+      if (p.lon < minLon) minLon = p.lon;
+      if (p.lon > maxLon) maxLon = p.lon;
+    });
+
+    // Add a small margin (approx 50m in degrees)
+    const margin = 0.0005; 
+    const bbox = {
+      min_lat: minLat - margin,
+      max_lat: maxLat + margin,
+      min_lon: minLon - margin,
+      max_lon: maxLon + margin,
+      name: name
+    };
+
+    setStatus('Fetching & parsing OSM data for the area...', 'text-warning');
+    this.updateProcessingUI(true);
+    this.isProcessing = true;
+
+    try {
+      const data = await fetchAreaApi(bbox);
+      setStatus(`Map created: ${data.filename}. Loading and planning...`, 'text-success');
+
+      // Add to file select if it's there
+      const sel = document.getElementById('file-select');
+      if (sel && ![...sel.options].some(o => o.value === data.filename)) {
+        sel.appendChild(new Option(data.filename, data.filename));
+      }
+      if (sel) sel.value = data.filename;
+
+      // Load the map data
+      await loadMapData(data.filename, { preserveView: true });
+
+      // After loading, proceed with replan
+      this.isProcessing = false; // Reset so replanPath can proceed
+      this.replanPath();
+    } catch (err) {
+      setStatus(`Fetch failed: ${err.message}`, 'text-danger');
+      this.updateProcessingUI(false);
+      this.isProcessing = false;
+    }
   }
 
   handleMapClick(e) {
@@ -340,7 +400,8 @@ class PlannerMode {
       return;
     }
     if (!currentFile) {
-        setStatus('Please load a map file first', 'text-warning');
+        const modal = new bootstrap.Modal(document.getElementById('planner-fetch-modal'));
+        modal.show();
         return;
     }
 
