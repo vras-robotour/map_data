@@ -90,6 +90,12 @@
   --md-typeset-table-color--light: rgba(204, 208, 218, 0.5);
 }
 
+/* Code blocks inside admonitions need a darker bg so they stand out (latte only) */
+[data-md-color-scheme="catppuccin-latte"] .md-typeset .admonition pre,
+[data-md-color-scheme="catppuccin-latte"] .md-typeset details pre {
+  background-color: var(--cat-surface0);
+}
+
 /* ── Catppuccin Mocha (dark) ──────────────────────────────────────────────── */
 [data-md-color-scheme="slate"] {
   /* Palette */
