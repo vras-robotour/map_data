@@ -370,7 +370,43 @@
       title: 'OSM grid margin',
       desc: 'The OSM grid margin at parsing currently uses two variables. Replace them with a single <code>GRID_MARGIN</code> variable with a default in config file. Also make it changable in the viewer in Fetch and GPX parse dialogs.',
       file: null
+    },
+    {
+      type: 'improvement', sev: 'important',
+      title: 'Dependency Mismatch in ROS2 Manifest',
+      desc: '<code>package.xml</code> is missing critical execution dependencies (flask, overpy, shapely, etc.) that are required by the core library and viewer. Users installing via rosdep will face runtime failures.',
+      file: 'package.xml'
+    },
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'Inconsistent Python Dependency Definitions',
+      desc: 'Mismatch between <code>setup.py</code> and <code>requirements.txt</code>. <code>setup.py</code> is missing <code>PyYAML</code>, <code>matplotlib</code>, and <code>scipy</code>, which are imported in the code. <code>requirements.txt</code> contains many transitive/unnecessary dependencies.',
+      file: 'setup.py, requirements.txt'
+    },
+    {
+      type: 'documentation', sev: 'nice-to-have',
+      title: 'Placeholder Package Description',
+      desc: '<code>package.xml</code> still contains the default <code>TODO: Package description</code> text.',
+      file: 'package.xml'
+    },
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'Annotated Objects in Edit Mode',
+      desc: 'Do not show the editable parts of annotated objects before the user clicks them. The current behaviour is a bit noisy and may overwhelm new users. Also have the same editing UI for OSM objects and for user-created annotations.',
+      file: 'viewer'
+    },
+    {
+      type: 'improvement', sev: 'important',
+      title: 'Rerendering of Reverted Changes',
+      desc: 'When reverting an annotation edit, the viewer updates the data but does not trigger a rerender, leaving stale old geometry on the map, alongside the new reverted geometry, until the next load. This can cause confusion about whether the revert action succeeded.',
+      file: 'viewer'
     }
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'Improve Node Editing',
+      desc: 'Update the editing of nodes to be more responsive. Curently, clicking a node does not always trigger a drag of the node. Also true for path points in planner.',
+      file: 'viewer'
+    },
   ];
 
   let groupBy = 'type';
