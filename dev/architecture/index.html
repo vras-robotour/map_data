@@ -1,0 +1,1991 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="ROS2 tools to work with OSM data and perform path planning.">
+      
+      
+        <meta name="author" content="Jan Vlk">
+      
+      
+      
+        <link rel="prev" href="../../troubleshooting/">
+      
+      
+        <link rel="next" href="../tag_configuration/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Architecture - map_data</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../stylesheets/catppuccin.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="catppuccin-latte" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#architecture-overview" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="map_data" class="md-header__button md-logo" aria-label="map_data" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            map_data
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Architecture
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="catppuccin-latte" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/vras-robotour/map_data" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vras-robotour/map_data
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../usage/" class="md-tabs__link">
+          
+  
+  
+  Usage
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../api/map_data/" class="md-tabs__link">
+          
+  
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../troubleshooting/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Troubleshooting
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  Developer Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="map_data" class="md-nav__button md-logo" aria-label="map_data" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    map_data
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/vras-robotour/map_data" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vras-robotour/map_data
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Usage
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interactive Viewer
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Interactive Viewer
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../viewer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../viewer_view/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Viewer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../viewer_planner/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Planner
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../viewer_tracker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tracker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../planning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Path Planning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/map_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MapData
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/way/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Way
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/pathsolver/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pathsolvers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/viewer_routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Viewer REST API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Developer Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Developer Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#component-diagram" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Component diagram
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mapdata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MapData
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#way-objects" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Way objects
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pathsolvers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pathsolvers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pathsolvers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#graphplanner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GraphPlanner
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#replanpath" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ReplanPath
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#viewer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Viewer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ros2-nodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ROS2 nodes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data flow
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tag_configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tag Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../planner_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Planner Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../data_formats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Formats
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../todo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Known Issues & Backlog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#component-diagram" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Component diagram
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mapdata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MapData
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#way-objects" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Way objects
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pathsolvers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pathsolvers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pathsolvers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#graphplanner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GraphPlanner
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#replanpath" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ReplanPath
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#viewer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Viewer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ros2-nodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ROS2 nodes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data flow
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="architecture-overview">Architecture Overview</h1>
+<p>This page describes the internal structure of the <code>map_data</code> package. The system is organised into four main layers: <strong>data ingestion</strong>, <strong>representation</strong>, <strong>planning</strong>, and <strong>visualisation</strong>.</p>
+<hr />
+<h2 id="component-diagram">Component diagram</h2>
+<div class="arch-diagram">
+<style>
+/* ── Semantic tokens (scoped; reference --cat-* from catppuccin.css) ── */
+.arch-diagram {
+  --d-ink:          var(--cat-text);
+  --d-ink-3:        var(--cat-subtext0);
+  --d-ink-4:        var(--cat-overlay1);
+  --d-ink-faint:    var(--cat-overlay0);
+  --d-box-bg:       var(--cat-base);
+  --d-box-bg-soft:  var(--cat-mantle);
+  --d-box-edge:     var(--cat-surface1);
+  --d-dark-bg:      var(--cat-text);
+  --d-dark-edge:    var(--cat-text);
+  --d-dark-text:    var(--cat-base);
+  --d-dark-sub:     var(--cat-overlay1);
+  --d-dark-id:      var(--cat-overlay0);
+  --d-input-bg:     var(--cat-surface0);
+  --d-input-edge:   var(--cat-surface1);
+  --d-flow-main:    var(--cat-overlay1);
+  --d-flow-md:      var(--cat-text);
+  --d-data-rl:      var(--cat-blue);
+  --d-data-fl:      var(--cat-green);
+  --d-data-bl:      var(--cat-peach);
+  --d-data-cl:      var(--cat-mauve);
+  --d-data-nc:      var(--cat-teal);
+  --d-accent:       var(--cat-mauve);
+  --d-node-shadow:  rgba(76,79,105,0.10);
+  --d-group-fill:   rgba(124,127,147,0.06);
+}
+[data-md-color-scheme="slate"] .arch-diagram {
+  --d-dark-bg:      var(--cat-crust);
+  --d-dark-edge:    var(--cat-surface0);
+  --d-dark-text:    var(--cat-text);
+  --d-dark-sub:     var(--cat-subtext0);
+  --d-dark-id:      var(--cat-overlay1);
+  --d-box-bg:       var(--cat-mantle);
+  --d-box-bg-soft:  var(--cat-base);
+  --d-input-bg:     var(--cat-surface0);
+  --d-input-edge:   var(--cat-surface1);
+  --d-node-shadow:  rgba(0,0,0,0.45);
+  --d-group-fill:   rgba(127,132,156,0.06);
+}
+
+/*── SVG flow lines ──*/
+.arch-diagram .flow { fill: none; stroke-linecap: round; stroke-linejoin: round }
+.arch-diagram .flow-main { stroke: var(--d-flow-main) }
+.arch-diagram .flow-md   { stroke: var(--d-flow-md)   }
+.arch-diagram .flow-rl   { stroke: var(--d-data-rl)   }
+.arch-diagram .flow-fl   { stroke: var(--d-data-fl)   }
+.arch-diagram .flow-bl   { stroke: var(--d-data-bl)   }
+.arch-diagram .flow-cl   { stroke: var(--d-data-cl)   }
+.arch-diagram .flow-nc   { stroke: var(--d-data-nc)   }
+
+.arch-diagram .head-main { fill: var(--d-flow-main) }
+.arch-diagram .head-md   { fill: var(--d-flow-md)   }
+.arch-diagram .head-rl   { fill: var(--d-data-rl)   }
+.arch-diagram .head-fl   { fill: var(--d-data-fl)   }
+.arch-diagram .head-bl   { fill: var(--d-data-bl)   }
+.arch-diagram .head-cl   { fill: var(--d-data-cl)   }
+.arch-diagram .head-nc   { fill: var(--d-data-nc)   }
+
+.arch-diagram .dot-main  { fill: var(--d-flow-main) }
+.arch-diagram .dot-md    { fill: var(--d-flow-md)   }
+.arch-diagram .dot-rl    { fill: var(--d-data-rl)   }
+.arch-diagram .dot-fl    { fill: var(--d-data-fl)   }
+.arch-diagram .dot-bl    { fill: var(--d-data-bl)   }
+.arch-diagram .dot-cl    { fill: var(--d-data-cl)   }
+.arch-diagram .dot-nc    { fill: var(--d-data-nc)   }
+
+.arch-diagram .bar-rl    { fill: var(--d-data-rl)   }
+.arch-diagram .bar-fl    { fill: var(--d-data-fl)   }
+.arch-diagram .bar-bl    { fill: var(--d-data-bl)   }
+.arch-diagram .bar-cl    { fill: var(--d-data-cl)   }
+.arch-diagram .bar-nc    { fill: var(--d-data-nc)   }
+
+/*── Groups ──*/
+.arch-diagram .group-rect {
+  fill: var(--d-group-fill);
+  stroke: var(--cat-surface1);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+.arch-diagram .group-tag-bg {
+  fill: var(--d-box-bg);
+  stroke: var(--d-ink-3);
+  stroke-width: 1.25;
+}
+.arch-diagram .group-tag-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px; font-weight: 600;
+  fill: var(--d-accent);
+  letter-spacing: 0.05em;
+}
+.arch-diagram .group-tag-text {
+  font-family: 'Inter', sans-serif;
+  font-size: 13.5px; font-weight: 700;
+  letter-spacing: 0.22em;
+  fill: var(--d-ink);
+}
+
+/*── Boxes ──*/
+.arch-diagram .box-shadow     { fill: var(--d-node-shadow) }
+.arch-diagram .box-rect       { fill: var(--d-box-bg);      stroke: var(--d-box-edge);   stroke-width: 1 }
+.arch-diagram .box-rect-input { fill: var(--d-input-bg);    stroke: var(--d-input-edge); stroke-width: 1 }
+.arch-diagram .box-rect-dark  { fill: var(--d-dark-bg);     stroke: var(--d-dark-edge);  stroke-width: 1 }
+.arch-diagram .box-rect-sidecar { fill: var(--d-box-bg-soft); stroke: var(--d-box-edge); stroke-width: 1 }
+.arch-diagram .box-sidecar-dashed {
+  fill: none; stroke: var(--d-ink-4);
+  stroke-width: 1; stroke-dasharray: 4 3;
+}
+
+/*── Labels ──*/
+.arch-diagram .label-title {
+  text-anchor: middle;
+  font-family: 'Inter', sans-serif;
+  font-size: 18px; font-weight: 600;
+  fill: var(--d-ink);
+}
+.arch-diagram .label-title-mono {
+  text-anchor: middle;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16.5px; font-weight: 500;
+  fill: var(--d-ink);
+}
+.arch-diagram .label-sub {
+  text-anchor: middle;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; font-weight: 500;
+  fill: var(--d-ink-3);
+}
+.arch-diagram .label-title.dark,
+.arch-diagram .label-title-mono.dark { fill: var(--d-dark-text) }
+.arch-diagram .label-sub.dark        { fill: var(--d-dark-sub)  }
+.arch-diagram .id-chip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 500;
+  letter-spacing: 0.14em;
+  fill: var(--d-ink-faint);
+}
+.arch-diagram .id-chip.dark { fill: var(--d-dark-id) }
+.arch-diagram .cross-mark   { stroke: var(--d-ink-faint); stroke-width: 1; opacity: 0.7 }
+
+.arch-diagram svg.diagram { display: block; width: 100%; height: auto }
+</style>
+
+<svg class="diagram" viewBox="0 0 1400 1160" xmlns="http://www.w3.org/2000/svg" aria-label="MapData architecture diagram"></svg>
+
+<script>
+(function(){
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.currentScript.closest('.arch-diagram').querySelector('svg.diagram');
+  function el(tag, attrs, text){
+    const n = document.createElementNS(NS, tag);
+    for(const k in attrs){ n.setAttribute(k, attrs[k]); }
+    if(text != null) n.textContent = text;
+    return n;
+  }
+  const defs = el('defs');
+  function head(id, cls){
+    const m = el('marker',{id,viewBox:'0 0 10 10',refX:'8.5',refY:'5',
+      markerUnits:'userSpaceOnUse',markerWidth:'9',markerHeight:'9',orient:'auto-start-reverse'});
+    m.appendChild(el('path',{d:'M 0 1 L 9 5 L 0 9 Z',class:cls}));
+    defs.appendChild(m);
+  }
+  ['main','md','rl','fl','bl','cl','nc'].forEach(c=>head(`h-${c}`,`head-${c}`));
+  svg.appendChild(defs);
+
+  const boxes = {
+    GPX:{x:478, y:72,  w:184,h:70,  title:'GPX / YAML file',  mono:true,                       kind:'input'},
+    OA :{x:738, y:72,  w:184,h:70,  title:'Overpass API',                                        kind:'input'},
+    MD :{x:540, y:244, w:320,h:104, title:'MapData',           sub:'run_queries · run_parse',    kind:'dark'},
+    RL :{x:100, y:474, w:200,h:84,  title:'roads',             mono:true,accent:'rl'},
+    FL :{x:350, y:474, w:200,h:84,  title:'footways',          mono:true,accent:'fl'},
+    BL :{x:600, y:474, w:200,h:84,  title:'barriers',          mono:true,accent:'bl'},
+    CL :{x:850, y:474, w:200,h:84,  title:'crossroads',        mono:true,accent:'cl'},
+    NC :{x:1100,y:474, w:200,h:84,  title:'nodes cache',       mono:true,accent:'nc'},
+    GP :{x:120, y:744, w:240,h:116, title:'GraphPlanner',      sub:'Graph A*'},
+    RP :{x:392, y:744, w:240,h:116, title:'ReplanPath',        sub:'Grid A* / RRT*'},
+    VW :{x:760, y:744, w:240,h:116, title:'Viewer',            sub:'Flask + Leaflet'},
+    ANN:{x:1032,y:744, w:240,h:116, title:'annotations sidecar',sub:'.annotations.json',kind:'sidecar'},
+    ROS:{x:430, y:990, w:540,h:116, title:'ROS2 nodes',
+         sub:'osm_cloud · TrackerNode · create_mapdata · visualize_mapdata',kind:'dark'},
+  };
+  const topAt=(b,i,n)=>{const p=22,u=b.w-2*p;return{x:b.x+p+(n<=1?u/2:u*i/(n-1)),y:b.y}};
+  const bot  =b=>({x:b.x+b.w/2,y:b.y+b.h});
+
+  const groups=[
+    {x:500, y:200,w:400, h:172,label:'data ingestion'},
+    {x:60,  y:422,w:1280,h:172,label:'representation'},
+    {x:80,  y:682,w:592, h:222,label:'planning'},
+    {x:720, y:682,w:592, h:222,label:'visualisation',tagSide:'right'},
+  ];
+  for(const g of groups)
+    svg.appendChild(el('rect',{x:g.x,y:g.y,width:g.w,height:g.h,rx:6,ry:6,class:'group-rect'}));
+
+  function vBezier(s,t){
+    const dy=t.y-s.y,c1y=s.y+dy*0.55,c2y=t.y-dy*0.55;
+    return `M ${s.x} ${s.y} C ${s.x} ${c1y}, ${t.x} ${c2y}, ${t.x} ${t.y}`;
+  }
+  function flow(d,cls,marker,opacity=1,dash=null,width=2.2,mstart=null){
+    const a={d,class:`flow ${cls}`,'stroke-width':width,opacity};
+    if(marker) a['marker-end']=`url(#${marker})`;
+    if(mstart) a['marker-start']=`url(#${mstart})`;
+    if(dash)   a['stroke-dasharray']=dash;
+    svg.appendChild(el('path',a));
+  }
+  function dot(x,y,cls,r=2.5){ svg.appendChild(el('circle',{cx:x,cy:y,r,class:cls})) }
+
+  // sources -> MapData
+  {
+    const md=boxes.MD;
+    const e1={x:md.x+md.w*0.30,y:md.y},e2={x:md.x+md.w*0.70,y:md.y};
+    flow(vBezier(bot(boxes.GPX),e1),'flow-main','h-main',0.9,null,2.4);
+    flow(vBezier(bot(boxes.OA), e2),'flow-main','h-main',0.9,null,2.4);
+    dot(bot(boxes.GPX).x,bot(boxes.GPX).y,'dot-main');
+    dot(bot(boxes.OA ).x,bot(boxes.OA ).y,'dot-main');
+  }
+
+  // MapData -> representation bus
+  {
+    const md=boxes.MD,startX=md.x+md.w/2,startY=md.y+md.h,busY=408;
+    flow(`M ${startX} ${startY} L ${startX} ${busY}`,'flow-md',null,1,null,2.4);
+    const reps=['RL','FL','BL','CL','NC'],xs=reps.map(k=>boxes[k].x+boxes[k].w/2);
+    flow(`M ${Math.min(...xs,startX)} ${busY} L ${Math.max(...xs,startX)} ${busY}`,'flow-md',null,1,null,2.4);
+    for(const k of reps){
+      const b=boxes[k],tx=b.x+b.w/2;
+      flow(`M ${tx} ${busY} L ${tx} ${b.y-1}`,'flow-md','h-md',1,null,2.4);
+    }
+  }
+
+  function orthoPath(pts,r=9){
+    if(pts.length<2) return '';
+    let d=`M ${pts[0][0]} ${pts[0][1]}`;
+    for(let i=1;i<pts.length-1;i++){
+      const[px,py]=pts[i-1],[cx,cy]=pts[i],[nx,ny]=pts[i+1];
+      const dx1=Math.sign(cx-px),dy1=Math.sign(cy-py),dx2=Math.sign(nx-cx),dy2=Math.sign(ny-cy);
+      d+=` L ${cx-dx1*r} ${cy-dy1*r} Q ${cx} ${cy} ${cx+dx2*r} ${cy+dy2*r}`;
+    }
+    const l=pts[pts.length-1];
+    return d+` L ${l[0]} ${l[1]}`;
+  }
+
+  // representation -> consumers
+  const repTargets={RL:['GP','RP','VW'],FL:['GP','RP','VW'],BL:['RP','VW'],CL:['VW'],NC:['GP','RP']};
+  const targetInputs={GP:['RL','FL','NC'],RP:['RL','FL','BL','NC'],VW:['RL','FL','BL','CL']};
+  const laneY={RL:576,FL:592,BL:608,CL:624,NC:640};
+  for(const src of Object.keys(repTargets)){
+    const b=boxes[src],cls=src.toLowerCase(),sx=b.x+b.w/2,sy=b.y+b.h,lane=laneY[src];
+    dot(sx,sy,`dot-${cls}`);
+    for(const tgtKey of repTargets[src]){
+      const tgt=boxes[tgtKey],order=targetInputs[tgtKey],idx=order.indexOf(src),entry=topAt(tgt,idx,order.length);
+      if(src==='CL'){ flow(`M ${sx} ${sy} L ${sx} ${tgt.y-1}`,`flow-${cls}`,`h-${cls}`,0.95,null,2.2); continue; }
+      flow(orthoPath([[sx,sy],[sx,lane],[entry.x,lane],[entry.x,entry.y-1]],9),`flow-${cls}`,`h-${cls}`,0.95,null,2.2);
+    }
+  }
+
+  // Viewer <-> annotations
+  {
+    const vw=boxes.VW,an=boxes.ANN,y=vw.y+vw.h*0.5;
+    flow(`M ${vw.x+vw.w} ${y} L ${an.x} ${y}`,'flow-main','h-main',1,null,2.2,'h-main');
+  }
+
+  // GP & RP -> ROS2 ; MD -> ROS2 (right detour)
+  {
+    const ros=boxes.ROS;
+    const eGP={x:ros.x+ros.w*0.18,y:ros.y},eRP={x:ros.x+ros.w*0.36,y:ros.y},eMD={x:ros.x+ros.w*0.78,y:ros.y};
+    const gpB=bot(boxes.GP),rpB=bot(boxes.RP);
+    flow(orthoPath([[gpB.x,gpB.y],[gpB.x,940],[eGP.x,940],[eGP.x,eGP.y-1]],9),'flow-main','h-main',0.95,null,2.4);
+    flow(orthoPath([[rpB.x,rpB.y],[rpB.x,900],[eRP.x,900],[eRP.x,eRP.y-1]],9),'flow-main','h-main',0.95,null,2.4);
+    dot(gpB.x,gpB.y,'dot-main'); dot(rpB.x,rpB.y,'dot-main');
+    const md=boxes.MD,s={x:md.x+md.w,y:md.y+md.h*0.55},r=10;
+    const d=[`M ${s.x} ${s.y}`,`L ${1360-r} ${s.y}`,`Q 1360 ${s.y} 1360 ${s.y+r}`,
+             `L 1360 ${940-r}`,`Q 1360 940 ${1360-r} 940`,`L ${eMD.x+r} 940`,
+             `Q ${eMD.x} 940 ${eMD.x} ${940+r}`,`L ${eMD.x} ${ros.y}`].join(' ');
+    flow(d,'flow-md','h-md',0.8,'5 4',2.0); dot(s.x,s.y,'dot-md');
+  }
+
+  // group labels
+  for(let i=0;i<groups.length;i++){
+    const g=groups[i],num=String(i+1).padStart(2,'0'),label=g.label.toUpperCase();
+    const tagW=52+label.length*10.2,tagH=28,tagX=(g.tagSide==='right')?(g.x+g.w-tagW-18):(g.x+18),tagY=g.y-tagH/2;
+    svg.appendChild(el('rect',{x:tagX,y:tagY,width:tagW,height:tagH,rx:14,ry:14,class:'group-tag-bg'}));
+    svg.appendChild(el('text',{x:tagX+14,y:tagY+tagH/2+4,class:'group-tag-num'},num));
+    svg.appendChild(el('line',{x1:tagX+26,y1:tagY+7,x2:tagX+26,y2:tagY+tagH-7,stroke:'currentColor','stroke-width':'1',opacity:'0.25'}));
+    svg.appendChild(el('text',{x:tagX+38,y:tagY+tagH/2+4.5,class:'group-tag-text'},label));
+  }
+
+  // boxes
+  function renderBox(b){
+    const g=el('g');
+    g.appendChild(el('rect',{x:b.x,y:b.y+2,width:b.w,height:b.h,rx:5,ry:5,class:'box-shadow',opacity:0.6}));
+    let rc='box-rect',dark=false;
+    if(b.kind==='input') rc='box-rect-input';
+    else if(b.kind==='dark'){rc='box-rect-dark';dark=true;}
+    else if(b.kind==='sidecar') rc='box-rect-sidecar';
+    g.appendChild(el('rect',{x:b.x,y:b.y,width:b.w,height:b.h,rx:5,ry:5,class:rc}));
+    if(b.accent) g.appendChild(el('rect',{x:b.x,y:b.y,width:4,height:b.h,rx:2,ry:2,class:`bar-${b.accent}`}));
+    if(b.kind==='sidecar') g.appendChild(el('rect',{x:b.x+.5,y:b.y+.5,width:b.w-1,height:b.h-1,rx:5,ry:5,class:'box-sidecar-dashed'}));
+    const cx=b.x+b.w/2,tc=(b.mono?'label-title-mono':'label-title')+(dark?' dark':'');
+    if(b.sub){ g.appendChild(el('text',{x:cx,y:b.y+b.h/2-2,  class:tc},b.title));
+               g.appendChild(el('text',{x:cx,y:b.y+b.h/2+20, class:`label-sub${dark?' dark':''}`},b.sub)); }
+    else       g.appendChild(el('text',{x:cx,y:b.y+b.h/2+6,  class:tc},b.title));
+    svg.appendChild(g);
+  }
+  for(const id in boxes) renderBox(boxes[id]);
+
+  // corner marks
+  [[20,20],[1380,20],[20,1140],[1380,1140]].forEach(([x,y])=>{
+    const l=6;
+    svg.appendChild(el('line',{x1:x-l,y1:y,x2:x+l,y2:y,class:'cross-mark'}));
+    svg.appendChild(el('line',{x1:x,y1:y-l,x2:x,y2:y+l,class:'cross-mark'}));
+  });
+})();
+</script>
+</div>
+
+<hr />
+<h2 id="mapdata">MapData</h2>
+<p><code>MapData</code> (defined in <code>map_data/map_data.py</code>) is the central data class. It accepts either a path to a <code>.gpx</code> (or <code>.yaml</code>) file or a pre-converted UTM coordinate array, queries the Overpass API for all OSM features inside the derived bounding box, and parses the responses into categorised <code>Way</code> lists.</p>
+<p><strong>Overpass queries.</strong> Three concurrent HTTP requests are fired in a thread pool:</p>
+<ul>
+<li>ways query — all OSM ways (roads, footways, barriers, buildings, etc.) plus their constituent nodes</li>
+<li>relations query — multipolygon relations that reference the above ways</li>
+<li>nodes query — all standalone point features (obstacle nodes)</li>
+</ul>
+<p>The bounding box is the convex hull of the input waypoints expanded by <code>osm_margin + reserve_margin</code> metres on all sides (defaults: 100 m + 50 m).</p>
+<p><strong>Core attributes after parsing:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>roads_list</code></td>
+<td><code>list[Way]</code></td>
+<td>Vehicle-intended highway ways, buffered to 7 m wide polygons</td>
+</tr>
+<tr>
+<td><code>footways_list</code></td>
+<td><code>list[Way]</code></td>
+<td>Pedestrian footways, buffered to 3 m wide polygons</td>
+</tr>
+<tr>
+<td><code>barriers_list</code></td>
+<td><code>list[Way]</code></td>
+<td>Physical barriers, buildings, water, and obstacle nodes</td>
+</tr>
+<tr>
+<td><code>crossroads_list</code></td>
+<td><code>list[Way]</code></td>
+<td>Footway intersection points (buffered 1.5 m circles)</td>
+</tr>
+<tr>
+<td><code>nodes_cache</code></td>
+<td><code>dict[int, dict]</code></td>
+<td>Mapping of OSM node ID to <code>{lat, lon, tags}</code></td>
+</tr>
+<tr>
+<td><code>zone_number</code></td>
+<td><code>int</code></td>
+<td>UTM zone number inferred from the input waypoints</td>
+</tr>
+<tr>
+<td><code>zone_letter</code></td>
+<td><code>str</code></td>
+<td>UTM zone letter inferred from the input waypoints</td>
+</tr>
+<tr>
+<td><code>waypoints</code></td>
+<td><code>np.ndarray</code></td>
+<td><code>(N, 2)</code> UTM easting/northing array of the input waypoints</td>
+</tr>
+<tr>
+<td><code>min_x/max_x/min_y/max_y</code></td>
+<td><code>float</code></td>
+<td>UTM bounding box including margins</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Serialisation.</strong> <code>MapData.save()</code> writes a JSON file (<code>.mapdata</code> extension) using <code>json.dump</code>. <code>MapData.load(path)</code> reads it back; it also transparently handles the legacy pickle format (detected by the <code>0x80</code> header byte) for backwards compatibility.</p>
+<hr />
+<h2 id="way-objects">Way objects</h2>
+<p>Every OSM feature is stored as a <code>Way</code> instance (<code>map_data/utils/way.py</code>). A <code>Way</code> holds:</p>
+<ul>
+<li><code>id</code> — OSM way/node ID (positive integer) or a synthetic negative integer for merged multipolygon segments or viewer-drawn annotations</li>
+<li><code>is_area</code> — <code>True</code> if the geometry is a closed polygon</li>
+<li><code>nodes</code> — ordered list of OSM node IDs</li>
+<li><code>tags</code> — dict of OSM tag key-value pairs</li>
+<li><code>line</code> — Shapely geometry (<code>Polygon</code> for closed/buffered features, <code>LineString</code> for open features)</li>
+<li><code>in_out</code> — <code>"outer"</code> or <code>"inner"</code> for multipolygon relation members</li>
+</ul>
+<p>All geometry is stored in UTM coordinates (same zone as the input waypoints). Ways are buffered during parsing: roads receive a 7 m half-width buffer and footways a 3 m half-width buffer, converting <code>LineString</code> geometries to <code>Polygon</code>.</p>
+<hr />
+<h2 id="pathsolvers">Pathsolvers</h2>
+<p>The package provides two independent path-planning back-ends.</p>
+<h3 id="graphplanner">GraphPlanner</h3>
+<p><code>map_data/pathsolver/graph_planner.py</code></p>
+<p>Builds an undirected weighted graph directly from the OSM way network (<code>roads_list</code> and/or <code>footways_list</code>). Edge weights are Euclidean distances in metres. Planning uses A* with a straight-line distance heuristic.</p>
+<p>Waypoints passed to <code>GraphPlanner.plan()</code> are first snapped to the nearest graph edge using an STRtree spatial index. Viewer-drawn annotation paths (negative-ID ways) are spliced into the graph by projecting their endpoints onto the nearest existing OSM edge and inserting synthetic junction nodes at the projection points.</p>
+<p>This planner is well-suited for route planning on well-mapped pedestrian or road networks where staying on designated paths is required.</p>
+<h3 id="replanpath">ReplanPath</h3>
+<p><code>map_data/pathsolver/replan.py</code></p>
+<p>Builds a cost raster (occupancy grid) at resolution <code>cell_size</code> metres. Each cell receives a cost based on:</p>
+<ul>
+<li>the OSM highway type and surface material of the nearest way within <code>max_path_dist</code> metres (see <code>highway_costs</code> and <code>surface_costs</code> in <code>planner_defaults.yaml</code>)</li>
+<li>a fixed <code>default_off_path_cost</code> for cells not covered by any way</li>
+<li>barrier polygons inflated by <code>inflate_obstacles</code> metres, set to cost 1.0 (impassable)</li>
+</ul>
+<p>Two search algorithms are available on top of this grid:</p>
+<ul>
+<li><strong>Grid A</strong>* (<code>map_data/pathsolver/grid_astar.py</code>) — fast, optimal on the discrete grid</li>
+<li><strong>RRT</strong>* (<code>map_data/pathsolver/rrt_star.py</code>) — sampling-based, produces smoother paths in cluttered environments</li>
+</ul>
+<p>Optional post-processing: Douglas-Peucker simplification (<code>simplify_path</code>) and gradient-descent smoothing (<code>smooth_path</code>).</p>
+<hr />
+<h2 id="viewer">Viewer</h2>
+<p>The viewer (<code>map_data/viewer/</code>) is a single-page web application consisting of:</p>
+<ul>
+<li><strong>Flask back-end</strong> (<code>app.py</code>, <code>routes.py</code>) — serves GeoJSON representations of the <code>MapData</code> contents, handles annotation CRUD operations, and exposes a <code>/export</code> endpoint that writes a human-readable JSON export of the annotated map</li>
+<li><strong>Leaflet front-end</strong> — renders roads, footways, and barriers as coloured polygons on an OpenStreetMap tile layer; provides drawing tools for obstacle annotations and path annotations</li>
+</ul>
+<p><strong>Sidecar annotation files.</strong> All viewer edits are persisted alongside the <code>.mapdata</code> file as <code>&lt;stem&gt;.annotations.json</code>. This design keeps the binary/JSON map data immutable while allowing iterative annotation without re-running the Overpass query. The viewer merges the sidecar at load time to produce the rendered view.</p>
+<hr />
+<h2 id="ros2-nodes">ROS2 nodes</h2>
+<table>
+<thead>
+<tr>
+<th>Node</th>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>create_mapdata</code></td>
+<td><code>map_data/create_mapdata.py</code></td>
+<td>CLI node: reads a GPX/YAML file, runs <code>MapData.run_all()</code>, writes the <code>.mapdata</code> file</td>
+</tr>
+<tr>
+<td><code>visualize_mapdata</code></td>
+<td><code>map_data/visualize_mapdata.py</code></td>
+<td>CLI node: loads a <code>.mapdata</code> file and starts the Flask viewer</td>
+</tr>
+<tr>
+<td><code>osm_cloud</code></td>
+<td><code>map_data/osm_cloud.py</code></td>
+<td>ROS2 node: publishes the parsed OSM features as <code>sensor_msgs/PointCloud2</code> messages for use in Nav2 or custom navigation stacks</td>
+</tr>
+<tr>
+<td><code>TrackerNode</code></td>
+<td><code>map_data/viewer/ros_node.py</code></td>
+<td>ROS2 node embedded in the viewer: subscribes to robot pose and streams it to the Leaflet front-end via WebSocket for live position display</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="data-flow">Data flow</h2>
+<p>A typical session follows this sequence:</p>
+<ol>
+<li><strong>Create <code>.mapdata</code></strong> — run <code>create_mapdata</code> with a GPX waypoint file. The node queries Overpass, parses the OSM data, and writes <code>&lt;name&gt;.mapdata</code> to disk. Or download and parse data inside the viewer.</li>
+<li><strong>Visualize data</strong> — run <code>visualize_mapdata</code> with the <code>.mapdata</code> file to create images of parsed data. Alternatively run the viewer and load parsed data in the browser. If the data were parsed through the viewer they will be shown automatically.</li>
+<li><strong>Annotate</strong> — use the viewer drawing tools to mark obstacles, draw alternative path segments, delete or hide erroneous ways, adjust node positions, and override OSM tags. Changes are saved automatically to <code>&lt;name&gt;.annotations.json</code>.</li>
+<li><strong>Export</strong> — click the Export button to produce <code>&lt;name&gt;.exported.mapdata</code>, a human-readable JSON snapshot of the annotated map suitable for downstream processing.</li>
+<li><strong>Plan path</strong> — instantiate <code>GraphPlanner</code> or <code>ReplanPath</code> with the loaded <code>MapData</code> object and call <code>plan()</code> with the desired waypoints.</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 <a href="https://cyber.felk.cvut.cz/research/groups-teams/vras/">VRAS</a> & <a href="https://vlk-jan.github.io">Jan Vlk</a>
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,2578 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="ROS2 tools to work with OSM data and perform path planning.">
+      
+      
+        <meta name="author" content="Jan Vlk">
+      
+      
+      
+        <link rel="prev" href="../pathsolver/">
+      
+      
+        <link rel="next" href="../../troubleshooting/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Viewer REST API - map_data</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../stylesheets/catppuccin.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="catppuccin-latte" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#viewer-rest-api" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="map_data" class="md-header__button md-logo" aria-label="map_data" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            map_data
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Viewer REST API
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="catppuccin-latte" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/vras-robotour/map_data" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vras-robotour/map_data
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../usage/" class="md-tabs__link">
+          
+  
+  
+  Usage
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../map_data/" class="md-tabs__link">
+          
+  
+  
+  API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../troubleshooting/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Troubleshooting
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../dev/architecture/" class="md-tabs__link">
+          
+  
+  
+  Developer Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="map_data" class="md-nav__button md-logo" aria-label="map_data" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    map_data
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/vras-robotour/map_data" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    vras-robotour/map_data
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Usage
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interactive Viewer
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Interactive Viewer
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../viewer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../viewer_view/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Viewer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../viewer_planner/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Planner
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../viewer_tracker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tracker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../planning/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Path Planning
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../map_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MapData
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../way/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Way
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pathsolver/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pathsolvers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Viewer REST API
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Viewer REST API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#file-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File Management
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="File Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-apifiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-apimapdatafilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/mapdata?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apifetch_area" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/fetch_area
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apiupload_gpx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/upload_gpx
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-apiexportfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/export?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Annotations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Annotations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-apiannotationsfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/annotations?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apiannotationsfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/annotations?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apiannotationsann_idfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/annotations/&lt;ann_id&gt;?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-apiannotationsann_idfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/annotations/&lt;ann_id&gt;?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ways" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ways
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Ways">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-apiwaysway_idfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/ways/&lt;way_id&gt;?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-apiwaysway_idfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/ways/&lt;way_id&gt;?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apiwaysway_idtagsfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/ways/&lt;way_id&gt;/tags?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-apiwaysway_idtagsfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/ways/&lt;way_id&gt;/tags?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apiwaysway_idhidefilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/ways/&lt;way_id&gt;/hide?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apiwaysway_idshowfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/ways/&lt;way_id&gt;/show?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apiwaysway_idrestorefilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/ways/&lt;way_id&gt;/restore?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-apiwaysway_idsegmentsfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/ways/&lt;way_id&gt;/segments?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apiwayssplitfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/ways/split?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-apiwayssplitfilenameway_ididnode_idid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/ways/split?file=&lt;name&gt;&amp;way_id=&lt;id&gt;&amp;node_id=&lt;id&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#nodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Nodes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Nodes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-apiway_nodesfilenameway_idid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/way_nodes?file=&lt;name&gt;&amp;way_id=&lt;id&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-apiway_nodefilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/way_node?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apiway_noderestorefilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/way_node/restore?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apiway_nodesmovefilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/way_nodes/move?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-apiway_nodesmovefilenameway_idid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/way_nodes/move?file=&lt;name&gt;&amp;way_id=&lt;id&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#path-planning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Path Planning
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Path Planning">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-apiplanner_defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/planner_defaults
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-apicost_gridfilenamemin_latmin_lonmax_latmax_lon" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/cost_grid?file=&lt;name&gt;&amp;min_lat=&amp;min_lon=&amp;max_lat=&amp;max_lon=
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apicreate_replan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/create_replan
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apicancel_replan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/cancel_replan
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#wormhole-robot-file-transfer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wormhole (Robot File Transfer)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Wormhole (Robot File Transfer)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#post-apicreate_wormhole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/create_wormhole
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apicancel_wormhole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/cancel_wormhole
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Developer Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Developer Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/tag_configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tag Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/planner_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Planner Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/data_formats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Formats
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/todo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Known Issues & Backlog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#file-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File Management
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="File Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-apifiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-apimapdatafilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/mapdata?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apifetch_area" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/fetch_area
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apiupload_gpx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/upload_gpx
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-apiexportfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/export?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Annotations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Annotations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-apiannotationsfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/annotations?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apiannotationsfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/annotations?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apiannotationsann_idfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/annotations/&lt;ann_id&gt;?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-apiannotationsann_idfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/annotations/&lt;ann_id&gt;?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ways" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ways
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Ways">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-apiwaysway_idfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/ways/&lt;way_id&gt;?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-apiwaysway_idfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/ways/&lt;way_id&gt;?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apiwaysway_idtagsfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/ways/&lt;way_id&gt;/tags?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-apiwaysway_idtagsfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/ways/&lt;way_id&gt;/tags?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apiwaysway_idhidefilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/ways/&lt;way_id&gt;/hide?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apiwaysway_idshowfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/ways/&lt;way_id&gt;/show?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apiwaysway_idrestorefilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/ways/&lt;way_id&gt;/restore?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-apiwaysway_idsegmentsfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/ways/&lt;way_id&gt;/segments?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apiwayssplitfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/ways/split?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-apiwayssplitfilenameway_ididnode_idid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/ways/split?file=&lt;name&gt;&amp;way_id=&lt;id&gt;&amp;node_id=&lt;id&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#nodes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Nodes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Nodes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-apiway_nodesfilenameway_idid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/way_nodes?file=&lt;name&gt;&amp;way_id=&lt;id&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-apiway_nodefilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/way_node?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apiway_noderestorefilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/way_node/restore?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apiway_nodesmovefilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/way_nodes/move?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-apiway_nodesmovefilenameway_idid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/way_nodes/move?file=&lt;name&gt;&amp;way_id=&lt;id&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#path-planning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Path Planning
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Path Planning">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-apiplanner_defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/planner_defaults
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-apicost_gridfilenamemin_latmin_lonmax_latmax_lon" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/cost_grid?file=&lt;name&gt;&amp;min_lat=&amp;min_lon=&amp;max_lat=&amp;max_lon=
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apicreate_replan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/create_replan
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apicancel_replan" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/cancel_replan
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#wormhole-robot-file-transfer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wormhole (Robot File Transfer)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Wormhole (Robot File Transfer)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#post-apicreate_wormhole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/create_wormhole
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apicancel_wormhole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/cancel_wormhole
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="viewer-rest-api">Viewer REST API</h1>
+<div class="admonition note">
+<p class="admonition-title">Internal API</p>
+<p>This API is consumed by the viewer's JavaScript frontend. It is documented here for
+developers who want to build custom tooling or integrate with the viewer programmatically.</p>
+</div>
+<p>All endpoints are served by the Flask app started with <code>map_data_viewer</code>. Data endpoints live
+under <code>/api/</code>. Errors return standard HTTP status codes with a plain-text description.</p>
+<hr />
+<h2 id="file-management">File Management</h2>
+<h3 id="get-apifiles"><code>GET /api/files</code></h3>
+<p>List available <code>.mapdata</code> and <code>.gpx</code> files in the data directory.</p>
+<p><strong>Response</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">&quot;mapdata&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;stromovka.mapdata&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;coords.mapdata&quot;</span><span class="p">],</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">&quot;gpx&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;coords.gpx&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;route.gpx&quot;</span><span class="p">]</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">}</span>
+</span></code></pre></div>
+<hr />
+<h3 id="get-apimapdatafilename"><code>GET /api/mapdata?file=&lt;name&gt;</code></h3>
+<p>Load all parsed features for a <code>.mapdata</code> file as a GeoJSON FeatureCollection. Stored
+annotations (tag overrides, deletions, splits, node moves) are applied before the response
+is returned.</p>
+<p><strong>Query parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>file</code></td>
+<td>yes</td>
+<td>Filename in the data directory (e.g. <code>coords.mapdata</code>)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Response</strong> — GeoJSON FeatureCollection. Each feature has:</p>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td><code>int</code> or <code>"int:int"</code></td>
+<td>OSM way ID, or virtual ID <code>"123:0"</code> for split segments</td>
+</tr>
+<tr>
+<td><code>category</code></td>
+<td><code>string</code></td>
+<td><code>"road"</code>, <code>"footway"</code>, or <code>"barrier"</code></td>
+</tr>
+<tr>
+<td><code>tags</code></td>
+<td><code>object</code></td>
+<td>OSM tags, with any stored overrides merged in</td>
+</tr>
+<tr>
+<td><code>in_out</code></td>
+<td><code>string \| null</code></td>
+<td>Direction hint (<code>"in"</code>, <code>"out"</code>, or <code>null</code>)</td>
+</tr>
+<tr>
+<td><code>is_node</code></td>
+<td><code>bool</code></td>
+<td><code>true</code> if the barrier is a point feature (node) rather than a polygon</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="post-apifetch_area"><code>POST /api/fetch_area</code></h3>
+<p>Download and parse a new OSM area and save the result as a <code>.mapdata</code> file. Queries the
+Overpass API — may take several seconds for large areas.</p>
+<p><strong>Request body</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">{</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">&quot;min_lat&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">50.07</span><span class="p">,</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">&quot;max_lat&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">50.09</span><span class="p">,</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">&quot;min_lon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">14.40</span><span class="p">,</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nt">&quot;max_lon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">14.43</span><span class="p">,</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my_area&quot;</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="p">}</span>
+</span></code></pre></div>
+<p><strong>Response 200</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">{</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">&quot;filename&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my_area.mapdata&quot;</span><span class="p">,</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">&quot;roads&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">14</span><span class="p">,</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">&quot;footways&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">52</span><span class="p">,</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="nt">&quot;barriers&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">91</span><span class="p">,</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span><span class="nt">&quot;crossroads&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">23</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="p">}</span>
+</span></code></pre></div>
+<p><strong>Error 503</strong> — Overpass API unavailable; try again later.</p>
+<hr />
+<h3 id="post-apiupload_gpx"><code>POST /api/upload_gpx</code></h3>
+<p>Upload a <code>.gpx</code> file, parse it (fetching OSM data for its bounds), and save the result as a
+<code>.mapdata</code> file.</p>
+<p><strong>Request</strong> — <code>multipart/form-data</code></p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>file</code></td>
+<td>yes</td>
+<td>The <code>.gpx</code> file</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>no</td>
+<td>Base name for the output file (defaults to the uploaded filename)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Response 200</strong> — same shape as <code>/api/fetch_area</code>.</p>
+<hr />
+<h3 id="get-apiexportfilename"><code>GET /api/export?file=&lt;name&gt;</code></h3>
+<p>Export a <code>.mapdata</code> file as a human-readable JSON file, with all stored annotations applied.</p>
+<p><strong>Response</strong> — file download, <code>Content-Type: application/json</code>, filename <code>&lt;name&gt;.exported.mapdata</code>.</p>
+<hr />
+<h2 id="annotations">Annotations</h2>
+<p>All annotation endpoints require <code>?file=&lt;name&gt;</code>.</p>
+<h3 id="get-apiannotationsfilename"><code>GET /api/annotations?file=&lt;name&gt;</code></h3>
+<p>Return the raw annotation store for a file (the full contents of the <code>.annotations.json</code> sidecar).</p>
+<hr />
+<h3 id="post-apiannotationsfilename"><code>POST /api/annotations?file=&lt;name&gt;</code></h3>
+<p>Add a new drawn annotation (obstacle polygon or custom path).</p>
+<p><strong>Request body</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;obstacle&quot;</span><span class="p">,</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="nt">&quot;geometry&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Polygon&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;coordinates&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[[[</span><span class="mf">14.4</span><span class="p">,</span><span class="w"> </span><span class="mf">50.07</span><span class="p">],</span><span class="w"> </span><span class="err">...</span><span class="p">]]</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nt">&quot;properties&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{}</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="p">}</span>
+</span></code></pre></div>
+<p><code>type</code> is <code>"obstacle"</code> or <code>"path"</code>.</p>
+<p><strong>Response 201</strong> — the created annotation with a generated <code>id</code> field.</p>
+<hr />
+<h3 id="put-apiannotationsann_idfilename"><code>PUT /api/annotations/&lt;ann_id&gt;?file=&lt;name&gt;</code></h3>
+<p>Update an annotation's geometry, type, or properties.</p>
+<p><strong>Request body</strong> — same fields as POST.</p>
+<p><strong>Response 200</strong> — updated annotation object.</p>
+<hr />
+<h3 id="delete-apiannotationsann_idfilename"><code>DELETE /api/annotations/&lt;ann_id&gt;?file=&lt;name&gt;</code></h3>
+<p>Delete an annotation.</p>
+<p><strong>Response 204.</strong></p>
+<hr />
+<h2 id="ways">Ways</h2>
+<h3 id="get-apiwaysway_idfilename"><code>GET /api/ways/&lt;way_id&gt;?file=&lt;name&gt;</code></h3>
+<p>Get a single way as a GeoJSON Feature with all stored edits applied. Supports virtual IDs
+(<code>123:0</code>, <code>123:1</code>) for individual segments of a split way.</p>
+<p><strong>Response</strong> — GeoJSON Feature (same properties as <code>/api/mapdata</code> features).</p>
+<hr />
+<h3 id="delete-apiwaysway_idfilename"><code>DELETE /api/ways/&lt;way_id&gt;?file=&lt;name&gt;</code></h3>
+<p>Mark a way as deleted. The deletion is stored in the annotations sidecar and does not modify
+the <code>.mapdata</code> file. Deleted ways are excluded from map display and planning.</p>
+<p><strong>Request body</strong> (optional)</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;footway&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;label&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Fence segment&quot;</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+<p><strong>Response 204.</strong></p>
+<hr />
+<h3 id="put-apiwaysway_idtagsfilename"><code>PUT /api/ways/&lt;way_id&gt;/tags?file=&lt;name&gt;</code></h3>
+<p>Override OSM tags for a way. The provided tags are merged on top of the original OSM tags on
+every subsequent load.</p>
+<p><strong>Request body</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;tags&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;highway&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;footway&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;surface&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;gravel&quot;</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;footway&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;label&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+<p><strong>Response 204.</strong></p>
+<hr />
+<h3 id="delete-apiwaysway_idtagsfilename"><code>DELETE /api/ways/&lt;way_id&gt;/tags?file=&lt;name&gt;</code></h3>
+<p>Remove stored tag overrides for a way, reverting to the original OSM tags.</p>
+<p><strong>Response 204.</strong></p>
+<hr />
+<h3 id="put-apiwaysway_idhidefilename"><code>PUT /api/ways/&lt;way_id&gt;/hide?file=&lt;name&gt;</code></h3>
+<p>Temporarily hide a way from the map. Hidden ways are still included in exports and planning.</p>
+<p><strong>Response 204.</strong></p>
+<hr />
+<h3 id="put-apiwaysway_idshowfilename"><code>PUT /api/ways/&lt;way_id&gt;/show?file=&lt;name&gt;</code></h3>
+<p>Un-hide a previously hidden way.</p>
+<p><strong>Response 204.</strong></p>
+<hr />
+<h3 id="put-apiwaysway_idrestorefilename"><code>PUT /api/ways/&lt;way_id&gt;/restore?file=&lt;name&gt;</code></h3>
+<p>Restore a deleted way (undo a prior DELETE).</p>
+<p><strong>Response 204.</strong></p>
+<hr />
+<h3 id="get-apiwaysway_idsegmentsfilename"><code>GET /api/ways/&lt;way_id&gt;/segments?file=&lt;name&gt;</code></h3>
+<p>Get the individual segments of a split way as GeoJSON Features.</p>
+<p><strong>Response</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;segments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Feature&quot;</span><span class="p">,</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+<hr />
+<h3 id="post-apiwayssplitfilename"><code>POST /api/ways/split?file=&lt;name&gt;</code></h3>
+<p>Split a way at a node, creating two independently editable segments.</p>
+<p><strong>Request body</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;way_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">123456</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;node_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">789012</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+<p><strong>Response 200</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;segments&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+<hr />
+<h3 id="delete-apiwayssplitfilenameway_ididnode_idid"><code>DELETE /api/ways/split?file=&lt;name&gt;&amp;way_id=&lt;id&gt;&amp;node_id=&lt;id&gt;</code></h3>
+<p>Undo a way split.</p>
+<p><strong>Response 200</strong> — <code>{"segments": [...]}</code></p>
+<hr />
+<h2 id="nodes">Nodes</h2>
+<h3 id="get-apiway_nodesfilenameway_idid"><code>GET /api/way_nodes?file=&lt;name&gt;&amp;way_id=&lt;id&gt;</code></h3>
+<p>Get the ordered node list for a way, including WGS84 coordinates.</p>
+<p><strong>Response</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p">{</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span><span class="nt">&quot;way_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">123456</span><span class="p">,</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="nt">&quot;nodes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">111</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;lat&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">50.071</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;lon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">14.401</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;tags&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{}</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">112</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;lat&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">50.072</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;lon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">14.402</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;tags&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{}</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">  </span><span class="p">]</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="p">}</span>
+</span></code></pre></div>
+<hr />
+<h3 id="delete-apiway_nodefilename"><code>DELETE /api/way_node?file=&lt;name&gt;</code></h3>
+<p>Delete a single node from a way.</p>
+<p><strong>Request body</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;way_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">123456</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;node_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">111</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;footway&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;label&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+<p><strong>Response 204.</strong></p>
+<hr />
+<h3 id="put-apiway_noderestorefilename"><code>PUT /api/way_node/restore?file=&lt;name&gt;</code></h3>
+<p>Restore a deleted node.</p>
+<p><strong>Request body</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;way_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">123456</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;node_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">111</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+<p><strong>Response 204.</strong></p>
+<hr />
+<h3 id="put-apiway_nodesmovefilename"><code>PUT /api/way_nodes/move?file=&lt;name&gt;</code></h3>
+<p>Move one or more nodes to new WGS84 positions (used by drag-and-drop editing).</p>
+<p><strong>Request body</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="p">{</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span><span class="nt">&quot;way_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">123456</span><span class="p">,</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span><span class="nt">&quot;nodes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">111</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;lat&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">50.0715</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;lon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">14.4015</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span><span class="p">]</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="p">}</span>
+</span></code></pre></div>
+<p><strong>Response 200</strong> — the updated way as a GeoJSON Feature.</p>
+<hr />
+<h3 id="delete-apiway_nodesmovefilenameway_idid"><code>DELETE /api/way_nodes/move?file=&lt;name&gt;&amp;way_id=&lt;id&gt;</code></h3>
+<p>Reset all node position overrides for a way, restoring original OSM positions.</p>
+<p><strong>Response 204.</strong></p>
+<hr />
+<h2 id="path-planning">Path Planning</h2>
+<h3 id="get-apiplanner_defaults"><code>GET /api/planner_defaults</code></h3>
+<p>Return the planner default configuration from <code>config/planner_defaults.yaml</code>.</p>
+<p><strong>Response</strong> — the YAML file contents as a JSON object (see <a href="../../dev/planner_config/">Planner Configuration</a>).</p>
+<hr />
+<h3 id="get-apicost_gridfilenamemin_latmin_lonmax_latmax_lon"><code>GET /api/cost_grid?file=&lt;name&gt;&amp;min_lat=&amp;min_lon=&amp;max_lat=&amp;max_lon=</code></h3>
+<p>Compute the traversal cost grid for a bounding box. Used by the <strong>Show Cost Grid</strong> overlay
+in the Planner. Cells have cost 0.0 (free path) to 1.0 (obstacle boundary); values above
+1.0 indicate hard obstacles.</p>
+<p><strong>Query parameters</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>file</code></td>
+<td>yes</td>
+<td>Map filename</td>
+</tr>
+<tr>
+<td><code>min_lat</code>, <code>min_lon</code>, <code>max_lat</code>, <code>max_lon</code></td>
+<td>yes</td>
+<td>Bounding box in WGS84 degrees</td>
+</tr>
+<tr>
+<td><code>highway_costs</code></td>
+<td>no</td>
+<td>JSON-encoded cost override dict (e.g. <code>{"footway":0.0,"residential":0.5}</code>)</td>
+</tr>
+<tr>
+<td><code>surface_costs</code></td>
+<td>no</td>
+<td>JSON-encoded surface cost override dict</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Response</strong> — GeoJSON FeatureCollection of Point features, each with property <code>cost</code>.</p>
+<hr />
+<h3 id="post-apicreate_replan"><code>POST /api/create_replan</code></h3>
+<p>Run path planning on a set of waypoints. The main planning endpoint.</p>
+<p><strong>Request body</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="p">{</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span><span class="nt">&quot;file&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;coords.mapdata&quot;</span><span class="p">,</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">  </span><span class="nt">&quot;points&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[[</span><span class="mf">50.071</span><span class="p">,</span><span class="w"> </span><span class="mf">14.401</span><span class="p">],</span><span class="w"> </span><span class="p">[</span><span class="mf">50.075</span><span class="p">,</span><span class="w"> </span><span class="mf">14.408</span><span class="p">]],</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">  </span><span class="nt">&quot;algorithm&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;astar&quot;</span><span class="p">,</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">  </span><span class="nt">&quot;sub_algorithm&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;astar&quot;</span><span class="p">,</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">  </span><span class="nt">&quot;allowed_ways&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;footway&quot;</span><span class="p">],</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">  </span><span class="nt">&quot;cell_size&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.25</span><span class="p">,</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="w">  </span><span class="nt">&quot;inflate_obstacles&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.25</span><span class="p">,</span>
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="w">  </span><span class="nt">&quot;simplify_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="w">  </span><span class="nt">&quot;smooth_path&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="w">  </span><span class="nt">&quot;transfer_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;550e8400-e29b-41d4-a716&quot;</span><span class="p">,</span>
+</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a><span class="w">  </span><span class="nt">&quot;highway_costs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;footway&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.0</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;residential&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.5</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-13-13"><a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a><span class="w">  </span><span class="nt">&quot;surface_costs&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;asphalt&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.0</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;grass&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.5</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-13-14"><a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a><span class="p">}</span>
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>algorithm</code></td>
+<td><code>"rrt"</code></td>
+<td><code>"astar"</code> = Grid A<em>, <code>"rrt"</code> = RRT</em>, <code>"graph"</code> = on-way graph planning</td>
+</tr>
+<tr>
+<td><code>sub_algorithm</code></td>
+<td><code>"astar"</code></td>
+<td>Used when <code>algorithm</code> is <code>"astar"</code> or <code>"rrt"</code> — selects the segment-level solver</td>
+</tr>
+<tr>
+<td><code>allowed_ways</code></td>
+<td><code>["footway"]</code></td>
+<td>Way categories to treat as low-cost: <code>"footway"</code>, <code>"road"</code>, or both</td>
+</tr>
+<tr>
+<td><code>transfer_id</code></td>
+<td><code>null</code></td>
+<td>Client-generated UUID; pass to <code>/api/cancel_replan</code> to abort</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Response</strong></p>
+<table>
+<thead>
+<tr>
+<th><code>retrieveNum</code></th>
+<th><code>newPath</code></th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0</code></td>
+<td><code>[[lat,lon],...]</code></td>
+<td>Path changed from input</td>
+</tr>
+<tr>
+<td><code>-1</code></td>
+<td><code>[[lat,lon],...]</code></td>
+<td>Path unchanged (already obstacle-free)</td>
+</tr>
+<tr>
+<td><code>1</code></td>
+<td><code>null</code></td>
+<td>Cancelled or failed (check <code>status</code> field)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3 id="post-apicancel_replan"><code>POST /api/cancel_replan</code></h3>
+<p>Cancel an in-progress planning request.</p>
+<p><strong>Request body</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;transfer_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;550e8400-e29b-41d4-a716&quot;</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+<p><strong>Response</strong> — <code>{"success": true}</code></p>
+<hr />
+<h2 id="wormhole-robot-file-transfer">Wormhole (Robot File Transfer)</h2>
+<p>Wormhole endpoints use <a href="https://magic-wormhole.readthedocs.io/">magic-wormhole</a> to transfer
+files peer-to-peer. Requires <code>pip install magic-wormhole</code> on the server.</p>
+<h3 id="post-apicreate_wormhole"><code>POST /api/create_wormhole</code></h3>
+<p>Send a GPX file to a robot over the network. The server starts a wormhole send process and
+waits up to 15 seconds for the one-time transfer code to be generated.</p>
+<p><strong>Request body</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;gpx&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&lt;?xml version=\&quot;1.0\&quot;?&gt;...&quot;</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+<p><strong>Response 200</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;success&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;code&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;7-guitar-academy&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;transfer_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;uuid&quot;</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+<p>Give the code to the robot operator, who runs <code>wormhole receive &lt;code&gt;</code> to receive the file.</p>
+<p><strong>Response 500</strong> if <code>wormhole</code> is not installed or the code was not captured in time.</p>
+<hr />
+<h3 id="post-apicancel_wormhole"><code>POST /api/cancel_wormhole</code></h3>
+<p>Cancel an active wormhole transfer.</p>
+<p><strong>Request body</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">&quot;transfer_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;uuid&quot;</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+<p><strong>Response</strong> — <code>{"success": bool, "message": "..."}</code></p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2026 <a href="https://cyber.felk.cvut.cz/research/groups-teams/vras/">VRAS</a> & <a href="https://vlk-jan.github.io">Jan Vlk</a>
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
