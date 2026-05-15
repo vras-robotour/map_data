@@ -103,6 +103,13 @@ def load_mapdata(md_class: Any, path: str) -> Any:
     md.max_long = meta["max_long"]
     md.coords_file = meta["coords_file"]
 
+    from map_data.map_data import CoordsData  # local import to avoid circular dep
+    md.coords_data = CoordsData(md.min_long, md.max_long, md.min_lat, md.max_lat)
+
+    md.osm_ways_data = None
+    md.osm_rels_data = None
+    md.osm_nodes_data = None
+
     md.waypoints = np.array(data["waypoints"])
     md.nodes_cache = {int(k): v for k, v in data["nodes_cache"].items()}
 

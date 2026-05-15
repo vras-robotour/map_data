@@ -246,7 +246,7 @@ class OSMCloud(Node):
                 )
                 break
             except Exception as e:
-                self.get_logger().warn(f"Failed to get UTM to local transform: {e}")
+                self.get_logger().warning(f"Failed to get UTM to local transform: {e}")
                 rclpy.spin_once(self, timeout_sec=1.0)
 
     def get_cloud(self) -> PointCloud2:

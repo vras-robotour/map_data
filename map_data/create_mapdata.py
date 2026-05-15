@@ -46,9 +46,6 @@ def process_map_data(file_name, download):
             map_data.save()
         else:
             map_data = md.MapData.load(full_path)
-            if map_data.run_parse() != 0:
-                logger.error("Failed to re-parse map data")
-                raise SystemExit(1)
             map_data.save()
         logger.info(f"Successfully processed map data for {file_name}")
     except Exception as e:
