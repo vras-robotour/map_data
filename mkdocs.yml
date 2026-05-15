@@ -1,0 +1,88 @@
+site_name: map_data
+site_description: ROS2 tools to work with OSM data and perform path planning.
+site_author: Jan Vlk
+repo_url: https://github.com/vras-robotour/map_data
+repo_name: vras-robotour/map_data
+edit_uri: edit/master/docs/
+copyright: Copyright &copy; 2026 <a href="https://cyber.felk.cvut.cz/research/groups-teams/vras/">VRAS</a> & <a href="https://vlk-jan.github.io">Jan Vlk</a>
+
+extra_css:
+  - stylesheets/catppuccin.css
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: catppuccin-latte
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+          options:
+            show_source: false
+            show_root_heading: true
+            docstring_style: numpy
+
+nav:
+  - Home: index.md
+  - Usage:
+      - Overview: usage.md
+      - Interactive Viewer:
+          - Overview: viewer.md
+          - Viewer: viewer_view.md
+          - Planner: viewer_planner.md
+          - Tracker: viewer_tracker.md
+      - Path Planning: planning.md
+  - API Reference:
+      - MapData: api/map_data.md
+      - Way: api/way.md
+      - Pathsolvers: api/pathsolver.md
+      - Viewer REST API: api/viewer_routes.md
+  - Troubleshooting: troubleshooting.md
+  - Developer Guide:
+      - Architecture: dev/architecture.md
+      - Tag Configuration: dev/tag_configuration.md
+      - Planner Configuration: dev/planner_config.md
+      - Data Formats: dev/data_formats.md
+      - Contributing: dev/contributing.md
+      - Known Issues & Backlog: dev/todo.md
+      - Changelog: dev/changelog.md

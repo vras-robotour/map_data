@@ -9,7 +9,28 @@ if TYPE_CHECKING:
 
 
 class GraphPlanner:
+    """Graph-based path planner that routes along the OSM road and footway network.
+
+    Builds an undirected weighted graph from the ways stored in a
+    :class:`~map_data.map_data.MapData` instance. Manually annotated paths
+    (negative-ID ways) are spliced into the graph by projecting their
+    endpoints onto the nearest OSM edge, so annotations extend the
+    traversable network seamlessly.
+
+    Planning is performed with A* (see :meth:`plan`). The planner operates
+    entirely in UTM coordinates.
+    """
+
     def __init__(self, map_data: "MapData", highway_types: Optional[List[str]] = None) -> None:
+        """
+        Parameters
+        ----------
+        map_data : MapData
+            Parsed map data containing the OSM ways and node cache.
+        highway_types : list of str, optional
+            Way categories to include in the graph. Supported values are
+            ``"footway"`` and ``"road"``. Defaults to ``["footway"]``.
+        """
         self.map_data = map_data
         self.highway_types = highway_types or ["footway"]
         self.nodes: Dict[int, np.ndarray] = self.map_data.get_points()
@@ -17,6 +38,12 @@ class GraphPlanner:
         self._build_graph()
 
     def _build_graph(self) -> None:
+        """Build the adjacency graph and spatial index from the allowed ways.
+
+        Annotation ways (negative integer IDs) are connected to the OSM graph
+        by projecting their endpoints onto the nearest existing edge and
+        inserting a new junction node at the projection point.
+        """
         self.graph = {}
         self._allowed_ways = []
         if "footway" in self.highway_types:
@@ -119,6 +146,7 @@ class GraphPlanner:
         self._edge_tree = STRtree(final_edge_segments) if final_edge_segments else None
 
     def _add_edge(self, u: int, v: int, d: float) -> None:
+        """Add an undirected edge of length *d* between nodes *u* and *v*."""
         self.graph.setdefault(u, []).append((v, d))
         self.graph.setdefault(v, []).append((u, d))
 
@@ -140,9 +168,25 @@ class GraphPlanner:
         return (n1, n2, projected_point), min_dist
 
     def a_star(self, start_node, goal_node, extra_nodes: Optional[Dict] = None) -> Optional[List[np.ndarray]]:
-        """
-        Standard A* between two nodes.
-        extra_nodes: dict for temporary nodes (e.g. snapped points)
+        """Run A* between two graph nodes and return the path as UTM coordinates.
+
+        Parameters
+        ----------
+        start_node : int or str
+            ID of the start node in the graph.
+        goal_node : int or str
+            ID of the goal node in the graph.
+        extra_nodes : dict, optional
+            Temporary adjacency entries and positions for nodes not
+            permanently in the graph (e.g. snapped projection points).
+            Expected keys: ``"positions"`` mapping node ID → ``np.ndarray``,
+            plus per-node adjacency lists.
+
+        Returns
+        -------
+        list of np.ndarray or None
+            Sequence of ``[x, y]`` UTM positions along the path, or
+            ``None`` if no path exists.
         """
 
         def get_neighbors(u):
@@ -172,9 +216,23 @@ class GraphPlanner:
         return self.nodes[node_id].ravel()[:2]
 
     def plan(self, path_utm: np.ndarray) -> Union[np.ndarray, bool]:
-        """
-        Plan path between multiple UTM points.
-        Connects clicked points to the nearest point on the nearest edge.
+        """Plan a path through a sequence of UTM waypoints along the graph.
+
+        Each consecutive pair of waypoints is routed independently. The
+        waypoints are snapped to the nearest graph edge before planning,
+        so they do not need to lie exactly on the network.
+
+        Parameters
+        ----------
+        path_utm : np.ndarray
+            Array of shape ``(N, 2)`` containing ``[x, y]`` UTM coordinates
+            of the desired waypoints, in order.
+
+        Returns
+        -------
+        np.ndarray or False
+            Concatenated path as an ``(M, 2)`` UTM coordinate array, or
+            ``False`` if any segment could not be routed.
         """
         full_path = []
 

@@ -66,6 +66,36 @@ class CoordsData:
 
 
 class MapData:
+    """Central data class for OSM-based map data.
+
+    Parses GPS waypoints from a GPX file (or a raw coordinate array),
+    downloads the corresponding OSM features via the Overpass API, and
+    exposes them as three categorised lists of :class:`~map_data.utils.way.Way`
+    objects: ``roads_list``, ``footways_list``, and ``barriers_list``.
+
+    The class can be used entirely without ROS2. A running ROS2 context is
+    only required for the ``create_mapdata`` and ``visualize_mapdata`` CLI
+    nodes.
+
+    Attributes
+    ----------
+    waypoints : np.ndarray
+        ``(N, 2)`` array of UTM easting/northing coordinates parsed from the
+        input file.
+    zone_number : int
+        UTM zone number inferred from the waypoints.
+    zone_letter : str
+        UTM zone letter inferred from the waypoints.
+    roads_list : list of Way
+        Parsed road ways (vehicle-intended highways).
+    footways_list : list of Way
+        Parsed footway ways (pedestrian paths).
+    barriers_list : list of Way
+        Parsed barrier features (walls, buildings, fences, water, …).
+    crossroads_list : list of Way
+        Footway intersection points detected during parsing.
+    """
+
     def __init__(
         self,
         coords: Any,
@@ -73,6 +103,23 @@ class MapData:
         current_robot_position: Optional[np.ndarray] = None,
         flip: bool = False,
     ):
+        """
+        Parameters
+        ----------
+        coords : str or array-like
+            If *coords_type* is ``"file"``, the path to a ``.gpx`` file.
+            If *coords_type* is ``"array"``, a tuple
+            ``(waypoints, zone_number, zone_letter)`` where *waypoints* is
+            an ``(N, 2)`` array of UTM easting/northing coordinates.
+        coords_type : str
+            ``"file"`` (default) to parse a GPX file, or ``"array"`` to
+            supply pre-converted UTM coordinates directly.
+        current_robot_position : np.ndarray, optional
+            If provided, prepended to the waypoint array so the robot's
+            current position is included in the bounding box calculation.
+        flip : bool
+            If ``True``, reverse the order of the parsed waypoints.
+        """
         if coords_type == "file":
             with open(coords, "r") as f:
                 gpx_object = gpxparse(f)
@@ -216,6 +263,13 @@ class MapData:
         return np.column_stack([easting, northing]), zone_number, zone_letter
 
     def run_queries(self):
+        """Download OSM ways, relations, and nodes from the Overpass API.
+
+        Fires three concurrent Overpass queries covering the bounding box of
+        the loaded waypoints and stores the raw JSON responses internally.
+        Call :meth:`run_parse` afterwards to convert the responses into
+        :class:`~map_data.utils.way.Way` objects.
+        """
         bbox = f"{self.min_lat},{self.min_long},{self.max_lat},{self.max_long}"
         queries = {
             "ways": f"[out:json]; (way({bbox}); >; ); out;",
@@ -234,6 +288,18 @@ class MapData:
         logger.info("All OSM queries finished.")
 
     def run_parse(self) -> int:
+        """Parse the downloaded OSM data into categorised Way lists.
+
+        Populates :attr:`roads_list`, :attr:`footways_list`,
+        :attr:`barriers_list`, and :attr:`crossroads_list`. The raw OSM
+        response buffers are cleared after parsing to free memory.
+
+        Returns
+        -------
+        int
+            ``0`` on success, ``1`` if OSM data has not been downloaded yet
+            (call :meth:`run_queries` first).
+        """
         if any(
             d is None
             for d in (self.osm_ways_data, self.osm_rels_data, self.osm_nodes_data)
@@ -304,11 +370,31 @@ class MapData:
     # ------------------------------------------------------------------
 
     def run_all(self, save: bool = True):
+        """Download OSM data, parse it, and optionally save the result.
+
+        Convenience wrapper that calls :meth:`run_queries`, :meth:`run_parse`,
+        and :meth:`save` in sequence.
+
+        Parameters
+        ----------
+        save : bool
+            If ``True`` (default), write a ``.mapdata`` file after successful
+            parsing.
+        """
         self.run_queries()
         if self.run_parse() == 0 and save:
             self.save()
 
     def save(self, path: Optional[str] = None):
+        """Serialize this object to a ``.mapdata`` file.
+
+        Parameters
+        ----------
+        path : str, optional
+            Output file path. Defaults to the source GPX filename with its
+            extension replaced by ``.mapdata``. Logs an error and returns
+            without writing if no path can be determined.
+        """
         if path is None:
             if self.coords_file:
                 path = self.coords_file.rsplit(".", 1)[0] + ".mapdata"
@@ -320,6 +406,18 @@ class MapData:
 
     @classmethod
     def load(cls, path: str) -> "MapData":
+        """Load a previously saved ``.mapdata`` file.
+
+        Parameters
+        ----------
+        path : str
+            Path to the ``.mapdata`` file to load.
+
+        Returns
+        -------
+        MapData
+            Restored instance with all way lists populated.
+        """
         return load_mapdata(cls, path)
 
     def __str__(self) -> str:
@@ -334,6 +432,19 @@ class MapData:
         )
 
     def get_points(self, z: float = 0.0) -> Dict[int, np.ndarray]:
+        """Return all cached OSM nodes as a dictionary of UTM coordinates.
+
+        Parameters
+        ----------
+        z : float
+            Z-coordinate to assign to every node (default ``0.0``).
+
+        Returns
+        -------
+        dict of {int: np.ndarray}
+            Mapping of OSM node ID → column vector of shape ``(3, 1)``
+            containing ``[easting, northing, z]``.
+        """
         points = {}
         for node_id, data in self.nodes_cache.items():
             e, n, _, _ = utm.from_latlon(data["lat"], data["lon"])
@@ -341,6 +452,14 @@ class MapData:
         return points
 
     def get_ways(self) -> Dict[str, List[Way]]:
+        """Return all parsed way lists grouped by category.
+
+        Returns
+        -------
+        dict of {str: list of Way}
+            Keys are ``"roads"``, ``"footways"``, ``"barriers"``, and
+            ``"crossroads"``.
+        """
         return {
             "roads": self.roads_list,
             "footways": self.footways_list,

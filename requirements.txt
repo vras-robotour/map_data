@@ -19,3 +19,6 @@ scipy
 matplotlib
 python-dotenv
 PyYAML
+mkdocs
+mkdocs-material
+mkdocstrings[python]
