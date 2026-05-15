@@ -139,6 +139,14 @@ ros2 run map_data visualize_mapdata -f coords.mapdata -sm -sb
 topic (cost-aware footway grid) and optionally publishes intersections as a
 `geometry_msgs/PoseArray` and `visualization_msgs/MarkerArray`.
 
+This node is designed to be flexible and configurable, allowing you to adjust
+the grid resolution, cost falloff, and other parameters to suit your specific
+use case. It can be launched directly with ROS2 or included in a larger launch file.
+
+The data provided are useful for local path planning, obstacle avoidance, and
+navigation tasks. The cost-aware grid can be used by planners to prefer footway
+paths while still allowing off-path navigation when necessary.
+
 ### ROS2 parameters
 
 | Parameter | Default | Description |

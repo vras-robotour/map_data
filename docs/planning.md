@@ -177,8 +177,8 @@ controller benefits from smooth curvature and the small positional deviation is 
 | Situation | Recommended algorithm |
 |-----------|----------------------|
 | Well-mapped pedestrian network, path must stay on ways | `GraphPlanner` |
-| Urban route, obstacles well-defined by OSM barriers | Grid A\* (`algorithm="astar"`) |
-| Large open area, sparse obstacles | RRT\* (`algorithm="rrt"`) |
+| Urban route, obstacles well-defined by OSM barriers | Grid A\* |
+| Large open area, sparse obstacles | RRT\* |
 | Very large area where a fine Grid A\* grid is too expensive | RRT\* |
 
 ---

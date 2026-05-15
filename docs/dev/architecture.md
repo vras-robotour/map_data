@@ -49,7 +49,7 @@ This page describes the internal structure of the `map_data` package. The system
   --d-group-fill:   rgba(127,132,156,0.06);
 }
 
-/* ── SVG flow lines ── */
+/*── SVG flow lines ──*/
 .arch-diagram .flow { fill: none; stroke-linecap: round; stroke-linejoin: round }
 .arch-diagram .flow-main { stroke: var(--d-flow-main) }
 .arch-diagram .flow-md   { stroke: var(--d-flow-md)   }
@@ -81,7 +81,7 @@ This page describes the internal structure of the `map_data` package. The system
 .arch-diagram .bar-cl    { fill: var(--d-data-cl)   }
 .arch-diagram .bar-nc    { fill: var(--d-data-nc)   }
 
-/* ── Groups ── */
+/*── Groups ──*/
 .arch-diagram .group-rect {
   fill: var(--d-group-fill);
   stroke: var(--cat-surface1);
@@ -106,7 +106,7 @@ This page describes the internal structure of the `map_data` package. The system
   fill: var(--d-ink);
 }
 
-/* ── Boxes ── */
+/*── Boxes ──*/
 .arch-diagram .box-shadow     { fill: var(--d-node-shadow) }
 .arch-diagram .box-rect       { fill: var(--d-box-bg);      stroke: var(--d-box-edge);   stroke-width: 1 }
 .arch-diagram .box-rect-input { fill: var(--d-input-bg);    stroke: var(--d-input-edge); stroke-width: 1 }
@@ -117,7 +117,7 @@ This page describes the internal structure of the `map_data` package. The system
   stroke-width: 1; stroke-dasharray: 4 3;
 }
 
-/* ── Labels ── */
+/*── Labels ──*/
 .arch-diagram .label-title {
   text-anchor: middle;
   font-family: 'Inter', sans-serif;
@@ -183,7 +183,7 @@ This page describes the internal structure of the `map_data` package. The system
     CL :{x:850, y:474, w:200,h:84,  title:'crossroads',        mono:true,accent:'cl'},
     NC :{x:1100,y:474, w:200,h:84,  title:'nodes cache',       mono:true,accent:'nc'},
     GP :{x:120, y:744, w:240,h:116, title:'GraphPlanner',      sub:'Graph A*'},
-    RP :{x:392, y:744, w:240,h:116, title:'ReplanPath',        sub:'grid · Grid A* / RRT*'},
+    RP :{x:392, y:744, w:240,h:116, title:'ReplanPath',        sub:'Grid A* / RRT*'},
     VW :{x:760, y:744, w:240,h:116, title:'Viewer',            sub:'Flask + Leaflet'},
     ANN:{x:1032,y:744, w:240,h:116, title:'annotations sidecar',sub:'.annotations.json',kind:'sidecar'},
     ROS:{x:430, y:990, w:540,h:116, title:'ROS2 nodes',
@@ -428,8 +428,8 @@ The viewer (`map_data/viewer/`) is a single-page web application consisting of:
 
 A typical session follows this sequence:
 
-1. **Create `.mapdata`** — run `create_mapdata` with a GPX waypoint file. The node queries Overpass, parses the OSM data, and writes `<name>.mapdata` to disk.
-2. **Open viewer** — run `visualize_mapdata` with the `.mapdata` file. The Flask server starts and opens the map in a browser.
+1. **Create `.mapdata`** — run `create_mapdata` with a GPX waypoint file. The node queries Overpass, parses the OSM data, and writes `<name>.mapdata` to disk. Or download and parse data inside the viewer.
+2. **Visualize data** — run `visualize_mapdata` with the `.mapdata` file to create images of parsed data. Alternatively run the viewer and load parsed data in the browser. If the data were parsed through the viewer they will be shown automatically.
 3. **Annotate** — use the viewer drawing tools to mark obstacles, draw alternative path segments, delete or hide erroneous ways, adjust node positions, and override OSM tags. Changes are saved automatically to `<name>.annotations.json`.
 4. **Export** — click the Export button to produce `<name>.exported.mapdata`, a human-readable JSON snapshot of the annotated map suitable for downstream processing.
 5. **Plan path** — instantiate `GraphPlanner` or `ReplanPath` with the loaded `MapData` object and call `plan()` with the desired waypoints.

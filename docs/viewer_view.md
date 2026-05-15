@@ -1,7 +1,7 @@
 # Viewer
 
 The **Viewer** mode is the default mode of the interactive viewer. It lets you inspect
-parsed map features, manage layer visibility, and draw manual annotations.
+and edit parsed map features, manage layer visibility, and draw manual annotations.
 
 ## Toolbar
 
@@ -10,12 +10,13 @@ The toolbar at the top of the page provides the following tools:
 | Tool | Shortcut | Action |
 |------|:--------:|--------|
 | **VIEW** | `v` | Inspect map features. Click any object to see its OSM tags and properties in the sidebar. |
-| **EDIT** | `e` | Select and reshape existing custom annotations. |
+| **EDIT** | `e` | Select and reshape existing objects and custom annotations. |
 | **+ OBS** | `a` | Draw rectangles, polygons, or circles to add manual obstacle annotations. |
 | **+ PATH** | `p` | Draw custom paths or footways as line annotations. |
-| **DEL** | `d` | Remove custom annotations by clicking on them. |
+| **DEL** | `d` | Remove objects and custom annotations by clicking on them. |
 | **FETCH** | `f` | Draw a bounding box to download and parse a new OSM area on the fly. |
 | **GPX** | `g` | Upload a `.gpx` file to create a new map from a GPS track. |
+| **CLEAR** |  | Clear currently loaded data. |
 
 ## Layers Panel
 
@@ -31,7 +32,7 @@ The sidebar shows a **Layers** panel with toggles for each feature category:
 | Waypoints | Blue | GPX waypoints from the loaded file |
 | Robot | Green | Live robot position (visible when ROS2 is available) |
 
-Each category also has an expandable sub-filter to toggle individual highway or surface subtypes.
+First three categories also have an expandable sub-filter to toggle individual types.
 Use the **Search** box at the top of the Layers panel to filter features by OSM ID or name.
 
 ## Properties Panel
@@ -49,6 +50,8 @@ Three collapsible panels at the bottom of the sidebar track the state of manual 
 - **Hidden** — features that have been hidden from the map via the context menu.
 
 Use the **Export** button in the toolbar to save all annotations and changes back to the `.mapdata` file.
+Deleted features will be removed from the file, while edits and annotations are added to it, hidden
+features are preserved.
 
 ---
 

@@ -1,7 +1,7 @@
 # Interactive Viewer
 
 `map_data_viewer` launches a local Flask web server with a Leaflet-based map UI.
-It lets you inspect parsed features, view their OSM tags, draw manual annotations,
+It lets you inspect and edit parsed features, view their OSM tags, draw manual annotations,
 and plan paths — without needing ROS2.
 
 ## Running the Viewer
