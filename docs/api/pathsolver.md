@@ -1,5 +1,16 @@
 # Pathsolvers
 
+## Generic A\*
+
+`astar_search` is the low-level A\* implementation shared by `GraphPlanner` and `grid_astar`.
+It works on any hashable node type — you can use it directly to build a custom planner.
+See [Using `astar_search` directly](../planning.md#using-astar_search-directly) for a worked example.
+
+::: map_data.pathsolver.astar.astar_search
+    options:
+      show_source: true
+      heading_level: 3
+
 ## Graph Planner
 
 ::: map_data.pathsolver.graph_planner.GraphPlanner

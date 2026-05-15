@@ -4,7 +4,7 @@ site_author: Jan Vlk
 repo_url: https://github.com/vras-robotour/map_data
 repo_name: vras-robotour/map_data
 edit_uri: edit/master/docs/
-copyright: Copyright &copy; 2026 <a href="https://cyber.felk.cvut.cz/research/groups-teams/vras/">VRAS</a>
+copyright: Copyright &copy; 2026 <a href="https://cyber.felk.cvut.cz/research/groups-teams/vras/">VRAS</a> & <a href="https://vlk-jan.github.io">Jan Vlk</a>
 
 extra_css:
   - stylesheets/catppuccin.css
@@ -77,8 +77,12 @@ nav:
       - Way: api/way.md
       - Pathsolvers: api/pathsolver.md
       - Viewer REST API: api/viewer_routes.md
+  - Troubleshooting: troubleshooting.md
   - Developer Guide:
       - Architecture: dev/architecture.md
       - Tag Configuration: dev/tag_configuration.md
       - Planner Configuration: dev/planner_config.md
       - Data Formats: dev/data_formats.md
+      - Contributing: dev/contributing.md
+      - Known Issues & Backlog: dev/todo.md
+      - Changelog: dev/changelog.md

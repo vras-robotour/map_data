@@ -49,3 +49,53 @@ Three collapsible panels at the bottom of the sidebar track the state of manual 
 - **Hidden** — features that have been hidden from the map via the context menu.
 
 Use the **Export** button in the toolbar to save all annotations and changes back to the `.mapdata` file.
+
+---
+
+## Programmatic annotations
+
+Annotations can also be created or inspected without the viewer UI by editing the sidecar
+`.annotations.json` file directly. This is useful for scripting bulk edits or seeding
+annotations from an external data source.
+
+**Add an obstacle polygon programmatically:**
+
+```python
+import json, time, pathlib
+
+mapdata_path = pathlib.Path("coords.mapdata")
+sidecar_path = mapdata_path.with_suffix(".annotations.json")
+
+# Load existing sidecar or start fresh
+if sidecar_path.exists():
+    with open(sidecar_path) as f:
+        sidecar = json.load(f)
+else:
+    sidecar = {"version": 1, "annotations": [], "deleted_ways": [],
+                "hidden_ways": [], "tag_overrides": {}, "split_ways": {},
+                "deleted_nodes": {}, "node_position_overrides": {},
+                "change_log": [], "change_log_migration": "1"}
+
+# Polygon coordinates are WGS-84 (lon, lat) pairs, closed ring
+sidecar["annotations"].append({
+    "id": f"ann_{int(time.time() * 1000)}",
+    "type": "obstacle",
+    "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+            [14.5678, 50.1234],
+            [14.5680, 50.1234],
+            [14.5680, 50.1236],
+            [14.5678, 50.1234],
+        ]]
+    },
+    "properties": {}
+})
+
+with open(sidecar_path, "w") as f:
+    json.dump(sidecar, f, indent=2)
+```
+
+The viewer merges the sidecar at load time, so reloading the file in the browser will show the
+new annotation immediately. See [Data Formats — `.annotations.json`](dev/data_formats.md#annotationsjson-sidecar-format)
+for the full sidecar schema.
