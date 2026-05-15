@@ -313,27 +313,9 @@
     },
     {
       type: 'improvement', sev: 'important',
-      title: 'Bare except swallows config errors in map_data.py',
-      desc: 'A bare <code>except Exception:</code> around the YAML config load silently falls back to defaults with no log message. Misconfigured <code>planner_defaults.yaml</code> is completely invisible.',
-      file: 'map_data/map_data.py'
-    },
-    {
-      type: 'improvement', sev: 'important',
-      title: 'Bare except swallows config errors in replan.py',
-      desc: 'Same pattern as <code>map_data.py</code>: all exceptions during YAML parsing are caught and ignored, so an invalid <code>planner_defaults.yaml</code> silently uses hardcoded defaults.',
-      file: 'map_data/pathsolver/replan.py:61'
-    },
-    {
-      type: 'improvement', sev: 'important',
       title: 'Bare except silently drops features in viewer helpers',
       desc: 'Failed geometry conversions in the viewer are swallowed by <code>except Exception: continue</code>. Features that fail to convert disappear from the map with no warning in the log.',
       file: 'map_data/viewer/helpers.py:61'
-    },
-    {
-      type: 'improvement', sev: 'important',
-      title: 'assert used for production validation in osm_cloud',
-      desc: 'ROS2 parameter types are validated with <code>assert</code> statements. Assertions are stripped when running <code>python -O</code>, silently skipping validation and producing confusing downstream errors.',
-      file: 'map_data/osm_cloud.py:102-104'
     },
     {
       type: 'improvement', sev: 'minor',
@@ -382,12 +364,6 @@
       title: 'No error-scenario tests',
       desc: 'No tests exercise error paths: malformed GPX input, corrupt <code>.mapdata</code> files, Overpass timeouts, or planning with an empty <code>MapData</code> object.',
       file: null
-    },
-    {
-      type: 'documentation', sev: 'minor',
-      title: 'setup.py description is a placeholder',
-      desc: 'The package description field still reads <code>"TODO: Package description"</code>, which appears in <code>pip show</code> output and any PyPI-style listing.',
-      file: 'setup.py:46'
     },
     {
       type: 'improvement', sev: 'nice-to-have',

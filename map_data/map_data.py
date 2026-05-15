@@ -22,16 +22,13 @@ from map_data.utils.way import Way
 logger = logging.getLogger(__name__)
 
 
-import yaml
-
-
 def load_map_defaults():
     """Load default map configuration from config/planner_defaults.yaml."""
     try:
         from ament_index_python.resources import get_resource
         _, package_path = get_resource("packages", "map_data")
         config_path = os.path.join(package_path, "share", "map_data", "config", "planner_defaults.yaml")
-    except Exception:
+    except LookupError:
         config_path = os.path.realpath(
             os.path.join(os.path.dirname(__file__), "..", "config", "planner_defaults.yaml")
         )

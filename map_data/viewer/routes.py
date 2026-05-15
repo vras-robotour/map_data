@@ -1519,9 +1519,8 @@ def create_replan():
         res = replanner.replan(utm_path, algorithm=sub_algorithm)
 
     if res is None:
-        return jsonify({"retrieveNum": 1, "newPath": None, "status": "cancelled"})
-    if res is False:
-        return jsonify({"retrieveNum": 1, "newPath": None, "status": "failed"})
+        status = "cancelled" if algorithm != "graph" else "failed"
+        return jsonify({"retrieveNum": 1, "newPath": None, "status": status})
 
     new_path = []
     changed = False

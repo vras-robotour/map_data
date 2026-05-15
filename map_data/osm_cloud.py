@@ -398,8 +398,10 @@ def create_cloud(points: np.ndarray) -> PointCloud2:
     """
     if not isinstance(points, np.ndarray):
         points = np.array(points)
-    assert points.ndim == 2
-    assert points.shape[1] == 4
+    if points.ndim != 2:
+        raise ValueError(f"points must be a 2-D array, got {points.ndim}-D")
+    if points.shape[1] != 4:
+        raise ValueError(f"points must have 4 columns (x, y, z, cost), got {points.shape[1]}")
 
     points_f32 = points.astype(np.float32)
     cloud: PointCloud2 = msgify(
@@ -481,8 +483,10 @@ def transform_points(
         point : np.array
             Transformed point.
         """
-        assert isinstance(point, np.ndarray)
-        assert isinstance(transform_mat, np.ndarray)
+        if not isinstance(point, np.ndarray):
+            raise TypeError(f"point must be np.ndarray, got {type(point).__name__}")
+        if not isinstance(transform_mat, np.ndarray):
+            raise TypeError(f"transform_mat must be np.ndarray, got {type(transform_mat).__name__}")
 
         res = np.dot(transform_mat[:3, :3], point) + transform_mat[:3, 3:]
         return res

@@ -215,7 +215,7 @@ class GraphPlanner:
             return extra_nodes_data["positions"][node_id]
         return self.nodes[node_id].ravel()[:2]
 
-    def plan(self, path_utm: np.ndarray) -> Union[np.ndarray, bool]:
+    def plan(self, path_utm: np.ndarray) -> Optional[np.ndarray]:
         """Plan a path through a sequence of UTM waypoints along the graph.
 
         Each consecutive pair of waypoints is routed independently. The
@@ -230,9 +230,9 @@ class GraphPlanner:
 
         Returns
         -------
-        np.ndarray or False
+        np.ndarray or None
             Concatenated path as an ``(M, 2)`` UTM coordinate array, or
-            ``False`` if any segment could not be routed.
+            ``None`` if any segment could not be routed.
         """
         full_path = []
 
@@ -245,7 +245,7 @@ class GraphPlanner:
             edge_goal_info, _ = self._find_closest_edge(p_goal)
 
             if not edge_start_info or not edge_goal_info:
-                return False
+                return None
 
             id_s = "temp_start"
             id_g = "temp_goal"
@@ -278,7 +278,7 @@ class GraphPlanner:
             # Route between temporary nodes (projections)
             segment = self.a_star(id_s, id_g, extra)
             if not segment:
-                return False
+                return None
 
             # Combine: clicked point -> projection -> graph path -> projection -> clicked point
             # segment already contains [p_proj_s, ..., p_proj_g]

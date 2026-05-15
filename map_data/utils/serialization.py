@@ -111,8 +111,4 @@ def load_mapdata(md_class: Any, path: str) -> Any:
     md.barriers_list = [way_from_dict(w) for w in data["barriers"]]
     md.crossroads_list = [way_from_dict(w) for w in data.get("crossroads", [])]
 
-    md.roads = {w.id for w in md.roads_list}
-    md.footways = {w.id for w in md.footways_list}
-    md.barriers = {w.id for w in md.barriers_list}
-
     return md

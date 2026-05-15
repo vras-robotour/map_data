@@ -8,7 +8,7 @@ package_name = "map_data"
 setup(
     name=package_name,
     version="0.0.1",
-    packages=find_packages(exclude=["test"]),
+    packages=find_packages(exclude=["tests"]),
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
@@ -18,7 +18,6 @@ setup(
         (os.path.join("share", package_name, "data"), glob("data/*.mapdata")),
         (os.path.join("share", package_name, "data"), glob("data/*.annotations.json")),
         (os.path.join("share", package_name, "parameters"), glob("parameters/*.csv")),
-        (os.path.join("share", package_name, "config"), glob("config/*.yaml")),
     ],
     install_requires=[
         "setuptools",
@@ -43,7 +42,7 @@ setup(
     zip_safe=False,
     maintainer="vlkjan6",
     maintainer_email="vlkjan6@fel.cvut.cz",
-    description="TODO: Package description",
+    description="ROS2 package for downloading, parsing, and visualizing OSM map data with integrated A* and RRT* path planners.",
     license="BSD-3-Clause",
     tests_require=["pytest"],
     entry_points={

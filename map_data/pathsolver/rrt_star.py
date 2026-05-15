@@ -1,7 +1,7 @@
 import random
 import numpy as np
 from scipy.spatial import cKDTree
-from typing import Iterator, List, Optional, Tuple
+from typing import Any, Iterator, List, Optional, Tuple
 from shapely.geometry import Point, LineString
 
 # Rebuild the spatial index after this many new nodes are added since the last build.
@@ -33,7 +33,7 @@ class RRTStar:
         start: np.ndarray,
         goal: np.ndarray,
         obstacles: List,
-        obstacles_tree: Optional[any],
+        obstacles_tree: Optional[Any],
         grid: np.ndarray,
         low: Tuple[float, float],
         grid_scale: float = 1.0,
@@ -479,7 +479,9 @@ if __name__ == "__main__":
         start,
         goal,
         obstacles,
-        grid,
+        obstacles_tree=None,
+        grid=grid,
+        low=(0.0, 0.0),
         max_iter=2000,
         step_size=0.1,
         neighbor_radius=1.5,
@@ -493,5 +495,3 @@ if __name__ == "__main__":
             print(f"({point[0]:.2f}, {point[1]:.2f})")
     else:
         print("No path found.")
-
-    rrt_star.visualize(path)
