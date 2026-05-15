@@ -6,6 +6,36 @@ This page covers the core CLI tools and ROS2 nodes for parsing, visualizing, and
     `create_mapdata`, `visualize_mapdata`, and `osm_cloud` require a sourced ROS2 workspace.
     The `MapData` class, path planning modules, and the interactive viewer work **standalone**.
 
+## What gets downloaded
+
+When `create_mapdata` (or `MapData.run_all()`) is called, three concurrent
+[Overpass API](https://overpass-api.de/) queries are sent:
+
+| Query | What it fetches |
+|-------|----------------|
+| **Ways** | All OSM ways inside the bounding box: roads, footways, paths, buildings, fences, water bodies, and any other area or line feature |
+| **Relations** | Multipolygon relations that reference the above ways (e.g. building complexes, large parks) |
+| **Nodes** | Standalone point features used as obstacles (e.g. bollards, barriers, gates) |
+
+The downloaded data is then filtered and classified into `roads_list`, `footways_list`, and
+`barriers_list` according to the tag CSV files in `parameters/`. Ways whose tags do not match
+any configured category are discarded.
+
+### Bounding box and margins
+
+The query bounding box is the convex hull of the GPX waypoints, expanded outward by
+`osm_margin + reserve_margin` on all sides. With the defaults (`osm_margin = 100 m`,
+`reserve_margin = 50 m`) that is **150 m beyond the outermost waypoint**.
+
+| Margin | Default | Purpose |
+|--------|---------|---------|
+| `osm_margin` | 100 m | Ensures that features near the route boundary — particularly barriers and building footprints — are fully captured, even when their geometry extends a few metres past the last waypoint. |
+| `reserve_margin` | 50 m | Clips the internal UTM bounding box (`min_x/max_x/min_y/max_y`) used by the path planners. The extra buffer prevents the planning grid from touching the download boundary, where data may be incomplete. |
+
+Both values are configurable in `config/planner_defaults.yaml`. Increase `osm_margin` for routes
+near dense urban areas with large building footprints, or decrease it to reduce query time and
+file size for simple open-terrain routes.
+
 ## Inspecting a .mapdata file
 
 `map_data_info` prints statistics about a `.mapdata` file — feature counts, total footway
