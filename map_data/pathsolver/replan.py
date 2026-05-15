@@ -58,7 +58,7 @@ def load_planner_defaults():
         from ament_index_python.resources import get_resource
         _, package_path = get_resource("packages", "map_data")
         config_path = os.path.join(package_path, "share", "map_data", "config", "planner_defaults.yaml")
-    except LookupError:
+    except (ImportError, LookupError):
         config_path = os.path.realpath(
             os.path.join(os.path.dirname(__file__), "..", "..", "config", "planner_defaults.yaml")
         )
