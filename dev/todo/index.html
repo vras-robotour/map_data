@@ -1508,27 +1508,9 @@
     },
     {
       type: 'improvement', sev: 'important',
-      title: 'Bare except swallows config errors in map_data.py',
-      desc: 'A bare <code>except Exception:</code> around the YAML config load silently falls back to defaults with no log message. Misconfigured <code>planner_defaults.yaml</code> is completely invisible.',
-      file: 'map_data/map_data.py'
-    },
-    {
-      type: 'improvement', sev: 'important',
-      title: 'Bare except swallows config errors in replan.py',
-      desc: 'Same pattern as <code>map_data.py</code>: all exceptions during YAML parsing are caught and ignored, so an invalid <code>planner_defaults.yaml</code> silently uses hardcoded defaults.',
-      file: 'map_data/pathsolver/replan.py:61'
-    },
-    {
-      type: 'improvement', sev: 'important',
       title: 'Bare except silently drops features in viewer helpers',
       desc: 'Failed geometry conversions in the viewer are swallowed by <code>except Exception: continue</code>. Features that fail to convert disappear from the map with no warning in the log.',
       file: 'map_data/viewer/helpers.py:61'
-    },
-    {
-      type: 'improvement', sev: 'important',
-      title: 'assert used for production validation in osm_cloud',
-      desc: 'ROS2 parameter types are validated with <code>assert</code> statements. Assertions are stripped when running <code>python -O</code>, silently skipping validation and producing confusing downstream errors.',
-      file: 'map_data/osm_cloud.py:102-104'
     },
     {
       type: 'improvement', sev: 'minor',
@@ -1579,17 +1561,47 @@
       file: null
     },
     {
-      type: 'documentation', sev: 'minor',
-      title: 'setup.py description is a placeholder',
-      desc: 'The package description field still reads <code>"TODO: Package description"</code>, which appears in <code>pip show</code> output and any PyPI-style listing.',
-      file: 'setup.py:46'
-    },
-    {
       type: 'improvement', sev: 'nice-to-have',
       title: 'OSM grid margin',
       desc: 'The OSM grid margin at parsing currently uses two variables. Replace them with a single <code>GRID_MARGIN</code> variable with a default in config file. Also make it changable in the viewer in Fetch and GPX parse dialogs.',
       file: null
+    },
+    {
+      type: 'improvement', sev: 'important',
+      title: 'Dependency Mismatch in ROS2 Manifest',
+      desc: '<code>package.xml</code> is missing critical execution dependencies (flask, overpy, shapely, etc.) that are required by the core library and viewer. Users installing via rosdep will face runtime failures.',
+      file: 'package.xml'
+    },
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'Inconsistent Python Dependency Definitions',
+      desc: 'Mismatch between <code>setup.py</code> and <code>requirements.txt</code>. <code>setup.py</code> is missing <code>PyYAML</code>, <code>matplotlib</code>, and <code>scipy</code>, which are imported in the code. <code>requirements.txt</code> contains many transitive/unnecessary dependencies.',
+      file: 'setup.py, requirements.txt'
+    },
+    {
+      type: 'documentation', sev: 'nice-to-have',
+      title: 'Placeholder Package Description',
+      desc: '<code>package.xml</code> still contains the default <code>TODO: Package description</code> text.',
+      file: 'package.xml'
+    },
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'Annotated Objects in Edit Mode',
+      desc: 'Do not show the editable parts of annotated objects before the user clicks them. The current behaviour is a bit noisy and may overwhelm new users. Also have the same editing UI for OSM objects and for user-created annotations.',
+      file: 'viewer'
+    },
+    {
+      type: 'improvement', sev: 'important',
+      title: 'Rerendering of Reverted Changes',
+      desc: 'When reverting an annotation edit, the viewer updates the data but does not trigger a rerender, leaving stale old geometry on the map, alongside the new reverted geometry, until the next load. This can cause confusion about whether the revert action succeeded.',
+      file: 'viewer'
     }
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'Improve Node Editing',
+      desc: 'Update the editing of nodes to be more responsive. Curently, clicking a node does not always trigger a drag of the node. Also true for path points in planner.',
+      file: 'viewer'
+    },
   ];
 
   let groupBy = 'type';
