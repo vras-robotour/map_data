@@ -1,6 +1,9 @@
 import copy
 import json
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 import numpy as np
 import utm
@@ -58,7 +61,8 @@ def mapdata_to_geojson(map_data):
         for way in ways:
             try:
                 geom = geom_to_geojson(way.line, zn, zl)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to convert geometry for way %s: %s", way.id, e)
                 continue
             if geom is None:
                 continue

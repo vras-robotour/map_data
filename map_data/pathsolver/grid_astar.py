@@ -1,5 +1,8 @@
 import heapq
+import logging
 import numpy as np
+
+logger = logging.getLogger(__name__)
 from shapely.geometry import LineString
 from typing import Optional, Tuple, Union
 
@@ -41,10 +44,17 @@ def grid_astar(
     def to_idx(p):
         ix = int(np.floor((p[0] - low[0]) / cs))
         iy = int(np.floor((p[1] - low[1]) / cs))
-        return np.clip(ix, 0, nx - 1), np.clip(iy, 0, ny - 1)
+        return ix, iy
 
     start_ix, start_iy = to_idx(start_utm)
     goal_ix, goal_iy = to_idx(goal_utm)
+
+    if not (0 <= goal_ix < nx and 0 <= goal_iy < ny):
+        logger.warning("Goal %s is outside the grid bounds; cannot plan path.", goal_utm)
+        return None
+    if not (0 <= start_ix < nx and 0 <= start_iy < ny):
+        logger.warning("Start %s is outside the grid bounds; cannot plan path.", start_utm)
+        return None
 
     if start_ix == goal_ix and start_iy == goal_iy:
         return np.array([start_utm, goal_utm])
