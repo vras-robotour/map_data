@@ -145,9 +145,22 @@ def _get_data_dir() -> str:
         )
 
 
-def _annotation_path(filename):
-    base = filename.rsplit(".", 1)[0]
-    return os.path.join(_get_data_dir(), f"{base}.annotations.json")
+def _safe_data_path(filename: str) -> str:
+    """Resolve a user-supplied filename within the data directory.
+
+    Aborts with 400 if the resolved path would escape the data directory
+    (e.g. via '../' traversal sequences).
+    """
+    data_dir = os.path.realpath(_get_data_dir())
+    resolved = os.path.realpath(os.path.join(data_dir, filename))
+    if not (resolved == data_dir or resolved.startswith(data_dir + os.sep)):
+        abort(400, "Invalid file path")
+    return resolved
+
+
+def _annotation_path(filename: str) -> str:
+    base = os.path.splitext(os.path.basename(filename))[0]
+    return os.path.join(os.path.realpath(_get_data_dir()), f"{base}.annotations.json")
 
 
 @bp.route("/")
@@ -180,7 +193,7 @@ def get_mapdata():
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
-    path = os.path.join(_get_data_dir(), filename)
+    path = _safe_data_path(filename)
     if not os.path.isfile(path):
         abort(404, f"File not found: {filename}")
     map_data = copy.copy(load_mapdata_cached(path))
@@ -277,6 +290,9 @@ def fetch_area():
     for field in ("min_lat", "min_lon", "max_lat", "max_lon", "name"):
         if field not in body:
             abort(400, f"Missing field: {field}")
+
+    if body["min_lat"] >= body["max_lat"] or body["min_lon"] >= body["max_lon"]:
+        abort(400, "min_lat/min_lon must be strictly less than max_lat/max_lon")
 
     name = re.sub(r"[^a-zA-Z0-9_\-]", "_", str(body["name"]).strip())
     if not name:
@@ -384,7 +400,7 @@ def get_way_nodes():
     way_id = request.args.get("way_id")
     if not filename or way_id is None:
         abort(400, "Missing 'file' or 'way_id' query parameter")
-    path = os.path.join(_get_data_dir(), filename)
+    path = _safe_data_path(filename)
     if not os.path.isfile(path):
         abort(404, f"File not found: {filename}")
 
@@ -501,7 +517,7 @@ def get_way(way_id):
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
-    path = os.path.join(_get_data_dir(), filename)
+    path = _safe_data_path(filename)
     if not os.path.isfile(path):
         abort(404, f"File not found: {filename}")
 
@@ -701,7 +717,7 @@ def get_way_segments(way_id):
 
 
 def _get_way_segments_geojson(filename, original_way_id):
-    path = os.path.join(_get_data_dir(), filename)
+    path = _safe_data_path(filename)
     md = load_mapdata_cached(path)
     store = load_annotations(_annotation_path(filename))
 
@@ -1121,7 +1137,7 @@ def undo_move_way_nodes():
 
 
 def get_merged_mapdata(filename):
-    path = os.path.join(_get_data_dir(), filename)
+    path = _safe_data_path(filename)
     if not os.path.isfile(path):
         return None, None
 
