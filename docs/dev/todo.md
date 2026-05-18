@@ -384,18 +384,6 @@
       file: null
     },
     {
-      type: 'improvement', sev: 'important',
-      title: 'Dependency Mismatch in ROS2 Manifest',
-      desc: '<code>package.xml</code> is missing critical execution dependencies (flask, overpy, shapely, etc.) that are required by the core library and viewer. Users installing via rosdep will face runtime failures.',
-      file: 'package.xml'
-    },
-    {
-      type: 'improvement', sev: 'minor',
-      title: 'Inconsistent Python Dependency Definitions',
-      desc: 'Mismatch between <code>setup.py</code> and <code>requirements.txt</code>. <code>setup.py</code> is missing <code>PyYAML</code>, <code>matplotlib</code>, and <code>scipy</code>, which are imported in the code. <code>requirements.txt</code> contains many transitive/unnecessary dependencies.',
-      file: 'setup.py, requirements.txt'
-    },
-    {
       type: 'improvement', sev: 'minor',
       title: 'Annotated Objects in Edit Mode',
       desc: 'Do not show the editable parts of annotated objects before the user clicks them. The current behaviour is a bit noisy and may overwhelm new users. Also have the same editing UI for OSM objects and for user-created annotations.',

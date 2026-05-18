@@ -31,6 +31,10 @@ setup(
         "tqdm",
         "requests",
         "ros2_numpy",
+        "PyYAML",
+        "matplotlib",
+        "scipy",
+        "joblib",
     ],
     package_data={
         "map_data": [

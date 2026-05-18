@@ -9,14 +9,28 @@
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>ros2_numpy</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>nav2_msgs</exec_depend>
-  <exec_depend>geographic_msgs</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>tf2_geometry_msgs</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>
+
+  <exec_depend>python3-flask</exec_depend>
+  <exec_depend>python3-flask-socketio</exec_depend>
+  <exec_depend>python3-gpxpy</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-overpy</exec_depend>
+  <exec_depend>python3-shapely</exec_depend>
+  <exec_depend>python3-utm</exec_depend>
+  <exec_depend>python3-tqdm</exec_depend>
+  <exec_depend>python3-requests</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-matplotlib</exec_depend>
+  <exec_depend>python3-scipy</exec_depend>
+  <exec_depend>python3-joblib</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>
