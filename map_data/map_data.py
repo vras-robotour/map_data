@@ -16,35 +16,14 @@ from map_data.utils.parsing import (
     parse_osm_ways,
     separate_ways,
 )
+from map_data.utils.config import load_config
 from map_data.utils.serialization import load_mapdata, save_mapdata
 from map_data.utils.way import Way
 
 logger = logging.getLogger(__name__)
 
 
-def load_map_defaults() -> Dict[str, Any]:
-    """Load default map configuration from config/planner_defaults.yaml."""
-    try:
-        from ament_index_python.resources import get_resource
-
-        _, package_path = get_resource("packages", "map_data")
-        config_path = os.path.join(
-            package_path, "share", "map_data", "config", "planner_defaults.yaml"
-        )
-    except (ImportError, LookupError):
-        config_path = os.path.realpath(
-            os.path.join(
-                os.path.dirname(__file__), "..", "config", "planner_defaults.yaml"
-            )
-        )
-
-    if os.path.exists(config_path):
-        with open(config_path, "r") as f:
-            return yaml.safe_load(f)
-    return {}
-
-
-_DEFAULTS = load_map_defaults()
+_DEFAULTS = load_config("planner_defaults.yaml")
 OSM_MARGIN: float = _DEFAULTS.get("osm_margin", 100)
 RESERVE: float = _DEFAULTS.get("reserve_margin", 50)
 
