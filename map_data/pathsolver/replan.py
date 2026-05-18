@@ -2,6 +2,7 @@
 
 import os
 import yaml
+import logging
 import argparse
 import threading
 
@@ -28,6 +29,9 @@ from map_data.utils.gpx import (
 )
 from map_data.utils.way import Way
 from map_data.utils.config import load_config
+
+
+logger = logging.getLogger(__name__)
 
 
 _cancel_lock = threading.Lock()
@@ -158,7 +162,7 @@ class ReplanPath:
         results.sort(key=lambda x: x[1])
         for segment_path, _ in results:
             if segment_path is None:
-                print(f"{algorithm} failed to find a path.")
+                logger.warning(f"{algorithm} failed to find a path.")
                 return None
             new_path.extend(segment_path)
 

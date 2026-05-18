@@ -1,5 +1,6 @@
 import os
 import sys
+import logging
 from typing import Dict, List, Tuple, Union
 
 import gpxpy
@@ -7,16 +8,18 @@ import numpy as np
 import utm
 import yaml
 
+logger = logging.getLogger(__name__)
+
 
 def parse_path(path_file: str) -> Union[Tuple[np.ndarray, int, str], List]:
     """
     Parse a path from a GPX or YAML file.
     """
     if not path_file:
-        print("No path file provided.")
+        logger.error("No path file provided.")
         return []
     if not os.path.exists(path_file):
-        print(f"Path file {path_file} does not exist.")
+        logger.error(f"Path file {path_file} does not exist.")
         return []
 
     if path_file.endswith(".gpx"):
@@ -24,7 +27,7 @@ def parse_path(path_file: str) -> Union[Tuple[np.ndarray, int, str], List]:
     elif path_file.endswith(".yaml"):
         return parse_yaml_file(path_file)
     else:
-        print(f"Unsupported file format: {path_file}.")
+        logger.error(f"Unsupported file format: {path_file}.")
         return []
 
 
@@ -42,12 +45,12 @@ def parse_gpx_file(gpx_file: str) -> Union[Tuple[np.ndarray, int, str], List]:
             }
             waypoints.append(convert_waypoint(point))
     except Exception as e:
-        print(f"Error parsing GPX file: {e}")
+        logger.error(f"Error parsing GPX file: {e}")
         return []
     if not waypoints:
-        print("No waypoints found in GPX file.")
+        logger.warning("No waypoints found in GPX file.")
     else:
-        print(f"Parsed {len(waypoints)} waypoints from GPX file.")
+        logger.info(f"Parsed {len(waypoints)} waypoints from GPX file.")
         zone_num, zone_let = utm.from_latlon(
             gpx.waypoints[0].latitude, gpx.waypoints[0].longitude
         )[2:]
@@ -68,9 +71,9 @@ def parse_yaml_file(yaml_file: str) -> Union[Tuple[np.ndarray, int, str], List]:
             point["ele"] = 0
         waypoints.append(convert_waypoint(point))
     if not waypoints:
-        print("No waypoints found in YAML file.")
+        logger.warning("No waypoints found in YAML file.")
     else:
-        print(f"Parsed {len(waypoints)} waypoints from YAML file.")
+        logger.info(f"Parsed {len(waypoints)} waypoints from YAML file.")
         zone_num, zone_let = utm.from_latlon(
             file_waypoints[0]["latitude"], file_waypoints[0]["longitude"]
         )[2:]
@@ -109,9 +112,7 @@ def create_gpx_content(
             lon = point["longitude"]
             gpx_waypoints.append(f'  <wpt lat="{lat}" lon="{lon}"></wpt>')
         except KeyError as e:
-            print(
-                f"Warning: Skipping a waypoint due to missing key: {e}", file=sys.stderr
-            )
+            logger.warning(f"Skipping a waypoint due to missing key: {e}")
             continue
 
     waypoints_xml = "\n".join(gpx_waypoints)
