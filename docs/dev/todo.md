@@ -294,12 +294,6 @@
 
   const ITEMS = [
     {
-      type: 'security', sev: 'important',
-      title: 'Pickle deserialisation without validation',
-      desc: '<code>MapData.load()</code> transparently unpickles legacy <code>.mapdata</code> files without validating their source. Unpickling untrusted data can execute arbitrary code.',
-      file: 'map_data/utils/serialization.py:78'
-    },
-    {
       type: 'improvement', sev: 'minor',
       title: 'Low return type annotation coverage',
       desc: 'Approximately 36 % of functions have return type annotations. Most methods in <code>map_data.py</code> have parameter types but no <code>-&gt;</code> return types, preventing static analysis with mypy or pyright.',

@@ -30,7 +30,7 @@
 
 - Core architecture split into modular components: `OverpassClient`, `parsing`, `serialization`
 - `Way` class refactored to a `@dataclass` with full type hints
-- `.mapdata` serialisation migrated from pickle to JSON + WKT; legacy pickle files are still loaded transparently
+- `.mapdata` serialisation migrated from pickle to JSON + WKT; legacy pickle support was subsequently removed for security reasons.
 - Overpass queries parallelised for faster map data loading
 
 ### Fixed

@@ -6,7 +6,7 @@ This page documents every file format produced or consumed by the `map_data` pac
 
 ## `.mapdata` file format
 
-A `.mapdata` file is a **JSON text file** written by `MapData.save()` via `json.dump`. It is not a pickle file and it is not binary. (Legacy files created before the JSON migration may be Python pickle — these are detected by a `0x80` leading byte and loaded transparently for backwards compatibility, but the format is deprecated.)
+A `.mapdata` file is a **JSON text file** written by `MapData.save()` via `json.dump`. It is not a pickle file and it is not binary. Legacy files created before the JSON migration were Python pickle — support for these has been removed for security reasons. Legacy files must be re-parsed from their source GPX/YAML file to be converted to the JSON format.
 
 Read a `.mapdata` file with:
 
@@ -16,7 +16,7 @@ from map_data.map_data import MapData
 md = MapData.load("route.mapdata")
 ```
 
-Never open `.mapdata` files with `pickle.load` directly — use `MapData.load()` so that both the current JSON format and the legacy pickle format are handled correctly.
+Never open `.mapdata` files with `pickle.load` directly — use `MapData.load()`.
 
 ### Top-level JSON structure
 

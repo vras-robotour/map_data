@@ -104,17 +104,11 @@ After that, use `ros2 run map_data create_mapdata ...` rather than calling the s
 
 ## `.mapdata` file issues
 
-### `MapData.load()` raises `JSONDecodeError`
+### `MapData.load()` raises `ValueError` or `JSONDecodeError`
 
-The file may be truncated (interrupted write) or a legacy pickle file that failed migration. Try:
+The file may be truncated (interrupted write) or a legacy pickle file (detected by a `0x80` header byte). Support for the legacy pickle format has been removed for security reasons.
 
-```python
-with open("coords.mapdata", "rb") as f:
-    header = f.read(2)
-print(header)  # b'\x80\x05' → pickle; b'{\n' → JSON
-```
-
-If it is a valid pickle file, `MapData.load()` should handle it transparently. If neither format is detected, the file is corrupt — re-run `create_mapdata` to regenerate it.
+If you have a legacy file, you must re-run `create_mapdata` to regenerate it in the JSON format or parse the GPX/YAML file through the web viewer.
 
 ### UTM zone boundary warning
 

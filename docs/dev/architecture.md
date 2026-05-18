@@ -350,7 +350,7 @@ The bounding box is the convex hull of the input waypoints expanded by `osm_marg
 | `waypoints` | `np.ndarray` | `(N, 2)` UTM easting/northing array of the input waypoints |
 | `min_x/max_x/min_y/max_y` | `float` | UTM bounding box including margins |
 
-**Serialisation.** `MapData.save()` writes a JSON file (`.mapdata` extension) using `json.dump`. `MapData.load(path)` reads it back; it also transparently handles the legacy pickle format (detected by the `0x80` header byte) for backwards compatibility.
+**Serialisation.** `MapData.save()` writes a JSON file (`.mapdata` extension) using `json.dump`. `MapData.load(path)` reads it back. Support for the legacy pickle format has been removed for security reasons; legacy files must be re-parsed from the source GPX/YAML.
 
 ---
 
