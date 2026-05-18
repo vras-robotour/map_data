@@ -28,16 +28,10 @@ uv pip install mkdocs mkdocs-material "mkdocstrings[python]"
 ## Running the tests
 
 ```bash
-pytest tests/
+pytest tests/ -v
 ```
 
-All tests are standalone — no ROS2 context or network access is required.
-
-To run a specific test file:
-
-```bash
-pytest tests/test_astar.py -v
-```
+All tests are standalone — no ROS2 context or network access is required. See the [Testing](testing.md) page for a full breakdown of test files, design principles, and guidance on adding new tests.
 
 ## Running the docs locally
 
