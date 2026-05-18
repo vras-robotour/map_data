@@ -365,24 +365,6 @@
       desc: 'The main bottlenecks are the Python <code>_bresenham</code> generator and <code>_segment_cost</code> in RRT* (called O(max_iter × neighbors) times), and the <code>heapq</code> loop in <code>grid_astar</code>. Recommended approach: (1) try <code>@numba.njit</code> on these inner loops first — zero build overhead, easy to toggle; (2) replace <code>grid_astar</code> with <code>skimage.graph.route_through_array</code> which is C-backed; (3) Cython or pybind11 only if numba is unacceptable for deployment. Full C/C++ rewrite is not justified given that numpy, cKDTree, and Shapely/GEOS are already native.',
       file: 'map_data/pathsolver/rrt_star.py, map_data/pathsolver/grid_astar.py'
     },
-    {
-      type: 'security', sev: 'critical',
-      title: 'Path Traversal via Unsanitized File Parameter',
-      desc: 'Multiple API routes accept a <code>file</code> query parameter and join it directly with the data directory using <code>os.path.join()</code> without verifying the resolved path stays within the data directory. An attacker can supply <code>../../../etc/passwd</code> (or similar) to read arbitrary files accessible to the server process. Fix: resolve the joined path with <code>os.path.realpath()</code> and assert it starts with the real data directory.',
-      file: 'map_data/viewer/routes.py'
-    },
-    {
-      type: 'bug', sev: 'minor',
-      title: 'YAML Path Parser Has No Error Handling',
-      desc: '<code>parse_yaml_file()</code> has no try/except, unlike its GPX counterpart. A malformed YAML file, a missing <code>waypoints</code> key, or a waypoint with missing <code>latitude</code>/<code>longitude</code> fields will raise an uncaught exception that propagates to the caller. Wrap the body in a try/except and return <code>[]</code> with a logged error, matching the GPX parser contract.',
-      file: 'map_data/utils/gpx.py'
-    },
-    {
-      type: 'bug', sev: 'minor',
-      title: 'Bounding Box Min/Max Not Validated in fetch_area',
-      desc: 'The <code>/api/fetch_area</code> endpoint accepts <code>min_lat</code>, <code>max_lat</code>, <code>min_lon</code>, <code>max_lon</code> from the request body and checks they are present, but never validates that <code>min &lt; max</code>. Inverted bounds produce a valid but nonsensical UTM bounding box that silently yields an empty or incorrect Overpass query.',
-      file: 'map_data/viewer/routes.py'
-    }
   ];
 
   let groupBy = 'type';
