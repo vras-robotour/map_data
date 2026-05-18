@@ -5,8 +5,12 @@ import numpy as np
 from shapely.geometry import LineString
 from typing import Optional, Tuple, Union
 
+from map_data.utils.config import load_config
 
 logger = logging.getLogger(__name__)
+
+_DEFAULTS = load_config("planner_defaults.yaml")
+GRID_COST_WEIGHT = _DEFAULTS.get("grid_cost_weight", 5.0)
 
 
 def grid_astar(
@@ -67,8 +71,8 @@ def grid_astar(
 
     # Pre-calculate costs and pad with infinity to avoid boundary checks
     # grid is assumed to be 0.0 near paths, 1.0 away from paths.
-    # Base traversal cost is 1.0 + grid_value * 5.0
-    costs = 1.0 + grid * 5.0
+    # Base traversal cost is 1.0 + grid_value * GRID_COST_WEIGHT
+    costs = 1.0 + grid * GRID_COST_WEIGHT
     padded_costs = np.full((ny + 2, nx + 2), np.inf, dtype=np.float32)
     padded_costs[1:-1, 1:-1] = costs
 

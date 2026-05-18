@@ -28,3 +28,9 @@ smooth_path: false
 osm_margin: 100
 reserve_margin: 50
 path_cost_cap: 0.85
+grid_cost_weight: 5.0
+obstacle_radius: 2.0
+buffer_widths:
+  road: 7.0
+  footway: 3.0
+  barrier: 2.0

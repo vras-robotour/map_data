@@ -4,9 +4,14 @@ from scipy.spatial import cKDTree
 from typing import Any, Iterator, List, Optional, Tuple
 from shapely.geometry import Point, LineString
 
+from map_data.utils.config import load_config
+
 # Rebuild the spatial index after this many new nodes are added since the last build.
 # Balances rebuild cost (O(n log n)) against linear-scan cost for the unindexed tail.
 _KDTREE_REBUILD_INTERVAL = 50
+
+_DEFAULTS = load_config("planner_defaults.yaml")
+GRID_COST_WEIGHT = _DEFAULTS.get("grid_cost_weight", 5.0)
 
 
 class RRTStar:
@@ -339,8 +344,8 @@ class RRTStar:
 
         avg_c = total_grid_cost / count if count > 0 else 0.0
         # Cost = dist * (1 + avg_grid_cost * penalty)
-        # We use 5.0 to match A* logic
-        return False, np.linalg.norm(end - start) * (1.0 + avg_c * 5.0)
+        # We use GRID_COST_WEIGHT to match A* logic
+        return False, np.linalg.norm(end - start) * (1.0 + avg_c * GRID_COST_WEIGHT)
 
     def find_path(self) -> Optional[np.ndarray]:
         """Run the RRT* algorithm and return the planned path.
