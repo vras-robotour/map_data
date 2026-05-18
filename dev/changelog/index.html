@@ -1351,6 +1351,7 @@
 <li>Interactive viewer: vertex-level editing for manual annotations in Edit mode</li>
 <li>Interactive viewer: GPX file import for waypoint overlays</li>
 <li>Interactive viewer: planner mode can download and parse OSM data on demand</li>
+<li>Interactive viewer: GPX upload modal with map name input (previously a stub)</li>
 <li>Path planning module (<code>pathsolver</code>) with A* graph search and cost-grid support</li>
 <li>Path planning: annotated paths take priority over obstacle cells</li>
 <li>Path planning: paths-only planning mode (constrained to mapped ways)</li>
@@ -1362,13 +1363,18 @@
 <li>Documentation site (MkDocs Material)</li>
 <li>Type hints across core and utility modules</li>
 <li>pytest suite covering core logic and path planning edge cases</li>
+<li>OSM response caching: Overpass query results are persisted to a <code>.osm_cache.json</code> sidecar file and reused on subsequent loads when the bounding box matches, avoiding redundant network requests</li>
+<li>New planner config parameters in <code>planner_defaults.yaml</code>: <code>grid_cost_weight</code>, <code>obstacle_radius</code>, and per-type <code>buffer_widths</code> (<code>road</code>, <code>footway</code>, <code>barrier</code>) — previously hardcoded in source</li>
 </ul>
 <h3 id="changed">Changed</h3>
 <ul>
 <li>Core architecture split into modular components: <code>OverpassClient</code>, <code>parsing</code>, <code>serialization</code></li>
 <li><code>Way</code> class refactored to a <code>@dataclass</code> with full type hints</li>
-<li><code>.mapdata</code> serialisation migrated from pickle to JSON + WKT; legacy pickle files are still loaded transparently</li>
+<li><code>.mapdata</code> serialisation migrated from pickle to JSON + WKT; legacy pickle support was subsequently removed for security reasons</li>
 <li>Overpass queries parallelised for faster map data loading</li>
+<li><code>ReplanPath</code> refactored into focused sub-modules: grid construction moved to <code>PathGrid</code> (<code>pathsolver/grid_constructor.py</code>), path smoothing to <code>smooth_path</code> (<code>pathsolver/smoothing.py</code>), and matplotlib debug visualization to <code>visualize_replan</code> (<code>pathsolver/visualizer.py</code>)</li>
+<li>Config loading centralized to <code>map_data/utils/config.py</code>, eliminating duplicated YAML-loading logic from <code>map_data.py</code> and <code>replan.py</code></li>
+<li><code>visualize_mapdata</code> CLI tool removed; the browser-based viewer supersedes it</li>
 </ul>
 <h3 id="fixed">Fixed</h3>
 <ul>
@@ -1376,6 +1382,9 @@
 <li>Annotation deletion via the Del key in the viewer</li>
 <li>Path planning with split ways</li>
 <li>Thread-safe cancellation in the replanning module</li>
+<li><code>parse_yaml_file</code> now wraps all parse errors in a try/except and returns <code>[]</code> with a log message, matching the error contract of <code>parse_gpx_file</code></li>
+<li>Path traversal vulnerability in viewer API: user-supplied <code>file</code> parameter is now validated against the resolved data directory before any file access</li>
+<li><code>/api/fetch_area</code> now rejects requests where <code>min_lat &gt;= max_lat</code> or <code>min_lon &gt;= max_lon</code></li>
 </ul>
 
 

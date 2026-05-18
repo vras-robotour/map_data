@@ -1127,10 +1127,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#create_mapdata-visualize_mapdata-not-found" class="md-nav__link">
+  <a href="#create_mapdata-not-found" class="md-nav__link">
     <span class="md-ellipsis">
       
-        create_mapdata / visualize_mapdata not found
+        create_mapdata not found
       
     </span>
   </a>
@@ -1166,10 +1166,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#mapdataload-raises-jsondecodeerror" class="md-nav__link">
+  <a href="#mapdataload-raises-valueerror-or-jsondecodeerror" class="md-nav__link">
     <span class="md-ellipsis">
       
-        MapData.load() raises JSONDecodeError
+        MapData.load() raises ValueError or JSONDecodeError
       
     </span>
   </a>
@@ -1685,10 +1685,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#create_mapdata-visualize_mapdata-not-found" class="md-nav__link">
+  <a href="#create_mapdata-not-found" class="md-nav__link">
     <span class="md-ellipsis">
       
-        create_mapdata / visualize_mapdata not found
+        create_mapdata not found
       
     </span>
   </a>
@@ -1724,10 +1724,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#mapdataload-raises-jsondecodeerror" class="md-nav__link">
+  <a href="#mapdataload-raises-valueerror-or-jsondecodeerror" class="md-nav__link">
     <span class="md-ellipsis">
       
-        MapData.load() raises JSONDecodeError
+        MapData.load() raises ValueError or JSONDecodeError
       
     </span>
   </a>
@@ -1817,7 +1817,7 @@
 <h3 id="flask-server-fails-to-start">Flask server fails to start</h3>
 <ul>
 <li>Check that port <code>5000</code> is not already in use: <code>lsof -i :5000</code>.</li>
-<li>If you see <code>ImportError: cannot import name 'rclpy'</code>, you are running the viewer from within a ROS2 workspace where <code>rclpy</code> was expected. The viewer itself does not require ROS2, but the <code>visualize_mapdata</code> ROS2 node wraps it. Run the viewer directly instead:</li>
+<li>If you see <code>ImportError: cannot import name 'rclpy'</code>, you are running the viewer from within a ROS2 workspace where <code>rclpy</code> was expected. The viewer itself does not require ROS2. Run the viewer directly:</li>
 </ul>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>map_data_viewer<span class="w"> </span>--file<span class="w"> </span>coords.mapdata
 </span></code></pre></div>
@@ -1827,8 +1827,8 @@
 <p>Annotation files are written to the same directory as the <code>.mapdata</code> file. If the directory is read-only (e.g. inside a ROS2 install prefix), saving will silently fail. Run the viewer from a directory where you have write permission, or copy the <code>.mapdata</code> file to a writable location first.</p>
 <hr />
 <h2 id="ros2-node-errors">ROS2 node errors</h2>
-<h3 id="create_mapdata-visualize_mapdata-not-found"><code>create_mapdata</code> / <code>visualize_mapdata</code> not found</h3>
-<p>These are ROS2 nodes. They are available only after building the package with <code>colcon</code> and sourcing the workspace:</p>
+<h3 id="create_mapdata-not-found"><code>create_mapdata</code> not found</h3>
+<p>This is a ROS2 node. It is available only after building the package with <code>colcon</code> and sourcing the workspace:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>colcon<span class="w"> </span>build<span class="w"> </span>--packages-select<span class="w"> </span>map_data
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">source</span><span class="w"> </span>install/setup.bash
 </span></code></pre></div>
@@ -1841,13 +1841,9 @@
 </ol>
 <hr />
 <h2 id="mapdata-file-issues"><code>.mapdata</code> file issues</h2>
-<h3 id="mapdataload-raises-jsondecodeerror"><code>MapData.load()</code> raises <code>JSONDecodeError</code></h3>
-<p>The file may be truncated (interrupted write) or a legacy pickle file that failed migration. Try:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;coords.mapdata&quot;</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">header</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nb">print</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>  <span class="c1"># b&#39;\x80\x05&#39; → pickle; b&#39;{\n&#39; → JSON</span>
-</span></code></pre></div>
-<p>If it is a valid pickle file, <code>MapData.load()</code> should handle it transparently. If neither format is detected, the file is corrupt — re-run <code>create_mapdata</code> to regenerate it.</p>
+<h3 id="mapdataload-raises-valueerror-or-jsondecodeerror"><code>MapData.load()</code> raises <code>ValueError</code> or <code>JSONDecodeError</code></h3>
+<p>The file may be truncated (interrupted write) or a legacy pickle file (detected by a <code>0x80</code> header byte). Support for the legacy pickle format has been removed for security reasons.</p>
+<p>If you have a legacy file, you must re-run <code>create_mapdata</code> to regenerate it in the JSON format or parse the GPX/YAML file through the web viewer.</p>
 <h3 id="utm-zone-boundary-warning">UTM zone boundary warning</h3>
 <p>If the log prints <code>WARNING: ways span multiple UTM zones</code>, the <code>.mapdata</code> bounding box crosses a zone boundary. Path planning will still work, but geometry accuracy degrades near the boundary because all features are projected into a single UTM zone. For affected areas, consider splitting the route into segments that stay within one zone.</p>
 

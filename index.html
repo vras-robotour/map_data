@@ -1450,7 +1450,7 @@ serializes the result as a <code>.mapdata</code> file.</p>
 cost-aware footway point cloud for use in autonomous navigation.</p>
 <p>The <code>MapData</code> class, the path planning modules, and the interactive viewer work <strong>standalone</strong> — no running ROS2
 context is required for data parsing, annotation, or planning. ROS2 is only needed for the
-<code>osm_cloud</code> publisher and the <code>create_mapdata</code> / <code>visualize_mapdata</code> CLI nodes.</p>
+<code>osm_cloud</code> publisher and the <code>create_mapdata</code> CLI node.</p>
 <p>The package targets <strong>ROS2 Humble</strong> or later on Ubuntu 22.04.</p>
 <p>Sample <code>.gpx</code> files are provided in <code>./data/</code>.</p>
 <h2 id="installation">Installation</h2>
@@ -1485,47 +1485,33 @@ or a <code>colcon build</code>) so the <code>parameters/</code> CSV files are ac
 </span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">footways_list</span><span class="p">))</span>
 </span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">barriers_list</span><span class="p">))</span>
 </span></code></pre></div>
-<p><strong>Plot the parsed data:</strong></p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.map_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">MapData</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.vis_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_map</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">md</span> <span class="o">=</span> <span class="n">MapData</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;coords.mapdata&quot;</span><span class="p">)</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="n">plot_map</span><span class="p">(</span><span class="n">md</span><span class="p">)</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
-</span></code></pre></div>
 <h2 id="project-structure">Project Structure</h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>map_data/
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>├── map_data.py              # MapData class — parses GPX + OSM into roads/footways/barriers
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>├── info.py                  # CLI tool to print information about a .mapdata file
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>├── create_mapdata.py        # ROS2 node / CLI: download and parse OSM data
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>├── visualize_mapdata.py     # ROS2 node / CLI: static matplotlib plots
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>├── osm_cloud.py             # ROS2 node: publishes footway grid and intersections
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>├── pathsolver/              # Path planning algorithms
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>│   ├── graph_planner.py     # Global A* planning on OSM ways
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>│   ├── replan.py            # Local/Grid-based replanning (Grid A*, RRT*)
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>│   ├── grid_astar.py        # Grid-based A* implementation
-</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>│   ├── rrt_star.py          # RRT* implementation
-</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>│   └── astar.py             # Generic A* search logic
-</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>├── utils/                   # Shared utility functions
-</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>│   ├── way.py               # Way class — represents a single OSM feature with geometry
-</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>│   ├── overpass.py          # OSM Overpass API client
-</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>│   ├── parsing.py           # OSM XML/JSON parsing logic
-</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>│   ├── serialization.py     # .mapdata file I/O
-</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>│   ├── background_map.py    # Raster map tile fetching
-</span><span id="__span-5-19"><a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>│   ├── vis_utils.py         # matplotlib plotting helpers
-</span><span id="__span-5-20"><a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>│   └── points_to_graph_points.py # Equidistant point interpolation
-</span><span id="__span-5-21"><a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a>└── viewer/                  # Modular interactive viewer (Flask + Leaflet)
-</span><span id="__span-5-22"><a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>    ├── app.py               # App factory and server entry point
-</span><span id="__span-5-23"><a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a>    ├── routes.py            # REST API endpoints and GeoJSON conversion
-</span><span id="__span-5-24"><a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a>    ├── helpers.py           # Geometry and annotation utility functions
-</span><span id="__span-5-25"><a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a>    ├── cache.py             # MapData object caching
-</span><span id="__span-5-26"><a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a>    ├── templates/           # HTML templates
-</span><span id="__span-5-27"><a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a>    └── static/              # External CSS and Modular JS assets
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>map_data/
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>├── map_data.py              # MapData class — parses GPX + OSM into roads/footways/barriers
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>├── info.py                  # CLI tool to print information about a .mapdata file
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>├── create_mapdata.py        # ROS2 node / CLI: download and parse OSM data
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>├── osm_cloud.py             # ROS2 node: publishes footway grid and intersections
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>├── pathsolver/              # Path planning algorithms
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>│   ├── graph_planner.py     # Global A* planning on OSM ways
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>│   ├── replan.py            # Local/Grid-based replanning (Grid A*, RRT*)
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│   ├── grid_astar.py        # Grid-based A* implementation
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>│   ├── rrt_star.py          # RRT* implementation
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>│   └── astar.py             # Generic A* search logic
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>├── utils/                   # Shared utility functions
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>│   ├── way.py               # Way class — represents a single OSM feature with geometry
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>│   ├── overpass.py          # OSM Overpass API client
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>│   ├── parsing.py           # OSM XML/JSON parsing logic
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>│   ├── serialization.py     # .mapdata file I/O
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>│   └── points_to_graph_points.py # Equidistant point interpolation
+</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>└── viewer/                  # Modular interactive viewer (Flask + Leaflet)
+</span><span id="__span-4-19"><a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>    ├── app.py               # App factory and server entry point
+</span><span id="__span-4-20"><a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>    ├── routes.py            # REST API endpoints and GeoJSON conversion
+</span><span id="__span-4-21"><a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>    ├── helpers.py           # Geometry and annotation utility functions
+</span><span id="__span-4-22"><a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>    ├── cache.py             # MapData object caching
+</span><span id="__span-4-23"><a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>    ├── templates/           # HTML templates
+</span><span id="__span-4-24"><a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>    └── static/              # External CSS and Modular JS assets
 </span></code></pre></div>
 <h2 id="license">License</h2>
-<p>This project is licensed under the BSD 3-Clause License — see the <a href="https://github.com/vras-robotour/map_data/blob/master/LICENSE">LICENSE</a> file for details.</p>
 
 
 

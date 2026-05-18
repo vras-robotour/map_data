@@ -1634,7 +1634,7 @@
     VW :{x:760, y:744, w:240,h:116, title:'Viewer',            sub:'Flask + Leaflet'},
     ANN:{x:1032,y:744, w:240,h:116, title:'annotations sidecar',sub:'.annotations.json',kind:'sidecar'},
     ROS:{x:430, y:990, w:540,h:116, title:'ROS2 nodes',
-         sub:'osm_cloud · TrackerNode · create_mapdata · visualize_mapdata',kind:'dark'},
+         sub:'osm_cloud · TrackerNode · create_mapdata',kind:'dark'},
   };
   const topAt=(b,i,n)=>{const p=22,u=b.w-2*p;return{x:b.x+p+(n<=1?u/2:u*i/(n-1)),y:b.y}};
   const bot  =b=>({x:b.x+b.w/2,y:b.y+b.h});
@@ -1836,7 +1836,8 @@
 </tr>
 </tbody>
 </table>
-<p><strong>Serialisation.</strong> <code>MapData.save()</code> writes a JSON file (<code>.mapdata</code> extension) using <code>json.dump</code>. <code>MapData.load(path)</code> reads it back; it also transparently handles the legacy pickle format (detected by the <code>0x80</code> header byte) for backwards compatibility.</p>
+<p><strong>OSM caching.</strong> After a successful Overpass query, the raw responses are saved to a <code>.osm_cache.json</code> sidecar file next to the source <code>.gpx</code>/<code>.yaml</code> file. On the next load, if the file exists and the stored bounding box matches the current one (within 1 × 10⁻⁶ °, ≈ 11 cm), the cache is used and the network round-trip is skipped. The cache is invalidated automatically whenever the bounding box changes.</p>
+<p><strong>Serialisation.</strong> <code>MapData.save()</code> writes a JSON file (<code>.mapdata</code> extension) using <code>json.dump</code>. <code>MapData.load(path)</code> reads it back. Support for the legacy pickle format has been removed for security reasons; legacy files must be re-parsed from the source GPX/YAML.</p>
 <hr />
 <h2 id="way-objects">Way objects</h2>
 <p>Every OSM feature is stored as a <code>Way</code> instance (<code>map_data/utils/way.py</code>). A <code>Way</code> holds:</p>
@@ -1859,18 +1860,50 @@
 <p>This planner is well-suited for route planning on well-mapped pedestrian or road networks where staying on designated paths is required.</p>
 <h3 id="replanpath">ReplanPath</h3>
 <p><code>map_data/pathsolver/replan.py</code></p>
-<p>Builds a cost raster (occupancy grid) at resolution <code>cell_size</code> metres. Each cell receives a cost based on:</p>
+<p>Orchestrates cost-grid planning. Grid construction, smoothing, and visualization are handled by dedicated sub-modules:</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Class / function</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pathsolver/grid_constructor.py</code></td>
+<td><code>PathGrid</code></td>
+<td>Builds the cost raster at <code>cell_size</code> metre resolution; assigns per-cell costs from highway type, surface, and barrier geometry</td>
+</tr>
+<tr>
+<td><code>pathsolver/grid_astar.py</code></td>
+<td><code>grid_astar</code></td>
+<td>Fast, optimal A* search on the discrete grid</td>
+</tr>
+<tr>
+<td><code>pathsolver/rrt_star.py</code></td>
+<td><code>RRTStar</code></td>
+<td>Sampling-based planner; produces smoother paths in cluttered environments</td>
+</tr>
+<tr>
+<td><code>pathsolver/smoothing.py</code></td>
+<td><code>smooth_path</code></td>
+<td>Gradient-descent path smoothing with optional collision checking</td>
+</tr>
+<tr>
+<td><code>pathsolver/visualizer.py</code></td>
+<td><code>visualize_replan</code></td>
+<td>Matplotlib debug visualization of the grid, obstacles, and planned path</td>
+</tr>
+</tbody>
+</table>
+<p>Each <code>PathGrid</code> cell cost is determined by:</p>
 <ul>
-<li>the OSM highway type and surface material of the nearest way within <code>max_path_dist</code> metres (see <code>highway_costs</code> and <code>surface_costs</code> in <code>planner_defaults.yaml</code>)</li>
+<li>the OSM highway type and surface material of the nearest way within <code>max_path_dist</code> metres (configured via <code>highway_costs</code> and <code>surface_costs</code> in <code>planner_defaults.yaml</code>)</li>
 <li>a fixed <code>default_off_path_cost</code> for cells not covered by any way</li>
 <li>barrier polygons inflated by <code>inflate_obstacles</code> metres, set to cost 1.0 (impassable)</li>
 </ul>
-<p>Two search algorithms are available on top of this grid:</p>
-<ul>
-<li><strong>Grid A</strong>* (<code>map_data/pathsolver/grid_astar.py</code>) — fast, optimal on the discrete grid</li>
-<li><strong>RRT</strong>* (<code>map_data/pathsolver/rrt_star.py</code>) — sampling-based, produces smoother paths in cluttered environments</li>
-</ul>
-<p>Optional post-processing: Douglas-Peucker simplification (<code>simplify_path</code>) and gradient-descent smoothing (<code>smooth_path</code>).</p>
+<p>Key parameters now exposed in <code>planner_defaults.yaml</code>: <code>grid_cost_weight</code>, <code>obstacle_radius</code>, and <code>buffer_widths</code> (per road type).</p>
 <hr />
 <h2 id="viewer">Viewer</h2>
 <p>The viewer (<code>map_data/viewer/</code>) is a single-page web application consisting of:</p>
@@ -1896,11 +1929,6 @@
 <td>CLI node: reads a GPX/YAML file, runs <code>MapData.run_all()</code>, writes the <code>.mapdata</code> file</td>
 </tr>
 <tr>
-<td><code>visualize_mapdata</code></td>
-<td><code>map_data/visualize_mapdata.py</code></td>
-<td>CLI node: loads a <code>.mapdata</code> file and starts the Flask viewer</td>
-</tr>
-<tr>
 <td><code>osm_cloud</code></td>
 <td><code>map_data/osm_cloud.py</code></td>
 <td>ROS2 node: publishes the parsed OSM features as <code>sensor_msgs/PointCloud2</code> messages for use in Nav2 or custom navigation stacks</td>
@@ -1917,7 +1945,7 @@
 <p>A typical session follows this sequence:</p>
 <ol>
 <li><strong>Create <code>.mapdata</code></strong> — run <code>create_mapdata</code> with a GPX waypoint file. The node queries Overpass, parses the OSM data, and writes <code>&lt;name&gt;.mapdata</code> to disk. Or download and parse data inside the viewer.</li>
-<li><strong>Visualize data</strong> — run <code>visualize_mapdata</code> with the <code>.mapdata</code> file to create images of parsed data. Alternatively run the viewer and load parsed data in the browser. If the data were parsed through the viewer they will be shown automatically.</li>
+<li><strong>Visualize data</strong> — run the viewer and load parsed data in the browser. If the data were parsed through the viewer they will be shown automatically.</li>
 <li><strong>Annotate</strong> — use the viewer drawing tools to mark obstacles, draw alternative path segments, delete or hide erroneous ways, adjust node positions, and override OSM tags. Changes are saved automatically to <code>&lt;name&gt;.annotations.json</code>.</li>
 <li><strong>Export</strong> — click the Export button to produce <code>&lt;name&gt;.exported.mapdata</code>, a human-readable JSON snapshot of the annotated map suitable for downstream processing.</li>
 <li><strong>Plan path</strong> — instantiate <code>GraphPlanner</code> or <code>ReplanPath</code> with the loaded <code>MapData</code> object and call <code>plan()</code> with the desired waypoints.</li>

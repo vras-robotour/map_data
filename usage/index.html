@@ -569,17 +569,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#visualizing-the-parsed-data" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Visualizing the parsed data
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#publishing-a-point-cloud-of-footways-and-intersections" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1373,17 +1362,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#visualizing-the-parsed-data" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Visualizing the parsed data
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#publishing-a-point-cloud-of-footways-and-intersections" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1446,7 +1424,7 @@
 <p>This page covers the core CLI tools and ROS2 nodes for parsing, visualizing, and publishing map data.</p>
 <div class="admonition note">
 <p class="admonition-title">ROS2 requirement</p>
-<p><code>create_mapdata</code>, <code>visualize_mapdata</code>, and <code>osm_cloud</code> require a sourced ROS2 workspace.
+<p><code>create_mapdata</code> and <code>osm_cloud</code> require a sourced ROS2 workspace.
 The <code>MapData</code> class, path planning modules, and the interactive viewer work <strong>standalone</strong>.</p>
 </div>
 <h2 id="what-gets-downloaded">What gets downloaded</h2>
@@ -1568,57 +1546,10 @@ re-parses an existing <code>.mapdata</code> with the current tag configuration.<
 <p>Re-parse an existing <code>.mapdata</code> file (e.g. after editing tag CSVs):</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>ros2<span class="w"> </span>run<span class="w"> </span>map_data<span class="w"> </span>create_mapdata<span class="w"> </span>-f<span class="w"> </span>coords.mapdata
 </span></code></pre></div>
-<h2 id="visualizing-the-parsed-data">Visualizing the parsed data</h2>
-<p><code>visualize_mapdata</code> generates static matplotlib plots from a <code>.mapdata</code> file.
-It shows two figures: one with all parsed features (barriers, footways, roads) and
-one with footways only.</p>
-<table>
-<thead>
-<tr>
-<th>Flag</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>-f &lt;filename&gt;</code></td>
-<td><code>.mapdata</code> file to visualize</td>
-</tr>
-<tr>
-<td><code>-sm</code></td>
-<td>Save the main map plot (default filename: <code>map.png</code>)</td>
-</tr>
-<tr>
-<td><code>-if &lt;filename&gt;</code></td>
-<td>Custom filename for the main plot (requires <code>-sm</code>)</td>
-</tr>
-<tr>
-<td><code>-sb</code></td>
-<td>Save the background tile image (default filename: <code>bgd_map.png</code>)</td>
-</tr>
-<tr>
-<td><code>-bf &lt;filename&gt;</code></td>
-<td>Custom filename for the background image (requires <code>-sb</code>)</td>
-</tr>
-</tbody>
-</table>
-<p>All saved images are written to the <code>./data/</code> directory.</p>
-<p>Visualize and display interactively:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>ros2<span class="w"> </span>run<span class="w"> </span>map_data<span class="w"> </span>visualize_mapdata<span class="w"> </span>-f<span class="w"> </span>coords.mapdata
-</span></code></pre></div>
-<p>Visualize and save both images:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>ros2<span class="w"> </span>run<span class="w"> </span>map_data<span class="w"> </span>visualize_mapdata<span class="w"> </span>-f<span class="w"> </span>coords.mapdata<span class="w"> </span>-sm<span class="w"> </span>-sb
-</span></code></pre></div>
 <h2 id="publishing-a-point-cloud-of-footways-and-intersections">Publishing a point cloud of footways and intersections</h2>
 <p><code>osm_cloud</code> is a ROS2 node that publishes a <code>sensor_msgs/PointCloud2</code> on the <code>grid</code>
 topic (cost-aware footway grid) and optionally publishes intersections as a
 <code>geometry_msgs/PoseArray</code> and <code>visualization_msgs/MarkerArray</code>.</p>
-<p>This node is designed to be flexible and configurable, allowing you to adjust
-the grid resolution, cost falloff, and other parameters to suit your specific
-use case. It can be launched directly with ROS2 or included in a larger launch file.</p>
-<p>The data provided are useful for local path planning, obstacle avoidance, and
-navigation tasks. The cost-aware grid can be used by planners to prefer footway
-paths while still allowing off-path navigation when necessary.</p>
 <h3 id="ros2-parameters">ROS2 parameters</h3>
 <table>
 <thead>
@@ -1699,9 +1630,9 @@ paths while still allowing off-path navigation when necessary.</p>
 <h3 id="launching">Launching</h3>
 <p>The recommended way to run the node is via the provided launch file, which also sets
 up the required static transforms and enables intersection publishing by default:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>ros2<span class="w"> </span>launch<span class="w"> </span>map_data<span class="w"> </span>osm_cloud.launch.py<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">    </span>mapdata_file:<span class="o">=</span>/path/to/coords.mapdata<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span>grid_topic:<span class="o">=</span>osm_cloud
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>ros2<span class="w"> </span>launch<span class="w"> </span>map_data<span class="w"> </span>osm_cloud.launch.py<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span>mapdata_file:<span class="o">=</span>/path/to/coords.mapdata<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span>grid_topic:<span class="o">=</span>osm_cloud
 </span></code></pre></div>
 <table>
 <thead>

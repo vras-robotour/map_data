@@ -1641,13 +1641,13 @@
 <p>This page documents every file format produced or consumed by the <code>map_data</code> package.</p>
 <hr />
 <h2 id="mapdata-file-format"><code>.mapdata</code> file format</h2>
-<p>A <code>.mapdata</code> file is a <strong>JSON text file</strong> written by <code>MapData.save()</code> via <code>json.dump</code>. It is not a pickle file and it is not binary. (Legacy files created before the JSON migration may be Python pickle — these are detected by a <code>0x80</code> leading byte and loaded transparently for backwards compatibility, but the format is deprecated.)</p>
+<p>A <code>.mapdata</code> file is a <strong>JSON text file</strong> written by <code>MapData.save()</code> via <code>json.dump</code>. It is not a pickle file and it is not binary. Legacy files created before the JSON migration were Python pickle — support for these has been removed for security reasons. Legacy files must be re-parsed from their source GPX/YAML file to be converted to the JSON format.</p>
 <p>Read a <code>.mapdata</code> file with:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.map_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">MapData</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">md</span> <span class="o">=</span> <span class="n">MapData</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;route.mapdata&quot;</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Never open <code>.mapdata</code> files with <code>pickle.load</code> directly — use <code>MapData.load()</code> so that both the current JSON format and the legacy pickle format are handled correctly.</p>
+<p>Never open <code>.mapdata</code> files with <code>pickle.load</code> directly — use <code>MapData.load()</code>.</p>
 <h3 id="top-level-json-structure">Top-level JSON structure</h3>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">{</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">&quot;metadata&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="p">},</span>

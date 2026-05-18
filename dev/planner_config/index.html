@@ -1660,7 +1660,7 @@
 <h3 id="viewer-highway-costs-modal">Viewer Highway Costs modal</h3>
 <p>The viewer exposes a modal panel where <code>highway_costs</code> values can be edited per session. Changes take effect immediately for the next path planning request without reloading the <code>.mapdata</code> file.</p>
 <h3 id="cli-flags">CLI flags</h3>
-<p>The <code>ReplanPath</code> constructor and the <code>visualize_mapdata</code> node accept <code>--cell_size</code> and <code>--inflate_obstacles</code> as command-line arguments. These override the YAML defaults for that invocation only; the YAML file is not modified.</p>
+<p>The <code>ReplanPath</code> constructor accepts <code>--cell_size</code> and <code>--inflate_obstacles</code> as command-line arguments. These override the YAML defaults for that invocation only; the YAML file is not modified.</p>
 <h3 id="programmatic-override">Programmatic override</h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.pathsolver.replan</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplanPath</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
