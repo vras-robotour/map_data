@@ -294,58 +294,16 @@
 
   const ITEMS = [
     {
-      type: 'improvement', sev: 'minor',
-      title: 'Low return type annotation coverage',
-      desc: 'Approximately 36 % of functions have return type annotations. Most methods in <code>map_data.py</code> have parameter types but no <code>-&gt;</code> return types, preventing static analysis with mypy or pyright.',
-      file: 'map_data/map_data.py, map_data/utils/parsing.py'
-    },
-    {
-      type: 'improvement', sev: 'minor',
-      title: 'Duplicate config loading logic',
-      desc: '<code>load_map_defaults()</code> and <code>load_planner_defaults()</code> are nearly identical functions in two different files. Changes to the YAML key names or fallback values must be made twice.',
-      file: 'map_data/map_data.py, map_data/pathsolver/replan.py'
-    },
-    {
-      type: 'improvement', sev: 'minor',
-      title: 'Magic numbers without explanation',
-      desc: 'Several hardcoded constants are not configurable and carry no comment explaining their origin. They should be promoted to <code>planner_defaults.yaml</code> or at least documented inline.',
-      file: 'astar.py:72 (0.1), grid_astar.py:55 (5.0), parsing.py:14 (OBSTACLE_RADIUS=2), rrt_star.py:287 (5.0), parsing.py:202-205 (buffer widths 7, 3, 2)'
-    },
-    {
-      type: 'improvement', sev: 'minor',
-      title: 'Inconsistent logging',
-      desc: '<code>map_data/utils/gpx.py</code> uses <code>print()</code> statements for error reporting and status updates instead of the standard <code>logging</code> module used in the rest of the project.',
-      file: 'map_data/utils/gpx.py'
-    },
-    {
-      type: 'improvement', sev: 'minor',
-      title: 'OverpassClient efficiency and robustness',
-      desc: '<code>OverpassClient</code> instantiates <code>overpy.Overpass()</code> for every successful query. It should be instantiated once. Also, the 429 error handling and status checking logic could be more robust.',
-      file: 'map_data/utils/overpass.py'
-    },
-    {
-      type: 'improvement', sev: 'important',
-      title: 'Local OSM response caching',
-      desc: 'The current system caches processed <code>.mapdata</code> files. Adding a cache for raw Overpass JSON responses would allow for re-parsing with different parameters (e.g., different buffer widths or tags) without re-querying the API.',
-      file: 'map_data/map_data.py, map_data/utils/overpass.py'
-    },
-    {
       type: 'testing', sev: 'minor',
       title: 'No unit tests for OverpassClient',
       desc: 'The Overpass client logic, including its retry and status-check mechanism, is untested. Mocking the API responses would allow for testing various error scenarios (429, 500, timeouts).',
       file: 'map_data/utils/overpass.py'
     },
     {
-      type: 'improvement', sev: 'minor',
-      title: 'Low type annotation coverage in utilities',
-      desc: 'Utility modules like <code>overpass.py</code>, <code>gpx.py</code>, and <code>rrt_star.py</code> have incomplete type hints, especially for return types and complex data structures.',
-      file: 'map_data/utils/, map_data/pathsolver/rrt_star.py'
-    },
-    {
       type: 'improvement', sev: 'nice-to-have',
-      title: 'replan.py mixes too many concerns',
-      desc: 'At ~400 lines, <code>replan.py</code> handles grid construction, A*/RRT* dispatch, post-processing (simplify, smooth), debug visualisation, and CLI argument parsing. Splitting into smaller units would make it easier to test and extend independently.',
-      file: 'map_data/pathsolver/replan.py'
+      title: 'Expose more planning parameters in the viewer',
+      desc: 'The newly promoted parameters in <code>planner_defaults.yaml</code> (grid cost weight, obstacle radius, buffer widths) should be added to the viewer configuration UI to allow for easier experimentation without manual YAML edits.',
+      file: 'viewer'
     },
     {
       type: 'testing', sev: 'important',
@@ -394,6 +352,36 @@
       title: 'Improve Node Editing',
       desc: 'Update the editing of nodes to be more responsive. Curently, clicking a node does not always trigger a drag of the node. Also true for path points in planner.',
       file: 'viewer'
+    },
+    {
+      type: 'improvement', sev: 'nice-to-have',
+      title: 'Viewer File Loading',
+    desc: 'Allow for drag-and-drop loading of <code>.mapdata</code> files in the viewer, in addition to the existing file dialog. This would speed up testing of different files and be more intuitive for users. Also allow for droppning GPX/YAML files to trigger parsing. Check for file API support of YAML files.',
+      file: 'viewer'
+    },
+    {
+      type: 'improvement', sev: 'nice-to-have',
+      title: 'Speed up planning hot paths with native extensions',
+      desc: 'The main bottlenecks are the Python <code>_bresenham</code> generator and <code>_segment_cost</code> in RRT* (called O(max_iter × neighbors) times), and the <code>heapq</code> loop in <code>grid_astar</code>. Recommended approach: (1) try <code>@numba.njit</code> on these inner loops first — zero build overhead, easy to toggle; (2) replace <code>grid_astar</code> with <code>skimage.graph.route_through_array</code> which is C-backed; (3) Cython or pybind11 only if numba is unacceptable for deployment. Full C/C++ rewrite is not justified given that numpy, cKDTree, and Shapely/GEOS are already native.',
+      file: 'map_data/pathsolver/rrt_star.py, map_data/pathsolver/grid_astar.py'
+    },
+    {
+      type: 'security', sev: 'critical',
+      title: 'Path Traversal via Unsanitized File Parameter',
+      desc: 'Multiple API routes accept a <code>file</code> query parameter and join it directly with the data directory using <code>os.path.join()</code> without verifying the resolved path stays within the data directory. An attacker can supply <code>../../../etc/passwd</code> (or similar) to read arbitrary files accessible to the server process. Fix: resolve the joined path with <code>os.path.realpath()</code> and assert it starts with the real data directory.',
+      file: 'map_data/viewer/routes.py'
+    },
+    {
+      type: 'bug', sev: 'minor',
+      title: 'YAML Path Parser Has No Error Handling',
+      desc: '<code>parse_yaml_file()</code> has no try/except, unlike its GPX counterpart. A malformed YAML file, a missing <code>waypoints</code> key, or a waypoint with missing <code>latitude</code>/<code>longitude</code> fields will raise an uncaught exception that propagates to the caller. Wrap the body in a try/except and return <code>[]</code> with a logged error, matching the GPX parser contract.',
+      file: 'map_data/utils/gpx.py'
+    },
+    {
+      type: 'bug', sev: 'minor',
+      title: 'Bounding Box Min/Max Not Validated in fetch_area',
+      desc: 'The <code>/api/fetch_area</code> endpoint accepts <code>min_lat</code>, <code>max_lat</code>, <code>min_lon</code>, <code>max_lon</code> from the request body and checks they are present, but never validates that <code>min &lt; max</code>. Inverted bounds produce a valid but nonsensical UTM bounding box that silently yields an empty or incorrect Overpass query.',
+      file: 'map_data/viewer/routes.py'
     }
   ];
 
