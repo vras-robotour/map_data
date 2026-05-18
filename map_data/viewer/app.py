@@ -3,6 +3,7 @@ import logging
 import os
 import threading
 import time
+from typing import Optional
 
 from flask import Flask
 from flask_socketio import SocketIO
