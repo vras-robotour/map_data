@@ -294,28 +294,10 @@
 
   const ITEMS = [
     {
-      type: 'bug', sev: 'critical',
-      title: 'visualize_mapdata crashes on launch',
-      desc: 'References <code>md</code> and <code>args</code> which are never defined. The <code>visualize_mapdata</code> ROS2 node raises <code>NameError</code> immediately on any invocation.',
-      file: 'map_data/visualize_mapdata.py:32,41'
-    },
-    {
-      type: 'bug', sev: 'minor',
-      title: 'grid_astar silently clips goal to grid boundary',
-      desc: 'When the goal coordinate falls outside the grid bounds it is clamped to the nearest edge cell without returning an error. The caller receives a path to the wrong destination.',
-      file: 'map_data/pathsolver/grid_astar.py:44'
-    },
-    {
       type: 'security', sev: 'important',
       title: 'Pickle deserialisation without validation',
       desc: '<code>MapData.load()</code> transparently unpickles legacy <code>.mapdata</code> files without validating their source. Unpickling untrusted data can execute arbitrary code.',
       file: 'map_data/utils/serialization.py:78'
-    },
-    {
-      type: 'improvement', sev: 'important',
-      title: 'Bare except silently drops features in viewer helpers',
-      desc: 'Failed geometry conversions in the viewer are swallowed by <code>except Exception: continue</code>. Features that fail to convert disappear from the map with no warning in the log.',
-      file: 'map_data/viewer/helpers.py:61'
     },
     {
       type: 'improvement', sev: 'minor',
@@ -330,10 +312,46 @@
       file: 'map_data/map_data.py, map_data/pathsolver/replan.py'
     },
     {
+      type: 'security', sev: 'important',
+      title: 'Hardcoded API key in background_map.py',
+      desc: 'A default API key for Geoapify is hardcoded in <code>get_url()</code>. While it might be a public/shared key, it should be exclusively managed via environment variables to prevent misuse or quota exhaustion.',
+      file: 'map_data/utils/background_map.py:16'
+    },
+    {
       type: 'improvement', sev: 'minor',
       title: 'Magic numbers without explanation',
       desc: 'Several hardcoded constants are not configurable and carry no comment explaining their origin. They should be promoted to <code>planner_defaults.yaml</code> or at least documented inline.',
-      file: 'astar.py:72 (0.1), grid_astar.py:55 (5.0), parsing.py:14 (OBSTACLE_RADIUS=2)'
+      file: 'astar.py:72 (0.1), grid_astar.py:55 (5.0), parsing.py:14 (OBSTACLE_RADIUS=2), rrt_star.py:287 (5.0), parsing.py:202-205 (buffer widths 7, 3, 2), vis_utils.py (hardcoded hex colors)'
+    },
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'Inconsistent logging',
+      desc: '<code>map_data/utils/gpx.py</code> and <code>map_data/utils/vis_utils.py</code> use <code>print()</code> statements for error reporting and status updates instead of the standard <code>logging</code> module used in the rest of the project.',
+      file: 'map_data/utils/gpx.py, map_data/utils/vis_utils.py'
+    },
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'OverpassClient efficiency and robustness',
+      desc: '<code>OverpassClient</code> instantiates <code>overpy.Overpass()</code> for every successful query. It should be instantiated once. Also, the 429 error handling and status checking logic could be more robust.',
+      file: 'map_data/utils/overpass.py'
+    },
+    {
+      type: 'improvement', sev: 'important',
+      title: 'Local OSM response caching',
+      desc: 'The current system caches processed <code>.mapdata</code> files. Adding a cache for raw Overpass JSON responses would allow for re-parsing with different parameters (e.g., different buffer widths or tags) without re-querying the API.',
+      file: 'map_data/map_data.py, map_data/utils/overpass.py'
+    },
+    {
+      type: 'testing', sev: 'minor',
+      title: 'No unit tests for OverpassClient',
+      desc: 'The Overpass client logic, including its retry and status-check mechanism, is untested. Mocking the API responses would allow for testing various error scenarios (429, 500, timeouts).',
+      file: 'map_data/utils/overpass.py'
+    },
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'Low type annotation coverage in utilities',
+      desc: 'Utility modules like <code>overpass.py</code>, <code>gpx.py</code>, and <code>rrt_star.py</code> have incomplete type hints, especially for return types and complex data structures.',
+      file: 'map_data/utils/, map_data/pathsolver/rrt_star.py'
     },
     {
       type: 'improvement', sev: 'nice-to-have',
@@ -382,12 +400,6 @@
       title: 'Inconsistent Python Dependency Definitions',
       desc: 'Mismatch between <code>setup.py</code> and <code>requirements.txt</code>. <code>setup.py</code> is missing <code>PyYAML</code>, <code>matplotlib</code>, and <code>scipy</code>, which are imported in the code. <code>requirements.txt</code> contains many transitive/unnecessary dependencies.',
       file: 'setup.py, requirements.txt'
-    },
-    {
-      type: 'documentation', sev: 'nice-to-have',
-      title: 'Placeholder Package Description',
-      desc: '<code>package.xml</code> still contains the default <code>TODO: Package description</code> text.',
-      file: 'package.xml'
     },
     {
       type: 'improvement', sev: 'minor',
