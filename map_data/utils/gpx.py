@@ -61,15 +61,20 @@ def parse_gpx_file(gpx_file: str) -> Union[Tuple[np.ndarray, int, str], List]:
 def parse_yaml_file(yaml_file: str) -> Union[Tuple[np.ndarray, int, str], List]:
     waypoints = []
     zone_num, zone_let = None, None
-    with open(yaml_file, "r") as f:
-        file_waypoints = yaml.safe_load(f)["waypoints"]
-    for waypoint in file_waypoints:
-        point = {"lat": waypoint["latitude"], "lon": waypoint["longitude"]}
-        if "elevation" in waypoint:
-            point["ele"] = waypoint["elevation"]
-        else:
-            point["ele"] = 0
-        waypoints.append(convert_waypoint(point))
+    try:
+        with open(yaml_file, "r") as f:
+            data = yaml.safe_load(f)
+        file_waypoints = data["waypoints"]
+        for waypoint in file_waypoints:
+            point = {"lat": waypoint["latitude"], "lon": waypoint["longitude"]}
+            if "elevation" in waypoint:
+                point["ele"] = waypoint["elevation"]
+            else:
+                point["ele"] = 0
+            waypoints.append(convert_waypoint(point))
+    except Exception as e:
+        logger.error(f"Error parsing YAML file: {e}")
+        return []
     if not waypoints:
         logger.warning("No waypoints found in YAML file.")
     else:
