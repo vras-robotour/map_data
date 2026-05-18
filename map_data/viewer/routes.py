@@ -1,6 +1,7 @@
 import copy
 import io
 import json
+import logging
 import os
 import re
 import select
@@ -10,8 +11,11 @@ import tempfile
 import threading
 import time
 import uuid
-from typing import Dict, Any
+from typing import Any
 
+import numpy as np
+import shapely.geometry as geometry
+import utm
 from flask import (
     Blueprint,
     abort,
@@ -21,25 +25,28 @@ from flask import (
     request,
     send_file,
 )
-import numpy as np
-import shapely.geometry as geometry
-import utm
 
 from map_data.map_data import MapData
-from map_data.pathsolver.replan import ReplanPath, cancel_replan_backend, parse_args
 from map_data.pathsolver.graph_planner import GraphPlanner
+from map_data.pathsolver.replan import (
+    ReplanPath,
+    cancel_replan_backend,
+    load_planner_defaults,
+    parse_args,
+)
 from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.serialization import map_data_to_dict
 from map_data.utils.way import FOOTWAY_VALUES, Way
+
 from .cache import load_mapdata_cached
 from .helpers import (
     apply_node_position_overrides,
+    geojson_geom_to_utm,
     geom_to_geojson,
     get_deleted_node_ids,
     get_deleted_way_ids,
     get_node_position_overrides,
     get_split_node_ids,
-    geojson_geom_to_utm,
     load_annotations,
     mapdata_to_geojson,
     migrate_change_log,
@@ -47,8 +54,8 @@ from .helpers import (
     save_annotations,
     split_way,
 )
-from map_data.pathsolver.replan import load_planner_defaults
 
+logger = logging.getLogger(__name__)
 bp = Blueprint("viewer", __name__)
 
 
@@ -64,7 +71,7 @@ _CAT_FOR_LIST = {
 }
 
 
-def _apply_way_edits(md: MapData, store: Dict[str, Any]) -> None:
+def _apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
     """Apply deletions, node deletions, splits, and position overrides to md in-place."""
     zn, zl = md.zone_number, md.zone_letter
     nodes_cache = getattr(md, "nodes_cache", {})
@@ -82,9 +89,7 @@ def _apply_way_edits(md: MapData, store: Dict[str, Any]) -> None:
                     continue
                 del_nids = get_deleted_node_ids(store, w.id)
                 if del_nids:
-                    w = rebuild_way_without_nodes(
-                        w, del_nids, zn, zl, nodes_cache, category=cat
-                    )
+                    w = rebuild_way_without_nodes(w, del_nids, zn, zl, nodes_cache, category=cat)
                     if w is None:
                         continue
                 split_nids = get_split_node_ids(store, w.id)
@@ -104,9 +109,7 @@ def _apply_way_edits(md: MapData, store: Dict[str, Any]) -> None:
                 else:
                     new_lst.append(w)
             setattr(md, lst_name, new_lst)
-        md.crossroads_list = md.parse_intersections(
-            {str(w.id): w for w in md.footways_list}
-        )
+        md.crossroads_list = md.parse_intersections({str(w.id): w for w in md.footways_list})
 
     node_pos_store = store.get("node_position_overrides", {})
     if node_pos_store:
@@ -140,9 +143,7 @@ def _get_data_dir() -> str:
         return os.path.join(pkg, "share", "map_data", "data")
     except Exception:
         # Fallback to the local data directory relative to this file
-        return os.path.realpath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "data")
-        )
+        return os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", "data"))
 
 
 def _safe_data_path(filename: str) -> str:
@@ -212,9 +213,7 @@ def get_mapdata():
                 cat = f["properties"].get("category")
                 if cat in ("road", "footway"):
                     hw = merged.get("highway", "")
-                    f["properties"]["category"] = (
-                        "footway" if hw in FOOTWAY_VALUES else "road"
-                    )
+                    f["properties"]["category"] = "footway" if hw in FOOTWAY_VALUES else "road"
     return jsonify(geojson)
 
 
@@ -310,9 +309,7 @@ def fetch_area():
             [body["max_lat"], body["max_lon"]],
         ]
     )
-    easting, northing, zone_number, zone_letter = utm.from_latlon(
-        corners[:, 0], corners[:, 1]
-    )
+    easting, northing, zone_number, zone_letter = utm.from_latlon(corners[:, 0], corners[:, 1])
     waypoints = np.column_stack([easting, northing])
 
     md = MapData([waypoints, zone_number, zone_letter], coords_type="array")
@@ -366,9 +363,7 @@ def upload_gpx():
         md.coords_file = file.filename
 
         md.run_queries()
-        if any(
-            d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)
-        ):
+        if any(d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)):
             abort(503, "Overpass API unavailable — try again later")
 
         if md.run_parse() != 0:
@@ -437,9 +432,7 @@ def get_way_nodes():
     # Apply deletions and overrides (consistent with get_way)
     del_nids = get_deleted_node_ids(store, search_id)
     if del_nids:
-        way = rebuild_way_without_nodes(
-            way, del_nids, zn, zl, nodes_cache, category=category
-        )
+        way = rebuild_way_without_nodes(way, del_nids, zn, zl, nodes_cache, category=category)
         if way is None:
             return jsonify({"way_id": way_id, "nodes": []})
 
@@ -481,16 +474,12 @@ def get_way_nodes():
         nid = getattr(nid_obj, "id", nid_obj)
         if nid in nodes_cache:
             nd = nodes_cache[nid]
-            nodes.append(
-                {"id": nid, "lat": nd["lat"], "lon": nd["lon"], "tags": nd["tags"]}
-            )
+            nodes.append({"id": nid, "lat": nd["lat"], "lon": nd["lon"], "tags": nd["tags"]})
         else:
             # Fallback to geometry
             if geom_latlon is None:
                 geom = way.line
-                raw = list(
-                    geom.exterior.coords if hasattr(geom, "exterior") else geom.coords
-                )
+                raw = list(geom.exterior.coords if hasattr(geom, "exterior") else geom.coords)
                 geom_latlon = [utm.to_latlon(e, n, zn, zl) for e, n in raw]
             if i < len(geom_latlon):
                 lat, lon = geom_latlon[i]
@@ -622,9 +611,7 @@ def get_way(way_id):
         feature["properties"]["tags"] = merged
         if category in ("road", "footway"):
             hw = merged.get("highway", "")
-            feature["properties"]["category"] = (
-                "footway" if hw in FOOTWAY_VALUES else "road"
-            )
+            feature["properties"]["category"] = "footway" if hw in FOOTWAY_VALUES else "road"
 
     return jsonify(feature)
 
@@ -681,9 +668,7 @@ def update_way_tags(way_id):
         "label": body.get("label", ""),
     }
     cl = store.setdefault("change_log", [])
-    if not any(
-        e.get("type") == "tag" and e.get("id") == original_way_id_str for e in cl
-    ):
+    if not any(e.get("type") == "tag" and e.get("id") == original_way_id_str for e in cl):
         cl.append({"type": "tag", "id": original_way_id_str, "ts": time.time()})
     save_annotations(ann_path, store)
     return "", 204
@@ -699,9 +684,7 @@ def delete_way_tags(way_id):
     store.get("tag_overrides", {}).pop(str(way_id), None)
     store.get("tag_override_meta", {}).pop(str(way_id), None)
     cl = store.get("change_log", [])
-    store["change_log"] = [
-        e for e in cl if not (e.get("type") == "tag" and e.get("id") == way_id)
-    ]
+    store["change_log"] = [e for e in cl if not (e.get("type") == "tag" and e.get("id") == way_id)]
     save_annotations(ann_path, store)
     return "", 204
 
@@ -878,9 +861,7 @@ def undo_way_split():
     store = load_annotations(ann_path)
     splits = store.get("split_ways", {})
     if str(way_id_int) in splits:
-        splits[str(way_id_int)] = [
-            nid for nid in splits[str(way_id_int)] if nid != node_id_int
-        ]
+        splits[str(way_id_int)] = [nid for nid in splits[str(way_id_int)] if nid != node_id_int]
         if not splits[str(way_id_int)]:
             del splits[str(way_id_int)]
 
@@ -944,9 +925,7 @@ def show_way(way_id):
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
     hw = store.get("hidden_ways", [])
-    store["hidden_ways"] = [
-        d for d in hw if (d["id"] if isinstance(d, dict) else d) != way_id_int
-    ]
+    store["hidden_ways"] = [d for d in hw if (d["id"] if isinstance(d, dict) else d) != way_id_int]
     save_annotations(ann_path, store)
     return "", 204
 
@@ -966,9 +945,7 @@ def restore_way(way_id):
     ann_path = _annotation_path(filename)
     store = load_annotations(ann_path)
     dw = store.get("deleted_ways", [])
-    store["deleted_ways"] = [
-        d for d in dw if (d["id"] if isinstance(d, dict) else d) != way_id_int
-    ]
+    store["deleted_ways"] = [d for d in dw if (d["id"] if isinstance(d, dict) else d) != way_id_int]
     cl = store.get("change_log", [])
     store["change_log"] = [
         e for e in cl if not (e.get("type") == "way" and e.get("id") == way_id_int)
@@ -1161,9 +1138,7 @@ def get_merged_mapdata(filename):
         for w in md.footways_list:
             (new_roads if w.is_road() else new_footways).append(w)
         md.roads_list, md.footways_list = new_roads, new_footways
-        md.crossroads_list = md.parse_intersections(
-            {str(w.id): w for w in md.footways_list}
-        )
+        md.crossroads_list = md.parse_intersections({str(w.id): w for w in md.footways_list})
 
     ann_id = -1
     node_id = -1
@@ -1314,9 +1289,7 @@ class WormholeManager:
         if shutil.which("wormhole") is None:
             # We don't want to crash the whole app if wormhole is missing,
             # just log it and the endpoints will fail gracefully.
-            logger.warning(
-                "'wormhole' command not found. magic-wormhole is required for sharing."
-            )
+            logger.warning("'wormhole' command not found. magic-wormhole is required for sharing.")
 
     def create_transfer(self, gpx_data):
         transfer_id = str(uuid.uuid4())
@@ -1368,9 +1341,7 @@ class WormholeManager:
         wormhole_code = None
         try:
             while True:
-                readable, _, _ = select.select(
-                    [process.stdout, process.stderr], [], [], 0.1
-                )
+                readable, _, _ = select.select([process.stdout, process.stderr], [], [], 0.1)
                 for stream in readable:
                     line = stream.readline().strip()
                     if line:
@@ -1391,9 +1362,7 @@ class WormholeManager:
                     break
 
             process.wait(timeout=60)
-            transfer_info["status"] = (
-                "completed" if process.returncode == 0 else "failed"
-            )
+            transfer_info["status"] = "completed" if process.returncode == 0 else "failed"
         except Exception as e:
             logger.error(f"Error in wormhole thread for {transfer_id}: {e}")
             transfer_info["status"] = "failed"
@@ -1405,9 +1374,9 @@ class WormholeManager:
     def get_transfer_code(self, transfer_id, timeout=10):
         start_time = time.time()
         while time.time() - start_time < timeout:
-            if transfer_id in self.active_transfers and self.active_transfers[
-                transfer_id
-            ].get("code"):
+            if transfer_id in self.active_transfers and self.active_transfers[transfer_id].get(
+                "code"
+            ):
                 return self.active_transfers[transfer_id]["code"]
             time.sleep(0.1)
         return None
@@ -1521,9 +1490,7 @@ def create_replan():
 
         # Filter barriers to bounding box for faster processing
         bbox = geometry.box(p_low[0], p_low[1], p_high[0], p_high[1])
-        filtered_barriers = [
-            w for w in md.barriers_list if w.line and w.line.intersects(bbox)
-        ]
+        filtered_barriers = [w for w in md.barriers_list if w.line and w.line.intersects(bbox)]
 
         obstacles = ways_to_shapely(filtered_barriers)
         replanner = ReplanPath(args, obstacles, transfer_id=transfer_id)
@@ -1555,9 +1522,8 @@ def create_replan():
         lat, lon = utm.to_latlon(res[i][0], res[i][1], zn, zl)
         new_path.append([lat, lon])
         # Simple heuristic to check if it actually changed significantly
-        if not changed and i < len(utm_path):
-            if np.linalg.norm(res[i] - utm_path[i]) > 0.1:
-                changed = True
+        if not changed and i < len(utm_path) and np.linalg.norm(res[i] - utm_path[i]) > 0.1:
+            changed = True
 
     if changed:
         return jsonify({"retrieveNum": 0, "newPath": new_path})

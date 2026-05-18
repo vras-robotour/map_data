@@ -1,8 +1,10 @@
 import random
+from collections.abc import Iterator
+from typing import Any
+
 import numpy as np
 from scipy.spatial import cKDTree
-from typing import Any, Iterator, List, Optional, Tuple
-from shapely.geometry import Point, LineString
+from shapely.geometry import LineString, Point
 
 from map_data.utils.config import load_config
 
@@ -37,17 +39,17 @@ class RRTStar:
         self,
         start: np.ndarray,
         goal: np.ndarray,
-        obstacles: List,
-        obstacles_tree: Optional[Any],
+        obstacles: list,
+        obstacles_tree: Any | None,
         grid: np.ndarray,
-        low: Tuple[float, float],
+        low: tuple[float, float],
         grid_scale: float = 1.0,
         max_iter: int = 2000,
         step_size: float = 2.0,
         neighbor_radius: float = 5.0,
         traversability_threshold: float = 10.0,  # inf is blocked, high values are expensive
         simplify: bool = True,
-        transfer_id: Optional[str] = None,
+        transfer_id: str | None = None,
         improve_after_goal: bool = False,
     ) -> None:
         """
@@ -117,7 +119,7 @@ class RRTStar:
         self.simplify = simplify
         self.transfer_id = transfer_id
         self.improve_after_goal = improve_after_goal
-        self._kdtree: Optional[cKDTree] = None
+        self._kdtree: cKDTree | None = None
         self._kdtree_n: int = 0
 
         # Limit sampling area
@@ -153,9 +155,7 @@ class RRTStar:
             self._trav_xs = None
             self._trav_ys = None
 
-    def _is_collision(
-        self, point1: np.ndarray, point2: Optional[np.ndarray] = None
-    ) -> bool:
+    def _is_collision(self, point1: np.ndarray, point2: np.ndarray | None = None) -> bool:
         """Return ``True`` if a point or segment intersects an obstacle.
 
         Checks both the Shapely obstacle polygons (via STRtree) and the cost
@@ -187,8 +187,8 @@ class RRTStar:
         return False
 
     def _bresenham(
-        self, start: Tuple[int, int], goal: Tuple[int, int]
-    ) -> Iterator[Tuple[int, int]]:
+        self, start: tuple[int, int], goal: tuple[int, int]
+    ) -> Iterator[tuple[int, int]]:
         """Yield integer grid cells along the line from *start* to *goal* (Bresenham)."""
         x0, y0 = start
         x1, y1 = goal
@@ -230,10 +230,8 @@ class RRTStar:
             idx = random.randrange(len(self._trav_xs))
             return np.array(
                 [
-                    self._trav_xs[idx]
-                    + random.uniform(-self.grid_scale / 2, self.grid_scale / 2),
-                    self._trav_ys[idx]
-                    + random.uniform(-self.grid_scale / 2, self.grid_scale / 2),
+                    self._trav_xs[idx] + random.uniform(-self.grid_scale / 2, self.grid_scale / 2),
+                    self._trav_ys[idx] + random.uniform(-self.grid_scale / 2, self.grid_scale / 2),
                 ]
             )
         return np.array(
@@ -274,7 +272,7 @@ class RRTStar:
             return target
         return start + (direction / dist) * self.step_size
 
-    def _get_near_nodes(self, new_point: np.ndarray) -> List[int]:
+    def _get_near_nodes(self, new_point: np.ndarray) -> list[int]:
         """Return indices of all tree nodes within *neighbor_radius* of *new_point*."""
         n = len(self.nodes)
         new_idx = n - 1  # node just appended by the caller
@@ -286,9 +284,7 @@ class RRTStar:
 
         # KD-tree covers [0, _kdtree_n); _nearest_node always rebuilds first so
         # new_point is never included in the tree.
-        result: List[int] = list(
-            self._kdtree.query_ball_point(new_point, self.neighbor_radius)
-        )
+        result: list[int] = list(self._kdtree.query_ball_point(new_point, self.neighbor_radius))
 
         # Linear scan over nodes added since the last rebuild, excluding new_point itself
         for i in range(self._kdtree_n, n):
@@ -300,7 +296,7 @@ class RRTStar:
 
         return result
 
-    def _segment_cost(self, start: np.ndarray, end: np.ndarray) -> Tuple[bool, float]:
+    def _segment_cost(self, start: np.ndarray, end: np.ndarray) -> tuple[bool, float]:
         """Compute the cost of the segment from *start* to *end*.
 
         Returns
@@ -312,14 +308,7 @@ class RRTStar:
             Returns ``(True, inf)`` on collision.
         """
         if self.obstacles_tree:
-            if (
-                len(
-                    self.obstacles_tree.query(
-                        LineString([start, end]), predicate="intersects"
-                    )
-                )
-                > 0
-            ):
+            if len(self.obstacles_tree.query(LineString([start, end]), predicate="intersects")) > 0:
                 return True, float("inf")
 
         p1_grid = (
@@ -347,7 +336,7 @@ class RRTStar:
         # We use GRID_COST_WEIGHT to match A* logic
         return False, np.linalg.norm(end - start) * (1.0 + avg_c * GRID_COST_WEIGHT)
 
-    def find_path(self) -> Optional[np.ndarray]:
+    def find_path(self) -> np.ndarray | None:
         """Run the RRT* algorithm and return the planned path.
 
         Iterates up to *max_iter* times, growing the tree from ``start``
@@ -377,9 +366,7 @@ class RRTStar:
             if self._is_collision(new_point):
                 continue
 
-            collision, nearest_seg_cost = self._segment_cost(
-                self.nodes[nearest_idx], new_point
-            )
+            collision, nearest_seg_cost = self._segment_cost(self.nodes[nearest_idx], new_point)
             if collision:
                 continue
 
@@ -436,7 +423,7 @@ class RRTStar:
             return np.array(path)
         return None
 
-    def _reconstruct_path(self, goal_idx: int) -> List[np.ndarray]:
+    def _reconstruct_path(self, goal_idx: int) -> list[np.ndarray]:
         """Walk the parent chain from *goal_idx* back to the root and return the path."""
         path = []
         curr = goal_idx
@@ -448,7 +435,7 @@ class RRTStar:
             return self._simplify_path(path)
         return path
 
-    def _simplify_path(self, path: List[np.ndarray]) -> List[np.ndarray]:
+    def _simplify_path(self, path: list[np.ndarray]) -> list[np.ndarray]:
         """Greedily remove intermediate waypoints that have line-of-sight to a later node."""
         if len(path) <= 2:
             return path

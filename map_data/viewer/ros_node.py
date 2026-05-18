@@ -1,29 +1,30 @@
 from __future__ import annotations
+
 import math
 import threading
 import time
+
 import utm
-from typing import Union
 
 try:
     import rclpy
     import rclpy.duration
-    from rclpy.node import Node
     from geometry_msgs.msg import TwistStamped
-    from nav_msgs.msg import Path, Odometry
     from nav2_msgs.action import (
         FollowGPSWaypoints,
         FollowWaypoints,
         NavigateThroughPoses,
     )
     from nav2_msgs.msg import BehaviorTreeLog, CollisionMonitorState, SpeedLimit
-    from tf2_ros.buffer import Buffer
-    from sensor_msgs.msg import NavSatFix, Imu
+    from nav_msgs.msg import Odometry, Path
+    from rclpy.node import Node
+    from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
+    from sensor_msgs.msg import Imu, NavSatFix
     from std_msgs.msg import Bool, Float32, Header, String, UInt64
-    from tf2_ros import TransformException
     from tf2_geometry_msgs import do_transform_pose_stamped
+    from tf2_ros import TransformException
+    from tf2_ros.buffer import Buffer
     from tf2_ros.transform_listener import TransformListener
-    from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
     ROS_AVAILABLE = True
 except ImportError:
@@ -50,9 +51,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
         self.declare_parameter("odom_topic", "/odom_2d")
         self.declare_parameter("motors_enabled_topic", "/motors_enabled")
         self.declare_parameter("speed_limit_topic", "/speed_limit")
-        self.declare_parameter(
-            "collision_monitor_state_topic", "/collision_monitor_state"
-        )
+        self.declare_parameter("collision_monitor_state_topic", "/collision_monitor_state")
         self.declare_parameter("recovery_heartbeat_topic", "/recovery/heartbeat")
         self.declare_parameter("bt_log_topic", "/behavior_tree_log")
         self.declare_parameter("teleop_topic", "/cmd_vel_teleop")
@@ -113,9 +112,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
             depth=10,
         )
 
-        def subscribe_if_enabled(
-            topic_param, msg_type, callback, qos=10, feature_name=None
-        ):
+        def subscribe_if_enabled(topic_param, msg_type, callback, qos=10, feature_name=None):
             topic = self.get_parameter(topic_param).value
             if topic:
                 self.create_subscription(msg_type, topic, callback, qos)
@@ -147,9 +144,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
             qos_best_effort,
             "battery",
         )
-        subscribe_if_enabled(
-            "bus_current_topic", Float32, self._current_callback, qos_best_effort
-        )
+        subscribe_if_enabled("bus_current_topic", Float32, self._current_callback, qos_best_effort)
         subscribe_if_enabled(
             "teensy_temp_topic", Float32, self._temp_callback, qos_best_effort, "temp"
         )
@@ -271,8 +266,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
             "collision_action": self.collision_action,
             "recovery_active": self._last_recovery_time > 0
             and (now - self._last_recovery_time) < 5.0,
-            "teleop_active": self._last_teleop_time > 0
-            and (now - self._last_teleop_time) < 2.0,
+            "teleop_active": self._last_teleop_time > 0 and (now - self._last_teleop_time) < 2.0,
             "nav_state": self.nav_state,
             "localization_state": self.localization_state,
             "last_speech": dict(self.last_speech) if self.last_speech else None,
@@ -301,12 +295,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
 
     def _convert_path_latlon(
         self,
-        msg: Union[
-            "Path",
-            "NavigateThroughPoses.Goal",
-            "FollowWaypoints.Goal",
-            "FollowGPSWaypoints.Goal",
-        ],
+        msg: Path | NavigateThroughPoses.Goal | FollowWaypoints.Goal | FollowGPSWaypoints.Goal,
     ):
         waypoints_gps = []
         if ROS_AVAILABLE and isinstance(msg, FollowGPSWaypoints.Goal):
@@ -324,9 +313,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
                     rclpy.duration.Duration(seconds=0),
                 )
             except TransformException as ex:
-                self.get_logger().info(
-                    f"Could not transform utm to {msg.header.frame_id}: {ex}"
-                )
+                self.get_logger().info(f"Could not transform utm to {msg.header.frame_id}: {ex}")
                 return None
 
             if isinstance(msg, Path):
@@ -342,9 +329,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
             with self._lock:
                 ref_pos = self.pose_gps
             if ref_pos:
-                _, _, zone_number, zone_letter = utm.from_latlon(
-                    ref_pos["lat"], ref_pos["lon"]
-                )
+                _, _, zone_number, zone_letter = utm.from_latlon(ref_pos["lat"], ref_pos["lon"])
             else:
                 zone_number, zone_letter = 33, "U"
 
@@ -369,9 +354,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
                 self.pose_gps["heading"] = self.current_heading
             self._dirty = True
         if first:
-            self.get_logger().info(
-                f"First GPS fix received: {msg.latitude}, {msg.longitude}"
-            )
+            self.get_logger().info(f"First GPS fix received: {msg.latitude}, {msg.longitude}")
 
     def _ekf_callback(self, msg):
         with self._lock:
@@ -381,11 +364,9 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
                 self.pose_ekf["heading"] = self.current_heading
             self._dirty = True
         if first:
-            self.get_logger().info(
-                f"First EKF pose received: {msg.latitude}, {msg.longitude}"
-            )
+            self.get_logger().info(f"First EKF pose received: {msg.latitude}, {msg.longitude}")
 
-    def _path_callback(self, msg: "Path"):
+    def _path_callback(self, msg: Path):
         waypoints = self._convert_path_latlon(msg)
         if waypoints:
             subsampled = waypoints[::10]
@@ -397,43 +378,35 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
 
     def _feedback_callback(
         self,
-        msg: Union[
-            "NavigateThroughPoses.Feedback",
-            "FollowWaypoints.Feedback",
-            "FollowGPSWaypoints.Feedback",
-        ],
+        msg: NavigateThroughPoses.Feedback | FollowWaypoints.Feedback | FollowGPSWaypoints.Feedback,
     ):
         if not ROS_AVAILABLE:
             return
         with self._lock:
             if isinstance(msg, NavigateThroughPoses.Feedback):
-                self.current_waypoint = (
-                    self.num_waypoints - msg.number_of_poses_remaining
-                )
+                self.current_waypoint = self.num_waypoints - msg.number_of_poses_remaining
             else:
                 self.current_waypoint = msg.current_waypoint
             self._dirty = True
 
-    def _voltage_callback(self, msg: "Float32"):
+    def _voltage_callback(self, msg: Float32):
         with self._lock:
             self.bus_voltage = round(float(msg.data), 2)
             self._dirty = True
 
-    def _current_callback(self, msg: "Float32"):
+    def _current_callback(self, msg: Float32):
         with self._lock:
             self.bus_current = round(float(msg.data), 2)
             self._dirty = True
 
-    def _motors_callback(self, msg: "Bool"):
+    def _motors_callback(self, msg: Bool):
         with self._lock:
             self.motors_enabled = bool(msg.data)
             self._dirty = True
 
-    def _azimuth_callback(self, msg: "Imu"):
+    def _azimuth_callback(self, msg: Imu):
         q = msg.orientation
-        yaw = math.atan2(
-            2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
-        )
+        yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
         heading = round((90.0 - math.degrees(yaw)) % 360.0, 1)
         with self._lock:
             self.current_heading = heading
@@ -444,24 +417,24 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
                 self.pose_ekf["heading"] = heading
             self._dirty = True
 
-    def _temp_callback(self, msg: "Float32"):
+    def _temp_callback(self, msg: Float32):
         with self._lock:
             self.teensy_temp = round(float(msg.data), 1)
             self._dirty = True
 
-    def _odom_speed_callback(self, msg: "Odometry"):
+    def _odom_speed_callback(self, msg: Odometry):
         vx = msg.twist.twist.linear.x
         vy = msg.twist.twist.linear.y
         with self._lock:
             self.speed = round(math.sqrt(vx * vx + vy * vy), 2)
             self._dirty = True
 
-    def _odrv_error_callback(self, msg: "UInt64"):
+    def _odrv_error_callback(self, msg: UInt64):
         with self._lock:
             self.motor_error = int(msg.data)
             self._dirty = True
 
-    def _speed_limit_callback(self, msg: "SpeedLimit"):
+    def _speed_limit_callback(self, msg: SpeedLimit):
         with self._lock:
             self.speed_limit = {
                 "value": round(msg.speed_limit, 2),
@@ -469,33 +442,33 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
             }
             self._dirty = True
 
-    def _collision_callback(self, msg: "CollisionMonitorState"):
+    def _collision_callback(self, msg: CollisionMonitorState):
         with self._lock:
             self.collision_action = self._COLLISION_ACTIONS.get(
                 msg.action_type, str(msg.action_type)
             )
             self._dirty = True
 
-    def _recovery_callback(self, msg: "Header"):
+    def _recovery_callback(self, msg: Header):
         with self._lock:
             self._last_recovery_time = time.time()
             self._dirty = True
 
-    def _teleop_callback(self, msg: "TwistStamped"):
+    def _teleop_callback(self, msg: TwistStamped):
         lv, av = msg.twist.linear, msg.twist.angular
         if any(v != 0.0 for v in (lv.x, lv.y, lv.z, av.x, av.y, av.z)):
             with self._lock:
                 self._last_teleop_time = time.time()
                 self._dirty = True
 
-    def _bt_callback(self, msg: "BehaviorTreeLog"):
+    def _bt_callback(self, msg: BehaviorTreeLog):
         running = [e for e in msg.event_log if e.current_status == "RUNNING"]
         nav_state = running[-1].node_name if running else None
         with self._lock:
             self.nav_state = nav_state
             self._dirty = True
 
-    def _speech_callback(self, msg: "String", level: str):
+    def _speech_callback(self, msg: String, level: str):
         with self._lock:
             self.last_speech = {"level": level, "text": msg.data}
             self._dirty = True

@@ -54,9 +54,7 @@ def get_stats(path: str) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Display statistics for a .mapdata file"
-    )
+    parser = argparse.ArgumentParser(description="Display statistics for a .mapdata file")
     parser.add_argument("file", help="Path to the .mapdata file")
     args = parser.parse_args()
 

@@ -1,5 +1,6 @@
 import numpy as np
 import shapely.geometry as sh
+
 from map_data.pathsolver.replan import ReplanPath
 
 
@@ -81,9 +82,7 @@ class MockMapData:
         for way in self.footways_list:
             for node_id, coord in zip(
                 way.nodes,
-                way.line.exterior.coords
-                if hasattr(way.line, "exterior")
-                else way.line.coords,
+                way.line.exterior.coords if hasattr(way.line, "exterior") else way.line.coords,
             ):
                 points[node_id] = np.array(coord).reshape(1, -1)
         return points
@@ -183,9 +182,7 @@ def test_astar_grid_start_equals_goal_same_cell():
 
 def test_post_process_path_very_close_points():
     args = Args()
-    args.simplify_path = (
-        False  # Disable DP simplification to test only distance-based removal
-    )
+    args.simplify_path = False  # Disable DP simplification to test only distance-based removal
     replanner = ReplanPath(args, [])
 
     # Two points extremely close to each other

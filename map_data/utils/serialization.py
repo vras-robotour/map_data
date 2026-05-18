@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 from shapely import wkt
@@ -10,7 +10,7 @@ from map_data.utils.way import Way
 logger = logging.getLogger(__name__)
 
 
-def way_to_dict(way: Way) -> Dict[str, Any]:
+def way_to_dict(way: Way) -> dict[str, Any]:
     return {
         "id": way.id,
         "is_area": way.is_area,
@@ -21,7 +21,7 @@ def way_to_dict(way: Way) -> Dict[str, Any]:
     }
 
 
-def way_from_dict(data: Dict[str, Any]) -> Way:
+def way_from_dict(data: dict[str, Any]) -> Way:
     line = wkt.loads(data["line"]) if data.get("line") else None
     return Way(
         id=data["id"],
@@ -33,7 +33,7 @@ def way_from_dict(data: Dict[str, Any]) -> Way:
     )
 
 
-def map_data_to_dict(md: Any) -> Dict[str, Any]:
+def map_data_to_dict(md: Any) -> dict[str, Any]:
     return {
         "metadata": {
             "zone_number": md.zone_number,
@@ -77,7 +77,7 @@ def load_mapdata(md_class: Any, path: str) -> Any:
         raise ValueError(f"Legacy pickle format no longer supported: {path}")
 
     # Try JSON
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
     meta = data["metadata"]

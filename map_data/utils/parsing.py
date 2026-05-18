@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any
 
 import numpy as np
 import shapely.geometry as geometry
@@ -17,7 +17,7 @@ OBSTACLE_RADIUS = _DEFAULTS.get("obstacle_radius", 2.0)
 BUFFER_WIDTHS = _DEFAULTS.get("buffer_widths", {"road": 7, "footway": 3, "barrier": 2})
 
 
-def parse_osm_ways(osm_ways_data: Any, nodes_cache: Dict[int, Any]) -> Dict[int, Way]:
+def parse_osm_ways(osm_ways_data: Any, nodes_cache: dict[int, Any]) -> dict[int, Way]:
     ways = {}
     for way in tqdm(osm_ways_data.ways, desc="Parse ways"):
         lats = np.array([float(n.lat) for n in way.nodes])
@@ -44,15 +44,13 @@ def parse_osm_ways(osm_ways_data: Any, nodes_cache: Dict[int, Any]) -> Dict[int,
     return ways
 
 
-def parse_osm_rels(osm_rels_data: Any, ways: Dict[int, Way]) -> None:
+def parse_osm_rels(osm_rels_data: Any, ways: dict[int, Way]) -> None:
     for rel in tqdm(osm_rels_data.relations, desc="Parse rels"):
         outer_ids, inner_ids = [], []
 
         for member in rel.members:
             if member._type_value == "way" and int(member.ref) in ways:
-                (outer_ids if member.role == "outer" else inner_ids).append(
-                    int(member.ref)
-                )
+                (outer_ids if member.role == "outer" else inner_ids).append(int(member.ref))
 
         outer_ids = combine_ways(outer_ids, ways)
         rel_tags = dict(rel.tags) if rel.tags else {}
@@ -67,11 +65,11 @@ def parse_osm_rels(osm_rels_data: Any, ways: Dict[int, Way]) -> None:
 
 def parse_osm_nodes(
     osm_nodes_data: Any,
-    nodes_cache: Dict[int, Any],
-    way_node_ids: Set[int],
-    obstacle_tags: Dict[str, List[str]],
-    not_obstacle_tags: Dict[str, List[str]],
-) -> List[Way]:
+    nodes_cache: dict[int, Any],
+    way_node_ids: set[int],
+    obstacle_tags: dict[str, list[str]],
+    not_obstacle_tags: dict[str, list[str]],
+) -> list[Way]:
     barriers = []
     for node in tqdm(osm_nodes_data.nodes, desc="Parse nodes"):
         if node.id not in nodes_cache:
@@ -109,7 +107,7 @@ def parse_osm_nodes(
     return barriers
 
 
-def combine_ways(ids: List[int], ways: Dict[int, Way]) -> List[int]:
+def combine_ways(ids: list[int], ways: dict[int, Way]) -> list[int]:
     if not ids:
         return ids
 
@@ -139,9 +137,7 @@ def combine_ways(ids: List[int], ways: Dict[int, Way]) -> List[int]:
 
         while True:
             last_node_id = current_nodes[-1]
-            possible_next = [
-                w for w in endpoint_map.get(last_node_id, []) if w.id not in used_ways
-            ]
+            possible_next = [w for w in endpoint_map.get(last_node_id, []) if w.id not in used_ways]
             if not possible_next:
                 break
             next_way = possible_next[0]
@@ -162,9 +158,7 @@ def combine_ways(ids: List[int], ways: Dict[int, Way]) -> List[int]:
             while True:
                 first_node_id = current_nodes[0]
                 possible_prev = [
-                    w
-                    for w in endpoint_map.get(first_node_id, [])
-                    if w.id not in used_ways
+                    w for w in endpoint_map.get(first_node_id, []) if w.id not in used_ways
                 ]
                 if not possible_prev:
                     break
@@ -203,14 +197,14 @@ def combine_ways(ids: List[int], ways: Dict[int, Way]) -> List[int]:
 
 
 def separate_ways(
-    ways: Dict[int, Way],
-    barrier_tags: Dict[str, List[str]],
-    not_barrier_tags: Dict[str, List[str]],
-    anti_barrier_tags: Dict[str, List[str]],
-) -> Tuple[List[Way], List[Way], List[Way]]:
-    roads: List[Way] = []
-    footways: List[Way] = []
-    barriers: List[Way] = []
+    ways: dict[int, Way],
+    barrier_tags: dict[str, list[str]],
+    not_barrier_tags: dict[str, list[str]],
+    anti_barrier_tags: dict[str, list[str]],
+) -> tuple[list[Way], list[Way], list[Way]]:
+    roads: list[Way] = []
+    footways: list[Way] = []
+    barriers: list[Way] = []
     for way in tqdm(ways.values(), desc="Separate ways"):
         if way.is_road():
             roads.append(buffer_line(way, width=BUFFER_WIDTHS.get("road", 7)))
@@ -229,7 +223,7 @@ def buffer_line(way: Way, width: float) -> Way:
     return way
 
 
-def ways_to_shapely(ways: List[Way]) -> List[geometry.base.BaseGeometry]:
+def ways_to_shapely(ways: list[Way]) -> list[geometry.base.BaseGeometry]:
     """
     Convert a list of Way objects to their underlying Shapely geometries.
     """

@@ -17,10 +17,7 @@ class MockMapData:
         self._nodes_coords = nodes_coords  # {id: (x, y)}
 
     def get_points(self):
-        return {
-            nid: _make_node(x, y)
-            for nid, (x, y) in self._nodes_coords.items()
-        }
+        return {nid: _make_node(x, y) for nid, (x, y) in self._nodes_coords.items()}
 
 
 def _make_footway(way_id, node_ids, nodes_coords):

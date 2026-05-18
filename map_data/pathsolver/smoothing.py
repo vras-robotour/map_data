@@ -1,11 +1,12 @@
+from collections.abc import Callable
+
 import numpy as np
 from shapely.geometry import LineString
-from typing import Callable, Optional
 
 
 def smooth_path(
     path: np.ndarray,
-    collision_check_func: Optional[Callable[[LineString], bool]] = None,
+    collision_check_func: Callable[[LineString], bool] | None = None,
     weight_data: float = 0.5,
     weight_smooth: float = 0.3,
     tolerance: float = 0.001,
@@ -39,9 +40,7 @@ def smooth_path(
         for i in range(1, len(path) - 1):
             for j in range(len(path[i])):
                 aux = new_path[i][j]
-                new_path[i][j] += weight_data * (
-                    path[i][j] - new_path[i][j]
-                ) + weight_smooth * (
+                new_path[i][j] += weight_data * (path[i][j] - new_path[i][j]) + weight_smooth * (
                     new_path[i - 1][j] + new_path[i + 1][j] - 2.0 * new_path[i][j]
                 )
                 change += abs(aux - new_path[i][j])

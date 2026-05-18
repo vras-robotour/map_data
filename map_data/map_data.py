@@ -2,14 +2,14 @@ import concurrent.futures
 import json
 import logging
 import os
-import yaml
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import shapely.geometry as geometry
 import utm
 from gpxpy import parse as gpxparse
 
+from map_data.utils.config import load_config
 from map_data.utils.overpass import OverpassClient
 from map_data.utils.parsing import (
     parse_osm_nodes,
@@ -17,7 +17,6 @@ from map_data.utils.parsing import (
     parse_osm_ways,
     separate_ways,
 )
-from map_data.utils.config import load_config
 from map_data.utils.serialization import load_mapdata, save_mapdata
 from map_data.utils.way import Way
 
@@ -30,16 +29,14 @@ RESERVE: float = _DEFAULTS.get("reserve_margin", 50)
 
 
 class CoordsData:
-    def __init__(
-        self, min_long: float, max_long: float, min_lat: float, max_lat: float
-    ) -> None:
+    def __init__(self, min_long: float, max_long: float, min_lat: float, max_lat: float) -> None:
         self.min_long = min_long
         self.max_long = max_long
         self.min_lat = min_lat
         self.max_lat = max_lat
         self.x_margin, self.y_margin = self._compute_margin()
 
-    def _compute_margin(self) -> Tuple[float, float]:
+    def _compute_margin(self) -> tuple[float, float]:
         margin = max(
             (self.max_lat - self.min_lat) * 0.1,
             (self.max_long - self.min_long) * 0.1,
@@ -81,7 +78,7 @@ class MapData:
         self,
         coords: Any,
         coords_type: str = "file",
-        current_robot_position: Optional[np.ndarray] = None,
+        current_robot_position: np.ndarray | None = None,
         flip: bool = False,
     ) -> None:
         """
@@ -102,9 +99,9 @@ class MapData:
             If ``True``, reverse the order of the parsed waypoints.
         """
         if coords_type == "file":
-            with open(coords, "r") as f:
+            with open(coords) as f:
                 gpx_object = gpxparse(f)
-            self.coords_file: Optional[str] = coords
+            self.coords_file: str | None = coords
 
             points = []
             if gpx_object.waypoints:
@@ -112,22 +109,16 @@ class MapData:
             elif gpx_object.tracks:
                 for track in gpx_object.tracks:
                     for segment in track.segments:
-                        points.extend(
-                            [[p.latitude, p.longitude] for p in segment.points]
-                        )
+                        points.extend([[p.latitude, p.longitude] for p in segment.points])
             elif gpx_object.routes:
                 for route in gpx_object.routes:
                     points.extend([[p.latitude, p.longitude] for p in route.points])
 
             if not points:
-                raise ValueError(
-                    f"No points (waypoints, tracks or routes) found in {coords}"
-                )
+                raise ValueError(f"No points (waypoints, tracks or routes) found in {coords}")
 
             latlon = np.array(points)
-            self.waypoints, self.zone_number, self.zone_letter = self._latlon_to_utm(
-                latlon
-            )
+            self.waypoints, self.zone_number, self.zone_letter = self._latlon_to_utm(latlon)
         elif coords_type == "array":
             self.waypoints = np.array(coords[0])
             self.zone_number = coords[1]
@@ -160,25 +151,22 @@ class MapData:
             self.zone_letter,
         )
 
-        self.coords_data = CoordsData(
-            self.min_long, self.max_long, self.min_lat, self.max_lat
-        )
+        self.coords_data = CoordsData(self.min_long, self.max_long, self.min_lat, self.max_lat)
         self._check_utm_zone_boundary()
         self.points = [
-            geometry.Point(x, y)
-            for x, y in zip(self.waypoints[:, 0], self.waypoints[:, 1])
+            geometry.Point(x, y) for x, y in zip(self.waypoints[:, 0], self.waypoints[:, 1])
         ]
 
-        self.nodes_cache: Dict[int, Any] = {}
-        self.roads_list: List[Way] = []
-        self.footways_list: List[Way] = []
-        self.barriers_list: List[Way] = []
-        self.crossroads_list: List[Way] = []
+        self.nodes_cache: dict[int, Any] = {}
+        self.roads_list: list[Way] = []
+        self.footways_list: list[Way] = []
+        self.barriers_list: list[Way] = []
+        self.crossroads_list: list[Way] = []
 
         # Raw data stored temporarily during parsing
-        self.osm_ways_data: Optional[Any] = None
-        self.osm_rels_data: Optional[Any] = None
-        self.osm_nodes_data: Optional[Any] = None
+        self.osm_ways_data: Any | None = None
+        self.osm_rels_data: Any | None = None
+        self.osm_nodes_data: Any | None = None
 
         self._load_tag_configs()
 
@@ -212,38 +200,36 @@ class MapData:
                 os.path.join(os.path.dirname(__file__), "..", "parameters")
             )
 
-        self.BARRIER_TAGS: Dict[str, List[str]] = self._csv_to_dict(
+        self.BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
             os.path.join(params_path, "barrier_tags.csv")
         )
-        self.NOT_BARRIER_TAGS: Dict[str, List[str]] = self._csv_to_dict(
+        self.NOT_BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
             os.path.join(params_path, "not_barrier_tags.csv")
         )
-        self.ANTI_BARRIER_TAGS: Dict[str, List[str]] = self._csv_to_dict(
+        self.ANTI_BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
             os.path.join(params_path, "anti_barrier_tags.csv")
         )
-        self.OBSTACLE_TAGS: Dict[str, List[str]] = self._csv_to_dict(
+        self.OBSTACLE_TAGS: dict[str, list[str]] = self._csv_to_dict(
             os.path.join(params_path, "obstacle_tags.csv")
         )
-        self.NOT_OBSTACLE_TAGS: Dict[str, List[str]] = self._csv_to_dict(
+        self.NOT_OBSTACLE_TAGS: dict[str, list[str]] = self._csv_to_dict(
             os.path.join(params_path, "not_obstacle_tags.csv")
         )
 
     @staticmethod
-    def _csv_to_dict(path: str) -> Dict[str, List[str]]:
+    def _csv_to_dict(path: str) -> dict[str, list[str]]:
         arr = np.genfromtxt(path, dtype=str, delimiter=",")
-        result: Dict[str, List[str]] = {}
+        result: dict[str, list[str]] = {}
         for row in arr:
             result.setdefault(row[0], []).append(row[1])
         return result
 
     @staticmethod
-    def _latlon_to_utm(latlon: np.ndarray) -> Tuple[np.ndarray, int, str]:
-        easting, northing, zone_number, zone_letter = utm.from_latlon(
-            latlon[:, 0], latlon[:, 1]
-        )
+    def _latlon_to_utm(latlon: np.ndarray) -> tuple[np.ndarray, int, str]:
+        easting, northing, zone_number, zone_letter = utm.from_latlon(latlon[:, 0], latlon[:, 1])
         return np.column_stack([easting, northing]), zone_number, zone_letter
 
-    def _get_osm_cache_path(self) -> Optional[str]:
+    def _get_osm_cache_path(self) -> str | None:
         if not self.coords_file:
             return None
         return self.coords_file.rsplit(".", 1)[0] + ".osm_cache.json"
@@ -265,13 +251,13 @@ class MapData:
         except Exception as e:
             logger.warning(f"Could not save OSM cache: {e}")
 
-    def _load_osm_cache(self) -> Optional[Dict[str, str]]:
+    def _load_osm_cache(self) -> dict[str, str] | None:
         path = self._get_osm_cache_path()
         if not path or not os.path.exists(path):
             return None
 
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 cache_data = json.load(f)
 
             # Validate bbox
@@ -327,7 +313,7 @@ class MapData:
 
         client = OverpassClient()
 
-        def _fetch(q: str) -> Optional[str]:
+        def _fetch(q: str) -> str | None:
             return client.query_raw(q)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
@@ -360,10 +346,7 @@ class MapData:
             ``0`` on success, ``1`` if OSM data has not been downloaded yet
             (call :meth:`run_queries` first).
         """
-        if any(
-            d is None
-            for d in (self.osm_ways_data, self.osm_rels_data, self.osm_nodes_data)
-        ):
+        if any(d is None for d in (self.osm_ways_data, self.osm_rels_data, self.osm_nodes_data)):
             logger.error("Missing OSM data. Run run_queries() first.")
             return 1
 
@@ -393,9 +376,9 @@ class MapData:
         logger.info("Parsing finished.")
         return 0
 
-    def parse_intersections(self, ways_dict: Dict[int, Way]) -> List[Way]:
+    def parse_intersections(self, ways_dict: dict[int, Way]) -> list[Way]:
         """Identify nodes shared by multiple footways and return them as crossroad Ways."""
-        node_usage: Dict[int, List[bool]] = {}
+        node_usage: dict[int, list[bool]] = {}
 
         footways = [w for w in ways_dict.values() if w.is_footway()]
 
@@ -445,7 +428,7 @@ class MapData:
         if self.run_parse() == 0 and save:
             self.save()
 
-    def save(self, path: Optional[str] = None) -> None:
+    def save(self, path: str | None = None) -> None:
         """Serialize this object to a ``.mapdata`` file.
 
         Parameters
@@ -491,7 +474,7 @@ class MapData:
             f"  Features: {len(self.roads_list)} roads, {len(self.footways_list)} footways, {len(self.barriers_list)} barriers"
         )
 
-    def get_points(self, z: float = 0.0) -> Dict[int, np.ndarray]:
+    def get_points(self, z: float = 0.0) -> dict[int, np.ndarray]:
         """Return all cached OSM nodes as a dictionary of UTM coordinates.
 
         Parameters
@@ -511,7 +494,7 @@ class MapData:
             points[node_id] = np.array([e, n, z]).reshape(3, 1)
         return points
 
-    def get_ways(self) -> Dict[str, List[Way]]:
+    def get_ways(self) -> dict[str, list[Way]]:
         """Return all parsed way lists grouped by category.
 
         Returns

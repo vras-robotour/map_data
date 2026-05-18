@@ -13,14 +13,16 @@ from map_data.utils.way import Way
 _LAT, _LON = 50.0, 14.0
 
 # One footway way between two nodes — used as the mocked Overpass response
-_WAYS_JSON = json.dumps({
-    "version": 0.6,
-    "elements": [
-        {"type": "node", "id": 1, "lat": 50.001, "lon": 14.001},
-        {"type": "node", "id": 2, "lat": 50.002, "lon": 14.002},
-        {"type": "way", "id": 101, "nodes": [1, 2], "tags": {"highway": "footway"}},
-    ],
-})
+_WAYS_JSON = json.dumps(
+    {
+        "version": 0.6,
+        "elements": [
+            {"type": "node", "id": 1, "lat": 50.001, "lon": 14.001},
+            {"type": "node", "id": 2, "lat": 50.002, "lon": 14.002},
+            {"type": "way", "id": 101, "nodes": [1, 2], "tags": {"highway": "footway"}},
+        ],
+    }
+)
 _EMPTY_JSON = json.dumps({"version": 0.6, "elements": []})
 
 

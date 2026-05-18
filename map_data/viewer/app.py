@@ -3,14 +3,13 @@ import logging
 import os
 import threading
 import time
-from typing import Optional
 
 from flask import Flask
 from flask_socketio import SocketIO
 from werkzeug.routing import IntegerConverter
 
+from .ros_node import ROS_AVAILABLE, TrackerNode
 from .routes import bp
-from .ros_node import TrackerNode, ROS_AVAILABLE
 
 socketio = SocketIO(cors_allowed_origins="*")
 tracker_node = None
@@ -34,7 +33,7 @@ def telemetry_broadcaster() -> None:
         time.sleep(0.5)  # 2 Hz update rate
 
 
-def create_app(data_dir: Optional[str] = None) -> Flask:
+def create_app(data_dir: str | None = None) -> Flask:
     # Explicitly set paths relative to this file
     base_dir = os.path.dirname(os.path.abspath(__file__))
     template_dir = os.path.join(base_dir, "templates")
@@ -71,9 +70,7 @@ def create_app(data_dir: Optional[str] = None) -> Flask:
             spin_thread.start()
 
             # Start telemetry broadcaster
-            broadcaster_thread = threading.Thread(
-                target=telemetry_broadcaster, daemon=True
-            )
+            broadcaster_thread = threading.Thread(target=telemetry_broadcaster, daemon=True)
             broadcaster_thread.start()
 
             logging.info("ROS2 TrackerNode initialized and spinning.")
@@ -113,9 +110,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     # Using socketio.run instead of app.run
     # Disable debug mode to prevent the Flask reloader from initializing the ROS node twice
-    socketio.run(
-        app, host=args.host, port=args.port, debug=False, allow_unsafe_werkzeug=True
-    )
+    socketio.run(app, host=args.host, port=args.port, debug=False, allow_unsafe_werkzeug=True)
 
 
 if __name__ == "__main__":

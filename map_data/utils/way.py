@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 from shapely.geometry import MultiPoint, Point, Polygon
@@ -54,11 +54,11 @@ class Way:
 
     id: Any = -1
     is_area: bool = False
-    nodes: List[Any] = field(default_factory=list)
-    tags: Dict[str, str] = field(default_factory=dict)
-    line: Optional[BaseGeometry] = None
+    nodes: list[Any] = field(default_factory=list)
+    tags: dict[str, str] = field(default_factory=dict)
+    line: BaseGeometry | None = None
     in_out: str = ""
-    pcd_points: Optional[np.ndarray] = field(default=None, repr=False)
+    pcd_points: np.ndarray | None = field(default=None, repr=False)
 
     def is_road(self) -> bool:
         """Return ``True`` if this way is a vehicle road (any ``highway`` value not in footway types)."""
@@ -72,9 +72,9 @@ class Way:
 
     def is_barrier(
         self,
-        yes_tags: Dict[str, List[str]],
-        not_tags: Dict[str, List[str]],
-        anti_tags: Dict[str, List[str]],
+        yes_tags: dict[str, list[str]],
+        not_tags: dict[str, list[str]],
+        anti_tags: dict[str, list[str]],
     ) -> bool:
         """Return ``True`` if this way should be classified as an untraversable barrier.
 
@@ -93,9 +93,7 @@ class Way:
             key in yes_tags
             and (
                 self.tags[key] in yes_tags[key]
-                or (
-                    "*" in yes_tags[key] and self.tags[key] not in not_tags.get(key, [])
-                )
+                or ("*" in yes_tags[key] and self.tags[key] not in not_tags.get(key, []))
             )
             for key in self.tags
         )
@@ -171,6 +169,6 @@ class Way:
         return self.pcd_points
 
     @staticmethod
-    def _mask_points(points: List[Point], polygon: Polygon) -> filter:
+    def _mask_points(points: list[Point], polygon: Polygon) -> filter:
         prepared = prep(polygon)
         return filter(prepared.contains, points)

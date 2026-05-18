@@ -1,12 +1,10 @@
-from typing import Tuple
-
 import numpy as np
 from shapely.geometry import MultiPoint, Point
 
 
 def get_point_line(
     p1: Point, p2: Point, density: float, increase: int = 0
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Get the line between two points.
     """
@@ -30,7 +28,7 @@ def get_point_line(
 
 def increase_line(
     line: np.ndarray, dist_line: np.ndarray, vec: np.ndarray, n: int, density: float
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Increase the line by n points in the direction of vec.
     """
@@ -64,7 +62,7 @@ def get_equidistant_points(p1: np.ndarray, p2: np.ndarray, n: int) -> np.ndarray
 
 def points_to_graph_points(
     point1: Point, point2: Point, density: float = 1.0, width: float = 10.0
-) -> Tuple[MultiPoint, MultiPoint, np.ndarray]:
+) -> tuple[MultiPoint, MultiPoint, np.ndarray]:
     """
     Transform point into graph point.
     """
@@ -78,9 +76,7 @@ def points_to_graph_points(
             np.zeros((1, 1)),
         )
     else:
-        vec, point_line, dist_line = get_point_line(
-            point1, point2, density, parallel_increase
-        )
+        vec, point_line, dist_line = get_point_line(point1, point2, density, parallel_increase)
 
     normal_vec = np.matmul(
         np.array(

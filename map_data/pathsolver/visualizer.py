@@ -1,17 +1,16 @@
-import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon as MplPolygon
-from typing import List, Optional, Tuple
+import numpy as np
 import shapely as sh
+from matplotlib.patches import Polygon as MplPolygon
 
 
 def visualize_replan(
-    path: Optional[np.ndarray],
+    path: np.ndarray | None,
     grid_2d: np.ndarray,
-    low: Tuple[float, float],
-    high: Tuple[float, float],
-    obstacles: List[sh.geometry.base.BaseGeometry],
-    old_path: Optional[np.ndarray] = None,
+    low: tuple[float, float],
+    high: tuple[float, float],
+    obstacles: list[sh.geometry.base.BaseGeometry],
+    old_path: np.ndarray | None = None,
     save_path: str = "replan.png",
 ) -> None:
     """Visualize the grid, obstacles, and path using Matplotlib."""

@@ -9,9 +9,7 @@ from ament_index_python.resources import get_resource
 import map_data.map_data as md
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="[%(levelname)s] [%(name)s]: %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s] [%(name)s]: %(message)s")
 logger = logging.getLogger("create_mapdata")
 
 
@@ -27,9 +25,7 @@ def process_map_data(file_name: str, download: bool) -> None:
             data_path = os.path.join(package_path, "share", "map_data", "data")
             full_path = os.path.join(data_path, file_name)
         except LookupError:
-            logger.error(
-                f"File '{file_name}' not found and package 'map_data' not found"
-            )
+            logger.error(f"File '{file_name}' not found and package 'map_data' not found")
             raise SystemExit(1)
 
     if not os.path.exists(full_path) and not download:
@@ -54,18 +50,14 @@ def process_map_data(file_name: str, download: bool) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Create map data from GPX or download from OSM."
-    )
+    parser = argparse.ArgumentParser(description="Create map data from GPX or download from OSM.")
     parser.add_argument(
         "-f",
         "--file",
         default="buchlovice.gpx",
         help="GPX file name (default: buchlovice.gpx)",
     )
-    parser.add_argument(
-        "-d", "--download", action="store_true", help="Download data from OSM"
-    )
+    parser.add_argument("-d", "--download", action="store_true", help="Download data from OSM")
     args = parser.parse_args()
 
     process_map_data(args.file, args.download)

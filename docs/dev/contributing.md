@@ -15,11 +15,11 @@ cd map_data
 
 ## Setting up the development environment
 
-Install the package in editable mode together with the documentation dependencies:
+Install the package in editable mode together with the documentation and tooling dependencies:
 
 ```bash
 uv pip install -e .
-uv pip install mkdocs mkdocs-material "mkdocstrings[python]"
+uv pip install ruff mkdocs mkdocs-material "mkdocstrings[python]"
 ```
 
 !!! warning "Use `uv pip`, not plain `pip`"
@@ -49,10 +49,25 @@ mkdocs build
 
 ## Code style
 
-- **Formatting** — no formatter is currently enforced; follow the existing style (4-space indentation, ~100-character lines).
-- **Type annotations** — add return type annotations to any new function. Parameter annotations are required for public API methods.
+The project uses [Ruff](https://docs.astral.sh/ruff/) for both formatting and linting. Configuration lives in `pyproject.toml`.
+
+Before submitting a pull request, run:
+
+```bash
+ruff check --fix .
+ruff format .
+```
+
+Key style rules enforced:
+
+- **Line length** — 100 characters.
+- **Import order** — isort-compatible, `map_data` is treated as first-party.
+- **Type annotations** — modern PEP 585/604 style (`list[str]`, `X | None`). Add return annotations to all new functions; parameter annotations are required for public API methods.
 - **Docstrings** — public methods use NumPy-style docstrings (matches the `mkdocstrings` configuration). Internal helpers can omit docstrings when the name is self-explanatory.
 - **Comments** — only add a comment when the *why* is non-obvious. Do not annotate what the code does.
+
+!!! tip "Editor integration"
+    If you use Neovim with LazyVim, enable the `lazyvim.plugins.extras.lang.python` extra and add a `conform.nvim` plugin spec with `ruff_format` to get format-on-save automatically.
 
 ## Submitting changes
 

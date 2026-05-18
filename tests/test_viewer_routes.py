@@ -173,10 +173,7 @@ def test_delete_way(app_client_with_file):
     ann_path = tmp_path / "test.annotations.json"
     with open(ann_path) as f:
         store = json.load(f)
-    deleted_ids = {
-        (d["id"] if isinstance(d, dict) else d)
-        for d in store.get("deleted_ways", [])
-    }
+    deleted_ids = {(d["id"] if isinstance(d, dict) else d) for d in store.get("deleted_ways", [])}
     assert 1 in deleted_ids
 
 

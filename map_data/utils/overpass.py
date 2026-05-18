@@ -1,7 +1,6 @@
 import logging
-import time
 import re
-from typing import Optional
+import time
 
 import overpy
 import requests
@@ -15,7 +14,7 @@ OVERPASS_ENDPOINTS = [
 
 
 class OverpassClient:
-    def __init__(self, endpoints: Optional[list] = None):
+    def __init__(self, endpoints: list | None = None):
         self.endpoints = endpoints or OVERPASS_ENDPOINTS
         self._endpoint_index = 0
         self.session = requests.Session()
@@ -24,25 +23,21 @@ class OverpassClient:
         )
         self.api = overpy.Overpass()
 
-    def query(self, query_str: str, retries: int = 3) -> Optional[overpy.Result]:
+    def query(self, query_str: str, retries: int = 3) -> overpy.Result | None:
         raw_text = self.query_raw(query_str, retries)
         if raw_text:
             return self.api.parse_json(raw_text)
         return None
 
-    def query_raw(self, query_str: str, retries: int = 3) -> Optional[str]:
+    def query_raw(self, query_str: str, retries: int = 3) -> str | None:
         for attempt in range(1, retries + 1):
             endpoint = self.endpoints[self._endpoint_index % len(self.endpoints)]
             self._wait_for_slot(endpoint)
 
-            logger.info(
-                f"Querying Overpass via {endpoint} (attempt {attempt}/{retries})"
-            )
+            logger.info(f"Querying Overpass via {endpoint} (attempt {attempt}/{retries})")
             logger.debug(f"Query string: {query_str}")
             try:
-                response = self.session.post(
-                    endpoint, data={"data": query_str}, timeout=180
-                )
+                response = self.session.post(endpoint, data={"data": query_str}, timeout=180)
                 if response.status_code == 200:
                     return response.text
 
@@ -81,9 +76,7 @@ class OverpassClient:
                     if m and int(m.group(1)) > 0:
                         return
                     m_wait = re.search(r"in (\d+) seconds", text)
-                    wait_secs = min(
-                        int(m_wait.group(1)) + 2 if m_wait else 60, max_wait
-                    )
+                    wait_secs = min(int(m_wait.group(1)) + 2 if m_wait else 60, max_wait)
                     logger.info(f"Overpass busy, waiting {wait_secs}s...")
                     time.sleep(wait_secs)
                 elif "Connected as:" in text and "Rate limit:" in text:

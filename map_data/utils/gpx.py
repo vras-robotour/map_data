@@ -1,7 +1,5 @@
-import os
-import sys
 import logging
-from typing import Dict, List, Tuple, Union
+import os
 
 import gpxpy
 import numpy as np
@@ -11,7 +9,7 @@ import yaml
 logger = logging.getLogger(__name__)
 
 
-def parse_path(path_file: str) -> Union[Tuple[np.ndarray, int, str], List]:
+def parse_path(path_file: str) -> tuple[np.ndarray, int, str] | list:
     """
     Parse a path from a GPX or YAML file.
     """
@@ -31,11 +29,11 @@ def parse_path(path_file: str) -> Union[Tuple[np.ndarray, int, str], List]:
         return []
 
 
-def parse_gpx_file(gpx_file: str) -> Union[Tuple[np.ndarray, int, str], List]:
+def parse_gpx_file(gpx_file: str) -> tuple[np.ndarray, int, str] | list:
     waypoints = []
     zone_num, zone_let = None, None
     try:
-        with open(gpx_file, "r") as file:
+        with open(gpx_file) as file:
             gpx = gpxpy.parse(file)
         for waypoint in gpx.waypoints:
             point = {
@@ -51,18 +49,18 @@ def parse_gpx_file(gpx_file: str) -> Union[Tuple[np.ndarray, int, str], List]:
         logger.warning("No waypoints found in GPX file.")
     else:
         logger.info(f"Parsed {len(waypoints)} waypoints from GPX file.")
-        zone_num, zone_let = utm.from_latlon(
-            gpx.waypoints[0].latitude, gpx.waypoints[0].longitude
-        )[2:]
+        zone_num, zone_let = utm.from_latlon(gpx.waypoints[0].latitude, gpx.waypoints[0].longitude)[
+            2:
+        ]
 
     return np.array(waypoints), zone_num, zone_let
 
 
-def parse_yaml_file(yaml_file: str) -> Union[Tuple[np.ndarray, int, str], List]:
+def parse_yaml_file(yaml_file: str) -> tuple[np.ndarray, int, str] | list:
     waypoints = []
     zone_num, zone_let = None, None
     try:
-        with open(yaml_file, "r") as f:
+        with open(yaml_file) as f:
             data = yaml.safe_load(f)
         file_waypoints = data["waypoints"]
         for waypoint in file_waypoints:
@@ -86,14 +84,12 @@ def parse_yaml_file(yaml_file: str) -> Union[Tuple[np.ndarray, int, str], List]:
     return np.array(waypoints), zone_num, zone_let
 
 
-def convert_waypoint(point: Dict[str, float]) -> Tuple[float, float, float]:
+def convert_waypoint(point: dict[str, float]) -> tuple[float, float, float]:
     utm_point = utm.from_latlon(point["lat"], point["lon"])[:2]
     return utm_point + (point.get("ele", 0),)
 
 
-def utm_path_to_latlon(
-    path: np.ndarray, zone_num: int, zone_let: str
-) -> List[Dict[str, float]]:
+def utm_path_to_latlon(path: np.ndarray, zone_num: int, zone_let: str) -> list[dict[str, float]]:
     wgs_path = []
     for point in path:
         lat, lon = utm.to_latlon(point[0], point[1], zone_num, zone_let)
@@ -104,7 +100,7 @@ def utm_path_to_latlon(
 
 
 def create_gpx_content(
-    waypoints_data: List[Dict[str, Union[str, float]]],
+    waypoints_data: list[dict[str, str | float]],
     creator_name: str = "MapData Planner",
 ) -> str:
     """

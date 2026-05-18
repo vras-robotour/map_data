@@ -1,8 +1,10 @@
+from typing import TYPE_CHECKING
+
 import numpy as np
-from shapely.geometry import Point, LineString
+from shapely.geometry import LineString, Point
 from shapely.strtree import STRtree
+
 from map_data.pathsolver.astar import astar_search
-from typing import Dict, List, Optional, Tuple, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from map_data.map_data import MapData
@@ -21,7 +23,7 @@ class GraphPlanner:
     entirely in UTM coordinates.
     """
 
-    def __init__(self, map_data: "MapData", highway_types: Optional[List[str]] = None) -> None:
+    def __init__(self, map_data: "MapData", highway_types: list[str] | None = None) -> None:
         """
         Parameters
         ----------
@@ -33,8 +35,8 @@ class GraphPlanner:
         """
         self.map_data = map_data
         self.highway_types = highway_types or ["footway"]
-        self.nodes: Dict[int, np.ndarray] = self.map_data.get_points()
-        self.graph: Dict[int, List[Tuple[int, float]]] = {}
+        self.nodes: dict[int, np.ndarray] = self.map_data.get_points()
+        self.graph: dict[int, list[tuple[int, float]]] = {}
         self._build_graph()
 
     def _build_graph(self) -> None:
@@ -106,9 +108,9 @@ class GraphPlanner:
 
                         proj_node_id = new_internal_id
                         new_internal_id -= 1
-                        self.nodes[proj_node_id] = np.array(
-                            [p_proj[0], p_proj[1], 0.0]
-                        ).reshape(3, 1)
+                        self.nodes[proj_node_id] = np.array([p_proj[0], p_proj[1], 0.0]).reshape(
+                            3, 1
+                        )
 
                         target_way, segment_idx = edge_way_info[best_idx]
                         splits.setdefault((id(target_way), segment_idx), []).append(
@@ -150,7 +152,9 @@ class GraphPlanner:
         self.graph.setdefault(u, []).append((v, d))
         self.graph.setdefault(v, []).append((u, d))
 
-    def _find_closest_edge(self, point_utm: np.ndarray) -> Tuple[Optional[Tuple[int, int, np.ndarray]], float]:
+    def _find_closest_edge(
+        self, point_utm: np.ndarray
+    ) -> tuple[tuple[int, int, np.ndarray] | None, float]:
         """Find the closest edge using an STRtree spatial index."""
         if self._edge_tree is None:
             return None, float("inf")
@@ -167,7 +171,9 @@ class GraphPlanner:
         projected_point = np.array(line.interpolate(proj_dist).coords[0])
         return (n1, n2, projected_point), min_dist
 
-    def a_star(self, start_node, goal_node, extra_nodes: Optional[Dict] = None) -> Optional[List[np.ndarray]]:
+    def a_star(
+        self, start_node, goal_node, extra_nodes: dict | None = None
+    ) -> list[np.ndarray] | None:
         """Run A* between two graph nodes and return the path as UTM coordinates.
 
         Parameters
@@ -210,12 +216,12 @@ class GraphPlanner:
 
         return [self._get_node_pos(node, extra_nodes) for node in node_path]
 
-    def _get_node_pos(self, node_id: Union[int, str], extra_nodes_data: Optional[Dict] = None) -> np.ndarray:
+    def _get_node_pos(self, node_id: int | str, extra_nodes_data: dict | None = None) -> np.ndarray:
         if isinstance(node_id, str) and node_id.startswith("temp_"):
             return extra_nodes_data["positions"][node_id]
         return self.nodes[node_id].ravel()[:2]
 
-    def plan(self, path_utm: np.ndarray) -> Optional[np.ndarray]:
+    def plan(self, path_utm: np.ndarray) -> np.ndarray | None:
         """Plan a path through a sequence of UTM waypoints along the graph.
 
         Each consecutive pair of waypoints is routed independently. The

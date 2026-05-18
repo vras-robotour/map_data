@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
-from numpy.lib.recfunctions import unstructured_to_structured
-from scipy.spatial import cKDTree
-
 import rclpy
 from geometry_msgs.msg import Pose, PoseArray, TransformStamped
+from numpy.lib.recfunctions import unstructured_to_structured
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSProfile
 from ros2_numpy import msgify, numpify
+from scipy.spatial import cKDTree
 from sensor_msgs.msg import PointCloud2
 from tf2_ros import Buffer, StaticTransformBroadcaster, TransformListener
 from visualization_msgs.msg import Marker, MarkerArray
@@ -24,27 +23,21 @@ class OSMCloud(Node):
         super().__init__("osm_cloud")
         self.utm_frame: str = self.declare_parameter("utm_frame", "utm").value
         self.local_frame: str = self.declare_parameter("local_frame", "map").value
-        self.utm_to_local_param: Optional[List[float]] = self.declare_parameter(
+        self.utm_to_local_param: list[float] | None = self.declare_parameter(
             "utm_to_local", rclpy.Parameter.Type.DOUBLE_ARRAY
         ).value
-        self.mapdata_file: Optional[str] = self.declare_parameter(
+        self.mapdata_file: str | None = self.declare_parameter(
             "mapdata_file", rclpy.Parameter.Type.STRING
         ).value
-        self.gpx_file: Optional[str] = self.declare_parameter(
+        self.gpx_file: str | None = self.declare_parameter(
             "gpx_file", rclpy.Parameter.Type.STRING
         ).value
         self.save_mapdata: bool = self.declare_parameter("save_mapdata", False).value
         self.max_path_dist: float = self.declare_parameter("max_path_dist", 1.0).value
-        self.neighbor_cost: str = self.declare_parameter(
-            "neighbor_cost", "linear"
-        ).value
+        self.neighbor_cost: str = self.declare_parameter("neighbor_cost", "linear").value
         self.grid_res: float = self.declare_parameter("grid_res", 0.25).value
-        self.grid_max: List[float] = self.declare_parameter(
-            "grid_max", [0.0, 0.0]
-        ).value
-        self.grid_min: List[float] = self.declare_parameter(
-            "grid_min", [0.0, 0.0]
-        ).value
+        self.grid_max: list[float] = self.declare_parameter("grid_max", [0.0, 0.0]).value
+        self.grid_min: list[float] = self.declare_parameter("grid_min", [0.0, 0.0]).value
         self.auto_utm: bool = self.declare_parameter("auto_utm", False).value
         self.publish_intersections: bool = self.declare_parameter(
             "publish_intersections", False
@@ -66,9 +59,7 @@ class OSMCloud(Node):
         self.pub_grid = self.create_publisher(PointCloud2, self.grid_topic, qos)
 
         if self.publish_intersections:
-            self.pub_poses = self.create_publisher(
-                PoseArray, self.intersections_topic, qos
-            )
+            self.pub_poses = self.create_publisher(PoseArray, self.intersections_topic, qos)
             self.pub_markers = self.create_publisher(
                 MarkerArray, self.intersection_markers_topic, qos
             )
@@ -77,9 +68,9 @@ class OSMCloud(Node):
         self.tf_sub = TransformListener(self.tf, self)
         self.tf_static_pub = StaticTransformBroadcaster(self)
 
-        self.utm_to_local: Optional[np.ndarray] = None
-        self.poses: Optional[PoseArray] = None
-        self.markers: Optional[MarkerArray] = None
+        self.utm_to_local: np.ndarray | None = None
+        self.poses: PoseArray | None = None
+        self.markers: MarkerArray | None = None
 
         if self.mapdata_file is not None:
             self.map_data = md.MapData.load(self.mapdata_file)
@@ -94,9 +85,7 @@ class OSMCloud(Node):
         if self.utm_to_local_param is not None:
             self.utm_to_local = np.array(self.utm_to_local_param)
         elif self.auto_utm:
-            self.get_logger().info(
-                "Auto-calculating UTM to local transform from map center"
-            )
+            self.get_logger().info("Auto-calculating UTM to local transform from map center")
             center_x = (self.map_data.min_x + self.map_data.max_x) / 2
             center_y = (self.map_data.min_y + self.map_data.max_y) / 2
             self.utm_to_local = np.eye(4)
@@ -121,9 +110,7 @@ class OSMCloud(Node):
 
         self.get_logger().info(f"Using UTM to local transform: {self.utm_to_local}")
 
-        if all(v == 0.0 for v in self.grid_min) and all(
-            v == 0.0 for v in self.grid_max
-        ):
+        if all(v == 0.0 for v in self.grid_min) and all(v == 0.0 for v in self.grid_max):
             self.get_logger().info("Auto-calculating grid bounds from map data")
             # Transform map bounds to local frame
             bounds_utm = np.array(
@@ -135,9 +122,7 @@ class OSMCloud(Node):
             bounds_local = []
             for p in bounds_utm:
                 p_vec = p.reshape(3, 1)
-                p_loc = (
-                    np.dot(self.utm_to_local[:3, :3], p_vec) + self.utm_to_local[:3, 3:]
-                )
+                p_loc = np.dot(self.utm_to_local[:3, :3], p_vec) + self.utm_to_local[:3, 3:]
                 bounds_local.append(p_loc.flatten())
 
             bounds_local = np.array(bounds_local)
@@ -154,7 +139,7 @@ class OSMCloud(Node):
         self.create_timer(10.0, self.publish_cb)
         self.get_logger().info("Initialized OSM cloud")
 
-    def parameter_callback(self, params: List[rclpy.Parameter]) -> SetParametersResult:
+    def parameter_callback(self, params: list[rclpy.Parameter]) -> SetParametersResult:
         rebuild_cloud = False
         rebuild_intersections = False
         for param in params:
@@ -178,12 +163,8 @@ class OSMCloud(Node):
             elif param.name == "publish_intersections":
                 self.publish_intersections = param.value
                 if self.publish_intersections and not hasattr(self, "pub_poses"):
-                    qos = QoSProfile(
-                        depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL
-                    )
-                    self.pub_poses = self.create_publisher(
-                        PoseArray, "intersections", qos
-                    )
+                    qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+                    self.pub_poses = self.create_publisher(PoseArray, "intersections", qos)
                     self.pub_markers = self.create_publisher(
                         MarkerArray, "intersection_markers", qos
                     )
@@ -215,11 +196,7 @@ class OSMCloud(Node):
         self.grid_cloud.header.stamp = now
         self.pub_grid.publish(self.grid_cloud)
 
-        if (
-            self.publish_intersections
-            and self.poses is not None
-            and self.markers is not None
-        ):
+        if self.publish_intersections and self.poses is not None and self.markers is not None:
             self.poses.header.stamp = now
             for marker in self.markers.markers:
                 marker.header.stamp = now
@@ -241,9 +218,7 @@ class OSMCloud(Node):
                     rclpy.duration.Duration(seconds=15.0),
                 )
                 self.utm_to_local = numpify(utm_to_local.transform)
-                self.get_logger().info(
-                    f"Got UTM to local transform: {self.utm_to_local}"
-                )
+                self.get_logger().info(f"Got UTM to local transform: {self.utm_to_local}")
                 break
             except Exception as e:
                 self.get_logger().warning(f"Failed to get UTM to local transform: {e}")
@@ -278,9 +253,7 @@ class OSMCloud(Node):
         else:
             self.get_logger().warn(f"Unknown neighbor cost: {self.neighbor_cost}")
 
-        grid[:, 3] /= (
-            self.max_path_dist**2 if self.neighbor_cost == "quadratic" else 1.0
-        )
+        grid[:, 3] /= self.max_path_dist**2 if self.neighbor_cost == "quadratic" else 1.0
         cloud = create_cloud(grid)
         self.get_logger().info(str(grid.shape))
         cloud.header.frame_id = self.local_frame
@@ -288,7 +261,7 @@ class OSMCloud(Node):
 
         return cloud
 
-    def get_intersections(self) -> Tuple[PoseArray, MarkerArray]:
+    def get_intersections(self) -> tuple[PoseArray, MarkerArray]:
         """
         Create PoseArray and MarkerArray from intersections.
         """
@@ -299,13 +272,9 @@ class OSMCloud(Node):
         for way in crossroads:
             # way.line is a buffered Point (Polygon)
             centroid = way.line.centroid
-            points_to_transform[way.id] = np.array(
-                [centroid.x, centroid.y, 0.0]
-            ).reshape(3, 1)
+            points_to_transform[way.id] = np.array([centroid.x, centroid.y, 0.0]).reshape(3, 1)
 
-        transformed_points = transform_points(
-            points_to_transform, self.utm_to_local, 0.0
-        )
+        transformed_points = transform_points(points_to_transform, self.utm_to_local, 0.0)
 
         pose_array = PoseArray()
         pose_array.header.frame_id = self.local_frame
@@ -352,7 +321,7 @@ class OSMCloud(Node):
 
 
 def create_grid(
-    low: Tuple[float, ...], high: Tuple[float, ...], cell_size: float = 0.25
+    low: tuple[float, ...], high: tuple[float, ...], cell_size: float = 0.25
 ) -> np.ndarray:
     """
     Create a grid of points.
@@ -411,9 +380,7 @@ def create_cloud(points: np.ndarray) -> PointCloud2:
     return cloud
 
 
-def points_near_ref(
-    points: np.ndarray, reference: np.ndarray, max_dist: float = 1.0
-) -> np.ndarray:
+def points_near_ref(points: np.ndarray, reference: np.ndarray, max_dist: float = 1.0) -> np.ndarray:
     """
     Get points near reference points and set linear distance as cost.
 
@@ -447,8 +414,8 @@ def points_near_ref(
 
 
 def transform_points(
-    points: Dict[int, np.ndarray], transform: np.ndarray, z: Optional[float] = None
-) -> Dict[int, np.ndarray]:
+    points: dict[int, np.ndarray], transform: np.ndarray, z: float | None = None
+) -> dict[int, np.ndarray]:
     """
     Transform points.
 
@@ -500,7 +467,7 @@ def transform_points(
 
 
 def split_ways(
-    points: Dict[int, np.ndarray], ways: Dict[str, List[Any]], max_dist: float = 0.25
+    points: dict[int, np.ndarray], ways: dict[str, list[Any]], max_dist: float = 0.25
 ) -> np.ndarray:
     """
     Equidistantly split ways into points with a maximal step size. Also only use footways from map data,

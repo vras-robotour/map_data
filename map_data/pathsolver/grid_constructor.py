@@ -1,18 +1,19 @@
+from typing import Any
+
 import numpy as np
 import shapely as sh
 from matplotlib.path import Path
 from scipy.spatial import cKDTree
-from typing import Any, Dict, List, Optional, Tuple
 
 
 class PathGrid:
     def __init__(
         self,
-        low: Tuple[float, float],
-        high: Tuple[float, float],
+        low: tuple[float, float],
+        high: tuple[float, float],
         cell_size: float,
-        highway_costs: Dict[str, float],
-        surface_costs: Dict[str, float],
+        highway_costs: dict[str, float],
+        surface_costs: dict[str, float],
         default_off_path_cost: float = 0.9,
         path_cost_cap: float = 0.85,
     ):
@@ -25,7 +26,7 @@ class PathGrid:
         self.path_cost_cap = path_cost_cap
 
         self.grid = self._create_empty_grid()
-        self.grid_2d_cache: Optional[np.ndarray] = None
+        self.grid_2d_cache: np.ndarray | None = None
 
     def _create_empty_grid(self) -> np.ndarray:
         xs = np.linspace(
@@ -39,16 +40,14 @@ class PathGrid:
             np.ceil((self.high[1] - self.low[1]) / self.cell_size).astype(int),
         )
         # grid is (N, 3) where columns are [x, y, 0]
-        grid = np.pad(
-            np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2), ((0, 0), (0, 1))
-        )
+        grid = np.pad(np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2), ((0, 0), (0, 1)))
         return grid
 
     def fill(
         self,
         map_data: Any,
-        obstacles: List[sh.geometry.base.BaseGeometry],
-        highway_types: Optional[List[str]] = None,
+        obstacles: list[sh.geometry.base.BaseGeometry],
+        highway_types: list[str] | None = None,
         max_path_dist: float = 2.0,
     ) -> np.ndarray:
         if highway_types is None:
@@ -68,19 +67,11 @@ class PathGrid:
         all_ways = []
         if "footway" in highway_types:
             all_ways.extend(
-                [
-                    w
-                    for w in map_data.footways_list
-                    if w.line and w.line.intersects(bbox_buffered)
-                ]
+                [w for w in map_data.footways_list if w.line and w.line.intersects(bbox_buffered)]
             )
         if "road" in highway_types:
             all_ways.extend(
-                [
-                    w
-                    for w in map_data.roads_list
-                    if w.line and w.line.intersects(bbox_buffered)
-                ]
+                [w for w in map_data.roads_list if w.line and w.line.intersects(bbox_buffered)]
             )
 
         # Subtract path geometries from obstacles
@@ -114,15 +105,11 @@ class PathGrid:
                 if obstacle.geom_type == "Polygon":
                     poly_path = Path(np.array(obstacle.exterior.coords))
                     mask_inside = poly_path.contains_points(path_grid[mask_bbox, :2])
-                    path_grid[mask_bbox, 3] = np.where(
-                        mask_inside, 1.0, path_grid[mask_bbox, 3]
-                    )
+                    path_grid[mask_bbox, 3] = np.where(mask_inside, 1.0, path_grid[mask_bbox, 3])
                 elif obstacle.geom_type == "MultiPolygon":
                     for poly in obstacle.geoms:
                         poly_path = Path(np.array(poly.exterior.coords))
-                        mask_inside = poly_path.contains_points(
-                            path_grid[mask_bbox, :2]
-                        )
+                        mask_inside = poly_path.contains_points(path_grid[mask_bbox, :2])
                         path_grid[mask_bbox, 3] = np.where(
                             mask_inside, 1.0, path_grid[mask_bbox, 3]
                         )
@@ -158,15 +145,12 @@ class PathGrid:
 
         if path_points:
             tree = cKDTree(np.array(path_points))
-            dists, indices = tree.query(
-                path_grid[:, :2], distance_upper_bound=max_path_dist
-            )
+            dists, indices = tree.query(path_grid[:, :2], distance_upper_bound=max_path_dist)
             mask = dists < max_path_dist
             way_costs = np.array(path_point_costs)[indices[mask]]
             final_costs = (
                 way_costs
-                + (self.default_off_path_cost - way_costs)
-                * (dists[mask] / max_path_dist) ** 2
+                + (self.default_off_path_cost - way_costs) * (dists[mask] / max_path_dist) ** 2
             )
             path_grid[mask, 3] = np.minimum(path_grid[mask, 3], final_costs)
 
@@ -179,19 +163,15 @@ class PathGrid:
         num_x = int(np.ceil((self.high[0] - self.low[0]) / self.cell_size))
         num_y = int(np.ceil((self.high[1] - self.low[1]) / self.cell_size))
         grid_2d = np.zeros((num_x, num_y), dtype=np.float32)
-        x_indices = np.floor((self.grid[:, 0] - self.low[0]) / self.cell_size).astype(
-            int
-        )
-        y_indices = np.floor((self.grid[:, 1] - self.low[1]) / self.cell_size).astype(
-            int
-        )
-        grid_2d[np.clip(x_indices, 0, num_x - 1), np.clip(y_indices, 0, num_y - 1)] = (
-            self.grid[:, 3]
-        )
+        x_indices = np.floor((self.grid[:, 0] - self.low[0]) / self.cell_size).astype(int)
+        y_indices = np.floor((self.grid[:, 1] - self.low[1]) / self.cell_size).astype(int)
+        grid_2d[np.clip(x_indices, 0, num_x - 1), np.clip(y_indices, 0, num_y - 1)] = self.grid[
+            :, 3
+        ]
         return grid_2d.T
 
     def burn_obstacles(
-        self, grid_2d: np.ndarray, obstacles: List[sh.geometry.base.BaseGeometry]
+        self, grid_2d: np.ndarray, obstacles: list[sh.geometry.base.BaseGeometry]
     ) -> np.ndarray:
         if not obstacles:
             return grid_2d

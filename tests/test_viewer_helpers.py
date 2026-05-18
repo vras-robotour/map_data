@@ -1,7 +1,6 @@
 import types
 
 import numpy as np
-import pytest
 import utm
 from shapely.geometry import LineString, MultiPolygon, Polygon
 
@@ -43,7 +42,15 @@ def test_geom_to_geojson_polygon():
 
 def test_geom_to_geojson_multipolygon():
     p1 = Polygon([(_E0, _N0), (_E0 + 5, _N0), (_E0 + 5, _N0 + 5), (_E0, _N0 + 5), (_E0, _N0)])
-    p2 = Polygon([(_E0 + 20, _N0), (_E0 + 25, _N0), (_E0 + 25, _N0 + 5), (_E0 + 20, _N0 + 5), (_E0 + 20, _N0)])
+    p2 = Polygon(
+        [
+            (_E0 + 20, _N0),
+            (_E0 + 25, _N0),
+            (_E0 + 25, _N0 + 5),
+            (_E0 + 20, _N0 + 5),
+            (_E0 + 20, _N0),
+        ]
+    )
     mp = MultiPolygon([p1, p2])
     result = geom_to_geojson(mp, _ZN, _ZL)
     assert result["type"] == "MultiPolygon"
@@ -103,8 +110,11 @@ def test_get_deleted_way_ids_int_format():
 
 def test_split_way_linestring_basic():
     coords = [
-        (_E0, _N0), (_E0 + 25, _N0 + 25), (_E0 + 50, _N0 + 50),
-        (_E0 + 75, _N0 + 75), (_E0 + 100, _N0 + 100),
+        (_E0, _N0),
+        (_E0 + 25, _N0 + 25),
+        (_E0 + 50, _N0 + 50),
+        (_E0 + 75, _N0 + 75),
+        (_E0 + 100, _N0 + 100),
     ]
     way = Way(id=42, nodes=[1, 2, 3, 4, 5], line=LineString(coords), tags={}, in_out="")
     segments = split_way(way, [3])
@@ -171,12 +181,16 @@ def test_apply_node_position_overrides_linestring():
 
 def test_mapdata_to_geojson_structure():
     road = Way(
-        id=1, nodes=[10, 11], tags={"highway": "primary"},
+        id=1,
+        nodes=[10, 11],
+        tags={"highway": "primary"},
         line=LineString([(_E0, _N0), (_E0 + 100, _N0)]).buffer(3.5),
         in_out="",
     )
     footway = Way(
-        id=2, nodes=[12, 13], tags={"highway": "footway"},
+        id=2,
+        nodes=[12, 13],
+        tags={"highway": "footway"},
         line=LineString([(_E0, _N0 + 50), (_E0 + 100, _N0 + 50)]).buffer(1.5),
         in_out="",
     )
