@@ -65,7 +65,7 @@ The planning request was cancelled via `cancel_replan_backend()`. This is expect
 ### Flask server fails to start
 
 - Check that port `5000` is not already in use: `lsof -i :5000`.
-- If you see `ImportError: cannot import name 'rclpy'`, you are running the viewer from within a ROS2 workspace where `rclpy` was expected. The viewer itself does not require ROS2, but the `visualize_mapdata` ROS2 node wraps it. Run the viewer directly instead:
+- If you see `ImportError: cannot import name 'rclpy'`, you are running the viewer from within a ROS2 workspace where `rclpy` was expected. The viewer itself does not require ROS2. Run the viewer directly:
 
 ```bash
 map_data_viewer --file coords.mapdata
@@ -83,9 +83,9 @@ Annotation files are written to the same directory as the `.mapdata` file. If th
 
 ## ROS2 node errors
 
-### `create_mapdata` / `visualize_mapdata` not found
+### `create_mapdata` not found
 
-These are ROS2 nodes. They are available only after building the package with `colcon` and sourcing the workspace:
+This is a ROS2 node. It is available only after building the package with `colcon` and sourcing the workspace:
 
 ```bash
 colcon build --packages-select map_data

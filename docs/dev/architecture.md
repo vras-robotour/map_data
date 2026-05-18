@@ -187,7 +187,7 @@ This page describes the internal structure of the `map_data` package. The system
     VW :{x:760, y:744, w:240,h:116, title:'Viewer',            sub:'Flask + Leaflet'},
     ANN:{x:1032,y:744, w:240,h:116, title:'annotations sidecar',sub:'.annotations.json',kind:'sidecar'},
     ROS:{x:430, y:990, w:540,h:116, title:'ROS2 nodes',
-         sub:'osm_cloud · TrackerNode · create_mapdata · visualize_mapdata',kind:'dark'},
+         sub:'osm_cloud · TrackerNode · create_mapdata',kind:'dark'},
   };
   const topAt=(b,i,n)=>{const p=22,u=b.w-2*p;return{x:b.x+p+(n<=1?u/2:u*i/(n-1)),y:b.y}};
   const bot  =b=>({x:b.x+b.w/2,y:b.y+b.h});
@@ -418,7 +418,6 @@ The viewer (`map_data/viewer/`) is a single-page web application consisting of:
 | Node | File | Purpose |
 |------|------|---------|
 | `create_mapdata` | `map_data/create_mapdata.py` | CLI node: reads a GPX/YAML file, runs `MapData.run_all()`, writes the `.mapdata` file |
-| `visualize_mapdata` | `map_data/visualize_mapdata.py` | CLI node: loads a `.mapdata` file and starts the Flask viewer |
 | `osm_cloud` | `map_data/osm_cloud.py` | ROS2 node: publishes the parsed OSM features as `sensor_msgs/PointCloud2` messages for use in Nav2 or custom navigation stacks |
 | `TrackerNode` | `map_data/viewer/ros_node.py` | ROS2 node embedded in the viewer: subscribes to robot pose and streams it to the Leaflet front-end via WebSocket for live position display |
 
@@ -429,7 +428,10 @@ The viewer (`map_data/viewer/`) is a single-page web application consisting of:
 A typical session follows this sequence:
 
 1. **Create `.mapdata`** — run `create_mapdata` with a GPX waypoint file. The node queries Overpass, parses the OSM data, and writes `<name>.mapdata` to disk. Or download and parse data inside the viewer.
-2. **Visualize data** — run `visualize_mapdata` with the `.mapdata` file to create images of parsed data. Alternatively run the viewer and load parsed data in the browser. If the data were parsed through the viewer they will be shown automatically.
+2. **Visualize data** — run the viewer and load parsed data in the browser. If the data were parsed through the viewer they will be shown automatically.
 3. **Annotate** — use the viewer drawing tools to mark obstacles, draw alternative path segments, delete or hide erroneous ways, adjust node positions, and override OSM tags. Changes are saved automatically to `<name>.annotations.json`.
 4. **Export** — click the Export button to produce `<name>.exported.mapdata`, a human-readable JSON snapshot of the annotated map suitable for downstream processing.
 5. **Plan path** — instantiate `GraphPlanner` or `ReplanPath` with the loaded `MapData` object and call `plan()` with the desired waypoints.
+ the loaded `MapData` object and call `plan()` with the desired waypoints.
+th the desired waypoints.
+ the loaded `MapData` object and call `plan()` with the desired waypoints.

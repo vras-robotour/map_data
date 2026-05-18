@@ -71,8 +71,7 @@ class MapData:
     objects: ``roads_list``, ``footways_list``, and ``barriers_list``.
 
     The class can be used entirely without ROS2. A running ROS2 context is
-    only required for the ``create_mapdata`` and ``visualize_mapdata`` CLI
-    nodes.
+    only required for the ``create_mapdata`` CLI node.
 
     Attributes
     ----------

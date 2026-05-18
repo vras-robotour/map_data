@@ -303,7 +303,7 @@
       type: 'improvement', sev: 'minor',
       title: 'Low return type annotation coverage',
       desc: 'Approximately 36 % of functions have return type annotations. Most methods in <code>map_data.py</code> have parameter types but no <code>-&gt;</code> return types, preventing static analysis with mypy or pyright.',
-      file: 'map_data/map_data.py, map_data/utils/parsing.py, map_data/visualize_mapdata.py'
+      file: 'map_data/map_data.py, map_data/utils/parsing.py'
     },
     {
       type: 'improvement', sev: 'minor',
@@ -312,22 +312,16 @@
       file: 'map_data/map_data.py, map_data/pathsolver/replan.py'
     },
     {
-      type: 'security', sev: 'important',
-      title: 'Hardcoded API key in background_map.py',
-      desc: 'A default API key for Geoapify is hardcoded in <code>get_url()</code>. While it might be a public/shared key, it should be exclusively managed via environment variables to prevent misuse or quota exhaustion.',
-      file: 'map_data/utils/background_map.py:16'
-    },
-    {
       type: 'improvement', sev: 'minor',
       title: 'Magic numbers without explanation',
       desc: 'Several hardcoded constants are not configurable and carry no comment explaining their origin. They should be promoted to <code>planner_defaults.yaml</code> or at least documented inline.',
-      file: 'astar.py:72 (0.1), grid_astar.py:55 (5.0), parsing.py:14 (OBSTACLE_RADIUS=2), rrt_star.py:287 (5.0), parsing.py:202-205 (buffer widths 7, 3, 2), vis_utils.py (hardcoded hex colors)'
+      file: 'astar.py:72 (0.1), grid_astar.py:55 (5.0), parsing.py:14 (OBSTACLE_RADIUS=2), rrt_star.py:287 (5.0), parsing.py:202-205 (buffer widths 7, 3, 2)'
     },
     {
       type: 'improvement', sev: 'minor',
       title: 'Inconsistent logging',
-      desc: '<code>map_data/utils/gpx.py</code> and <code>map_data/utils/vis_utils.py</code> use <code>print()</code> statements for error reporting and status updates instead of the standard <code>logging</code> module used in the rest of the project.',
-      file: 'map_data/utils/gpx.py, map_data/utils/vis_utils.py'
+      desc: '<code>map_data/utils/gpx.py</code> uses <code>print()</code> statements for error reporting and status updates instead of the standard <code>logging</code> module used in the rest of the project.',
+      file: 'map_data/utils/gpx.py'
     },
     {
       type: 'improvement', sev: 'minor',

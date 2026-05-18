@@ -3,7 +3,7 @@
 This page covers the core CLI tools and ROS2 nodes for parsing, visualizing, and publishing map data.
 
 !!! note "ROS2 requirement"
-    `create_mapdata`, `visualize_mapdata`, and `osm_cloud` require a sourced ROS2 workspace.
+    `create_mapdata` and `osm_cloud` require a sourced ROS2 workspace.
     The `MapData` class, path planning modules, and the interactive viewer work **standalone**.
 
 ## What gets downloaded
@@ -105,47 +105,11 @@ Re-parse an existing `.mapdata` file (e.g. after editing tag CSVs):
 ros2 run map_data create_mapdata -f coords.mapdata
 ```
 
-## Visualizing the parsed data
-
-`visualize_mapdata` generates static matplotlib plots from a `.mapdata` file.
-It shows two figures: one with all parsed features (barriers, footways, roads) and
-one with footways only.
-
-| Flag | Description |
-|------|-------------|
-| `-f <filename>` | `.mapdata` file to visualize |
-| `-sm` | Save the main map plot (default filename: `map.png`) |
-| `-if <filename>` | Custom filename for the main plot (requires `-sm`) |
-| `-sb` | Save the background tile image (default filename: `bgd_map.png`) |
-| `-bf <filename>` | Custom filename for the background image (requires `-sb`) |
-
-All saved images are written to the `./data/` directory.
-
-Visualize and display interactively:
-
-```bash
-ros2 run map_data visualize_mapdata -f coords.mapdata
-```
-
-Visualize and save both images:
-
-```bash
-ros2 run map_data visualize_mapdata -f coords.mapdata -sm -sb
-```
-
 ## Publishing a point cloud of footways and intersections
 
 `osm_cloud` is a ROS2 node that publishes a `sensor_msgs/PointCloud2` on the `grid`
 topic (cost-aware footway grid) and optionally publishes intersections as a
 `geometry_msgs/PoseArray` and `visualization_msgs/MarkerArray`.
-
-This node is designed to be flexible and configurable, allowing you to adjust
-the grid resolution, cost falloff, and other parameters to suit your specific
-use case. It can be launched directly with ROS2 or included in a larger launch file.
-
-The data provided are useful for local path planning, obstacle avoidance, and
-navigation tasks. The cost-aware grid can be used by planners to prefer footway
-paths while still allowing off-path navigation when necessary.
 
 ### ROS2 parameters
 

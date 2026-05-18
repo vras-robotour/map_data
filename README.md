@@ -29,7 +29,7 @@ Full documentation, including installation guides, CLI usage, and API reference,
 ### Prerequisites
 
 - Python 3.10+
-- ROS2 Humble or later (required only for `create_mapdata`, `visualize_mapdata`, and `osm_cloud`)
+- ROS2 Humble or later (required only for `create_mapdata` and `osm_cloud`)
 
 ### Installation
 

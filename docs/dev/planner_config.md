@@ -106,7 +106,7 @@ The viewer exposes a modal panel where `highway_costs` values can be edited per 
 
 ### CLI flags
 
-The `ReplanPath` constructor and the `visualize_mapdata` node accept `--cell_size` and `--inflate_obstacles` as command-line arguments. These override the YAML defaults for that invocation only; the YAML file is not modified.
+The `ReplanPath` constructor accepts `--cell_size` and `--inflate_obstacles` as command-line arguments. These override the YAML defaults for that invocation only; the YAML file is not modified.
 
 ### Programmatic override
 
