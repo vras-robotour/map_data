@@ -350,6 +350,8 @@ The bounding box is the convex hull of the input waypoints expanded by `osm_marg
 | `waypoints` | `np.ndarray` | `(N, 2)` UTM easting/northing array of the input waypoints |
 | `min_x/max_x/min_y/max_y` | `float` | UTM bounding box including margins |
 
+**OSM caching.** After a successful Overpass query, the raw responses are saved to a `.osm_cache.json` sidecar file next to the source `.gpx`/`.yaml` file. On the next load, if the file exists and the stored bounding box matches the current one (within 1 × 10⁻⁶ °, ≈ 11 cm), the cache is used and the network round-trip is skipped. The cache is invalidated automatically whenever the bounding box changes.
+
 **Serialisation.** `MapData.save()` writes a JSON file (`.mapdata` extension) using `json.dump`. `MapData.load(path)` reads it back. Support for the legacy pickle format has been removed for security reasons; legacy files must be re-parsed from the source GPX/YAML.
 
 ---
@@ -387,18 +389,23 @@ This planner is well-suited for route planning on well-mapped pedestrian or road
 
 `map_data/pathsolver/replan.py`
 
-Builds a cost raster (occupancy grid) at resolution `cell_size` metres. Each cell receives a cost based on:
+Orchestrates cost-grid planning. Grid construction, smoothing, and visualization are handled by dedicated sub-modules:
 
-- the OSM highway type and surface material of the nearest way within `max_path_dist` metres (see `highway_costs` and `surface_costs` in `planner_defaults.yaml`)
+| Module | Class / function | Responsibility |
+|--------|-----------------|----------------|
+| `pathsolver/grid_constructor.py` | `PathGrid` | Builds the cost raster at `cell_size` metre resolution; assigns per-cell costs from highway type, surface, and barrier geometry |
+| `pathsolver/grid_astar.py` | `grid_astar` | Fast, optimal A* search on the discrete grid |
+| `pathsolver/rrt_star.py` | `RRTStar` | Sampling-based planner; produces smoother paths in cluttered environments |
+| `pathsolver/smoothing.py` | `smooth_path` | Gradient-descent path smoothing with optional collision checking |
+| `pathsolver/visualizer.py` | `visualize_replan` | Matplotlib debug visualization of the grid, obstacles, and planned path |
+
+Each `PathGrid` cell cost is determined by:
+
+- the OSM highway type and surface material of the nearest way within `max_path_dist` metres (configured via `highway_costs` and `surface_costs` in `planner_defaults.yaml`)
 - a fixed `default_off_path_cost` for cells not covered by any way
 - barrier polygons inflated by `inflate_obstacles` metres, set to cost 1.0 (impassable)
 
-Two search algorithms are available on top of this grid:
-
-- **Grid A*** (`map_data/pathsolver/grid_astar.py`) — fast, optimal on the discrete grid
-- **RRT*** (`map_data/pathsolver/rrt_star.py`) — sampling-based, produces smoother paths in cluttered environments
-
-Optional post-processing: Douglas-Peucker simplification (`simplify_path`) and gradient-descent smoothing (`smooth_path`).
+Key parameters now exposed in `planner_defaults.yaml`: `grid_cost_weight`, `obstacle_radius`, and `buffer_widths` (per road type).
 
 ---
 
@@ -432,6 +439,3 @@ A typical session follows this sequence:
 3. **Annotate** — use the viewer drawing tools to mark obstacles, draw alternative path segments, delete or hide erroneous ways, adjust node positions, and override OSM tags. Changes are saved automatically to `<name>.annotations.json`.
 4. **Export** — click the Export button to produce `<name>.exported.mapdata`, a human-readable JSON snapshot of the annotated map suitable for downstream processing.
 5. **Plan path** — instantiate `GraphPlanner` or `ReplanPath` with the loaded `MapData` object and call `plan()` with the desired waypoints.
- the loaded `MapData` object and call `plan()` with the desired waypoints.
-th the desired waypoints.
- the loaded `MapData` object and call `plan()` with the desired waypoints.
