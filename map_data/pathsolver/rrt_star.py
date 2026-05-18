@@ -4,9 +4,14 @@ from scipy.spatial import cKDTree
 from typing import Any, Iterator, List, Optional, Tuple
 from shapely.geometry import Point, LineString
 
+from map_data.utils.config import load_config
+
 # Rebuild the spatial index after this many new nodes are added since the last build.
 # Balances rebuild cost (O(n log n)) against linear-scan cost for the unindexed tail.
 _KDTREE_REBUILD_INTERVAL = 50
+
+_DEFAULTS = load_config("planner_defaults.yaml")
+GRID_COST_WEIGHT = _DEFAULTS.get("grid_cost_weight", 5.0)
 
 
 class RRTStar:
@@ -44,7 +49,7 @@ class RRTStar:
         simplify: bool = True,
         transfer_id: Optional[str] = None,
         improve_after_goal: bool = False,
-    ):
+    ) -> None:
         """
         Parameters
         ----------
@@ -181,7 +186,9 @@ class RRTStar:
                     return True
         return False
 
-    def _bresenham(self, start, goal) -> Iterator[Tuple[int, int]]:
+    def _bresenham(
+        self, start: Tuple[int, int], goal: Tuple[int, int]
+    ) -> Iterator[Tuple[int, int]]:
         """Yield integer grid cells along the line from *start* to *goal* (Bresenham)."""
         x0, y0 = start
         x1, y1 = goal
@@ -271,7 +278,7 @@ class RRTStar:
         """Return indices of all tree nodes within *neighbor_radius* of *new_point*."""
         n = len(self.nodes)
         new_idx = n - 1  # node just appended by the caller
-        r2 = self.neighbor_radius ** 2
+        r2 = self.neighbor_radius**2
 
         if self._kdtree is None:
             sq_dists = ((self._nodes_buf[:n] - new_point) ** 2).sum(axis=1)
@@ -279,7 +286,9 @@ class RRTStar:
 
         # KD-tree covers [0, _kdtree_n); _nearest_node always rebuilds first so
         # new_point is never included in the tree.
-        result: List[int] = list(self._kdtree.query_ball_point(new_point, self.neighbor_radius))
+        result: List[int] = list(
+            self._kdtree.query_ball_point(new_point, self.neighbor_radius)
+        )
 
         # Linear scan over nodes added since the last rebuild, excluding new_point itself
         for i in range(self._kdtree_n, n):
@@ -335,8 +344,8 @@ class RRTStar:
 
         avg_c = total_grid_cost / count if count > 0 else 0.0
         # Cost = dist * (1 + avg_grid_cost * penalty)
-        # We use 5.0 to match A* logic
-        return False, np.linalg.norm(end - start) * (1.0 + avg_c * 5.0)
+        # We use GRID_COST_WEIGHT to match A* logic
+        return False, np.linalg.norm(end - start) * (1.0 + avg_c * GRID_COST_WEIGHT)
 
     def find_path(self) -> Optional[np.ndarray]:
         """Run the RRT* algorithm and return the planned path.
@@ -368,7 +377,9 @@ class RRTStar:
             if self._is_collision(new_point):
                 continue
 
-            collision, nearest_seg_cost = self._segment_cost(self.nodes[nearest_idx], new_point)
+            collision, nearest_seg_cost = self._segment_cost(
+                self.nodes[nearest_idx], new_point
+            )
             if collision:
                 continue
 
@@ -437,7 +448,7 @@ class RRTStar:
             return self._simplify_path(path)
         return path
 
-    def _simplify_path(self, path) -> List[np.ndarray]:
+    def _simplify_path(self, path: List[np.ndarray]) -> List[np.ndarray]:
         """Greedily remove intermediate waypoints that have line-of-sight to a later node."""
         if len(path) <= 2:
             return path

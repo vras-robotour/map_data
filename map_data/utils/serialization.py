@@ -1,6 +1,5 @@
 import json
 import logging
-import pickle
 from typing import Any, Dict
 
 import numpy as np
@@ -58,33 +57,26 @@ def map_data_to_dict(md: Any) -> Dict[str, Any]:
     }
 
 
-def save_mapdata(md: Any, path: str):
+def save_mapdata(md: Any, path: str) -> None:
     data = map_data_to_dict(md)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
 
 def load_mapdata(md_class: Any, path: str) -> Any:
-    # Peek at the file to see if it's a pickle file (starts with 0x80)
+    # Check if it's a legacy pickle file (starts with 0x80)
     with open(path, "rb") as f:
         header = f.read(1)
 
     if header == b"\x80":
-        logger.warning(
-            f"Detected legacy pickle format for {path}. Loading via pickle..."
+        logger.error(
+            f"Detected legacy pickle format for {path}. "
+            "Pickle support has been removed for security reasons. "
+            "Please re-parse the data from the original GPX/YAML file."
         )
-        with open(path, "rb") as f:
-            try:
-                md = pickle.load(f)
-                logger.info(
-                    "Successfully loaded legacy mapdata. Consider re-saving to update format."
-                )
-                return md
-            except Exception as e:
-                logger.error(f"Failed to load legacy pickle file: {e}")
-                raise
+        raise ValueError(f"Legacy pickle format no longer supported: {path}")
 
-    # Otherwise try JSON
+    # Try JSON
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -102,6 +94,14 @@ def load_mapdata(md_class: Any, path: str) -> Any:
     md.min_long = meta["min_long"]
     md.max_long = meta["max_long"]
     md.coords_file = meta["coords_file"]
+
+    from map_data.map_data import CoordsData  # local import to avoid circular dep
+
+    md.coords_data = CoordsData(md.min_long, md.max_long, md.min_lat, md.max_lat)
+
+    md.osm_ways_data = None
+    md.osm_rels_data = None
+    md.osm_nodes_data = None
 
     md.waypoints = np.array(data["waypoints"])
     md.nodes_cache = {int(k): v for k, v in data["nodes_cache"].items()}

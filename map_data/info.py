@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger("map_data_info")
 
 
-def get_stats(path: str):
+def get_stats(path: str) -> None:
     if not os.path.isfile(path):
         logger.error(f"File not found: {path}")
         return
@@ -53,7 +53,7 @@ def get_stats(path: str):
     print("=" * 40)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Display statistics for a .mapdata file"
     )

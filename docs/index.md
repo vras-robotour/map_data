@@ -19,7 +19,7 @@ cost-aware footway point cloud for use in autonomous navigation.
 
 The `MapData` class, the path planning modules, and the interactive viewer work **standalone** — no running ROS2
 context is required for data parsing, annotation, or planning. ROS2 is only needed for the
-`osm_cloud` publisher and the `create_mapdata` / `visualize_mapdata` CLI nodes.
+`osm_cloud` publisher and the `create_mapdata` CLI node.
 
 The package targets **ROS2 Humble** or later on Ubuntu 22.04.
 
@@ -73,19 +73,6 @@ print(len(md.footways_list))
 print(len(md.barriers_list))
 ```
 
-**Plot the parsed data:**
-
-```python
-from map_data.map_data import MapData
-from map_data.vis_utils import plot_map
-import matplotlib.pyplot as plt
-
-md = MapData.load("coords.mapdata")
-
-plot_map(md)
-plt.show()
-```
-
 ## Project Structure
 
 ```text
@@ -93,7 +80,6 @@ map_data/
 ├── map_data.py              # MapData class — parses GPX + OSM into roads/footways/barriers
 ├── info.py                  # CLI tool to print information about a .mapdata file
 ├── create_mapdata.py        # ROS2 node / CLI: download and parse OSM data
-├── visualize_mapdata.py     # ROS2 node / CLI: static matplotlib plots
 ├── osm_cloud.py             # ROS2 node: publishes footway grid and intersections
 ├── pathsolver/              # Path planning algorithms
 │   ├── graph_planner.py     # Global A* planning on OSM ways
@@ -106,8 +92,6 @@ map_data/
 │   ├── overpass.py          # OSM Overpass API client
 │   ├── parsing.py           # OSM XML/JSON parsing logic
 │   ├── serialization.py     # .mapdata file I/O
-│   ├── background_map.py    # Raster map tile fetching
-│   ├── vis_utils.py         # matplotlib plotting helpers
 │   └── points_to_graph_points.py # Equidistant point interpolation
 └── viewer/                  # Modular interactive viewer (Flask + Leaflet)
     ├── app.py               # App factory and server entry point
@@ -119,5 +103,3 @@ map_data/
 ```
 
 ## License
-
-This project is licensed under the BSD 3-Clause License — see the [LICENSE](https://github.com/vras-robotour/map_data/blob/master/LICENSE) file for details.

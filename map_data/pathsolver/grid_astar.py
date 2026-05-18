@@ -1,7 +1,16 @@
 import heapq
+import logging
 import numpy as np
+
 from shapely.geometry import LineString
 from typing import Optional, Tuple, Union
+
+from map_data.utils.config import load_config
+
+logger = logging.getLogger(__name__)
+
+_DEFAULTS = load_config("planner_defaults.yaml")
+GRID_COST_WEIGHT = _DEFAULTS.get("grid_cost_weight", 5.0)
 
 
 def grid_astar(
@@ -41,18 +50,29 @@ def grid_astar(
     def to_idx(p):
         ix = int(np.floor((p[0] - low[0]) / cs))
         iy = int(np.floor((p[1] - low[1]) / cs))
-        return np.clip(ix, 0, nx - 1), np.clip(iy, 0, ny - 1)
+        return ix, iy
 
     start_ix, start_iy = to_idx(start_utm)
     goal_ix, goal_iy = to_idx(goal_utm)
+
+    if not (0 <= goal_ix < nx and 0 <= goal_iy < ny):
+        logger.warning(
+            "Goal %s is outside the grid bounds; cannot plan path.", goal_utm
+        )
+        return None
+    if not (0 <= start_ix < nx and 0 <= start_iy < ny):
+        logger.warning(
+            "Start %s is outside the grid bounds; cannot plan path.", start_utm
+        )
+        return None
 
     if start_ix == goal_ix and start_iy == goal_iy:
         return np.array([start_utm, goal_utm])
 
     # Pre-calculate costs and pad with infinity to avoid boundary checks
     # grid is assumed to be 0.0 near paths, 1.0 away from paths.
-    # Base traversal cost is 1.0 + grid_value * 5.0
-    costs = 1.0 + grid * 5.0
+    # Base traversal cost is 1.0 + grid_value * GRID_COST_WEIGHT
+    costs = 1.0 + grid * GRID_COST_WEIGHT
     padded_costs = np.full((ny + 2, nx + 2), np.inf, dtype=np.float32)
     padded_costs[1:-1, 1:-1] = costs
 

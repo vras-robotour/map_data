@@ -65,7 +65,7 @@ The planning request was cancelled via `cancel_replan_backend()`. This is expect
 ### Flask server fails to start
 
 - Check that port `5000` is not already in use: `lsof -i :5000`.
-- If you see `ImportError: cannot import name 'rclpy'`, you are running the viewer from within a ROS2 workspace where `rclpy` was expected. The viewer itself does not require ROS2, but the `visualize_mapdata` ROS2 node wraps it. Run the viewer directly instead:
+- If you see `ImportError: cannot import name 'rclpy'`, you are running the viewer from within a ROS2 workspace where `rclpy` was expected. The viewer itself does not require ROS2. Run the viewer directly:
 
 ```bash
 map_data_viewer --file coords.mapdata
@@ -83,9 +83,9 @@ Annotation files are written to the same directory as the `.mapdata` file. If th
 
 ## ROS2 node errors
 
-### `create_mapdata` / `visualize_mapdata` not found
+### `create_mapdata` not found
 
-These are ROS2 nodes. They are available only after building the package with `colcon` and sourcing the workspace:
+This is a ROS2 node. It is available only after building the package with `colcon` and sourcing the workspace:
 
 ```bash
 colcon build --packages-select map_data
@@ -104,17 +104,11 @@ After that, use `ros2 run map_data create_mapdata ...` rather than calling the s
 
 ## `.mapdata` file issues
 
-### `MapData.load()` raises `JSONDecodeError`
+### `MapData.load()` raises `ValueError` or `JSONDecodeError`
 
-The file may be truncated (interrupted write) or a legacy pickle file that failed migration. Try:
+The file may be truncated (interrupted write) or a legacy pickle file (detected by a `0x80` header byte). Support for the legacy pickle format has been removed for security reasons.
 
-```python
-with open("coords.mapdata", "rb") as f:
-    header = f.read(2)
-print(header)  # b'\x80\x05' → pickle; b'{\n' → JSON
-```
-
-If it is a valid pickle file, `MapData.load()` should handle it transparently. If neither format is detected, the file is corrupt — re-run `create_mapdata` to regenerate it.
+If you have a legacy file, you must re-run `create_mapdata` to regenerate it in the JSON format or parse the GPX/YAML file through the web viewer.
 
 ### UTM zone boundary warning
 

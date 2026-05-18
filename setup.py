@@ -31,6 +31,10 @@ setup(
         "tqdm",
         "requests",
         "ros2_numpy",
+        "PyYAML",
+        "matplotlib",
+        "scipy",
+        "joblib",
     ],
     package_data={
         "map_data": [
@@ -49,7 +53,6 @@ setup(
         "console_scripts": [
             "osm_cloud = map_data.osm_cloud:main",
             "create_mapdata = map_data.create_mapdata:main",
-            "visualize_mapdata = map_data.visualize_mapdata:main",
             "map_data_viewer = map_data.viewer.app:main",
             "map_data_info = map_data.info:main",
         ],

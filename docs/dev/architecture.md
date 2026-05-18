@@ -187,7 +187,7 @@ This page describes the internal structure of the `map_data` package. The system
     VW :{x:760, y:744, w:240,h:116, title:'Viewer',            sub:'Flask + Leaflet'},
     ANN:{x:1032,y:744, w:240,h:116, title:'annotations sidecar',sub:'.annotations.json',kind:'sidecar'},
     ROS:{x:430, y:990, w:540,h:116, title:'ROS2 nodes',
-         sub:'osm_cloud · TrackerNode · create_mapdata · visualize_mapdata',kind:'dark'},
+         sub:'osm_cloud · TrackerNode · create_mapdata',kind:'dark'},
   };
   const topAt=(b,i,n)=>{const p=22,u=b.w-2*p;return{x:b.x+p+(n<=1?u/2:u*i/(n-1)),y:b.y}};
   const bot  =b=>({x:b.x+b.w/2,y:b.y+b.h});
@@ -350,7 +350,9 @@ The bounding box is the convex hull of the input waypoints expanded by `osm_marg
 | `waypoints` | `np.ndarray` | `(N, 2)` UTM easting/northing array of the input waypoints |
 | `min_x/max_x/min_y/max_y` | `float` | UTM bounding box including margins |
 
-**Serialisation.** `MapData.save()` writes a JSON file (`.mapdata` extension) using `json.dump`. `MapData.load(path)` reads it back; it also transparently handles the legacy pickle format (detected by the `0x80` header byte) for backwards compatibility.
+**OSM caching.** After a successful Overpass query, the raw responses are saved to a `.osm_cache.json` sidecar file next to the source `.gpx`/`.yaml` file. On the next load, if the file exists and the stored bounding box matches the current one (within 1 × 10⁻⁶ °, ≈ 11 cm), the cache is used and the network round-trip is skipped. The cache is invalidated automatically whenever the bounding box changes.
+
+**Serialisation.** `MapData.save()` writes a JSON file (`.mapdata` extension) using `json.dump`. `MapData.load(path)` reads it back. Support for the legacy pickle format has been removed for security reasons; legacy files must be re-parsed from the source GPX/YAML.
 
 ---
 
@@ -387,18 +389,23 @@ This planner is well-suited for route planning on well-mapped pedestrian or road
 
 `map_data/pathsolver/replan.py`
 
-Builds a cost raster (occupancy grid) at resolution `cell_size` metres. Each cell receives a cost based on:
+Orchestrates cost-grid planning. Grid construction, smoothing, and visualization are handled by dedicated sub-modules:
 
-- the OSM highway type and surface material of the nearest way within `max_path_dist` metres (see `highway_costs` and `surface_costs` in `planner_defaults.yaml`)
+| Module | Class / function | Responsibility |
+|--------|-----------------|----------------|
+| `pathsolver/grid_constructor.py` | `PathGrid` | Builds the cost raster at `cell_size` metre resolution; assigns per-cell costs from highway type, surface, and barrier geometry |
+| `pathsolver/grid_astar.py` | `grid_astar` | Fast, optimal A* search on the discrete grid |
+| `pathsolver/rrt_star.py` | `RRTStar` | Sampling-based planner; produces smoother paths in cluttered environments |
+| `pathsolver/smoothing.py` | `smooth_path` | Gradient-descent path smoothing with optional collision checking |
+| `pathsolver/visualizer.py` | `visualize_replan` | Matplotlib debug visualization of the grid, obstacles, and planned path |
+
+Each `PathGrid` cell cost is determined by:
+
+- the OSM highway type and surface material of the nearest way within `max_path_dist` metres (configured via `highway_costs` and `surface_costs` in `planner_defaults.yaml`)
 - a fixed `default_off_path_cost` for cells not covered by any way
 - barrier polygons inflated by `inflate_obstacles` metres, set to cost 1.0 (impassable)
 
-Two search algorithms are available on top of this grid:
-
-- **Grid A*** (`map_data/pathsolver/grid_astar.py`) — fast, optimal on the discrete grid
-- **RRT*** (`map_data/pathsolver/rrt_star.py`) — sampling-based, produces smoother paths in cluttered environments
-
-Optional post-processing: Douglas-Peucker simplification (`simplify_path`) and gradient-descent smoothing (`smooth_path`).
+Key parameters now exposed in `planner_defaults.yaml`: `grid_cost_weight`, `obstacle_radius`, and `buffer_widths` (per road type).
 
 ---
 
@@ -418,7 +425,6 @@ The viewer (`map_data/viewer/`) is a single-page web application consisting of:
 | Node | File | Purpose |
 |------|------|---------|
 | `create_mapdata` | `map_data/create_mapdata.py` | CLI node: reads a GPX/YAML file, runs `MapData.run_all()`, writes the `.mapdata` file |
-| `visualize_mapdata` | `map_data/visualize_mapdata.py` | CLI node: loads a `.mapdata` file and starts the Flask viewer |
 | `osm_cloud` | `map_data/osm_cloud.py` | ROS2 node: publishes the parsed OSM features as `sensor_msgs/PointCloud2` messages for use in Nav2 or custom navigation stacks |
 | `TrackerNode` | `map_data/viewer/ros_node.py` | ROS2 node embedded in the viewer: subscribes to robot pose and streams it to the Leaflet front-end via WebSocket for live position display |
 
@@ -429,7 +435,7 @@ The viewer (`map_data/viewer/`) is a single-page web application consisting of:
 A typical session follows this sequence:
 
 1. **Create `.mapdata`** — run `create_mapdata` with a GPX waypoint file. The node queries Overpass, parses the OSM data, and writes `<name>.mapdata` to disk. Or download and parse data inside the viewer.
-2. **Visualize data** — run `visualize_mapdata` with the `.mapdata` file to create images of parsed data. Alternatively run the viewer and load parsed data in the browser. If the data were parsed through the viewer they will be shown automatically.
+2. **Visualize data** — run the viewer and load parsed data in the browser. If the data were parsed through the viewer they will be shown automatically.
 3. **Annotate** — use the viewer drawing tools to mark obstacles, draw alternative path segments, delete or hide erroneous ways, adjust node positions, and override OSM tags. Changes are saved automatically to `<name>.annotations.json`.
 4. **Export** — click the Export button to produce `<name>.exported.mapdata`, a human-readable JSON snapshot of the annotated map suitable for downstream processing.
 5. **Plan path** — instantiate `GraphPlanner` or `ReplanPath` with the loaded `MapData` object and call `plan()` with the desired waypoints.

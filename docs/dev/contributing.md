@@ -4,7 +4,7 @@
 
 - Python 3.10+
 - [`uv`](https://docs.astral.sh/uv/) (preferred) or plain `pip`
-- ROS2 Humble or later — **optional**; only needed for the `create_mapdata`, `visualize_mapdata`, and `osm_cloud` nodes
+- ROS2 Humble or later — **optional**; only needed for the `create_mapdata` and `osm_cloud` nodes
 
 ## Getting the code
 

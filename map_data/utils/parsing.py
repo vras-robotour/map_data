@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Set, Tuple
 
 import numpy as np
 import shapely.geometry as geometry
@@ -7,11 +7,14 @@ import utm
 from shapely.ops import linemerge
 from tqdm import tqdm
 
+from map_data.utils.config import load_config
 from map_data.utils.way import Way
 
 logger = logging.getLogger(__name__)
 
-OBSTACLE_RADIUS = 2
+_DEFAULTS = load_config("planner_defaults.yaml")
+OBSTACLE_RADIUS = _DEFAULTS.get("obstacle_radius", 2.0)
+BUFFER_WIDTHS = _DEFAULTS.get("buffer_widths", {"road": 7, "footway": 3, "barrier": 2})
 
 
 def parse_osm_ways(osm_ways_data: Any, nodes_cache: Dict[int, Any]) -> Dict[int, Way]:
@@ -41,7 +44,7 @@ def parse_osm_ways(osm_ways_data: Any, nodes_cache: Dict[int, Any]) -> Dict[int,
     return ways
 
 
-def parse_osm_rels(osm_rels_data: Any, ways: Dict[int, Way]):
+def parse_osm_rels(osm_rels_data: Any, ways: Dict[int, Way]) -> None:
     for rel in tqdm(osm_rels_data.relations, desc="Parse rels"):
         outer_ids, inner_ids = [], []
 
@@ -204,16 +207,18 @@ def separate_ways(
     barrier_tags: Dict[str, List[str]],
     not_barrier_tags: Dict[str, List[str]],
     anti_barrier_tags: Dict[str, List[str]],
-):
-    roads, footways, barriers = [], [], []
+) -> Tuple[List[Way], List[Way], List[Way]]:
+    roads: List[Way] = []
+    footways: List[Way] = []
+    barriers: List[Way] = []
     for way in tqdm(ways.values(), desc="Separate ways"):
         if way.is_road():
-            roads.append(buffer_line(way, width=7))
+            roads.append(buffer_line(way, width=BUFFER_WIDTHS.get("road", 7)))
         elif way.is_footway():
-            footways.append(buffer_line(way, width=3))
+            footways.append(buffer_line(way, width=BUFFER_WIDTHS.get("footway", 3)))
         elif way.is_barrier(barrier_tags, not_barrier_tags, anti_barrier_tags):
             if not way.is_area:
-                way = buffer_line(way, width=2)
+                way = buffer_line(way, width=BUFFER_WIDTHS.get("barrier", 2))
             barriers.append(way)
     return roads, footways, barriers
 

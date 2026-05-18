@@ -15,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger("create_mapdata")
 
 
-def process_map_data(file_name, download):
+def process_map_data(file_name: str, download: bool) -> None:
     """Process map data based on command-line arguments."""
     # Try to use file_name as a direct path first
     if os.path.exists(file_name):
@@ -46,9 +46,6 @@ def process_map_data(file_name, download):
             map_data.save()
         else:
             map_data = md.MapData.load(full_path)
-            if map_data.run_parse() != 0:
-                logger.error("Failed to re-parse map data")
-                raise SystemExit(1)
             map_data.save()
         logger.info(f"Successfully processed map data for {file_name}")
     except Exception as e:
@@ -56,7 +53,7 @@ def process_map_data(file_name, download):
         raise SystemExit(1)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Create map data from GPX or download from OSM."
     )

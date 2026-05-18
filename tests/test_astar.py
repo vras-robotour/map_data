@@ -155,17 +155,16 @@ def test_post_process_path_simplification():
 
 
 def test_astar_grid_goal_outside_boundary():
-    """Goal UTM outside the grid is clamped — path to the boundary is still found."""
+    """Goal UTM outside the grid is caught — returns None."""
     args = Args()
     replanner = ReplanPath(args, [])
     replanner._reshaped_grid_cache = np.zeros((20, 20), dtype=float)
 
     start = (1.0, 1.0)
-    goal = (15.0, 15.0)  # beyond 10×10 grid; clamped to far corner
+    goal = (15.0, 15.0)  # beyond 10×10 grid
     path = replanner._astar(start, goal)
 
-    assert path is not None
-    assert len(path) >= 2
+    assert path is None
 
 
 def test_astar_grid_start_equals_goal_same_cell():

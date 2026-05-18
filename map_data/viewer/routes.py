@@ -1,7 +1,6 @@
 import copy
 import io
 import json
-import logging
 import os
 import re
 import select
@@ -11,6 +10,7 @@ import tempfile
 import threading
 import time
 import uuid
+from typing import Dict, Any
 
 from flask import (
     Blueprint,
@@ -64,7 +64,7 @@ _CAT_FOR_LIST = {
 }
 
 
-def _apply_way_edits(md, store):
+def _apply_way_edits(md: MapData, store: Dict[str, Any]) -> None:
     """Apply deletions, node deletions, splits, and position overrides to md in-place."""
     zn, zl = md.zone_number, md.zone_letter
     nodes_cache = getattr(md, "nodes_cache", {})
@@ -82,7 +82,9 @@ def _apply_way_edits(md, store):
                     continue
                 del_nids = get_deleted_node_ids(store, w.id)
                 if del_nids:
-                    w = rebuild_way_without_nodes(w, del_nids, zn, zl, nodes_cache, category=cat)
+                    w = rebuild_way_without_nodes(
+                        w, del_nids, zn, zl, nodes_cache, category=cat
+                    )
                     if w is None:
                         continue
                 split_nids = get_split_node_ids(store, w.id)
@@ -115,7 +117,11 @@ def _apply_way_edits(md, store):
                 if ov:
                     w = (
                         apply_node_position_overrides(
-                            w, ov, zn, zl, nodes_cache,
+                            w,
+                            ov,
+                            zn,
+                            zl,
+                            nodes_cache,
                             category=_CAT_FOR_LIST[lst_name],
                         )
                         or w
@@ -124,7 +130,7 @@ def _apply_way_edits(md, store):
             setattr(md, lst_name, new_lst)
 
 
-def _get_data_dir():
+def _get_data_dir() -> str:
     if current_app.config.get("DATA_DIR"):
         return current_app.config["DATA_DIR"]
     try:
@@ -139,9 +145,22 @@ def _get_data_dir():
         )
 
 
-def _annotation_path(filename):
-    base = filename.rsplit(".", 1)[0]
-    return os.path.join(_get_data_dir(), f"{base}.annotations.json")
+def _safe_data_path(filename: str) -> str:
+    """Resolve a user-supplied filename within the data directory.
+
+    Aborts with 400 if the resolved path would escape the data directory
+    (e.g. via '../' traversal sequences).
+    """
+    data_dir = os.path.realpath(_get_data_dir())
+    resolved = os.path.realpath(os.path.join(data_dir, filename))
+    if not (resolved == data_dir or resolved.startswith(data_dir + os.sep)):
+        abort(400, "Invalid file path")
+    return resolved
+
+
+def _annotation_path(filename: str) -> str:
+    base = os.path.splitext(os.path.basename(filename))[0]
+    return os.path.join(os.path.realpath(_get_data_dir()), f"{base}.annotations.json")
 
 
 @bp.route("/")
@@ -174,7 +193,7 @@ def get_mapdata():
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
-    path = os.path.join(_get_data_dir(), filename)
+    path = _safe_data_path(filename)
     if not os.path.isfile(path):
         abort(404, f"File not found: {filename}")
     map_data = copy.copy(load_mapdata_cached(path))
@@ -271,6 +290,9 @@ def fetch_area():
     for field in ("min_lat", "min_lon", "max_lat", "max_lon", "name"):
         if field not in body:
             abort(400, f"Missing field: {field}")
+
+    if body["min_lat"] >= body["max_lat"] or body["min_lon"] >= body["max_lon"]:
+        abort(400, "min_lat/min_lon must be strictly less than max_lat/max_lon")
 
     name = re.sub(r"[^a-zA-Z0-9_\-]", "_", str(body["name"]).strip())
     if not name:
@@ -378,7 +400,7 @@ def get_way_nodes():
     way_id = request.args.get("way_id")
     if not filename or way_id is None:
         abort(400, "Missing 'file' or 'way_id' query parameter")
-    path = os.path.join(_get_data_dir(), filename)
+    path = _safe_data_path(filename)
     if not os.path.isfile(path):
         abort(404, f"File not found: {filename}")
 
@@ -495,7 +517,7 @@ def get_way(way_id):
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
-    path = os.path.join(_get_data_dir(), filename)
+    path = _safe_data_path(filename)
     if not os.path.isfile(path):
         abort(404, f"File not found: {filename}")
 
@@ -695,7 +717,7 @@ def get_way_segments(way_id):
 
 
 def _get_way_segments_geojson(filename, original_way_id):
-    path = os.path.join(_get_data_dir(), filename)
+    path = _safe_data_path(filename)
     md = load_mapdata_cached(path)
     store = load_annotations(_annotation_path(filename))
 
@@ -1115,7 +1137,7 @@ def undo_move_way_nodes():
 
 
 def get_merged_mapdata(filename):
-    path = os.path.join(_get_data_dir(), filename)
+    path = _safe_data_path(filename)
     if not os.path.isfile(path):
         return None, None
 
@@ -1241,7 +1263,7 @@ def get_cost_grid():
 
     obstacles = ways_to_shapely(md.barriers_list)
     replanner = ReplanPath(args, obstacles)
-    
+
     # Get custom highway costs from request if provided
     highway_costs = request.args.get("highway_costs")
     if highway_costs:
