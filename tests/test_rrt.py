@@ -45,6 +45,7 @@ def test_rrt_star_with_obstacle():
         step_size=0.5,
         neighbor_radius=2.0,
         grid_scale=0.1,
+        traversability_threshold=0.5,
     )
     path = rrt_star.find_path()
     assert path is not None
@@ -55,6 +56,17 @@ def test_rrt_star_with_obstacle():
         j = int(point[0] / 0.1)
         if 0 <= i < 100 and 0 <= j < 100:
             assert grid[i, j] < 0.95
+
+    # Verify that path segments don't cut through the obstacle region
+    for idx in range(len(path) - 1):
+        p1 = np.array(path[idx])
+        p2 = np.array(path[idx + 1])
+        for t in np.linspace(0, 1, 20):
+            pt = p1 + t * (p2 - p1)
+            i = int(pt[1] / 0.1)
+            j = int(pt[0] / 0.1)
+            if 0 <= i < 100 and 0 <= j < 100:
+                assert grid[i, j] < 0.95, f"Segment crosses obstacle at {pt}"
 
 
 def test_rrt_star_near_equal_start_goal():
