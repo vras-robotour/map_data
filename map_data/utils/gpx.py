@@ -1,6 +1,6 @@
 import os
 import sys
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 import gpxpy
 import numpy as np
@@ -83,7 +83,9 @@ def convert_waypoint(point: Dict[str, float]) -> Tuple[float, float, float]:
     return utm_point + (point.get("ele", 0),)
 
 
-def utm_path_to_latlon(path: np.ndarray, zone_num: int, zone_let: str) -> List[Dict[str, float]]:
+def utm_path_to_latlon(
+    path: np.ndarray, zone_num: int, zone_let: str
+) -> List[Dict[str, float]]:
     wgs_path = []
     for point in path:
         lat, lon = utm.to_latlon(point[0], point[1], zone_num, zone_let)
@@ -93,7 +95,10 @@ def utm_path_to_latlon(path: np.ndarray, zone_num: int, zone_let: str) -> List[D
     return wgs_path
 
 
-def create_gpx_content(waypoints_data: List[Dict[str, Union[str, float]]], creator_name: str = "MapData Planner") -> str:
+def create_gpx_content(
+    waypoints_data: List[Dict[str, Union[str, float]]],
+    creator_name: str = "MapData Planner",
+) -> str:
     """
     Generates the XML content for a GPX file from a list of waypoint dictionaries.
     """
@@ -104,7 +109,9 @@ def create_gpx_content(waypoints_data: List[Dict[str, Union[str, float]]], creat
             lon = point["longitude"]
             gpx_waypoints.append(f'  <wpt lat="{lat}" lon="{lon}"></wpt>')
         except KeyError as e:
-            print(f"Warning: Skipping a waypoint due to missing key: {e}", file=sys.stderr)
+            print(
+                f"Warning: Skipping a waypoint due to missing key: {e}", file=sys.stderr
+            )
             continue
 
     waypoints_xml = "\n".join(gpx_waypoints)

@@ -1,7 +1,6 @@
 import copy
 import io
 import json
-import logging
 import os
 import re
 import select
@@ -64,7 +63,7 @@ _CAT_FOR_LIST = {
 }
 
 
-def _apply_way_edits(md, store):
+def _apply_way_edits(md: MapData, store: Dict[str, Any]) -> None:
     """Apply deletions, node deletions, splits, and position overrides to md in-place."""
     zn, zl = md.zone_number, md.zone_letter
     nodes_cache = getattr(md, "nodes_cache", {})
@@ -82,7 +81,9 @@ def _apply_way_edits(md, store):
                     continue
                 del_nids = get_deleted_node_ids(store, w.id)
                 if del_nids:
-                    w = rebuild_way_without_nodes(w, del_nids, zn, zl, nodes_cache, category=cat)
+                    w = rebuild_way_without_nodes(
+                        w, del_nids, zn, zl, nodes_cache, category=cat
+                    )
                     if w is None:
                         continue
                 split_nids = get_split_node_ids(store, w.id)
@@ -115,7 +116,11 @@ def _apply_way_edits(md, store):
                 if ov:
                     w = (
                         apply_node_position_overrides(
-                            w, ov, zn, zl, nodes_cache,
+                            w,
+                            ov,
+                            zn,
+                            zl,
+                            nodes_cache,
                             category=_CAT_FOR_LIST[lst_name],
                         )
                         or w
@@ -124,7 +129,7 @@ def _apply_way_edits(md, store):
             setattr(md, lst_name, new_lst)
 
 
-def _get_data_dir():
+def _get_data_dir() -> str:
     if current_app.config.get("DATA_DIR"):
         return current_app.config["DATA_DIR"]
     try:
@@ -1241,7 +1246,7 @@ def get_cost_grid():
 
     obstacles = ways_to_shapely(md.barriers_list)
     replanner = ReplanPath(args, obstacles)
-    
+
     # Get custom highway costs from request if provided
     highway_costs = request.args.get("highway_costs")
     if highway_costs:

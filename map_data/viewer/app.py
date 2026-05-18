@@ -19,7 +19,7 @@ class SignedIntConverter(IntegerConverter):
     regex = r"-?\d+"
 
 
-def telemetry_broadcaster():
+def telemetry_broadcaster() -> None:
     """Background thread to broadcast ROS2 telemetry via WebSockets."""
     global tracker_node
     while True:
@@ -33,7 +33,7 @@ def telemetry_broadcaster():
         time.sleep(0.5)  # 2 Hz update rate
 
 
-def create_app(data_dir=None):
+def create_app(data_dir: Optional[str] = None) -> Flask:
     # Explicitly set paths relative to this file
     base_dir = os.path.dirname(os.path.abspath(__file__))
     template_dir = os.path.join(base_dir, "templates")
@@ -83,17 +83,19 @@ def create_app(data_dir=None):
     return app
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Interactive map data viewer")
     parser.add_argument("--data-dir", help="Directory containing .mapdata files")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5000)
-    
+
     # Filter out ROS-specific arguments before parsing
     import sys
+
     ros_args = []
     try:
         from rclpy.utilities import remove_ros_args
+
         ros_args = remove_ros_args(args=sys.argv[1:])
     except ImportError:
         ros_args = sys.argv[1:]
@@ -110,7 +112,10 @@ def main():
     logging.basicConfig(level=logging.INFO)
     # Using socketio.run instead of app.run
     # Disable debug mode to prevent the Flask reloader from initializing the ROS node twice
-    socketio.run(app, host=args.host, port=args.port, debug=False, allow_unsafe_werkzeug=True)
+    socketio.run(
+        app, host=args.host, port=args.port, debug=False, allow_unsafe_werkzeug=True
+    )
+
 
 if __name__ == "__main__":
     main()

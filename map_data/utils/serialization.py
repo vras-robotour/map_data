@@ -57,7 +57,7 @@ def map_data_to_dict(md: Any) -> Dict[str, Any]:
     }
 
 
-def save_mapdata(md: Any, path: str):
+def save_mapdata(md: Any, path: str) -> None:
     data = map_data_to_dict(md)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
@@ -96,6 +96,7 @@ def load_mapdata(md_class: Any, path: str) -> Any:
     md.coords_file = meta["coords_file"]
 
     from map_data.map_data import CoordsData  # local import to avoid circular dep
+
     md.coords_data = CoordsData(md.min_long, md.max_long, md.min_lat, md.max_lat)
 
     md.osm_ways_data = None

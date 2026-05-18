@@ -9,7 +9,7 @@ from map_data.map_data import MapData
 _mapdata_cache: dict = {}
 
 
-def load_mapdata_cached(path):
+def load_mapdata_cached(path: str) -> MapData:
     mtime = os.path.getmtime(path)
     key = (path, mtime)
     if key not in _mapdata_cache:

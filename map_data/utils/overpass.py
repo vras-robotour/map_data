@@ -59,7 +59,7 @@ class OverpassClient:
 
         return None
 
-    def _wait_for_slot(self, endpoint: str, max_wait: int = 300):
+    def _wait_for_slot(self, endpoint: str, max_wait: int = 300) -> None:
         if "overpass-api.de" not in endpoint:
             return
         status_url = endpoint.replace("/api/interpreter", "/api/status")

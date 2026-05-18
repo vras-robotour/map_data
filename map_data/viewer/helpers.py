@@ -2,8 +2,7 @@ import copy
 import json
 import logging
 import os
-
-logger = logging.getLogger(__name__)
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import utm
@@ -14,12 +13,17 @@ from shapely.geometry import (
     Polygon as _SPoly,
 )
 
+logger = logging.getLogger(__name__)
+
+
 # ------------------------------------------------------------------
 # GeoJSON conversion helpers
 # ------------------------------------------------------------------
 
 
-def ring_to_latlon(coords, zone_number, zone_letter):
+def ring_to_latlon(
+    coords: List[Tuple[float, float]], zone_number: int, zone_letter: str
+) -> List[List[float]]:
     result = []
     for x, y in coords:
         lat, lon = utm.to_latlon(x, y, zone_number, zone_letter)
@@ -106,14 +110,14 @@ def mapdata_to_geojson(map_data):
 # ------------------------------------------------------------------
 
 
-def load_annotations(path):
+def load_annotations(path: str) -> Dict[str, Any]:
     if os.path.isfile(path):
         with open(path) as f:
             return json.load(f)
     return {"version": 1, "annotations": []}
 
 
-def save_annotations(path, data):
+def save_annotations(path: str, data: Dict[str, Any]) -> None:
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 

@@ -22,15 +22,20 @@ from map_data.utils.way import Way
 logger = logging.getLogger(__name__)
 
 
-def load_map_defaults():
+def load_map_defaults() -> Dict[str, Any]:
     """Load default map configuration from config/planner_defaults.yaml."""
     try:
         from ament_index_python.resources import get_resource
+
         _, package_path = get_resource("packages", "map_data")
-        config_path = os.path.join(package_path, "share", "map_data", "config", "planner_defaults.yaml")
+        config_path = os.path.join(
+            package_path, "share", "map_data", "config", "planner_defaults.yaml"
+        )
     except (ImportError, LookupError):
         config_path = os.path.realpath(
-            os.path.join(os.path.dirname(__file__), "..", "config", "planner_defaults.yaml")
+            os.path.join(
+                os.path.dirname(__file__), "..", "config", "planner_defaults.yaml"
+            )
         )
 
     if os.path.exists(config_path):
@@ -40,14 +45,14 @@ def load_map_defaults():
 
 
 _DEFAULTS = load_map_defaults()
-OSM_MARGIN = _DEFAULTS.get("osm_margin", 100)
-RESERVE = _DEFAULTS.get("reserve_margin", 50)
+OSM_MARGIN: float = _DEFAULTS.get("osm_margin", 100)
+RESERVE: float = _DEFAULTS.get("reserve_margin", 50)
 
 
 class CoordsData:
     def __init__(
         self, min_long: float, max_long: float, min_lat: float, max_lat: float
-    ):
+    ) -> None:
         self.min_long = min_long
         self.max_long = max_long
         self.min_lat = min_lat
@@ -98,7 +103,7 @@ class MapData:
         coords_type: str = "file",
         current_robot_position: Optional[np.ndarray] = None,
         flip: bool = False,
-    ):
+    ) -> None:
         """
         Parameters
         ----------
@@ -119,7 +124,7 @@ class MapData:
         if coords_type == "file":
             with open(coords, "r") as f:
                 gpx_object = gpxparse(f)
-            self.coords_file = coords
+            self.coords_file: Optional[str] = coords
 
             points = []
             if gpx_object.waypoints:
@@ -197,7 +202,7 @@ class MapData:
 
         self._load_tag_configs()
 
-    def _check_utm_zone_boundary(self):
+    def _check_utm_zone_boundary(self) -> None:
         corners = [
             (self.min_lat, self.min_long),
             (self.min_lat, self.max_long),
@@ -216,7 +221,7 @@ class MapData:
                 zone_strs,
             )
 
-    def _load_tag_configs(self):
+    def _load_tag_configs(self) -> None:
         try:
             from ament_index_python.resources import get_resource
 
@@ -227,26 +232,26 @@ class MapData:
                 os.path.join(os.path.dirname(__file__), "..", "parameters")
             )
 
-        self.BARRIER_TAGS = self._csv_to_dict(
+        self.BARRIER_TAGS: Dict[str, List[str]] = self._csv_to_dict(
             os.path.join(params_path, "barrier_tags.csv")
         )
-        self.NOT_BARRIER_TAGS = self._csv_to_dict(
+        self.NOT_BARRIER_TAGS: Dict[str, List[str]] = self._csv_to_dict(
             os.path.join(params_path, "not_barrier_tags.csv")
         )
-        self.ANTI_BARRIER_TAGS = self._csv_to_dict(
+        self.ANTI_BARRIER_TAGS: Dict[str, List[str]] = self._csv_to_dict(
             os.path.join(params_path, "anti_barrier_tags.csv")
         )
-        self.OBSTACLE_TAGS = self._csv_to_dict(
+        self.OBSTACLE_TAGS: Dict[str, List[str]] = self._csv_to_dict(
             os.path.join(params_path, "obstacle_tags.csv")
         )
-        self.NOT_OBSTACLE_TAGS = self._csv_to_dict(
+        self.NOT_OBSTACLE_TAGS: Dict[str, List[str]] = self._csv_to_dict(
             os.path.join(params_path, "not_obstacle_tags.csv")
         )
 
     @staticmethod
     def _csv_to_dict(path: str) -> Dict[str, List[str]]:
         arr = np.genfromtxt(path, dtype=str, delimiter=",")
-        result = {}
+        result: Dict[str, List[str]] = {}
         for row in arr:
             result.setdefault(row[0], []).append(row[1])
         return result
@@ -258,7 +263,7 @@ class MapData:
         )
         return np.column_stack([easting, northing]), zone_number, zone_letter
 
-    def run_queries(self):
+    def run_queries(self) -> None:
         """Download OSM ways, relations, and nodes from the Overpass API.
 
         Fires three concurrent Overpass queries covering the bounding box of
@@ -273,7 +278,7 @@ class MapData:
             "nodes": f"[out:json]; (node({bbox}); ); out;",
         }
 
-        def _fetch(q):
+        def _fetch(q: str) -> Optional[Any]:
             return OverpassClient().query(q)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
@@ -365,7 +370,7 @@ class MapData:
     # High-level API
     # ------------------------------------------------------------------
 
-    def run_all(self, save: bool = True):
+    def run_all(self, save: bool = True) -> None:
         """Download OSM data, parse it, and optionally save the result.
 
         Convenience wrapper that calls :meth:`run_queries`, :meth:`run_parse`,
@@ -381,7 +386,7 @@ class MapData:
         if self.run_parse() == 0 and save:
             self.save()
 
-    def save(self, path: Optional[str] = None):
+    def save(self, path: Optional[str] = None) -> None:
         """Serialize this object to a ``.mapdata`` file.
 
         Parameters

@@ -15,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger("create_mapdata")
 
 
-def process_map_data(file_name, download):
+def process_map_data(file_name: str, download: bool) -> None:
     """Process map data based on command-line arguments."""
     # Try to use file_name as a direct path first
     if os.path.exists(file_name):
@@ -53,7 +53,7 @@ def process_map_data(file_name, download):
         raise SystemExit(1)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Create map data from GPX or download from OSM."
     )

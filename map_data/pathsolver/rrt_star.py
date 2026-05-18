@@ -44,7 +44,7 @@ class RRTStar:
         simplify: bool = True,
         transfer_id: Optional[str] = None,
         improve_after_goal: bool = False,
-    ):
+    ) -> None:
         """
         Parameters
         ----------
@@ -181,7 +181,9 @@ class RRTStar:
                     return True
         return False
 
-    def _bresenham(self, start, goal) -> Iterator[Tuple[int, int]]:
+    def _bresenham(
+        self, start: Tuple[int, int], goal: Tuple[int, int]
+    ) -> Iterator[Tuple[int, int]]:
         """Yield integer grid cells along the line from *start* to *goal* (Bresenham)."""
         x0, y0 = start
         x1, y1 = goal
@@ -271,7 +273,7 @@ class RRTStar:
         """Return indices of all tree nodes within *neighbor_radius* of *new_point*."""
         n = len(self.nodes)
         new_idx = n - 1  # node just appended by the caller
-        r2 = self.neighbor_radius ** 2
+        r2 = self.neighbor_radius**2
 
         if self._kdtree is None:
             sq_dists = ((self._nodes_buf[:n] - new_point) ** 2).sum(axis=1)
@@ -279,7 +281,9 @@ class RRTStar:
 
         # KD-tree covers [0, _kdtree_n); _nearest_node always rebuilds first so
         # new_point is never included in the tree.
-        result: List[int] = list(self._kdtree.query_ball_point(new_point, self.neighbor_radius))
+        result: List[int] = list(
+            self._kdtree.query_ball_point(new_point, self.neighbor_radius)
+        )
 
         # Linear scan over nodes added since the last rebuild, excluding new_point itself
         for i in range(self._kdtree_n, n):
@@ -368,7 +372,9 @@ class RRTStar:
             if self._is_collision(new_point):
                 continue
 
-            collision, nearest_seg_cost = self._segment_cost(self.nodes[nearest_idx], new_point)
+            collision, nearest_seg_cost = self._segment_cost(
+                self.nodes[nearest_idx], new_point
+            )
             if collision:
                 continue
 
@@ -437,7 +443,7 @@ class RRTStar:
             return self._simplify_path(path)
         return path
 
-    def _simplify_path(self, path) -> List[np.ndarray]:
+    def _simplify_path(self, path: List[np.ndarray]) -> List[np.ndarray]:
         """Greedily remove intermediate waypoints that have line-of-sight to a later node."""
         if len(path) <= 2:
             return path

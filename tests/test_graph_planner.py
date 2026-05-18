@@ -63,7 +63,7 @@ def test_graph_planner_disjoint_network():
 
     result = planner.plan(np.array([[0.0, 0.0], [55.0, 0.0]]))
 
-    assert result is False
+    assert result is None
 
 
 def test_graph_planner_same_edge():

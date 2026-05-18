@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Set, Tuple
 
 import numpy as np
 import shapely.geometry as geometry
@@ -41,7 +41,7 @@ def parse_osm_ways(osm_ways_data: Any, nodes_cache: Dict[int, Any]) -> Dict[int,
     return ways
 
 
-def parse_osm_rels(osm_rels_data: Any, ways: Dict[int, Way]):
+def parse_osm_rels(osm_rels_data: Any, ways: Dict[int, Way]) -> None:
     for rel in tqdm(osm_rels_data.relations, desc="Parse rels"):
         outer_ids, inner_ids = [], []
 
@@ -204,8 +204,10 @@ def separate_ways(
     barrier_tags: Dict[str, List[str]],
     not_barrier_tags: Dict[str, List[str]],
     anti_barrier_tags: Dict[str, List[str]],
-):
-    roads, footways, barriers = [], [], []
+) -> Tuple[List[Way], List[Way], List[Way]]:
+    roads: List[Way] = []
+    footways: List[Way] = []
+    barriers: List[Way] = []
     for way in tqdm(ways.values(), desc="Separate ways"):
         if way.is_road():
             roads.append(buffer_line(way, width=7))
