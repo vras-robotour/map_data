@@ -1,5 +1,6 @@
 import logging
 import time
+import re
 from typing import Optional
 
 import overpy
@@ -21,8 +22,15 @@ class OverpassClient:
         self.session.headers.update(
             {"User-Agent": "map_data/2.0 (https://github.com/vras-robotour/map_data)"}
         )
+        self.api = overpy.Overpass()
 
     def query(self, query_str: str, retries: int = 3) -> Optional[overpy.Result]:
+        raw_text = self.query_raw(query_str, retries)
+        if raw_text:
+            return self.api.parse_json(raw_text)
+        return None
+
+    def query_raw(self, query_str: str, retries: int = 3) -> Optional[str]:
         for attempt in range(1, retries + 1):
             endpoint = self.endpoints[self._endpoint_index % len(self.endpoints)]
             self._wait_for_slot(endpoint)
@@ -36,21 +44,22 @@ class OverpassClient:
                     endpoint, data={"data": query_str}, timeout=180
                 )
                 if response.status_code == 200:
-                    api = overpy.Overpass()
-                    return api.parse_json(response.text)
+                    return response.text
 
-                logger.warning(
-                    f"HTTP {response.status_code} on {endpoint}. Response: {response.text}"
-                )
                 if response.status_code in (429, 406):
                     logger.warning(
-                        f"Rate limited (HTTP {response.status_code}) on {endpoint}. Switching..."
+                        f"Rate limited (HTTP {response.status_code}) on {endpoint}. Switching endpoint..."
                     )
-                    time.sleep(10 * attempt)  # Exponential backoff hint
+                    self._endpoint_index += 1
+                    time.sleep(5 * attempt)  # Backoff before trying next endpoint
                 else:
-                    logger.warning(f"HTTP {response.status_code} on {endpoint}")
+                    logger.warning(
+                        f"HTTP {response.status_code} on {endpoint}. Response: {response.text[:200]}"
+                    )
+                    # For other errors, also try next endpoint
+                    self._endpoint_index += 1
+                    time.sleep(2 * attempt)
 
-                self._endpoint_index += 1
             except requests.RequestException as e:
                 logger.warning(f"Request failed on {endpoint}: {e}")
                 self._endpoint_index += 1
@@ -68,8 +77,6 @@ class OverpassClient:
             if resp.status_code == 200:
                 text = resp.text
                 if "slots available now" in text:
-                    import re
-
                     m = re.search(r"(\d+) slots available now", text)
                     if m and int(m.group(1)) > 0:
                         return
@@ -79,5 +86,10 @@ class OverpassClient:
                     )
                     logger.info(f"Overpass busy, waiting {wait_secs}s...")
                     time.sleep(wait_secs)
+                elif "Connected as:" in text and "Rate limit:" in text:
+                    # Alternative status format sometimes seen
+                    if "Available slots: 0" in text:
+                        logger.info("Overpass busy (0 slots), waiting 15s...")
+                        time.sleep(15)
         except Exception as e:
-            logger.debug(f"Could not check Overpass status: {e}")
+            logger.debug(f"Could not check Overpass status at {status_url}: {e}")

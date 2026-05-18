@@ -1,4 +1,5 @@
 import concurrent.futures
+import json
 import logging
 import os
 import yaml
@@ -242,14 +243,81 @@ class MapData:
         )
         return np.column_stack([easting, northing]), zone_number, zone_letter
 
-    def run_queries(self) -> None:
+    def _get_osm_cache_path(self) -> Optional[str]:
+        if not self.coords_file:
+            return None
+        return self.coords_file.rsplit(".", 1)[0] + ".osm_cache.json"
+
+    def _save_osm_cache(self, ways_raw: str, rels_raw: str, nodes_raw: str) -> None:
+        path = self._get_osm_cache_path()
+        if not path:
+            return
+        cache_data = {
+            "bbox": [self.min_lat, self.min_long, self.max_lat, self.max_long],
+            "ways": ways_raw,
+            "rels": rels_raw,
+            "nodes": nodes_raw,
+        }
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(cache_data, f)
+            logger.info(f"Saved OSM response cache to {path}")
+        except Exception as e:
+            logger.warning(f"Could not save OSM cache: {e}")
+
+    def _load_osm_cache(self) -> Optional[Dict[str, str]]:
+        path = self._get_osm_cache_path()
+        if not path or not os.path.exists(path):
+            return None
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                cache_data = json.load(f)
+
+            # Validate bbox
+            stored_bbox = cache_data.get("bbox")
+            current_bbox = [self.min_lat, self.min_long, self.max_lat, self.max_long]
+            if not stored_bbox or len(stored_bbox) != 4:
+                return None
+
+            # 1e-6 degree tolerance (~11cm at equator)
+            if not np.allclose(stored_bbox, current_bbox, atol=1e-6):
+                logger.info("OSM cache found but bounding box has changed. Re-querying.")
+                return None
+
+            logger.info(f"Using cached OSM responses from {path}")
+            return {
+                "ways": cache_data["ways"],
+                "rels": cache_data["rels"],
+                "nodes": cache_data["nodes"],
+            }
+        except Exception as e:
+            logger.debug(f"Could not load OSM cache: {e}")
+            return None
+
+    def run_queries(self, use_cache: bool = True) -> None:
         """Download OSM ways, relations, and nodes from the Overpass API.
 
         Fires three concurrent Overpass queries covering the bounding box of
         the loaded waypoints and stores the raw JSON responses internally.
         Call :meth:`run_parse` afterwards to convert the responses into
         :class:`~map_data.utils.way.Way` objects.
+
+        Parameters
+        ----------
+        use_cache : bool
+            If ``True`` (default), attempt to load responses from a local
+            ``.osm_cache.json`` file before querying the API.
         """
+        if use_cache:
+            cache = self._load_osm_cache()
+            if cache:
+                client = OverpassClient()
+                self.osm_ways_data = client.api.parse_json(cache["ways"])
+                self.osm_rels_data = client.api.parse_json(cache["rels"])
+                self.osm_nodes_data = client.api.parse_json(cache["nodes"])
+                return
+
         bbox = f"{self.min_lat},{self.min_long},{self.max_lat},{self.max_long}"
         queries = {
             "ways": f"[out:json]; (way({bbox}); >; ); out;",
@@ -257,15 +325,27 @@ class MapData:
             "nodes": f"[out:json]; (node({bbox}); ); out;",
         }
 
-        def _fetch(q: str) -> Optional[Any]:
-            return OverpassClient().query(q)
+        client = OverpassClient()
+
+        def _fetch(q: str) -> Optional[str]:
+            return client.query_raw(q)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
             futs = {name: ex.submit(_fetch, q) for name, q in queries.items()}
-            self.osm_ways_data = futs["ways"].result()
-            self.osm_rels_data = futs["rels"].result()
-            self.osm_nodes_data = futs["nodes"].result()
+            ways_raw = futs["ways"].result()
+            rels_raw = futs["rels"].result()
+            nodes_raw = futs["nodes"].result()
+
+        if any(r is None for r in (ways_raw, rels_raw, nodes_raw)):
+            logger.error("One or more Overpass queries failed.")
+            return
+
+        self.osm_ways_data = client.api.parse_json(ways_raw)
+        self.osm_rels_data = client.api.parse_json(rels_raw)
+        self.osm_nodes_data = client.api.parse_json(nodes_raw)
+
         logger.info("All OSM queries finished.")
+        self._save_osm_cache(ways_raw, rels_raw, nodes_raw)
 
     def run_parse(self) -> int:
         """Parse the downloaded OSM data into categorised Way lists.
