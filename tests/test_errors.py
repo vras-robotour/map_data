@@ -17,35 +17,35 @@ def test_mapdata_nonexistent_gpx_raises(tmp_path):
 
 
 def test_mapdata_invalid_gpx_xml_raises(tmp_path):
-    gpx_path = str(tmp_path / "bad.gpx")
-    with open(gpx_path, "w") as f:
+    gpx_path = tmp_path / "bad.gpx"
+    with gpx_path.open("w") as f:
         f.write("not xml content at all")
     with pytest.raises(Exception):
-        MapData(gpx_path, coords_type="file")
+        MapData(str(gpx_path), coords_type="file")
 
 
 def test_load_mapdata_invalid_json(tmp_path):
-    path = str(tmp_path / "bad.mapdata")
-    with open(path, "w") as f:
+    path = tmp_path / "bad.mapdata"
+    with path.open("w") as f:
         f.write("not json content {{{")
     with pytest.raises((json.JSONDecodeError, ValueError)):
-        MapData.load(path)
+        MapData.load(str(path))
 
 
 def test_load_mapdata_missing_metadata_key(tmp_path):
-    path = str(tmp_path / "empty.mapdata")
-    with open(path, "w") as f:
+    path = tmp_path / "empty.mapdata"
+    with path.open("w") as f:
         json.dump({}, f)
     with pytest.raises((KeyError, TypeError)):
-        MapData.load(path)
+        MapData.load(str(path))
 
 
 def test_load_mapdata_legacy_pickle_raises(tmp_path):
-    path = str(tmp_path / "legacy.mapdata")
-    with open(path, "wb") as f:
+    path = tmp_path / "legacy.mapdata"
+    with path.open("wb") as f:
         f.write(b"\x80\x04\x95some pickle data")
     with pytest.raises(ValueError):
-        MapData.load(path)
+        MapData.load(str(path))
 
 
 def test_overpass_timeout_returns_none():

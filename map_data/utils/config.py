@@ -1,5 +1,5 @@
 import logging
-import os
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -17,16 +17,14 @@ def load_config(filename: str) -> dict[str, Any]:
         from ament_index_python.resources import get_resource
 
         _, package_path = get_resource("packages", "map_data")
-        config_path = os.path.join(package_path, "share", "map_data", "config", filename)
+        config_path = Path(package_path) / "share" / "map_data" / "config" / filename
     except (ImportError, LookupError):
         # Fallback for non-ROS2 environments
-        config_path = os.path.realpath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "config", filename),
-        )
+        config_path = (Path(__file__).parent / ".." / ".." / "config" / filename).resolve()
 
-    if os.path.exists(config_path):
+    if config_path.exists():
         try:
-            with open(config_path) as f:
+            with config_path.open() as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
             logger.exception("Error loading config file %s: %s", config_path, e)

@@ -1,7 +1,7 @@
 import copy
 import json
 import logging
-import os
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -110,14 +110,15 @@ def mapdata_to_geojson(map_data):
 
 
 def load_annotations(path: str) -> dict[str, Any]:
-    if os.path.isfile(path):
-        with open(path) as f:
+    p = Path(path)
+    if p.is_file():
+        with p.open() as f:
             return json.load(f)
     return {"version": 1, "annotations": []}
 
 
 def save_annotations(path: str, data: dict[str, Any]) -> None:
-    with open(path, "w") as f:
+    with Path(path).open("w") as f:
         json.dump(data, f, indent=2)
 
 

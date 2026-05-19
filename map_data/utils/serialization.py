@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -57,15 +58,16 @@ def map_data_to_dict(md: Any) -> dict[str, Any]:
     }
 
 
-def save_mapdata(md: Any, path: str) -> None:
+def save_mapdata(md: Any, path: str | Path) -> None:
     data = map_data_to_dict(md)
-    with open(path, "w", encoding="utf-8") as f:
+    with Path(path).open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
 
-def load_mapdata(md_class: Any, path: str) -> Any:
+def load_mapdata(md_class: Any, path: str | Path) -> Any:
+    p = Path(path)
     # Check if it's a legacy pickle file (starts with 0x80)
-    with open(path, "rb") as f:
+    with p.open("rb") as f:
         header = f.read(1)
 
     if header == b"\x80":
@@ -78,7 +80,7 @@ def load_mapdata(md_class: Any, path: str) -> Any:
         raise ValueError(f"Legacy pickle format no longer supported: {path}")
 
     # Try JSON
-    with open(path, encoding="utf-8") as f:
+    with p.open(encoding="utf-8") as f:
         data = json.load(f)
 
     meta = data["metadata"]

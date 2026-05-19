@@ -1,8 +1,8 @@
 import argparse
 import logging
-import os
 import threading
 import time
+from pathlib import Path
 
 from flask import Flask
 from flask_socketio import SocketIO
@@ -37,11 +37,11 @@ def telemetry_broadcaster() -> None:
 
 def create_app(data_dir: str | None = None) -> Flask:
     # Explicitly set paths relative to this file
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    template_dir = os.path.join(base_dir, "templates")
-    static_dir = os.path.join(base_dir, "static")
+    base_dir = Path(__file__).parent
+    template_dir = base_dir / "templates"
+    static_dir = base_dir / "static"
 
-    app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
+    app = Flask(__name__, template_folder=str(template_dir), static_folder=str(static_dir))
     app.url_map.converters["signed_int"] = SignedIntConverter
 
     if data_dir:
@@ -105,7 +105,7 @@ def main() -> None:
     data_dir = None
 
     if args.data_dir:
-        data_dir = os.path.realpath(args.data_dir)
+        data_dir = str(Path(args.data_dir).resolve())
 
     app = create_app(data_dir=data_dir)
 

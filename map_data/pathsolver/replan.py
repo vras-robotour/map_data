@@ -2,9 +2,9 @@
 
 import argparse
 import logging
-import os
 import sys
 import threading
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -330,8 +330,9 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args()
 
-    path_file = os.path.join(os.path.dirname(__file__), "../", args.path)
-    path_data = parse_path(path_file)
+    base_dir = Path(__file__).parent
+    path_file = (base_dir / ".." / args.path).resolve()
+    path_data = parse_path(str(path_file))
 
     if args.file is None:
         map_data = MapData(path_data, coords_type="array")
@@ -340,7 +341,8 @@ if __name__ == "__main__":
         if ret:
             sys.exit(1)
     else:
-        map_data = MapData.load(os.path.join(os.path.dirname(__file__), "../", args.file))
+        map_file = (base_dir / ".." / args.file).resolve()
+        map_data = MapData.load(str(map_file))
 
     args.low = (map_data.min_x, map_data.min_y)
     args.high = (map_data.max_x, map_data.max_y)
@@ -354,7 +356,7 @@ if __name__ == "__main__":
     if args.save and new_path is not None:
         new_wgs_path = utm_path_to_latlon(new_path, path_data[1], path_data[2])
         gpx_content = create_gpx_content(new_wgs_path, creator_name="A* Replanner")
-        with open(args.save, "w") as f:
+        with Path(args.save).open("w") as f:
             f.write(gpx_content)
 
     if args.visualize:

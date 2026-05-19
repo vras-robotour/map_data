@@ -1,5 +1,5 @@
 import logging
-import os
+from pathlib import Path
 
 import gpxpy
 import numpy as np
@@ -16,14 +16,15 @@ def parse_path(path_file: str) -> tuple[np.ndarray, int, str] | list:
     if not path_file:
         logger.error("No path file provided.")
         return []
-    if not os.path.exists(path_file):
+    p = Path(path_file)
+    if not p.exists():
         logger.error("Path file %s does not exist.", path_file)
         return []
 
-    if path_file.endswith(".gpx"):
-        return parse_gpx_file(path_file)
-    if path_file.endswith(".yaml"):
-        return parse_yaml_file(path_file)
+    if p.suffix == ".gpx":
+        return parse_gpx_file(str(p))
+    if p.suffix == ".yaml":
+        return parse_yaml_file(str(p))
     logger.error("Unsupported file format: %s.", path_file)
     return []
 
@@ -32,7 +33,7 @@ def parse_gpx_file(gpx_file: str) -> tuple[np.ndarray, int, str] | list:
     waypoints = []
     zone_num, zone_let = None, None
     try:
-        with open(gpx_file) as file:
+        with Path(gpx_file).open() as file:
             gpx = gpxpy.parse(file)
         for waypoint in gpx.waypoints:
             point = {
@@ -59,7 +60,7 @@ def parse_yaml_file(yaml_file: str) -> tuple[np.ndarray, int, str] | list:
     waypoints = []
     zone_num, zone_let = None, None
     try:
-        with open(yaml_file) as f:
+        with Path(yaml_file).open() as f:
             data = yaml.safe_load(f)
         file_waypoints = data["waypoints"]
         for waypoint in file_waypoints:

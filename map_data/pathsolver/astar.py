@@ -2,12 +2,12 @@ import heapq
 from collections.abc import Callable, Iterable
 
 
-def astar_search[_N](
-    start_node: _N,
-    goal_node: _N,
-    get_neighbors_func: Callable[[_N], Iterable[tuple[_N, float]]],
-    heuristic_func: Callable[[_N], float],
-) -> list[_N] | None:
+def astar_search[N](
+    start_node: N,
+    goal_node: N,
+    get_neighbors_func: Callable[[N], Iterable[tuple[N, float]]],
+    heuristic_func: Callable[[N], float],
+) -> list[N] | None:
     """
     A generic A* search implementation.
 

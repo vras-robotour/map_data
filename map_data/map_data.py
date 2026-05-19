@@ -1,7 +1,7 @@
 import concurrent.futures
 import json
 import logging
-import os
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -102,7 +102,7 @@ class MapData:
 
         """
         if coords_type == "file":
-            with open(coords) as f:
+            with Path(coords).open() as f:
                 gpx_object = gpxparse(f)
             self.coords_file: str | None = coords
 
@@ -197,30 +197,28 @@ class MapData:
             from ament_index_python.resources import get_resource
 
             _, package_path = get_resource("packages", "map_data")
-            params_path = os.path.join(package_path, "share", "map_data", "parameters")
+            params_path = Path(package_path) / "share" / "map_data" / "parameters"
         except Exception:
-            params_path = os.path.realpath(
-                os.path.join(os.path.dirname(__file__), "..", "parameters"),
-            )
+            params_path = (Path(__file__).parent / ".." / "parameters").resolve()
 
         self.BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
-            os.path.join(params_path, "barrier_tags.csv"),
+            params_path / "barrier_tags.csv",
         )
         self.NOT_BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
-            os.path.join(params_path, "not_barrier_tags.csv"),
+            params_path / "not_barrier_tags.csv",
         )
         self.ANTI_BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
-            os.path.join(params_path, "anti_barrier_tags.csv"),
+            params_path / "anti_barrier_tags.csv",
         )
         self.OBSTACLE_TAGS: dict[str, list[str]] = self._csv_to_dict(
-            os.path.join(params_path, "obstacle_tags.csv"),
+            params_path / "obstacle_tags.csv",
         )
         self.NOT_OBSTACLE_TAGS: dict[str, list[str]] = self._csv_to_dict(
-            os.path.join(params_path, "not_obstacle_tags.csv"),
+            params_path / "not_obstacle_tags.csv",
         )
 
     @staticmethod
-    def _csv_to_dict(path: str) -> dict[str, list[str]]:
+    def _csv_to_dict(path: str | Path) -> dict[str, list[str]]:
         arr = np.genfromtxt(path, dtype=str, delimiter=",")
         result: dict[str, list[str]] = {}
         for row in arr:
@@ -232,10 +230,10 @@ class MapData:
         easting, northing, zone_number, zone_letter = utm.from_latlon(latlon[:, 0], latlon[:, 1])
         return np.column_stack([easting, northing]), zone_number, zone_letter
 
-    def _get_osm_cache_path(self) -> str | None:
+    def _get_osm_cache_path(self) -> Path | None:
         if not self.coords_file:
             return None
-        return self.coords_file.rsplit(".", 1)[0] + ".osm_cache.json"
+        return Path(self.coords_file).with_suffix(".osm_cache.json")
 
     def _save_osm_cache(self, ways_raw: str, rels_raw: str, nodes_raw: str) -> None:
         path = self._get_osm_cache_path()
@@ -248,7 +246,7 @@ class MapData:
             "nodes": nodes_raw,
         }
         try:
-            with open(path, "w", encoding="utf-8") as f:
+            with path.open("w", encoding="utf-8") as f:
                 json.dump(cache_data, f)
             logger.info("Saved OSM response cache to %s", path)
         except Exception as e:
@@ -256,11 +254,11 @@ class MapData:
 
     def _load_osm_cache(self) -> dict[str, str] | None:
         path = self._get_osm_cache_path()
-        if not path or not os.path.exists(path):
+        if not path or not path.exists():
             return None
 
         try:
-            with open(path, encoding="utf-8") as f:
+            with path.open(encoding="utf-8") as f:
                 cache_data = json.load(f)
 
             # Validate bbox
@@ -453,7 +451,7 @@ class MapData:
         """
         if path is None:
             if self.coords_file:
-                path = self.coords_file.rsplit(".", 1)[0] + ".mapdata"
+                path = str(Path(self.coords_file).with_suffix(".mapdata"))
             else:
                 logger.error("No save path provided and no source file available.")
                 return

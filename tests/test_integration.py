@@ -90,11 +90,11 @@ def test_gpx_parse_creates_waypoints(tmp_path):
   <wpt lat="50.001" lon="14.001"/>
   <wpt lat="50.002" lon="14.002"/>
 </gpx>"""
-    gpx_path = str(tmp_path / "test.gpx")
-    with open(gpx_path, "w") as f:
+    gpx_path = tmp_path / "test.gpx"
+    with gpx_path.open("w") as f:
         f.write(gpx_content)
 
-    md = MapData(gpx_path, coords_type="file")
+    md = MapData(str(gpx_path), coords_type="file")
     assert md.waypoints.shape[1] == 2
     assert len(md.waypoints) == 3
 

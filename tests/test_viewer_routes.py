@@ -173,7 +173,7 @@ def test_delete_way(app_client_with_file):
     assert resp.status_code == 204
 
     ann_path = tmp_path / "test.annotations.json"
-    with open(ann_path) as f:
+    with ann_path.open() as f:
         store = json.load(f)
     deleted_ids = {(d["id"] if isinstance(d, dict) else d) for d in store.get("deleted_ways", [])}
     assert 1 in deleted_ids
@@ -273,7 +273,7 @@ def test_restore_way(app_client_with_file):
     assert resp.status_code == 204
 
     ann_path = tmp_path / "test.annotations.json"
-    with open(ann_path) as f:
+    with ann_path.open() as f:
         store = json.load(f)
     deleted_ids = {(d["id"] if isinstance(d, dict) else d) for d in store.get("deleted_ways", [])}
     assert 1 not in deleted_ids

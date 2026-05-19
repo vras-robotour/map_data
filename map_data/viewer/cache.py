@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 
 from map_data.map_data import MapData
 
@@ -10,7 +10,8 @@ _mapdata_cache: dict = {}
 
 
 def load_mapdata_cached(path: str) -> MapData:
-    mtime = os.path.getmtime(path)
+    p = Path(path)
+    mtime = p.stat().st_mtime
     key = (path, mtime)
     if key not in _mapdata_cache:
         # Evict stale entries for the same path

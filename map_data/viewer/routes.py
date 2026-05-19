@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -135,36 +136,36 @@ def _apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
             setattr(md, lst_name, new_lst)
 
 
-def _get_data_dir() -> str:
+def _get_data_dir() -> Path:
     if current_app.config.get("DATA_DIR"):
-        return current_app.config["DATA_DIR"]
+        return Path(current_app.config["DATA_DIR"])
     try:
         from ament_index_python.resources import get_resource
 
         _, pkg = get_resource("packages", "map_data")
-        return os.path.join(pkg, "share", "map_data", "data")
+        return Path(pkg) / "share" / "map_data" / "data"
     except Exception:
         # Fallback to the local data directory relative to this file
-        return os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", "data"))
+        return (Path(__file__).parent / ".." / ".." / "data").resolve()
 
 
-def _safe_data_path(filename: str) -> str:
+def _safe_data_path(filename: str) -> Path:
     """
     Resolve a user-supplied filename within the data directory.
 
     Aborts with 400 if the resolved path would escape the data directory
     (e.g. via '../' traversal sequences).
     """
-    data_dir = os.path.realpath(_get_data_dir())
-    resolved = os.path.realpath(os.path.join(data_dir, filename))
-    if not (resolved == data_dir or resolved.startswith(data_dir + os.sep)):
+    data_dir = _get_data_dir().resolve()
+    resolved = (data_dir / filename).resolve()
+    if not (resolved == data_dir or data_dir in resolved.parents):
         abort(400, "Invalid file path")
     return resolved
 
 
-def _annotation_path(filename: str) -> str:
-    base = os.path.splitext(os.path.basename(filename))[0]
-    return os.path.join(os.path.realpath(_get_data_dir()), f"{base}.annotations.json")
+def _annotation_path(filename: str) -> Path:
+    base = Path(filename).stem
+    return _get_data_dir().resolve() / f"{base}.annotations.json"
 
 
 @bp.route("/")
@@ -182,11 +183,11 @@ def index():
 def list_files():
     result = {"mapdata": [], "gpx": []}
     try:
-        for name in sorted(os.listdir(_get_data_dir())):
-            if name.endswith(".mapdata"):
-                result["mapdata"].append(name)
-            elif name.endswith(".gpx"):
-                result["gpx"].append(name)
+        for p in sorted(_get_data_dir().iterdir()):
+            if p.suffix == ".mapdata":
+                result["mapdata"].append(p.name)
+            elif p.suffix == ".gpx":
+                result["gpx"].append(p.name)
     except FileNotFoundError:
         pass
     return jsonify(result)
@@ -198,10 +199,10 @@ def get_mapdata():
     if not filename:
         abort(400, "Missing 'file' query parameter")
     path = _safe_data_path(filename)
-    if not os.path.isfile(path):
+    if not path.is_file():
         abort(404, f"File not found: {filename}")
-    map_data = copy.copy(load_mapdata_cached(path))
-    store = load_annotations(_annotation_path(filename))
+    map_data = copy.copy(load_mapdata_cached(str(path)))
+    store = load_annotations(str(_annotation_path(filename)))
 
     _apply_way_edits(map_data, store)
 
@@ -236,7 +237,7 @@ def add_annotation():
     body = request.get_json(force=True)
     if not body or "geometry" not in body:
         abort(400, "Request body must include 'geometry'")
-    ann_path = _annotation_path(filename)
+    ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     ann = {
         "id": str(uuid.uuid4()),
@@ -257,7 +258,7 @@ def update_annotation(ann_id):
     body = request.get_json(force=True)
     if not body or "geometry" not in body:
         abort(400, "Request body must include 'geometry'")
-    ann_path = _annotation_path(filename)
+    ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     ann = next((a for a in store["annotations"] if a["id"] == ann_id), None)
     if ann is None:
@@ -276,7 +277,7 @@ def delete_annotation(ann_id):
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
-    ann_path = _annotation_path(filename)
+    ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     before = len(store["annotations"])
     store["annotations"] = [a for a in store["annotations"] if a["id"] != ann_id]
@@ -301,8 +302,8 @@ def fetch_area():
         abort(400, "name is empty after sanitizing")
 
     data_dir = _get_data_dir()
-    os.makedirs(data_dir, exist_ok=True)
-    out_path = os.path.join(data_dir, f"{name}.mapdata")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    out_path = data_dir / f"{name}.mapdata"
 
     corners = np.array(
         [
@@ -346,22 +347,22 @@ def upload_gpx():
 
     name = request.form.get("name")
     if not name:
-        name = os.path.splitext(file.filename)[0]
+        name = Path(file.filename).stem
 
     name = re.sub(r"[^a-zA-Z0-9_\-]", "_", name.strip())
     if not name:
         abort(400, "name is empty after sanitizing")
 
     data_dir = _get_data_dir()
-    os.makedirs(data_dir, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     # Use a temporary file to avoid saving the GPX to the data directory
     with tempfile.NamedTemporaryFile(suffix=".gpx", delete=False) as tmp:
         file.save(tmp.name)
-        gpx_tmp_path = tmp.name
+        gpx_tmp_path = Path(tmp.name)
 
     try:
-        md = MapData(gpx_tmp_path, coords_type="file")
+        md = MapData(str(gpx_tmp_path), coords_type="file")
         # Restore the original filename for metadata purposes
         md.coords_file = file.filename
 
@@ -372,8 +373,8 @@ def upload_gpx():
         if md.run_parse() != 0:
             abort(500, "Parsing failed")
 
-        out_path = os.path.join(data_dir, f"{name}.mapdata")
-        md.save(out_path)
+        out_path = data_dir / f"{name}.mapdata"
+        md.save(str(out_path))
 
         return jsonify(
             {
@@ -388,8 +389,8 @@ def upload_gpx():
         logger.error("Error processing GPX upload: %s", e, exc_info=True)
         abort(500, str(e))
     finally:
-        if os.path.exists(gpx_tmp_path):
-            os.remove(gpx_tmp_path)
+        if gpx_tmp_path.exists():
+            gpx_tmp_path.unlink()
 
 
 @bp.route("/api/way_nodes")
@@ -399,11 +400,11 @@ def get_way_nodes():
     if not filename or way_id is None:
         abort(400, "Missing 'file' or 'way_id' query parameter")
     path = _safe_data_path(filename)
-    if not os.path.isfile(path):
+    if not path.is_file():
         abort(404, f"File not found: {filename}")
 
-    md = load_mapdata_cached(path)
-    store = load_annotations(_annotation_path(filename))
+    md = load_mapdata_cached(str(path))
+    store = load_annotations(str(_annotation_path(filename)))
 
     original_way_id_str = str(way_id).split(":")[0]
     try:
@@ -510,11 +511,11 @@ def get_way(way_id):
     if not filename:
         abort(400, "Missing 'file' query parameter")
     path = _safe_data_path(filename)
-    if not os.path.isfile(path):
+    if not path.is_file():
         abort(404, f"File not found: {filename}")
 
-    md = load_mapdata_cached(path)
-    store = load_annotations(_annotation_path(filename))
+    md = load_mapdata_cached(str(path))
+    store = load_annotations(str(_annotation_path(filename)))
     nodes_cache = getattr(md, "nodes_cache", {})
 
     way = None
@@ -632,7 +633,7 @@ def delete_way(way_id):
         abort(400, "Invalid way ID")
 
     body = request.get_json(force=True) or {}
-    ann_path = _annotation_path(filename)
+    ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     migrate_change_log(store)
     if way_id_int not in get_deleted_way_ids(store):
@@ -662,7 +663,7 @@ def update_way_tags(way_id):
     tags = body.get("tags")
     if not isinstance(tags, dict):
         abort(400, "Request body must include 'tags' dict")
-    ann_path = _annotation_path(filename)
+    ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     migrate_change_log(store)
     store.setdefault("tag_overrides", {})[original_way_id_str] = tags
@@ -682,7 +683,7 @@ def delete_way_tags(way_id):
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
-    ann_path = _annotation_path(filename)
+    ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     store.get("tag_overrides", {}).pop(str(way_id), None)
     store.get("tag_override_meta", {}).pop(str(way_id), None)
@@ -704,8 +705,8 @@ def get_way_segments(way_id):
 
 def _get_way_segments_geojson(filename, original_way_id):
     path = _safe_data_path(filename)
-    md = load_mapdata_cached(path)
-    store = load_annotations(_annotation_path(filename))
+    md = load_mapdata_cached(str(path))
+    store = load_annotations(str(_annotation_path(filename)))
 
     original_way = None
     category = None
@@ -818,7 +819,7 @@ def split_way_endpoint():
     # If way_id is virtual (e.g. 123:0), get original ID
     original_way_id = way_id_val.split(":")[0]
 
-    ann_path = _annotation_path(filename)
+    ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     migrate_change_log(store)
     splits = store.setdefault("split_ways", {})
@@ -860,7 +861,7 @@ def undo_way_split():
         node_id_int = int(node_id)
     except (ValueError, TypeError):
         abort(400, "way_id and node_id must be integers")
-    ann_path = _annotation_path(filename)
+    ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     splits = store.get("split_ways", {})
     if str(way_id_int) in splits:
@@ -897,7 +898,7 @@ def hide_way(way_id):
         abort(400, "Invalid way ID")
 
     body = request.get_json(force=True) or {}
-    ann_path = _annotation_path(filename)
+    ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     hw = store.setdefault("hidden_ways", [])
     existing_ids = {(d["id"] if isinstance(d, dict) else d) for d in hw}
@@ -925,7 +926,7 @@ def show_way(way_id):
     except ValueError:
         abort(400, "Invalid way ID")
 
-    ann_path = _annotation_path(filename)
+    ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     hw = store.get("hidden_ways", [])
     store["hidden_ways"] = [d for d in hw if (d["id"] if isinstance(d, dict) else d) != way_id_int]
@@ -945,7 +946,7 @@ def restore_way(way_id):
     except ValueError:
         abort(400, "Invalid way ID")
 
-    ann_path = _annotation_path(filename)
+    ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     dw = store.get("deleted_ways", [])
     store["deleted_ways"] = [d for d in dw if (d["id"] if isinstance(d, dict) else d) != way_id_int]
@@ -972,7 +973,7 @@ def delete_way_node():
     except (ValueError, TypeError):
         abort(400, "way_id and node_id must be integers (way_id can be virtual)")
 
-    ann_path = _annotation_path(filename)
+    ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     migrate_change_log(store)
 
@@ -1020,7 +1021,7 @@ def restore_way_node():
     except (ValueError, TypeError):
         abort(400, "way_id and node_id must be integers (way_id can be virtual)")
 
-    ann_path = _annotation_path(filename)
+    ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
 
     # Use the full way_id to match the deletion record
@@ -1065,7 +1066,7 @@ def move_way_nodes():
     nodes = body.get("nodes")
     if not isinstance(nodes, list):
         abort(400, "Request body must include 'nodes' list")
-    ann_path = _annotation_path(filename)
+    ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     overrides = store.setdefault("node_position_overrides", {})
     way_key = original_way_id_str
@@ -1105,7 +1106,7 @@ def undo_move_way_nodes():
     except (ValueError, TypeError):
         abort(400, "way_id must be an integer or virtual ID")
 
-    ann_path = _annotation_path(filename)
+    ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     store.get("node_position_overrides", {}).pop(original_way_id_str, None)
     cl = store.get("change_log", [])
@@ -1118,11 +1119,11 @@ def undo_move_way_nodes():
 
 def get_merged_mapdata(filename):
     path = _safe_data_path(filename)
-    if not os.path.isfile(path):
+    if not path.is_file():
         return None, None
 
-    store = load_annotations(_annotation_path(filename))
-    md = copy.deepcopy(load_mapdata_cached(path))
+    store = load_annotations(str(_annotation_path(filename)))
+    md = copy.deepcopy(load_mapdata_cached(str(path)))
     zn, zl = md.zone_number, md.zone_letter
 
     _apply_way_edits(md, store)
@@ -1202,7 +1203,7 @@ def export_mapdata():
     buf = io.BytesIO()
     buf.write(json.dumps(map_data_to_dict(md), indent=2).encode("utf-8"))
     buf.seek(0)
-    base = filename.rsplit(".", 1)[0]
+    base = Path(filename).stem
     return send_file(
         buf,
         as_attachment=True,
@@ -1296,13 +1297,13 @@ class WormholeManager:
 
     def create_transfer(self, gpx_data):
         transfer_id = str(uuid.uuid4())
-        temp_dir = tempfile.mkdtemp()
-        file_path = os.path.join(temp_dir, "path.gpx")
+        temp_dir = Path(tempfile.mkdtemp())
+        file_path = temp_dir / "path.gpx"
 
-        with open(file_path, "w") as f:
+        with file_path.open("w") as f:
             f.write(gpx_data)
 
-        cmd = ["wormhole", "send", file_path]
+        cmd = ["wormhole", "send", str(file_path)]
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
 
