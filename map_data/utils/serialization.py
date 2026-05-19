@@ -1,12 +1,15 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from shapely import wkt
 
 from map_data.utils.way import Way
+
+if TYPE_CHECKING:
+    from map_data.map_data import MapData
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +37,7 @@ def way_from_dict(data: dict[str, Any]) -> Way:
     )
 
 
-def map_data_to_dict(md: Any) -> dict[str, Any]:
+def map_data_to_dict(md: "MapData") -> dict[str, Any]:
     return {
         "metadata": {
             "zone_number": md.zone_number,
@@ -58,13 +61,13 @@ def map_data_to_dict(md: Any) -> dict[str, Any]:
     }
 
 
-def save_mapdata(md: Any, path: str | Path) -> None:
+def save_mapdata(md: "MapData", path: str | Path) -> None:
     data = map_data_to_dict(md)
     with Path(path).open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
 
-def load_mapdata(md_class: Any, path: str | Path) -> Any:
+def load_mapdata(md_class: type["MapData"], path: str | Path) -> "MapData":
     p = Path(path)
     # Check if it's a legacy pickle file (starts with 0x80)
     with p.open("rb") as f:

@@ -52,7 +52,7 @@ def create_app(data_dir: str | None = None) -> Flask:
 
     # Context processor to expose ROS status to templates
     @app.context_processor
-    def inject_vars():
+    def inject_vars() -> dict[str, bool]:
         return {"ros_available": ROS_AVAILABLE}
 
     global tracker_node
@@ -65,7 +65,7 @@ def create_app(data_dir: str | None = None) -> Flask:
             tracker_node = TrackerNode()
 
             # Start ROS2 spin in a separate thread
-            def ros_spin():
+            def ros_spin() -> None:
                 rclpy.spin(tracker_node)
 
             spin_thread = threading.Thread(target=ros_spin, daemon=True)

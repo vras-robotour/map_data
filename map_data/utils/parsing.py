@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 import numpy as np
+import overpy
 import utm
 from shapely import geometry
 from shapely.ops import linemerge
@@ -17,7 +18,7 @@ OBSTACLE_RADIUS = _DEFAULTS.get("obstacle_radius", 2.0)
 BUFFER_WIDTHS = _DEFAULTS.get("buffer_widths", {"road": 7, "footway": 3, "barrier": 2})
 
 
-def parse_osm_ways(osm_ways_data: Any, nodes_cache: dict[int, Any]) -> dict[int, Way]:
+def parse_osm_ways(osm_ways_data: overpy.Result, nodes_cache: dict[int, dict[str, Any]]) -> dict[int, Way]:
     ways = {}
     for way in tqdm(osm_ways_data.ways, desc="Parse ways"):
         lats = np.array([float(n.lat) for n in way.nodes])
@@ -44,7 +45,7 @@ def parse_osm_ways(osm_ways_data: Any, nodes_cache: dict[int, Any]) -> dict[int,
     return ways
 
 
-def parse_osm_rels(osm_rels_data: Any, ways: dict[int, Way]) -> None:
+def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
     for rel in tqdm(osm_rels_data.relations, desc="Parse rels"):
         outer_ids, inner_ids = [], []
 
@@ -64,8 +65,8 @@ def parse_osm_rels(osm_rels_data: Any, ways: dict[int, Way]) -> None:
 
 
 def parse_osm_nodes(
-    osm_nodes_data: Any,
-    nodes_cache: dict[int, Any],
+    osm_nodes_data: overpy.Result,
+    nodes_cache: dict[int, dict[str, Any]],
     way_node_ids: set[int],
     obstacle_tags: dict[str, list[str]],
     not_obstacle_tags: dict[str, list[str]],

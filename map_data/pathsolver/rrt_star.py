@@ -1,10 +1,11 @@
 import random
 from collections.abc import Iterator
-from typing import Any
 
 import numpy as np
+import shapely as sh
 from scipy.spatial import cKDTree
 from shapely.geometry import LineString, Point
+from shapely.strtree import STRtree
 
 from map_data.utils.config import load_config
 
@@ -40,8 +41,8 @@ class RRTStar:
         self,
         start: np.ndarray,
         goal: np.ndarray,
-        obstacles: list,
-        obstacles_tree: Any | None,
+        obstacles: list[sh.geometry.base.BaseGeometry],
+        obstacles_tree: STRtree | None,
         grid: np.ndarray,
         low: tuple[float, float],
         grid_scale: float = 1.0,

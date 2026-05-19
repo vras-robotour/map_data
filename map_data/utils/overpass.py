@@ -14,7 +14,7 @@ OVERPASS_ENDPOINTS = [
 
 
 class OverpassClient:
-    def __init__(self, endpoints: list | None = None):
+    def __init__(self, endpoints: list[str] | None = None) -> None:
         self.endpoints = endpoints or OVERPASS_ENDPOINTS
         self._endpoint_index = 0
         self.session = requests.Session()

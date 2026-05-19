@@ -273,7 +273,7 @@ class ReplanPath:
 
     def fill_grid(
         self,
-        map_data: Any,
+        map_data: MapData,
         highway_types: list[str] | None = None,
         max_path_dist: float = 2.0,
     ) -> None:

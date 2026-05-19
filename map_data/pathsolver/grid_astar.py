@@ -47,7 +47,7 @@ def grid_astar(
     ny, nx = grid.shape
 
     # Convert UTM to grid indices
-    def to_idx(p):
+    def to_idx(p: tuple[float, float] | np.ndarray) -> tuple[int, int]:
         ix = int(np.floor((p[0] - low[0]) / cs))
         iy = int(np.floor((p[1] - low[1]) / cs))
         return ix, iy

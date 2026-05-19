@@ -1,9 +1,12 @@
-from typing import Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 import shapely as sh
 from matplotlib.path import Path
 from scipy.spatial import cKDTree
+
+if TYPE_CHECKING:
+    from map_data.map_data import MapData
 
 
 class PathGrid:
@@ -16,7 +19,7 @@ class PathGrid:
         surface_costs: dict[str, float],
         default_off_path_cost: float = 0.9,
         path_cost_cap: float = 0.85,
-    ):
+    ) -> None:
         self.low = np.array(low)
         self.high = np.array(high)
         self.cell_size = cell_size
@@ -44,7 +47,7 @@ class PathGrid:
 
     def fill(
         self,
-        map_data: Any,
+        map_data: "MapData",
         obstacles: list[sh.geometry.base.BaseGeometry],
         highway_types: list[str] | None = None,
         max_path_dist: float = 2.0,

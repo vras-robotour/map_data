@@ -2,7 +2,7 @@ import copy
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import utm
@@ -16,6 +16,12 @@ from shapely.geometry import (
 from shapely.geometry import (
     Polygon as _SPoly,
 )
+
+if TYPE_CHECKING:
+    from shapely.geometry.base import BaseGeometry
+
+    from map_data.map_data import MapData
+    from map_data.utils.way import Way
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +41,17 @@ def ring_to_latlon(
     return result
 
 
-def geom_to_geojson(geom, zone_number, zone_letter):
+def geom_to_geojson(
+    geom: "_SLS | _SPoly | _SMPoly", zone_number: int, zone_letter: str,
+) -> dict[str, Any] | None:
     gtype = geom.geom_type
     if gtype == "Polygon":
+        assert isinstance(geom, _SPoly)
         exterior = ring_to_latlon(geom.exterior.coords, zone_number, zone_letter)
         interiors = [ring_to_latlon(r.coords, zone_number, zone_letter) for r in geom.interiors]
         return {"type": "Polygon", "coordinates": [exterior, *interiors]}
     if gtype == "MultiPolygon":
+        assert isinstance(geom, _SMPoly)
         polygons = []
         for poly in geom.geoms:
             exterior = ring_to_latlon(poly.exterior.coords, zone_number, zone_letter)
@@ -49,6 +59,7 @@ def geom_to_geojson(geom, zone_number, zone_letter):
             polygons.append([exterior, *interiors])
         return {"type": "MultiPolygon", "coordinates": polygons}
     if gtype == "LineString":
+        assert isinstance(geom, _SLS)
         return {
             "type": "LineString",
             "coordinates": ring_to_latlon(geom.coords, zone_number, zone_letter),
@@ -56,14 +67,14 @@ def geom_to_geojson(geom, zone_number, zone_letter):
     return None
 
 
-def mapdata_to_geojson(map_data):
+def mapdata_to_geojson(map_data: "MapData") -> dict[str, Any]:
     features = []
     zn, zl = map_data.zone_number, map_data.zone_letter
 
-    def add_ways(ways, category):
+    def add_ways(ways: list["Way"], category: str) -> None:
         for way in ways:
             try:
-                geom = geom_to_geojson(way.line, zn, zl)
+                geom = geom_to_geojson(way.line, zn, zl) if way.line else None  # type: ignore[arg-type]
             except Exception as e:
                 logger.warning("Failed to convert geometry for way %s: %s", way.id, e)
                 continue
@@ -122,7 +133,7 @@ def save_annotations(path: str, data: dict[str, Any]) -> None:
         json.dump(data, f, indent=2)
 
 
-def get_deleted_way_ids(store):
+def get_deleted_way_ids(store: dict[str, Any]) -> set[int | str]:
     """
     Return set of deleted way IDs, handling both old (int list) and new (dict list) formats.
     """
@@ -130,7 +141,7 @@ def get_deleted_way_ids(store):
     return {(d["id"] if isinstance(d, dict) else d) for d in dw}
 
 
-def get_deleted_node_ids(store, way_id):
+def get_deleted_node_ids(store: dict[str, Any], way_id: int | str) -> set[int]:
     """
     Return set of deleted node IDs for a given way_id, handling both storage formats.
     """
@@ -140,7 +151,7 @@ def get_deleted_node_ids(store, way_id):
     return {d["node_id"] for d in dn if d["way_id"] == way_id}
 
 
-def get_split_node_ids(store, way_id):
+def get_split_node_ids(store: dict[str, Any], way_id: int | str) -> list[int]:
     """
     Return list of node IDs where the given way should be split.
     """
@@ -150,7 +161,13 @@ def get_split_node_ids(store, way_id):
     return [int(nid) for nid in way_splits]
 
 
-def split_way(way, split_nids, zone_number=None, zone_letter=None, nodes_cache=None):
+def split_way(
+    way: "Way",
+    split_nids: list[int],
+    zone_number: int | None = None,
+    zone_letter: str | None = None,
+    nodes_cache: dict[int, dict[str, Any]] | None = None,
+) -> list["Way"]:
     """
     Split a way at specified node IDs into a list of new Way objects.
     """
@@ -254,7 +271,7 @@ def split_way(way, split_nids, zone_number=None, zone_letter=None, nodes_cache=N
 _MIGRATION_VERSION = "v2"
 
 
-def migrate_change_log(store):
+def migrate_change_log(store: dict[str, Any]) -> None:
     """
     Ensure change_log covers all existing changes with proportional way/node interleaving.
 
@@ -329,7 +346,7 @@ def migrate_change_log(store):
     store["change_log_migration"] = _MIGRATION_VERSION
 
 
-def get_node_position_overrides(store, way_id):
+def get_node_position_overrides(store: dict[str, Any], way_id: int | str) -> dict[int, dict[str, float]]:
     """
     Return {node_id (int): {lat, lon}} for position overrides on a given way.
     """
@@ -341,8 +358,13 @@ def get_node_position_overrides(store, way_id):
 
 
 def apply_node_position_overrides(
-    way, overrides, zone_number, zone_letter, nodes_cache=None, category=None,
-):
+    way: "Way",
+    overrides: dict[int, dict[str, float]],
+    zone_number: int,
+    zone_letter: str,
+    nodes_cache: dict[int, dict[str, Any]] | None = None,
+    category: str | None = None,
+) -> "Way":
     """
     Return a copy of way with geometry updated from node position overrides.
 
@@ -490,12 +512,14 @@ def apply_node_position_overrides(
 # ------------------------------------------------------------------
 
 
-def geojson_geom_to_utm(geometry, zone_number, zone_letter):
+def geojson_geom_to_utm(
+    geometry: dict[str, Any], zone_number: int, zone_letter: str,
+) -> "BaseGeometry | None":
     """
     GeoJSON geometry (lon/lat) → Shapely geometry (UTM, same zone as mapdata).
     """
 
-    def pt(c):
+    def pt(c: list[float] | tuple[float, float]) -> tuple[float, float]:
         e, n, _, _ = utm.from_latlon(
             c[1],
             c[0],
@@ -520,8 +544,13 @@ def geojson_geom_to_utm(geometry, zone_number, zone_letter):
 
 
 def rebuild_way_without_nodes(
-    way, del_nids, zone_number=None, zone_letter=None, nodes_cache=None, category=None,
-):
+    way: "Way",
+    del_nids: set[int] | list[int],
+    zone_number: int | None = None,
+    zone_letter: str | None = None,
+    nodes_cache: dict[int, dict[str, Any]] | None = None,
+    category: str | None = None,
+) -> "Way | None":
     """
     Return a shallow copy of way with del_nids removed, or None if geometry becomes invalid.
     """

@@ -179,7 +179,10 @@ class GraphPlanner:
         return (n1, n2, projected_point), min_dist
 
     def a_star(
-        self, start_node, goal_node, extra_nodes: dict | None = None,
+        self,
+        start_node: int | str,
+        goal_node: int | str,
+        extra_nodes: dict | None = None,
     ) -> list[np.ndarray] | None:
         """
         Run A* between two graph nodes and return the path as UTM coordinates.
@@ -204,8 +207,10 @@ class GraphPlanner:
 
         """
 
-        def get_neighbors(u):
-            neighs = list(self.graph.get(u, []))
+        def get_neighbors(u: int | str) -> list[tuple[int | str, float]]:
+            neighs: list[tuple[int | str, float]] = []
+            if isinstance(u, int):
+                neighs.extend(self.graph.get(u, []))
             if extra_nodes and u in extra_nodes:
                 neighs.extend(extra_nodes[u])
             return neighs
@@ -213,10 +218,10 @@ class GraphPlanner:
         if not get_neighbors(start_node) and start_node != goal_node:
             return None
 
-        def heuristic(u):
+        def heuristic(u: int | str) -> float:
             p1 = self._get_node_pos(u, extra_nodes)
             p2 = self._get_node_pos(goal_node, extra_nodes)
-            return np.linalg.norm(p1 - p2)
+            return float(np.linalg.norm(p1 - p2))
 
         node_path = astar_search(start_node, goal_node, get_neighbors, heuristic)
 

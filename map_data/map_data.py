@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import overpy
 import utm
 from gpxpy import parse as gpxparse
 from shapely import geometry
@@ -78,7 +79,7 @@ class MapData:
 
     def __init__(
         self,
-        coords: Any,
+        coords: str | tuple[np.ndarray, int, str],
         coords_type: str = "file",
         current_robot_position: np.ndarray | None = None,
         flip: bool = False,
@@ -160,16 +161,16 @@ class MapData:
             geometry.Point(x, y) for x, y in zip(self.waypoints[:, 0], self.waypoints[:, 1])
         ]
 
-        self.nodes_cache: dict[int, Any] = {}
+        self.nodes_cache: dict[int, dict[str, Any]] = {}
         self.roads_list: list[Way] = []
         self.footways_list: list[Way] = []
         self.barriers_list: list[Way] = []
         self.crossroads_list: list[Way] = []
 
         # Raw data stored temporarily during parsing
-        self.osm_ways_data: Any | None = None
-        self.osm_rels_data: Any | None = None
-        self.osm_nodes_data: Any | None = None
+        self.osm_ways_data: overpy.Result | None = None
+        self.osm_rels_data: overpy.Result | None = None
+        self.osm_nodes_data: overpy.Result | None = None
 
         self._load_tag_configs()
 

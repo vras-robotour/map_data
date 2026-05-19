@@ -18,6 +18,7 @@ import numpy as np
 import utm
 from flask import (
     Blueprint,
+    Response,
     abort,
     current_app,
     jsonify,
@@ -61,7 +62,7 @@ bp = Blueprint("viewer", __name__)
 
 
 @bp.route("/api/planner_defaults")
-def get_planner_defaults():
+def get_planner_defaults() -> Response:
     return jsonify(load_planner_defaults())
 
 
@@ -169,7 +170,7 @@ def _annotation_path(filename: str) -> Path:
 
 
 @bp.route("/")
-def index():
+def index() -> str:
     api_key_thunderforest = os.getenv("THUNDERFOREST_API_KEY")
     api_key_seznam = os.getenv("SEZNAM_API_KEY")
     return render_template(
@@ -180,7 +181,7 @@ def index():
 
 
 @bp.route("/api/files")
-def list_files():
+def list_files() -> Response:
     result = {"mapdata": [], "gpx": []}
     try:
         for p in sorted(_get_data_dir().iterdir()):
@@ -194,7 +195,7 @@ def list_files():
 
 
 @bp.route("/api/mapdata")
-def get_mapdata():
+def get_mapdata() -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
@@ -222,7 +223,7 @@ def get_mapdata():
 
 
 @bp.route("/api/annotations")
-def get_annotations():
+def get_annotations() -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
@@ -230,7 +231,7 @@ def get_annotations():
 
 
 @bp.route("/api/annotations", methods=["POST"])
-def add_annotation():
+def add_annotation() -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
@@ -251,7 +252,7 @@ def add_annotation():
 
 
 @bp.route("/api/annotations/<ann_id>", methods=["PUT"])
-def update_annotation(ann_id):
+def update_annotation(ann_id: str) -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
@@ -273,7 +274,7 @@ def update_annotation(ann_id):
 
 
 @bp.route("/api/annotations/<ann_id>", methods=["DELETE"])
-def delete_annotation(ann_id):
+def delete_annotation(ann_id: str) -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
@@ -288,7 +289,7 @@ def delete_annotation(ann_id):
 
 
 @bp.route("/api/fetch_area", methods=["POST"])
-def fetch_area():
+def fetch_area() -> Response:
     body = request.get_json(force=True) or {}
     for field in ("min_lat", "min_lon", "max_lat", "max_lon", "name"):
         if field not in body:
@@ -338,7 +339,7 @@ def fetch_area():
 
 
 @bp.route("/api/upload_gpx", methods=["POST"])
-def upload_gpx():
+def upload_gpx() -> Response:
     if "file" not in request.files:
         abort(400, "No file part")
     file = request.files["file"]
@@ -394,7 +395,7 @@ def upload_gpx():
 
 
 @bp.route("/api/way_nodes")
-def get_way_nodes():
+def get_way_nodes() -> Response:
     filename = request.args.get("file")
     way_id = request.args.get("way_id")
     if not filename or way_id is None:
@@ -506,7 +507,7 @@ def get_way_nodes():
 
 
 @bp.route("/api/ways/<way_id>")
-def get_way(way_id):
+def get_way(way_id: str) -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
@@ -621,7 +622,7 @@ def get_way(way_id):
 
 
 @bp.route("/api/ways/<way_id>", methods=["DELETE"])
-def delete_way(way_id):
+def delete_way(way_id: str) -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
@@ -648,11 +649,11 @@ def delete_way(way_id):
         if not any(e.get("type") == "way" and e.get("id") == way_id_int for e in cl):
             cl.append({"type": "way", "id": way_id_int, "ts": time.time()})
     save_annotations(ann_path, store)
-    return "", 204
+    return Response("", 204)
 
 
 @bp.route("/api/ways/<way_id>/tags", methods=["PUT"])
-def update_way_tags(way_id):
+def update_way_tags(way_id: str) -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
@@ -675,11 +676,11 @@ def update_way_tags(way_id):
     if not any(e.get("type") == "tag" and e.get("id") == original_way_id_str for e in cl):
         cl.append({"type": "tag", "id": original_way_id_str, "ts": time.time()})
     save_annotations(ann_path, store)
-    return "", 204
+    return Response("", 204)
 
 
 @bp.route("/api/ways/<way_id>/tags", methods=["DELETE"])
-def delete_way_tags(way_id):
+def delete_way_tags(way_id: str) -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
@@ -690,11 +691,11 @@ def delete_way_tags(way_id):
     cl = store.get("change_log", [])
     store["change_log"] = [e for e in cl if not (e.get("type") == "tag" and e.get("id") == way_id)]
     save_annotations(ann_path, store)
-    return "", 204
+    return Response("", 204)
 
 
 @bp.route("/api/ways/<way_id>/segments")
-def get_way_segments(way_id):
+def get_way_segments(way_id: str) -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
@@ -703,7 +704,7 @@ def get_way_segments(way_id):
     return jsonify({"segments": segments})
 
 
-def _get_way_segments_geojson(filename, original_way_id):
+def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[str, Any]]:
     path = _safe_data_path(filename)
     md = load_mapdata_cached(str(path))
     store = load_annotations(str(_annotation_path(filename)))
@@ -802,7 +803,7 @@ def _get_way_segments_geojson(filename, original_way_id):
 
 
 @bp.route("/api/ways/split", methods=["POST"])
-def split_way_endpoint():
+def split_way_endpoint() -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
@@ -846,11 +847,11 @@ def split_way_endpoint():
     save_annotations(ann_path, store)
 
     segments = _get_way_segments_geojson(filename, original_way_id)
-    return jsonify({"success": True, "segments": segments}), 200
+    return jsonify({"success": True, "segments": segments})
 
 
 @bp.route("/api/ways/split", methods=["DELETE"])
-def undo_way_split():
+def undo_way_split() -> Response:
     filename = request.args.get("file")
     way_id = request.args.get("way_id")
     node_id = request.args.get("node_id")
@@ -881,12 +882,12 @@ def undo_way_split():
     ]
     save_annotations(ann_path, store)
 
-    segments = _get_way_segments_geojson(filename, way_id_int)
-    return jsonify({"segments": segments}), 200
+    segments = _get_way_segments_geojson(filename, str(way_id_int))
+    return jsonify({"segments": segments})
 
 
 @bp.route("/api/ways/<way_id>/hide", methods=["PUT"])
-def hide_way(way_id):
+def hide_way(way_id: str) -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
@@ -911,11 +912,11 @@ def hide_way(way_id):
             },
         )
     save_annotations(ann_path, store)
-    return "", 204
+    return Response("", 204)
 
 
 @bp.route("/api/ways/<way_id>/show", methods=["PUT"])
-def show_way(way_id):
+def show_way(way_id: str) -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
@@ -931,11 +932,11 @@ def show_way(way_id):
     hw = store.get("hidden_ways", [])
     store["hidden_ways"] = [d for d in hw if (d["id"] if isinstance(d, dict) else d) != way_id_int]
     save_annotations(ann_path, store)
-    return "", 204
+    return Response("", 204)
 
 
 @bp.route("/api/ways/<way_id>/restore", methods=["PUT"])
-def restore_way(way_id):
+def restore_way(way_id: str) -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
@@ -955,21 +956,21 @@ def restore_way(way_id):
         e for e in cl if not (e.get("type") == "way" and e.get("id") == way_id_int)
     ]
     save_annotations(ann_path, store)
-    return "", 204
+    return Response("", 204)
 
 
 @bp.route("/api/way_node", methods=["DELETE"])
-def delete_way_node():
+def delete_way_node() -> Response:
     filename = request.args.get("file")
     way_id = request.args.get("way_id")
-    node_id = request.args.get("node_id")
-    if not filename or way_id is None or node_id is None:
+    node_id_arg = request.args.get("node_id")
+    if not filename or way_id is None or node_id_arg is None:
         abort(400, "Missing required query parameters")
 
     original_way_id_str = str(way_id).split(":")[0]
     try:
         way_id_int = int(original_way_id_str)
-        node_id = int(node_id)
+        node_id = int(node_id_arg)
     except (ValueError, TypeError):
         abort(400, "way_id and node_id must be integers (way_id can be virtual)")
 
@@ -1003,21 +1004,21 @@ def delete_way_node():
                 },
             )
     save_annotations(ann_path, store)
-    return "", 204
+    return Response("", 204)
 
 
 @bp.route("/api/way_node/restore", methods=["PUT"])
-def restore_way_node():
+def restore_way_node() -> Response:
     filename = request.args.get("file")
     way_id = request.args.get("way_id")
-    node_id = request.args.get("node_id")
-    if not filename or way_id is None or node_id is None:
+    node_id_arg = request.args.get("node_id")
+    if not filename or way_id is None or node_id_arg is None:
         abort(400, "Missing required query parameters")
 
     original_way_id_str = str(way_id).split(":")[0]
     try:
         way_id_int = int(original_way_id_str)
-        node_id = int(node_id)
+        node_id = int(node_id_arg)
     except (ValueError, TypeError):
         abort(400, "way_id and node_id must be integers (way_id can be virtual)")
 
@@ -1046,11 +1047,11 @@ def restore_way_node():
         )
     ]
     save_annotations(ann_path, store)
-    return "", 204
+    return Response("", 204)
 
 
 @bp.route("/api/way_nodes/move", methods=["PUT"])
-def move_way_nodes():
+def move_way_nodes() -> Response:
     filename = request.args.get("file")
     way_id = request.args.get("way_id")
     if not filename or way_id is None:
@@ -1090,11 +1091,11 @@ def move_way_nodes():
             },
         )
     save_annotations(ann_path, store)
-    return "", 204
+    return Response("", 204)
 
 
 @bp.route("/api/way_nodes/move", methods=["DELETE"])
-def undo_move_way_nodes():
+def undo_move_way_nodes() -> Response:
     filename = request.args.get("file")
     way_id = request.args.get("way_id")
     if not filename or way_id is None:
@@ -1114,10 +1115,10 @@ def undo_move_way_nodes():
         e for e in cl if not (e.get("type") == "move" and e.get("id") == way_id_int)
     ]
     save_annotations(ann_path, store)
-    return "", 204
+    return Response("", 204)
 
 
-def get_merged_mapdata(filename):
+def get_merged_mapdata(filename: str) -> tuple[MapData | None, dict[str, Any] | None]:
     path = _safe_data_path(filename)
     if not path.is_file():
         return None, None
@@ -1191,7 +1192,7 @@ def get_merged_mapdata(filename):
 
 
 @bp.route("/api/export")
-def export_mapdata():
+def export_mapdata() -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
@@ -1213,7 +1214,7 @@ def export_mapdata():
 
 
 @bp.route("/api/cost_grid")
-def get_cost_grid():
+def get_cost_grid() -> Response:
     filename = request.args.get("file")
     min_lat = request.args.get("min_lat", type=float)
     min_lon = request.args.get("min_lon", type=float)
@@ -1222,6 +1223,7 @@ def get_cost_grid():
 
     if not all([filename, min_lat, min_lon, max_lat, max_lon]):
         abort(400, "Missing required parameters")
+    assert filename is not None
 
     md, _ = get_merged_mapdata(filename)
     if md is None:
@@ -1281,21 +1283,21 @@ def get_cost_grid():
 
 
 @bp.route("/api/cancel_replan", methods=["POST"])
-def cancel_replan_route():
+def cancel_replan_route() -> Response:
     transfer_id = request.json.get("transfer_id")
     cancel_replan_backend(transfer_id)
     return jsonify({"success": True})
 
 
 class WormholeManager:
-    def __init__(self):
-        self.active_transfers = {}
+    def __init__(self) -> None:
+        self.active_transfers: dict[str, dict[str, Any]] = {}
         if shutil.which("wormhole") is None:
             # We don't want to crash the whole app if wormhole is missing,
             # just log it and the endpoints will fail gracefully.
             logger.warning("'wormhole' command not found. magic-wormhole is required for sharing.")
 
-    def create_transfer(self, gpx_data):
+    def create_transfer(self, gpx_data: str) -> str:
         transfer_id = str(uuid.uuid4())
         temp_dir = Path(tempfile.mkdtemp())
         file_path = temp_dir / "path.gpx"
@@ -1336,7 +1338,7 @@ class WormholeManager:
         ).start()
         return transfer_id
 
-    def _capture_wormhole_code_thread(self, transfer_id):
+    def _capture_wormhole_code_thread(self, transfer_id: str) -> None:
         transfer_info = self.active_transfers.get(transfer_id)
         if not transfer_info:
             return
@@ -1375,17 +1377,17 @@ class WormholeManager:
         finally:
             self._cleanup_transfer(transfer_id)
 
-    def get_transfer_code(self, transfer_id, timeout=10):
+    def get_transfer_code(self, transfer_id: str, timeout: float = 10) -> str | None:
         start_time = time.time()
         while time.time() - start_time < timeout:
             if transfer_id in self.active_transfers and self.active_transfers[transfer_id].get(
                 "code",
             ):
-                return self.active_transfers[transfer_id]["code"]
+                return str(self.active_transfers[transfer_id]["code"])
             time.sleep(0.1)
         return None
 
-    def cancel_transfer(self, transfer_id):
+    def cancel_transfer(self, transfer_id: str) -> tuple[bool, str]:
         if transfer_id not in self.active_transfers:
             return False, "Invalid or unknown transfer ID"
 
@@ -1397,7 +1399,7 @@ class WormholeManager:
         self.active_transfers[transfer_id]["status"] = "cancelled"
         return True, "Transfer cancelled"
 
-    def _cleanup_transfer(self, transfer_id):
+    def _cleanup_transfer(self, transfer_id: str) -> None:
         transfer = self.active_transfers.pop(transfer_id, None)
         if transfer and transfer.get("temp_dir"):
             try:
@@ -1410,7 +1412,7 @@ wormhole_manager = WormholeManager()
 
 
 @bp.route("/api/create_wormhole", methods=["POST"])
-def create_wormhole():
+def create_wormhole() -> Response:
     gpx_data = request.json.get("gpx")
     if not gpx_data:
         return jsonify({"success": False, "message": "No GPX data provided"}), 400
@@ -1430,14 +1432,14 @@ def create_wormhole():
 
 
 @bp.route("/api/cancel_wormhole", methods=["POST"])
-def cancel_wormhole():
+def cancel_wormhole() -> Response:
     transfer_id = request.json.get("transfer_id")
     success, message = wormhole_manager.cancel_transfer(transfer_id)
     return jsonify({"success": success, "message": message})
 
 
 @bp.route("/api/create_replan", methods=["POST"])
-def create_replan():
+def create_replan() -> Response:
     body = request.get_json(force=True) or {}
     path_data = body.get("points")  # [[lat, lon], ...]
     filename = body.get("file")
