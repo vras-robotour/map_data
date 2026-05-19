@@ -12,6 +12,7 @@ from map_data.viewer.helpers import (
     get_deleted_way_ids,
     load_annotations,
     mapdata_to_geojson,
+    migrate_change_log,
     rebuild_way_without_nodes,
     save_annotations,
     split_way,
@@ -209,3 +210,78 @@ def test_mapdata_to_geojson_structure():
     assert "road" in categories
     assert "footway" in categories
     assert "waypoint" in categories
+
+
+# ── migrate_change_log ────────────────────────────────────────────────────────
+
+
+def test_migrate_change_log_fresh_store_adds_entries():
+    store = {
+        "deleted_ways": [{"id": 42, "category": "footway", "label": ""}],
+    }
+    migrate_change_log(store)
+    types_in_log = [e["type"] for e in store["change_log"]]
+    assert "way" in types_in_log
+
+
+def test_migrate_change_log_idempotent():
+    store = {
+        "deleted_ways": [{"id": 7, "category": "road", "label": ""}],
+    }
+    migrate_change_log(store)
+    cl_after_first = list(store["change_log"])
+    migrate_change_log(store)
+    assert store["change_log"] == cl_after_first
+
+
+def test_migrate_change_log_sets_migration_version():
+    store = {}
+    migrate_change_log(store)
+    assert store.get("change_log_migration") is not None
+
+
+def test_migrate_change_log_preserves_ts_entries():
+    ts_entry = {"type": "way", "id": 99, "ts": 1234567890.0}
+    store = {
+        "change_log": [ts_entry],
+        "deleted_ways": [{"id": 99, "category": "footway", "label": ""}],
+        # Simulate a stale migration version so the migration runs again
+        "change_log_migration": "old_version",
+    }
+    migrate_change_log(store)
+    # The timestamped entry must survive the migration
+    assert any(e.get("ts") == 1234567890.0 for e in store["change_log"])
+
+
+def test_migrate_change_log_legacy_entries_without_ts_dropped():
+    legacy_entry = {"type": "way", "id": 5}  # no "ts" key
+    store = {
+        "change_log": [legacy_entry],
+        "change_log_migration": "old_version",  # triggers re-migration
+    }
+    migrate_change_log(store)
+    # The legacy entry (no "ts") must be gone after re-migration
+    assert not any(
+        e.get("type") == "way" and e.get("id") == 5 and "ts" not in e
+        for e in store["change_log"]
+    )
+
+
+def test_migrate_change_log_node_deletions_tracked():
+    store = {
+        "deleted_nodes": [{"way_id": 1, "node_id": 101}],
+    }
+    migrate_change_log(store)
+    node_entries = [e for e in store["change_log"] if e.get("type") == "node"]
+    assert len(node_entries) == 1
+    assert node_entries[0]["node_id"] == 101
+
+
+def test_migrate_change_log_tag_overrides_tracked():
+    store = {
+        "tag_overrides": {"10": {"highway": "footway"}},
+    }
+    migrate_change_log(store)
+    tag_entries = [e for e in store["change_log"] if e.get("type") == "tag"]
+    assert len(tag_entries) == 1
+    assert tag_entries[0]["id"] == 10

@@ -181,3 +181,186 @@ def test_get_way_not_found(app_client_with_file):
     client, _, filename = app_client_with_file
     resp = client.get(f"/api/ways/9999?file={filename}")
     assert resp.status_code == 404
+
+
+# ── security ──────────────────────────────────────────────────────────────────
+
+
+def test_path_traversal_rejected(app_client):
+    client, _ = app_client
+    resp = client.get("/api/mapdata?file=../../../etc/passwd")
+    assert resp.status_code == 400
+
+
+def test_path_traversal_nested_rejected(app_client):
+    client, _ = app_client
+    resp = client.get("/api/mapdata?file=sub/../../etc/passwd")
+    assert resp.status_code == 400
+
+
+# ── way tags ─────────────────────────────────────────────────────────────────
+
+
+def test_update_way_tags(app_client_with_file):
+    client, _, filename = app_client_with_file
+    body = {"tags": {"highway": "path"}, "category": "footway", "label": "test"}
+    resp = client.put(
+        f"/api/ways/1/tags?file={filename}",
+        data=json.dumps(body),
+        content_type="application/json",
+    )
+    assert resp.status_code == 204
+
+
+def test_delete_way_tags(app_client_with_file):
+    client, _, filename = app_client_with_file
+    # Set tags first
+    client.put(
+        f"/api/ways/1/tags?file={filename}",
+        data=json.dumps({"tags": {"highway": "path"}}),
+        content_type="application/json",
+    )
+    resp = client.delete(f"/api/ways/1/tags?file={filename}")
+    assert resp.status_code == 204
+
+
+# ── hide / show / restore ─────────────────────────────────────────────────────
+
+
+def test_hide_way(app_client_with_file):
+    client, _, filename = app_client_with_file
+    body = {"category": "footway", "label": "test"}
+    resp = client.put(
+        f"/api/ways/1/hide?file={filename}",
+        data=json.dumps(body),
+        content_type="application/json",
+    )
+    assert resp.status_code == 204
+
+
+def test_show_way(app_client_with_file):
+    client, _, filename = app_client_with_file
+    body = {"category": "footway", "label": "test"}
+    client.put(
+        f"/api/ways/1/hide?file={filename}",
+        data=json.dumps(body),
+        content_type="application/json",
+    )
+    resp = client.put(
+        f"/api/ways/1/show?file={filename}",
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 204
+
+
+def test_restore_way(app_client_with_file):
+    client, tmp_path, filename = app_client_with_file
+    # Delete first
+    client.delete(
+        f"/api/ways/1?file={filename}",
+        data=json.dumps({"category": "footway", "label": ""}),
+        content_type="application/json",
+    )
+    # Now restore
+    resp = client.put(
+        f"/api/ways/1/restore?file={filename}",
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 204
+
+    ann_path = tmp_path / "test.annotations.json"
+    with open(ann_path) as f:
+        store = json.load(f)
+    deleted_ids = {(d["id"] if isinstance(d, dict) else d) for d in store.get("deleted_ways", [])}
+    assert 1 not in deleted_ids
+
+
+# ── node operations ───────────────────────────────────────────────────────────
+
+
+def test_delete_way_node(app_client_with_file):
+    client, _, filename = app_client_with_file
+    resp = client.delete(f"/api/way_node?file={filename}&way_id=1&node_id=101")
+    assert resp.status_code == 204
+
+
+def test_move_way_nodes(app_client_with_file):
+    client, _, filename = app_client_with_file
+    lat, lon = 50.0, 14.0
+    body = {"nodes": [{"id": 101, "lat": lat + 0.0001, "lon": lon + 0.0001}]}
+    resp = client.put(
+        f"/api/way_nodes/move?file={filename}&way_id=1",
+        data=json.dumps(body),
+        content_type="application/json",
+    )
+    assert resp.status_code == 204
+
+
+# ── way split ─────────────────────────────────────────────────────────────────
+
+
+def _make_mapdata_3node(path):
+    """Write a .mapdata file with a 3-node footway (so a middle split is possible)."""
+    lat, lon = 50.0, 14.0
+    e, n, zn, zl = utm.from_latlon(lat, lon)
+    waypoints = np.array([[e, n], [e + 100, n + 100]])
+    md = MapData([waypoints, int(zn), zl], coords_type="array")
+    way = Way(
+        id=2,
+        is_area=False,
+        nodes=[201, 202, 203],
+        tags={"highway": "footway"},
+        line=LineString([(e, n), (e + 50, n + 50), (e + 100, n + 100)]),
+        in_out="",
+    )
+    md.footways_list.append(way)
+    lat2, lon2 = utm.to_latlon(e + 50, n + 50, int(zn), zl)
+    lat3, lon3 = utm.to_latlon(e + 100, n + 100, int(zn), zl)
+    md.nodes_cache = {
+        201: {"lat": lat, "lon": lon, "tags": {}},
+        202: {"lat": lat2, "lon": lon2, "tags": {}},
+        203: {"lat": lat3, "lon": lon3, "tags": {}},
+    }
+    md.save(str(path))
+
+
+@pytest.fixture
+def app_client_3node(tmp_path):
+    _make_mapdata_3node(tmp_path / "three.mapdata")
+    app = create_app(data_dir=str(tmp_path))
+    app.config["TESTING"] = True
+    with app.test_client() as client:
+        yield client, tmp_path, "three.mapdata"
+
+
+def test_split_way_endpoint_saves_split(app_client_3node):
+    client, tmp_path, filename = app_client_3node
+    body = {"way_id": 2, "node_id": 202}
+    resp = client.post(
+        f"/api/ways/split?file={filename}",
+        data=json.dumps(body),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["success"] is True
+    # The split should result in two segments
+    assert len(data["segments"]) == 2
+
+
+def test_split_way_undo(app_client_3node):
+    client, _, filename = app_client_3node
+    # First split
+    client.post(
+        f"/api/ways/split?file={filename}",
+        data=json.dumps({"way_id": 2, "node_id": 202}),
+        content_type="application/json",
+    )
+    # Undo the split
+    resp = client.delete(f"/api/ways/split?file={filename}&way_id=2&node_id=202")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    # After undo, only one segment (original way)
+    assert len(data["segments"]) == 1
