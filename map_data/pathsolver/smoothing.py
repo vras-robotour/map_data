@@ -32,6 +32,7 @@ def smooth_path(
     -------
     np.ndarray
         The smoothed path.
+
     """
     new_path = np.copy(path)
     change = tolerance

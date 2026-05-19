@@ -33,6 +33,7 @@ class GraphPlanner:
         highway_types : list of str, optional
             Way categories to include in the graph. Supported values are
             ``"footway"`` and ``"road"``. Defaults to ``["footway"]``.
+
         """
         self.map_data = map_data
         self.highway_types = highway_types or ["footway"]
@@ -111,12 +112,12 @@ class GraphPlanner:
                         proj_node_id = new_internal_id
                         new_internal_id -= 1
                         self.nodes[proj_node_id] = np.array([p_proj[0], p_proj[1], 0.0]).reshape(
-                            3, 1
+                            3, 1,
                         )
 
                         target_way, segment_idx = edge_way_info[best_idx]
                         splits.setdefault((id(target_way), segment_idx), []).append(
-                            (proj_dist, proj_node_id, node_id, min_dist)
+                            (proj_dist, proj_node_id, node_id, min_dist),
                         )
 
         # Apply splits to _allowed_ways by inserting new nodes
@@ -157,7 +158,7 @@ class GraphPlanner:
         self.graph.setdefault(v, []).append((u, d))
 
     def _find_closest_edge(
-        self, point_utm: np.ndarray
+        self, point_utm: np.ndarray,
     ) -> tuple[tuple[int, int, np.ndarray] | None, float]:
         """
         Find the closest edge using an STRtree spatial index.
@@ -178,7 +179,7 @@ class GraphPlanner:
         return (n1, n2, projected_point), min_dist
 
     def a_star(
-        self, start_node, goal_node, extra_nodes: dict | None = None
+        self, start_node, goal_node, extra_nodes: dict | None = None,
     ) -> list[np.ndarray] | None:
         """
         Run A* between two graph nodes and return the path as UTM coordinates.
@@ -200,6 +201,7 @@ class GraphPlanner:
         list of np.ndarray or None
             Sequence of ``[x, y]`` UTM positions along the path, or
             ``None`` if no path exists.
+
         """
 
         def get_neighbors(u):
@@ -247,6 +249,7 @@ class GraphPlanner:
         np.ndarray or None
             Concatenated path as an ``(M, 2)`` UTM coordinate array, or
             ``None`` if any segment could not be routed.
+
         """
         full_path = []
 

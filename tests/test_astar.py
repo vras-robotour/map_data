@@ -143,7 +143,7 @@ def test_post_process_path_simplification():
     # Create a path with many points very close to each other along a line
     # (5, 0), (5, 0.01), (5, 0.02), ..., (5, 1), then (5, 10)
     noisy_segment = [[5.0, y] for y in np.arange(0, 1.01, 0.01)]
-    path = np.array(noisy_segment + [[5.0, 10.0]])
+    path = np.array([*noisy_segment, [5.0, 10.0]])
 
     processed_path = replanner._post_process_path(path)
 
@@ -162,7 +162,7 @@ def test_astar_grid_goal_outside_boundary():
     replanner._reshaped_grid_cache = np.zeros((20, 20), dtype=float)
 
     start = (1.0, 1.0)
-    goal = (15.0, 15.0)  # beyond 10×10 grid
+    goal = (15.0, 15.0)  # beyond 10x10 grid
     path = replanner._astar(start, goal)
 
     assert path is None

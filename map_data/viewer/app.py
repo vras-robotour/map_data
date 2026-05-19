@@ -31,7 +31,7 @@ def telemetry_broadcaster() -> None:
                 if data:
                     socketio.emit("telemetry", data)
             except Exception as e:
-                logging.error(f"Error in telemetry broadcaster: {e}")
+                logging.exception("Error in telemetry broadcaster: %s", e)
         time.sleep(0.5)  # 2 Hz update rate
 
 
@@ -53,7 +53,7 @@ def create_app(data_dir: str | None = None) -> Flask:
     # Context processor to expose ROS status to templates
     @app.context_processor
     def inject_vars():
-        return dict(ros_available=ROS_AVAILABLE)
+        return {"ros_available": ROS_AVAILABLE}
 
     global tracker_node
     if ROS_AVAILABLE:
@@ -77,7 +77,7 @@ def create_app(data_dir: str | None = None) -> Flask:
 
             logging.info("ROS2 TrackerNode initialized and spinning.")
         except Exception as e:
-            logging.error(f"Failed to initialize ROS2: {e}")
+            logging.exception("Failed to initialize ROS2: %s", e)
             tracker_node = None
 
     return app
@@ -100,7 +100,7 @@ def main() -> None:
     except ImportError:
         ros_args = sys.argv[1:]
 
-    args, unknown = parser.parse_known_args(args=ros_args)
+    args, _ = parser.parse_known_args(args=ros_args)
 
     data_dir = None
 

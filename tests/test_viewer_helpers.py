@@ -50,7 +50,7 @@ def test_geom_to_geojson_multipolygon():
             (_E0 + 25, _N0 + 5),
             (_E0 + 20, _N0 + 5),
             (_E0 + 20, _N0),
-        ]
+        ],
     )
     mp = MultiPolygon([p1, p2])
     result = geom_to_geojson(mp, _ZN, _ZL)

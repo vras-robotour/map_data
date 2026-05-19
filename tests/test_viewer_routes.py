@@ -340,7 +340,7 @@ def app_client_3node(tmp_path):
 
 
 def test_split_way_endpoint_saves_split(app_client_3node):
-    client, tmp_path, filename = app_client_3node
+    client, _, filename = app_client_3node
     body = {"way_id": 2, "node_id": 202}
     resp = client.post(
         f"/api/ways/split?file={filename}",

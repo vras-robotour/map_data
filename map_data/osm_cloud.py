@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import sys
 from typing import Any
 
 import numpy as np
@@ -24,13 +25,13 @@ class OSMCloud(Node):
         self.utm_frame: str = self.declare_parameter("utm_frame", "utm").value
         self.local_frame: str = self.declare_parameter("local_frame", "map").value
         self.utm_to_local_param: list[float] | None = self.declare_parameter(
-            "utm_to_local", rclpy.Parameter.Type.DOUBLE_ARRAY
+            "utm_to_local", rclpy.Parameter.Type.DOUBLE_ARRAY,
         ).value
         self.mapdata_file: str | None = self.declare_parameter(
-            "mapdata_file", rclpy.Parameter.Type.STRING
+            "mapdata_file", rclpy.Parameter.Type.STRING,
         ).value
         self.gpx_file: str | None = self.declare_parameter(
-            "gpx_file", rclpy.Parameter.Type.STRING
+            "gpx_file", rclpy.Parameter.Type.STRING,
         ).value
         self.save_mapdata: bool = self.declare_parameter("save_mapdata", False).value
         self.max_path_dist: float = self.declare_parameter("max_path_dist", 1.0).value
@@ -40,16 +41,16 @@ class OSMCloud(Node):
         self.grid_min: list[float] = self.declare_parameter("grid_min", [0.0, 0.0]).value
         self.auto_utm: bool = self.declare_parameter("auto_utm", False).value
         self.publish_intersections: bool = self.declare_parameter(
-            "publish_intersections", False
+            "publish_intersections", False,
         ).value
 
         # Topic parameters
         self.grid_topic: str = self.declare_parameter("grid_topic", "grid").value
         self.intersections_topic: str = self.declare_parameter(
-            "intersections_topic", "intersections"
+            "intersections_topic", "intersections",
         ).value
         self.intersection_markers_topic: str = self.declare_parameter(
-            "intersection_markers_topic", "intersection_markers"
+            "intersection_markers_topic", "intersection_markers",
         ).value
 
         # Register parameter callback
@@ -61,7 +62,7 @@ class OSMCloud(Node):
         if self.publish_intersections:
             self.pub_poses = self.create_publisher(PoseArray, self.intersections_topic, qos)
             self.pub_markers = self.create_publisher(
-                MarkerArray, self.intersection_markers_topic, qos
+                MarkerArray, self.intersection_markers_topic, qos,
             )
 
         self.tf = Buffer()
@@ -79,7 +80,7 @@ class OSMCloud(Node):
             self.map_data.run_all(self.save_mapdata)
         else:
             self.get_logger().error("No map data or gpx file provided")
-            exit(1)
+            sys.exit(1)
         self.get_logger().info(str(self.map_data))
 
         if self.utm_to_local_param is not None:
@@ -108,7 +109,7 @@ class OSMCloud(Node):
         else:
             self.get_utm_to_local()
 
-        self.get_logger().info(f"Using UTM to local transform: {self.utm_to_local}")
+        self.get_logger().info("Using UTM to local transform: %s", self.utm_to_local)
 
         if all(v == 0.0 for v in self.grid_min) and all(v == 0.0 for v in self.grid_max):
             self.get_logger().info("Auto-calculating grid bounds from map data")
@@ -117,7 +118,7 @@ class OSMCloud(Node):
                 [
                     [self.map_data.min_x, self.map_data.min_y, 0.0],
                     [self.map_data.max_x, self.map_data.max_y, 0.0],
-                ]
+                ],
             )
             bounds_local = []
             for p in bounds_utm:
@@ -129,7 +130,7 @@ class OSMCloud(Node):
             self.grid_min = [np.min(bounds_local[:, 0]), np.min(bounds_local[:, 1])]
             self.grid_max = [np.max(bounds_local[:, 0]), np.max(bounds_local[:, 1])]
             self.get_logger().info(
-                f"Calculated grid bounds: min={self.grid_min}, max={self.grid_max}"
+                "Calculated grid bounds: min=%s, max=%s", self.grid_min, self.grid_max,
             )
 
         self.grid_cloud: PointCloud2 = self.get_cloud()
@@ -166,7 +167,7 @@ class OSMCloud(Node):
                     qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
                     self.pub_poses = self.create_publisher(PoseArray, "intersections", qos)
                     self.pub_markers = self.create_publisher(
-                        MarkerArray, "intersection_markers", qos
+                        MarkerArray, "intersection_markers", qos,
                     )
                 rebuild_intersections = True
 
@@ -175,7 +176,7 @@ class OSMCloud(Node):
             try:
                 self.grid_cloud = self.get_cloud()
             except Exception as e:
-                self.get_logger().error(f"Failed to rebuild grid cloud: {e}")
+                self.get_logger().error("Failed to rebuild grid cloud: %s", e)
                 return SetParametersResult(successful=False, reason=str(e))
 
         if rebuild_intersections and self.publish_intersections:
@@ -183,7 +184,7 @@ class OSMCloud(Node):
             try:
                 self.poses, self.markers = self.get_intersections()
             except Exception as e:
-                self.get_logger().error(f"Failed to rebuild intersections: {e}")
+                self.get_logger().error("Failed to rebuild intersections: %s", e)
                 return SetParametersResult(successful=False, reason=str(e))
 
         return SetParametersResult(successful=True)
@@ -219,20 +220,21 @@ class OSMCloud(Node):
                     rclpy.duration.Duration(seconds=15.0),
                 )
                 self.utm_to_local = numpify(utm_to_local.transform)
-                self.get_logger().info(f"Got UTM to local transform: {self.utm_to_local}")
+                self.get_logger().info("Got UTM to local transform: %s", self.utm_to_local)
                 break
             except Exception as e:
-                self.get_logger().warning(f"Failed to get UTM to local transform: {e}")
+                self.get_logger().warning("Failed to get UTM to local transform: %s", e)
                 rclpy.spin_once(self, timeout_sec=1.0)
 
     def get_cloud(self) -> PointCloud2:
         """
         Return a point cloud from the map data.
 
-        Returns:
-        --------
+        Returns
+        -------
         cloud : sensor_msgs.PointCloud2
             Created point cloud.
+
         """
         points = transform_points(self.map_data.get_points(), self.utm_to_local, 0.0)
         grid = np.pad(
@@ -252,7 +254,7 @@ class OSMCloud(Node):
         elif self.neighbor_cost == "zero":
             grid[:, 3] = 0.0
         else:
-            self.get_logger().warn(f"Unknown neighbor cost: {self.neighbor_cost}")
+            self.get_logger().warn("Unknown neighbor cost: %s", self.neighbor_cost)
 
         grid[:, 3] /= self.max_path_dist**2 if self.neighbor_cost == "quadratic" else 1.0
         cloud = create_cloud(grid)
@@ -322,13 +324,13 @@ class OSMCloud(Node):
 
 
 def create_grid(
-    low: tuple[float, ...], high: tuple[float, ...], cell_size: float = 0.25
+    low: tuple[float, ...], high: tuple[float, ...], cell_size: float = 0.25,
 ) -> np.ndarray:
     """
     Create a grid of points.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     low : tuple
         Lower bounds of the grid.
     high : tuple
@@ -336,10 +338,11 @@ def create_grid(
     cell_size : float
         Size of the cell.
 
-    Returns:
-    --------
+    Returns
+    -------
     grid : np.array
         Grid of points.
+
     """
     low_arr = np.round(low)
     high_arr = np.round(high)
@@ -353,18 +356,18 @@ def create_grid(
         int(high_arr[1]),
         int(np.ceil((high_arr[1] - low_arr[1]) / cell_size)),
     )
-    grid = np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2)
-    return grid
+    return np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2)
 
 
 def create_cloud(points: np.ndarray) -> PointCloud2:
     """
     Create a point cloud from points.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     points : np.array
         Points in a grid to create the cloud from.
+
     """
     if not isinstance(points, np.ndarray):
         points = np.array(points)
@@ -385,8 +388,8 @@ def points_near_ref(points: np.ndarray, reference: np.ndarray, max_dist: float =
     """
     Get points near reference points and set linear distance as cost.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     points : np.array
         Points to check.
     reference : np.array
@@ -394,10 +397,11 @@ def points_near_ref(points: np.ndarray, reference: np.ndarray, max_dist: float =
     max_dist : float
         Maximum distance to check.
 
-    Returns:
-    --------
+    Returns
+    -------
     points : np.array
         All points with a cost based on distance to reference points.
+
     """
     if not isinstance(points, np.ndarray):
         points = np.array(points)
@@ -410,18 +414,17 @@ def points_near_ref(points: np.ndarray, reference: np.ndarray, max_dist: float =
     filtered_points = points[mask]
     filtered_dists = dists[mask]
 
-    result = np.hstack([filtered_points, (filtered_dists / max_dist).reshape(-1, 1)])
-    return result
+    return np.hstack([filtered_points, (filtered_dists / max_dist).reshape(-1, 1)])
 
 
 def transform_points(
-    points: dict[int, np.ndarray], transform: np.ndarray, z: float | None = None
+    points: dict[int, np.ndarray], transform: np.ndarray, z: float | None = None,
 ) -> dict[int, np.ndarray]:
     """
     Transform points.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     points : dict
         Points to transform.
     transform : np.array
@@ -429,35 +432,36 @@ def transform_points(
     z : float
         Z value to set.
 
-    Returns:
-    --------
+    Returns
+    -------
     transformed : dict
         Dictionary id: transformed point.
+
     """
 
     def transform_point(point: np.ndarray, transform_mat: np.ndarray) -> np.ndarray:
         """
         Transform a point with a transformation matrix.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         point : np.array
             Point to transform.
         transform_mat : np.array
             Transformation matrix.
 
-        Returns:
-        --------
+        Returns
+        -------
         point : np.array
             Transformed point.
+
         """
         if not isinstance(point, np.ndarray):
             raise TypeError(f"point must be np.ndarray, got {type(point).__name__}")
         if not isinstance(transform_mat, np.ndarray):
             raise TypeError(f"transform_mat must be np.ndarray, got {type(transform_mat).__name__}")
 
-        res = np.dot(transform_mat[:3, :3], point) + transform_mat[:3, 3:]
-        return res
+        return np.dot(transform_mat[:3, :3], point) + transform_mat[:3, 3:]
 
     transformed = {}
     for pid, point in points.items():
@@ -468,14 +472,14 @@ def transform_points(
 
 
 def split_ways(
-    points: dict[int, np.ndarray], ways: dict[str, list[Any]], max_dist: float = 0.25
+    points: dict[int, np.ndarray], ways: dict[str, list[Any]], max_dist: float = 0.25,
 ) -> np.ndarray:
     """
     Equidistantly split ways into points with a maximal step size. Also only use footways
     from map data, as we are not allowed to leave the footways.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     points : dict
         Points to split ways on.
     ways : dict
@@ -483,10 +487,11 @@ def split_ways(
     max_dist : float
         Maximal step size.
 
-    Returns:
-    --------
+    Returns
+    -------
     waypoints : np.array
         Waypoints created from the ways.
+
     """
     waypoints = []
     for way in ways.get("footways", []):

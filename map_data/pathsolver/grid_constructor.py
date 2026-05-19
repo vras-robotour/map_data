@@ -40,8 +40,7 @@ class PathGrid:
             np.ceil((self.high[1] - self.low[1]) / self.cell_size).astype(int),
         )
         # grid is (N, 3) where columns are [x, y, 0]
-        grid = np.pad(np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2), ((0, 0), (0, 1)))
-        return grid
+        return np.pad(np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2), ((0, 0), (0, 1)))
 
     def fill(
         self,
@@ -67,11 +66,11 @@ class PathGrid:
         all_ways = []
         if "footway" in highway_types:
             all_ways.extend(
-                [w for w in map_data.footways_list if w.line and w.line.intersects(bbox_buffered)]
+                [w for w in map_data.footways_list if w.line and w.line.intersects(bbox_buffered)],
             )
         if "road" in highway_types:
             all_ways.extend(
-                [w for w in map_data.roads_list if w.line and w.line.intersects(bbox_buffered)]
+                [w for w in map_data.roads_list if w.line and w.line.intersects(bbox_buffered)],
             )
 
         # Subtract path geometries from obstacles
@@ -111,7 +110,7 @@ class PathGrid:
                         poly_path = Path(np.array(poly.exterior.coords))
                         mask_inside = poly_path.contains_points(path_grid[mask_bbox, :2])
                         path_grid[mask_bbox, 3] = np.where(
-                            mask_inside, 1.0, path_grid[mask_bbox, 3]
+                            mask_inside, 1.0, path_grid[mask_bbox, 3],
                         )
 
         # 3. Process ways to set their costs
@@ -166,12 +165,12 @@ class PathGrid:
         x_indices = np.floor((self.grid[:, 0] - self.low[0]) / self.cell_size).astype(int)
         y_indices = np.floor((self.grid[:, 1] - self.low[1]) / self.cell_size).astype(int)
         grid_2d[np.clip(x_indices, 0, num_x - 1), np.clip(y_indices, 0, num_y - 1)] = self.grid[
-            :, 3
+            :, 3,
         ]
         return grid_2d.T
 
     def burn_obstacles(
-        self, grid_2d: np.ndarray, obstacles: list[sh.geometry.base.BaseGeometry]
+        self, grid_2d: np.ndarray, obstacles: list[sh.geometry.base.BaseGeometry],
     ) -> np.ndarray:
         if not obstacles:
             return grid_2d

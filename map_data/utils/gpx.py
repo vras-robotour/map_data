@@ -17,16 +17,15 @@ def parse_path(path_file: str) -> tuple[np.ndarray, int, str] | list:
         logger.error("No path file provided.")
         return []
     if not os.path.exists(path_file):
-        logger.error(f"Path file {path_file} does not exist.")
+        logger.error("Path file %s does not exist.", path_file)
         return []
 
     if path_file.endswith(".gpx"):
         return parse_gpx_file(path_file)
-    elif path_file.endswith(".yaml"):
+    if path_file.endswith(".yaml"):
         return parse_yaml_file(path_file)
-    else:
-        logger.error(f"Unsupported file format: {path_file}.")
-        return []
+    logger.error("Unsupported file format: %s.", path_file)
+    return []
 
 
 def parse_gpx_file(gpx_file: str) -> tuple[np.ndarray, int, str] | list:
@@ -43,12 +42,12 @@ def parse_gpx_file(gpx_file: str) -> tuple[np.ndarray, int, str] | list:
             }
             waypoints.append(convert_waypoint(point))
     except Exception as e:
-        logger.error(f"Error parsing GPX file: {e}")
+        logger.exception("Error parsing GPX file: %s", e)
         return []
     if not waypoints:
         logger.warning("No waypoints found in GPX file.")
     else:
-        logger.info(f"Parsed {len(waypoints)} waypoints from GPX file.")
+        logger.info("Parsed %s waypoints from GPX file.", len(waypoints))
         zone_num, zone_let = utm.from_latlon(gpx.waypoints[0].latitude, gpx.waypoints[0].longitude)[
             2:
         ]
@@ -71,14 +70,14 @@ def parse_yaml_file(yaml_file: str) -> tuple[np.ndarray, int, str] | list:
                 point["ele"] = 0
             waypoints.append(convert_waypoint(point))
     except Exception as e:
-        logger.error(f"Error parsing YAML file: {e}")
+        logger.exception("Error parsing YAML file: %s", e)
         return []
     if not waypoints:
         logger.warning("No waypoints found in YAML file.")
     else:
-        logger.info(f"Parsed {len(waypoints)} waypoints from YAML file.")
+        logger.info("Parsed %s waypoints from YAML file.", len(waypoints))
         zone_num, zone_let = utm.from_latlon(
-            file_waypoints[0]["latitude"], file_waypoints[0]["longitude"]
+            file_waypoints[0]["latitude"], file_waypoints[0]["longitude"],
         )[2:]
 
     return np.array(waypoints), zone_num, zone_let
@@ -86,7 +85,7 @@ def parse_yaml_file(yaml_file: str) -> tuple[np.ndarray, int, str] | list:
 
 def convert_waypoint(point: dict[str, float]) -> tuple[float, float, float]:
     utm_point = utm.from_latlon(point["lat"], point["lon"])[:2]
-    return utm_point + (point.get("ele", 0),)
+    return (*utm_point, point.get("ele", 0))
 
 
 def utm_path_to_latlon(path: np.ndarray, zone_num: int, zone_let: str) -> list[dict[str, float]]:
@@ -113,7 +112,7 @@ def create_gpx_content(
             lon = point["longitude"]
             gpx_waypoints.append(f'  <wpt lat="{lat}" lon="{lon}"></wpt>')
         except KeyError as e:
-            logger.warning(f"Skipping a waypoint due to missing key: {e}")
+            logger.warning("Skipping a waypoint due to missing key: %s", e)
             continue
 
     waypoints_xml = "\n".join(gpx_waypoints)

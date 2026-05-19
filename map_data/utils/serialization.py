@@ -70,9 +70,10 @@ def load_mapdata(md_class: Any, path: str) -> Any:
 
     if header == b"\x80":
         logger.error(
-            f"Detected legacy pickle format for {path}. "
+            "Detected legacy pickle format for %s. "
             "Pickle support has been removed for security reasons. "
-            "Please re-parse the data from the original GPX/YAML file."
+            "Please re-parse the data from the original GPX/YAML file.",
+            path,
         )
         raise ValueError(f"Legacy pickle format no longer supported: {path}")
 

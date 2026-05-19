@@ -10,13 +10,13 @@ logger = logging.getLogger("map_data_info")
 
 def get_stats(path: str) -> None:
     if not os.path.isfile(path):
-        logger.error(f"File not found: {path}")
+        logger.error("File not found: %s", path)
         return
 
     try:
         md = MapData.load(path)
-    except Exception as e:
-        logger.error(f"Failed to load map data: {e}")
+    except Exception:
+        logger.exception("Failed to load map data")
         return
 
     print("=" * 40)

@@ -5,9 +5,9 @@ import os
 from typing import Any
 
 import numpy as np
-import shapely.geometry as geometry
 import utm
 from gpxpy import parse as gpxparse
+from shapely import geometry
 
 from map_data.utils.config import load_config
 from map_data.utils.overpass import OverpassClient
@@ -73,6 +73,7 @@ class MapData:
         Parsed barrier features (walls, buildings, fences, water, …).
     crossroads_list : list of Way
         Footway intersection points detected during parsing.
+
     """
 
     def __init__(
@@ -98,6 +99,7 @@ class MapData:
             current position is included in the bounding box calculation.
         flip : bool
             If ``True``, reverse the order of the parsed waypoints.
+
         """
         if coords_type == "file":
             with open(coords) as f:
@@ -198,23 +200,23 @@ class MapData:
             params_path = os.path.join(package_path, "share", "map_data", "parameters")
         except Exception:
             params_path = os.path.realpath(
-                os.path.join(os.path.dirname(__file__), "..", "parameters")
+                os.path.join(os.path.dirname(__file__), "..", "parameters"),
             )
 
         self.BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
-            os.path.join(params_path, "barrier_tags.csv")
+            os.path.join(params_path, "barrier_tags.csv"),
         )
         self.NOT_BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
-            os.path.join(params_path, "not_barrier_tags.csv")
+            os.path.join(params_path, "not_barrier_tags.csv"),
         )
         self.ANTI_BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
-            os.path.join(params_path, "anti_barrier_tags.csv")
+            os.path.join(params_path, "anti_barrier_tags.csv"),
         )
         self.OBSTACLE_TAGS: dict[str, list[str]] = self._csv_to_dict(
-            os.path.join(params_path, "obstacle_tags.csv")
+            os.path.join(params_path, "obstacle_tags.csv"),
         )
         self.NOT_OBSTACLE_TAGS: dict[str, list[str]] = self._csv_to_dict(
-            os.path.join(params_path, "not_obstacle_tags.csv")
+            os.path.join(params_path, "not_obstacle_tags.csv"),
         )
 
     @staticmethod
@@ -248,9 +250,9 @@ class MapData:
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(cache_data, f)
-            logger.info(f"Saved OSM response cache to {path}")
+            logger.info("Saved OSM response cache to %s", path)
         except Exception as e:
-            logger.warning(f"Could not save OSM cache: {e}")
+            logger.warning("Could not save OSM cache: %s", e)
 
     def _load_osm_cache(self) -> dict[str, str] | None:
         path = self._get_osm_cache_path()
@@ -272,14 +274,14 @@ class MapData:
                 logger.info("OSM cache found but bounding box has changed. Re-querying.")
                 return None
 
-            logger.info(f"Using cached OSM responses from {path}")
+            logger.info("Using cached OSM responses from %s", path)
             return {
                 "ways": cache_data["ways"],
                 "rels": cache_data["rels"],
                 "nodes": cache_data["nodes"],
             }
         except Exception as e:
-            logger.debug(f"Could not load OSM cache: {e}")
+            logger.debug("Could not load OSM cache: %s", e)
             return None
 
     def run_queries(self, use_cache: bool = True) -> None:
@@ -296,6 +298,7 @@ class MapData:
         use_cache : bool
             If ``True`` (default), attempt to load responses from a local
             ``.osm_cache.json`` file before querying the API.
+
         """
         if use_cache:
             cache = self._load_osm_cache()
@@ -348,6 +351,7 @@ class MapData:
         int
             ``0`` on success, ``1`` if OSM data has not been downloaded yet
             (call :meth:`run_queries` first).
+
         """
         if any(d is None for d in (self.osm_ways_data, self.osm_rels_data, self.osm_nodes_data)):
             logger.error("Missing OSM data. Run run_queries() first.")
@@ -367,7 +371,7 @@ class MapData:
         )
 
         self.roads_list, self.footways_list, parsed_barriers = separate_ways(
-            ways_dict, self.BARRIER_TAGS, self.NOT_BARRIER_TAGS, self.ANTI_BARRIER_TAGS
+            ways_dict, self.BARRIER_TAGS, self.NOT_BARRIER_TAGS, self.ANTI_BARRIER_TAGS,
         )
         self.barriers_list = parsed_barriers + node_barriers
         self.crossroads_list = self.parse_intersections(ways_dict)
@@ -409,7 +413,7 @@ class MapData:
                         is_area=True,
                         tags={"type": "footway_intersection", "count": str(count)},
                         line=geometry.Point(e, n).buffer(1.5),
-                    )
+                    ),
                 )
         return crossroads
 
@@ -429,6 +433,7 @@ class MapData:
         save : bool
             If ``True`` (default), write a ``.mapdata`` file after successful
             parsing.
+
         """
         self.run_queries()
         if self.run_parse() == 0 and save:
@@ -444,6 +449,7 @@ class MapData:
             Output file path. Defaults to the source GPX filename with its
             extension replaced by ``.mapdata``. Logs an error and returns
             without writing if no path can be determined.
+
         """
         if path is None:
             if self.coords_file:
@@ -452,7 +458,7 @@ class MapData:
                 logger.error("No save path provided and no source file available.")
                 return
         save_mapdata(self, path)
-        logger.info(f"Map data saved to {path}")
+        logger.info("Map data saved to %s", path)
 
     @classmethod
     def load(cls, path: str) -> "MapData":
@@ -468,6 +474,7 @@ class MapData:
         -------
         MapData
             Restored instance with all way lists populated.
+
         """
         return load_mapdata(cls, path)
 
@@ -496,6 +503,7 @@ class MapData:
         dict of {int: np.ndarray}
             Mapping of OSM node ID → column vector of shape ``(3, 1)``
             containing ``[easting, northing, z]``.
+
         """
         points = {}
         for node_id, data in self.nodes_cache.items():
@@ -512,6 +520,7 @@ class MapData:
         dict of {str: list of Way}
             Keys are ``"roads"``, ``"footways"``, ``"barriers"``, and
             ``"crossroads"``.
+
         """
         return {
             "roads": self.roads_list,

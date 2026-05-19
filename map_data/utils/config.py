@@ -21,7 +21,7 @@ def load_config(filename: str) -> dict[str, Any]:
     except (ImportError, LookupError):
         # Fallback for non-ROS2 environments
         config_path = os.path.realpath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "config", filename)
+            os.path.join(os.path.dirname(__file__), "..", "..", "config", filename),
         )
 
     if os.path.exists(config_path):
@@ -29,8 +29,8 @@ def load_config(filename: str) -> dict[str, Any]:
             with open(config_path) as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
-            logger.error(f"Error loading config file {config_path}: {e}")
+            logger.exception("Error loading config file %s: %s", config_path, e)
             return {}
 
-    logger.debug(f"Config file not found: {config_path}")
+    logger.debug("Config file not found: %s", config_path)
     return {}

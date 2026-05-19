@@ -97,6 +97,7 @@ class RRTStar:
             If ``True``, continue iterating after the goal is first reached
             to find a lower-cost path. If ``False`` (default), return as
             soon as the goal is reached.
+
         """
         self.start = start
         self.goal = goal
@@ -183,13 +184,12 @@ class RRTStar:
         )
 
         for px, py in self._bresenham(p1_grid, p2_grid):
-            if 0 <= px < self.grid_shape[1] and 0 <= py < self.grid_shape[0]:
-                if self.grid[py, px] >= self.traversability_threshold:
-                    return True
+            if 0 <= px < self.grid_shape[1] and 0 <= py < self.grid_shape[0] and self.grid[py, px] >= self.traversability_threshold:
+                return True
         return False
 
     def _bresenham(
-        self, start: tuple[int, int], goal: tuple[int, int]
+        self, start: tuple[int, int], goal: tuple[int, int],
     ) -> Iterator[tuple[int, int]]:
         """
         Yield integer grid cells along the line from *start* to *goal* (Bresenham).
@@ -240,13 +240,13 @@ class RRTStar:
                 [
                     self._trav_xs[idx] + random.uniform(-self.grid_scale / 2, self.grid_scale / 2),
                     self._trav_ys[idx] + random.uniform(-self.grid_scale / 2, self.grid_scale / 2),
-                ]
+                ],
             )
         return np.array(
             [
                 random.uniform(self._sample_min[0], self._sample_max[0]),
                 random.uniform(self._sample_min[1], self._sample_max[1]),
-            ]
+            ],
         )
 
     def _nearest_node(self, point: np.ndarray) -> int:
@@ -320,10 +320,10 @@ class RRTStar:
             segment intersects an obstacle or blocked grid cell, and *cost*
             is the weighted traversal cost ``dist * (1 + avg_grid_cost * 5)``.
             Returns ``(True, inf)`` on collision.
+
         """
-        if self.obstacles_tree:
-            if len(self.obstacles_tree.query(LineString([start, end]), predicate="intersects")) > 0:
-                return True, float("inf")
+        if self.obstacles_tree and len(self.obstacles_tree.query(LineString([start, end]), predicate="intersects")) > 0:
+            return True, float("inf")
 
         p1_grid = (
             int((start[0] - self.low[0]) / self.grid_scale),
@@ -365,6 +365,7 @@ class RRTStar:
             Path as an ``(N, 2)`` array of ``[x, y]`` world coordinates,
             or ``None`` if no collision-free path was found within the
             iteration budget or if planning was cancelled via *transfer_id*.
+
         """
         from .replan import _is_cancelled
 
@@ -447,7 +448,7 @@ class RRTStar:
         while curr is not None:
             path.append(self.nodes[curr])
             curr = self.parent[curr]
-        path = path[::-1]
+        path.reverse()
         if self.simplify and len(path) > 2:
             return self._simplify_path(path)
         return path

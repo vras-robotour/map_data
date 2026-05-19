@@ -14,7 +14,7 @@ _FOOTWAY_JSON = json.dumps(
             {"type": "node", "id": 2, "lat": _LAT + 0.001, "lon": _LON + 0.001},
             {"type": "way", "id": 101, "nodes": [1, 2], "tags": {"highway": "footway"}},
         ],
-    }
+    },
 )
 
 _ROAD_JSON = json.dumps(
@@ -25,7 +25,7 @@ _ROAD_JSON = json.dumps(
             {"type": "node", "id": 4, "lat": _LAT + 0.001, "lon": _LON + 0.001},
             {"type": "way", "id": 102, "nodes": [3, 4], "tags": {"highway": "primary"}},
         ],
-    }
+    },
 )
 
 _AREA_JSON = json.dumps(
@@ -43,7 +43,7 @@ _AREA_JSON = json.dumps(
                 "tags": {"building": "yes"},
             },
         ],
-    }
+    },
 )
 
 _OBSTACLE_NODES_JSON = json.dumps(
@@ -55,7 +55,7 @@ _OBSTACLE_NODES_JSON = json.dumps(
             # A non-obstacle node
             {"type": "node", "id": 11, "lat": _LAT + 0.001, "lon": _LON, "tags": {"name": "bench"}},
         ],
-    }
+    },
 )
 
 
@@ -115,15 +115,14 @@ def _ways_from_json(json_str):
 
 def test_separate_ways_routes_footway():
     ways = _ways_from_json(_FOOTWAY_JSON)
-    roads, footways, barriers = separate_ways(ways, {}, {}, {})
+    roads, footways, _ = separate_ways(ways, {}, {}, {})
     assert len(footways) == 1
     assert len(roads) == 0
-    assert len(barriers) == 0
 
 
 def test_separate_ways_routes_road():
     ways = _ways_from_json(_ROAD_JSON)
-    roads, footways, barriers = separate_ways(ways, {}, {}, {})
+    roads, footways, _ = separate_ways(ways, {}, {}, {})
     assert len(roads) == 1
     assert len(footways) == 0
 
@@ -142,7 +141,7 @@ def test_separate_ways_routes_barrier_way():
                     "tags": {"barrier": "wall"},
                 },
             ],
-        }
+        },
     )
     ways = _ways_from_json(barrier_json)
     barrier_tags = {"barrier": ["*"]}

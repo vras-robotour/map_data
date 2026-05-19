@@ -21,7 +21,7 @@ _WAYS_JSON = json.dumps(
             {"type": "node", "id": 2, "lat": 50.002, "lon": 14.002},
             {"type": "way", "id": 101, "nodes": [1, 2], "tags": {"highway": "footway"}},
         ],
-    }
+    },
 )
 _EMPTY_JSON = json.dumps({"version": 0.6, "elements": []})
 

@@ -2,8 +2,8 @@ import logging
 from typing import Any
 
 import numpy as np
-import shapely.geometry as geometry
 import utm
+from shapely import geometry
 from shapely.ops import linemerge
 from tqdm import tqdm
 
@@ -102,7 +102,7 @@ def parse_osm_nodes(
                     is_area=True,
                     tags=dict(node.tags) if node.tags else {},
                     line=geometry.Point(easting, northing).buffer(OBSTACLE_RADIUS),
-                )
+                ),
             )
     return barriers
 

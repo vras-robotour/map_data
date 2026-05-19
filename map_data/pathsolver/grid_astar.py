@@ -42,6 +42,7 @@ def grid_astar(
     -------
     np.ndarray or None
         Found path as UTM coordinate array, or ``None`` if no path exists.
+
     """
     ny, nx = grid.shape
 
@@ -97,7 +98,7 @@ def grid_astar(
     flat_costs = padded_costs.ravel()
 
     while pq:
-        f, g_pushed, ix, iy = heapq.heappop(pq)
+        _f, g_pushed, ix, iy = heapq.heappop(pq)
 
         u_flat = (iy + 1) * p_nx + (ix + 1)
         if g_scores[u_flat] < g_pushed - 1e-4:

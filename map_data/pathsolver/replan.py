@@ -3,6 +3,7 @@
 import argparse
 import logging
 import os
+import sys
 import threading
 from typing import Any
 
@@ -149,7 +150,7 @@ class ReplanPath:
 
     def replan(self, path: np.ndarray, algorithm: str = "astar") -> np.ndarray | None:
         def process_segment(
-            i: int, path: np.ndarray, args: argparse.Namespace
+            i: int, path: np.ndarray, args: argparse.Namespace,
         ) -> tuple[list[np.ndarray] | None, int]:
             if _is_cancelled(self.transfer_id):
                 return None, i
@@ -182,7 +183,7 @@ class ReplanPath:
         results.sort(key=lambda x: x[1])
         for segment_path, _ in results:
             if segment_path is None:
-                logger.warning(f"{algorithm} failed to find a path.")
+                logger.warning("%s failed to find a path.", algorithm)
                 return None
             new_path.extend(segment_path)
 
@@ -337,7 +338,7 @@ if __name__ == "__main__":
         map_data.run_queries()
         ret = map_data.run_parse()
         if ret:
-            exit(1)
+            sys.exit(1)
     else:
         map_data = MapData.load(os.path.join(os.path.dirname(__file__), "../", args.file))
 

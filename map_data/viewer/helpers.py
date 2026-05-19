@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 def ring_to_latlon(
-    coords: list[tuple[float, float]], zone_number: int, zone_letter: str
+    coords: list[tuple[float, float]], zone_number: int, zone_letter: str,
 ) -> list[list[float]]:
     result = []
     for x, y in coords:
@@ -40,13 +40,13 @@ def geom_to_geojson(geom, zone_number, zone_letter):
     if gtype == "Polygon":
         exterior = ring_to_latlon(geom.exterior.coords, zone_number, zone_letter)
         interiors = [ring_to_latlon(r.coords, zone_number, zone_letter) for r in geom.interiors]
-        return {"type": "Polygon", "coordinates": [exterior] + interiors}
+        return {"type": "Polygon", "coordinates": [exterior, *interiors]}
     if gtype == "MultiPolygon":
         polygons = []
         for poly in geom.geoms:
             exterior = ring_to_latlon(poly.exterior.coords, zone_number, zone_letter)
             interiors = [ring_to_latlon(r.coords, zone_number, zone_letter) for r in poly.interiors]
-            polygons.append([exterior] + interiors)
+            polygons.append([exterior, *interiors])
         return {"type": "MultiPolygon", "coordinates": polygons}
     if gtype == "LineString":
         return {
@@ -81,7 +81,7 @@ def mapdata_to_geojson(map_data):
                         "tags": way.tags or {},
                         "in_out": way.in_out,
                     },
-                }
+                },
             )
 
     add_ways(map_data.roads_list, "road")
@@ -98,7 +98,7 @@ def mapdata_to_geojson(map_data):
                 "id": f"wp_{i}",
                 "geometry": {"type": "Point", "coordinates": [lon, lat]},
                 "properties": {"category": "waypoint", "index": i},
-            }
+            },
         )
 
     return {"type": "FeatureCollection", "features": features}
@@ -213,7 +213,7 @@ def split_way(way, split_nids, zone_number=None, zone_letter=None, nodes_cache=N
     current_nodes = []
     current_coords = []
 
-    split_set = set(int(nid) for nid in split_nids)
+    split_set = {int(nid) for nid in split_nids}
     for i, nid in enumerate(node_ids):
         current_nodes.append(way.nodes[i])
         if i < len(raw_coords):
@@ -288,7 +288,7 @@ def migrate_change_log(store):
             key = (d["way_id"], d["node_id"])
             if key not in tracked_nodes:
                 untracked_nodes.append(
-                    {"type": "node", "way_id": d["way_id"], "node_id": d["node_id"]}
+                    {"type": "node", "way_id": d["way_id"], "node_id": d["node_id"]},
                 )
 
     untracked_tags = []
@@ -340,7 +340,7 @@ def get_node_position_overrides(store, way_id):
 
 
 def apply_node_position_overrides(
-    way, overrides, zone_number, zone_letter, nodes_cache=None, category=None
+    way, overrides, zone_number, zone_letter, nodes_cache=None, category=None,
 ):
     """
     Return a copy of way with geometry updated from node position overrides.
@@ -418,7 +418,7 @@ def apply_node_position_overrides(
             if category == "barrier":
                 # Closed barrier area: reconstruct as flat Polygon from the node ring
                 ring = (
-                    utm_coords if utm_coords[0] == utm_coords[-1] else utm_coords + [utm_coords[0]]
+                    utm_coords if utm_coords[0] == utm_coords[-1] else [*utm_coords, utm_coords[0]]
                 )
                 if len(ring) < 4:
                     return way
@@ -471,7 +471,7 @@ def apply_node_position_overrides(
                 w.line = ls.buffer(r)
             except Exception:
                 if len(utm_coords) >= 3:
-                    closed = utm_coords + [utm_coords[0]]
+                    closed = [*utm_coords, utm_coords[0]]
                     try:
                         w.line = _SPoly(closed)
                     except Exception:
@@ -519,7 +519,7 @@ def geojson_geom_to_utm(geometry, zone_number, zone_letter):
 
 
 def rebuild_way_without_nodes(
-    way, del_nids, zone_number=None, zone_letter=None, nodes_cache=None, category=None
+    way, del_nids, zone_number=None, zone_letter=None, nodes_cache=None, category=None,
 ):
     """
     Return a shallow copy of way with del_nids removed, or None if geometry becomes invalid.
@@ -572,7 +572,7 @@ def rebuild_way_without_nodes(
                     ring = (
                         utm_coords
                         if utm_coords[0] == utm_coords[-1]
-                        else utm_coords + [utm_coords[0]]
+                        else [*utm_coords, utm_coords[0]]
                     )
                     if len(ring) < 4:
                         return None

@@ -14,7 +14,6 @@ import uuid
 from typing import Any
 
 import numpy as np
-import shapely.geometry as geometry
 import utm
 from flask import (
     Blueprint,
@@ -25,6 +24,7 @@ from flask import (
     request,
     send_file,
 )
+from shapely import geometry
 
 from map_data.map_data import MapData
 from map_data.pathsolver.graph_planner import GraphPlanner
@@ -103,7 +103,7 @@ def _apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                         seg_del_nids = get_deleted_node_ids(store, virtual_id)
                         if seg_del_nids:
                             seg = rebuild_way_without_nodes(
-                                seg, seg_del_nids, zn, zl, nodes_cache, category=cat
+                                seg, seg_del_nids, zn, zl, nodes_cache, category=cat,
                             )
                             if seg is None:
                                 continue
@@ -310,7 +310,7 @@ def fetch_area():
             [body["min_lat"], body["max_lon"]],
             [body["max_lat"], body["min_lon"]],
             [body["max_lat"], body["max_lon"]],
-        ]
+        ],
     )
     easting, northing, zone_number, zone_letter = utm.from_latlon(corners[:, 0], corners[:, 1])
     waypoints = np.column_stack([easting, northing])
@@ -332,7 +332,7 @@ def fetch_area():
             "footways": len(md.footways_list),
             "barriers": len(md.barriers_list),
             "crossroads": len(md.crossroads_list),
-        }
+        },
     )
 
 
@@ -382,10 +382,10 @@ def upload_gpx():
                 "footways": len(md.footways_list),
                 "barriers": len(md.barriers_list),
                 "crossroads": len(md.crossroads_list),
-            }
+            },
         )
     except Exception as e:
-        logger.error(f"Error processing GPX upload: {e}", exc_info=True)
+        logger.error("Error processing GPX upload: %s", e, exc_info=True)
         abort(500, str(e))
     finally:
         if os.path.exists(gpx_tmp_path):
@@ -443,7 +443,7 @@ def get_way_nodes():
     if pos_overrides:
         way = (
             apply_node_position_overrides(
-                way, pos_overrides, zn, zl, nodes_cache, category=category
+                way, pos_overrides, zn, zl, nodes_cache, category=category,
             )
             or way
         )
@@ -464,7 +464,7 @@ def get_way_nodes():
                 seg_del_nids = get_deleted_node_ids(store, way_id)
                 if seg_del_nids:
                     way = rebuild_way_without_nodes(
-                        way, seg_del_nids, zn, zl, nodes_cache, category=category
+                        way, seg_del_nids, zn, zl, nodes_cache, category=category,
                     )
                     if way is None:
                         return jsonify({"way_id": way_id, "nodes": []})
@@ -547,7 +547,7 @@ def get_way(way_id):
     del_nids = get_deleted_node_ids(store, search_id)
     if del_nids:
         way = rebuild_way_without_nodes(
-            way, del_nids, zn, zl, getattr(md, "nodes_cache", {}), category=category
+            way, del_nids, zn, zl, getattr(md, "nodes_cache", {}), category=category,
         )
         if way is None:
             abort(404, f"Way {way_id} reduced to nothing by node deletions")
@@ -582,7 +582,7 @@ def get_way(way_id):
                 seg_del_nids = get_deleted_node_ids(store, way_id)
                 if seg_del_nids:
                     way = rebuild_way_without_nodes(
-                        way, seg_del_nids, zn, zl, nodes_cache, category=category
+                        way, seg_del_nids, zn, zl, nodes_cache, category=category,
                     )
                     if way is None:
                         abort(
@@ -641,7 +641,7 @@ def delete_way(way_id):
                 "id": way_id_int,
                 "category": body.get("category", "unknown"),
                 "label": body.get("label", ""),
-            }
+            },
         )
         cl = store.setdefault("change_log", [])
         if not any(e.get("type") == "way" and e.get("id") == way_id_int for e in cl):
@@ -771,7 +771,7 @@ def _get_way_segments_geojson(filename, original_way_id):
         seg_del_nids = get_deleted_node_ids(store, virtual_id)
         if seg_del_nids:
             seg = rebuild_way_without_nodes(
-                seg, seg_del_nids, zn, zl, md.nodes_cache, category=category
+                seg, seg_del_nids, zn, zl, md.nodes_cache, category=category,
             )
             if seg is None:
                 continue
@@ -795,7 +795,7 @@ def _get_way_segments_geojson(filename, original_way_id):
                     "tags": tags,
                     "in_out": seg.in_out,
                 },
-            }
+            },
         )
     return features
 
@@ -839,7 +839,7 @@ def split_way_endpoint():
                     "way_id": int(original_way_id),
                     "node_id": node_id_int,
                     "ts": time.time(),
-                }
+                },
             )
 
     save_annotations(ann_path, store)
@@ -907,7 +907,7 @@ def hide_way(way_id):
                 "id": way_id_int,
                 "category": body.get("category", "unknown"),
                 "label": body.get("label", ""),
-            }
+            },
         )
     save_annotations(ann_path, store)
     return "", 204
@@ -999,7 +999,7 @@ def delete_way_node():
                     "way_id": target_id,
                     "node_id": node_id,
                     "ts": time.time(),
-                }
+                },
             )
     save_annotations(ann_path, store)
     return "", 204
@@ -1086,7 +1086,7 @@ def move_way_nodes():
                 "category": body.get("category", "unknown"),
                 "label": body.get("label", ""),
                 "ts": time.time(),
-            }
+            },
         )
     save_annotations(ann_path, store)
     return "", 204
@@ -1249,7 +1249,7 @@ def get_cost_grid():
             custom_costs = json.loads(highway_costs)
             replanner.HIGHWAY_COSTS = custom_costs
         except Exception as e:
-            logger.warning(f"Failed to parse custom highway costs: {e}")
+            logger.warning("Failed to parse custom highway costs: %s", e)
 
     surface_costs = request.args.get("surface_costs")
     if surface_costs:
@@ -1257,7 +1257,7 @@ def get_cost_grid():
             custom_surf_costs = json.loads(surface_costs)
             replanner.SURFACE_COSTS = custom_surf_costs
         except Exception as e:
-            logger.warning(f"Failed to parse custom surface costs: {e}")
+            logger.warning("Failed to parse custom surface costs: %s", e)
 
     replanner.fill_grid(md, highway_types=["footway", "road"])
 
@@ -1273,7 +1273,7 @@ def get_cost_grid():
                 "type": "Feature",
                 "geometry": {"type": "Point", "coordinates": [lon, lat]},
                 "properties": {"cost": float(row[3])},
-            }
+            },
         )
 
     return jsonify({"type": "FeatureCollection", "features": features})
@@ -1317,10 +1317,10 @@ class WormholeManager:
             )
         except Exception as e:
             shutil.rmtree(temp_dir)
-            raise RuntimeError(f"Failed to start wormhole process: {e}")
+            raise RuntimeError(f"Failed to start wormhole process: {e}") from e
 
-        logger.info(f"Starting wormhole transfer {transfer_id}: {' '.join(cmd)}")
-        logger.info(f"Process ID for transfer {transfer_id}: {process.pid}")
+        logger.info("Starting wormhole transfer %s: %s", transfer_id, " ".join(cmd))
+        logger.info("Process ID for transfer %s: %s", transfer_id, process.pid)
 
         self.active_transfers[transfer_id] = {
             "process": process,
@@ -1331,7 +1331,7 @@ class WormholeManager:
         }
 
         threading.Thread(
-            target=self._capture_wormhole_code_thread, args=(transfer_id,), daemon=True
+            target=self._capture_wormhole_code_thread, args=(transfer_id,), daemon=True,
         ).start()
         return transfer_id
 
@@ -1352,10 +1352,10 @@ class WormholeManager:
                         if match:
                             wormhole_code = match.group(1)
                             logger.info(
-                                f"Wormhole code for transfer {transfer_id}: {wormhole_code}"
+                                "Wormhole code for transfer %s: %s", transfer_id, wormhole_code,
                             )
                         elif stream == process.stderr:
-                            logger.warning(f"Wormhole stderr ({transfer_id}): {line}")
+                            logger.warning("Wormhole stderr (%s): %s", transfer_id, line)
 
                 if wormhole_code:
                     transfer_info["code"] = wormhole_code
@@ -1367,7 +1367,7 @@ class WormholeManager:
             process.wait(timeout=60)
             transfer_info["status"] = "completed" if process.returncode == 0 else "failed"
         except Exception as e:
-            logger.error(f"Error in wormhole thread for {transfer_id}: {e}")
+            logger.exception("Error in wormhole thread for %s: %s", transfer_id, e)
             transfer_info["status"] = "failed"
             if process.poll() is None:
                 process.kill()
@@ -1378,7 +1378,7 @@ class WormholeManager:
         start_time = time.time()
         while time.time() - start_time < timeout:
             if transfer_id in self.active_transfers and self.active_transfers[transfer_id].get(
-                "code"
+                "code",
             ):
                 return self.active_transfers[transfer_id]["code"]
             time.sleep(0.1)
@@ -1388,7 +1388,7 @@ class WormholeManager:
         if transfer_id not in self.active_transfers:
             return False, "Invalid or unknown transfer ID"
 
-        logger.info(f"Cancelling wormhole transfer {transfer_id}")
+        logger.info("Cancelling wormhole transfer %s", transfer_id)
         process = self.active_transfers[transfer_id]["process"]
         if process.poll() is None:
             process.kill()
@@ -1402,7 +1402,7 @@ class WormholeManager:
             try:
                 shutil.rmtree(transfer["temp_dir"])
             except Exception as e:
-                logger.error(f"Error cleaning temp dir for {transfer_id}: {e}")
+                logger.exception("Error cleaning temp dir for %s: %s", transfer_id, e)
 
 
 wormhole_manager = WormholeManager()
@@ -1419,13 +1419,12 @@ def create_wormhole():
         code = wormhole_manager.get_transfer_code(transfer_id, timeout=15)
         if code:
             return jsonify({"success": True, "code": code, "transfer_id": transfer_id})
-        else:
-            wormhole_manager.cancel_transfer(transfer_id)
-            return jsonify(
-                {"success": False, "message": "Failed to capture wormhole code in time"}
-            ), 500
+        wormhole_manager.cancel_transfer(transfer_id)
+        return jsonify(
+            {"success": False, "message": "Failed to capture wormhole code in time"},
+        ), 500
     except Exception as e:
-        logger.error(f"Error creating wormhole: {e}", exc_info=True)
+        logger.error("Error creating wormhole: %s", e, exc_info=True)
         return jsonify({"success": False, "message": str(e)}), 500
 
 
@@ -1501,12 +1500,12 @@ def create_replan():
             try:
                 replanner.HIGHWAY_COSTS = highway_costs
             except Exception as e:
-                logger.warning(f"Failed to set custom highway costs: {e}")
+                logger.warning("Failed to set custom highway costs: %s", e)
         if surface_costs:
             try:
                 replanner.SURFACE_COSTS = surface_costs
             except Exception as e:
-                logger.warning(f"Failed to set custom surface costs: {e}")
+                logger.warning("Failed to set custom surface costs: %s", e)
         replanner.fill_grid(md, highway_types=highway_types)
         res = replanner.replan(utm_path, algorithm=sub_algorithm)
 
@@ -1530,5 +1529,4 @@ def create_replan():
 
     if changed:
         return jsonify({"retrieveNum": 0, "newPath": new_path})
-    else:
-        return jsonify({"retrieveNum": -1, "newPath": new_path})
+    return jsonify({"retrieveNum": -1, "newPath": new_path})

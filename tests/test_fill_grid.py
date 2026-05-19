@@ -86,7 +86,7 @@ def test_fill_grid_cells_far_from_footway_have_high_cost():
 
 def test_fill_grid_cells_inside_barrier_are_inf():
     md = _make_md_with_footway()
-    # Barrier 2m x 2m square at (e0+5, n0+2) – away from footway
+    # Barrier 2m x 2m square at (e0+5, n0+2) - away from footway
     barrier = geom.box(_E0 + 5, _N0 + 2, _E0 + 7, _N0 + 4)
 
     args = _make_args((_E0, _N0), (_E0 + 20, _N0 + 20))

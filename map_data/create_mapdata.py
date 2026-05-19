@@ -26,12 +26,12 @@ def process_map_data(file_name: str, download: bool) -> None:
             _, package_path = get_resource("packages", "map_data")
             data_path = os.path.join(package_path, "share", "map_data", "data")
             full_path = os.path.join(data_path, file_name)
-        except LookupError:
-            logger.error(f"File '{file_name}' not found and package 'map_data' not found")
-            raise SystemExit(1)
+        except LookupError as e:
+            logger.exception("File '%s' not found and package 'map_data' not found", file_name)
+            raise SystemExit(1) from e
 
     if not os.path.exists(full_path) and not download:
-        logger.error(f"File {full_path} not found")
+        logger.error("File %s not found", full_path)
         raise SystemExit(1)
 
     try:
@@ -45,10 +45,10 @@ def process_map_data(file_name: str, download: bool) -> None:
         else:
             map_data = md.MapData.load(full_path)
             map_data.save()
-        logger.info(f"Successfully processed map data for {file_name}")
+        logger.info("Successfully processed map data for %s", file_name)
     except Exception as e:
-        logger.error(f"Error processing map data: {str(e)}")
-        raise SystemExit(1)
+        logger.exception("Error processing map data: %s", e)
+        raise SystemExit(1) from e
 
 
 def main() -> None:
