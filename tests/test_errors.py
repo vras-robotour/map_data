@@ -1,6 +1,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import gpxpy
 import numpy as np
 import pytest
 import requests
@@ -20,7 +21,7 @@ def test_mapdata_invalid_gpx_xml_raises(tmp_path):
     gpx_path = tmp_path / "bad.gpx"
     with gpx_path.open("w") as f:
         f.write("not xml content at all")
-    with pytest.raises(Exception):
+    with pytest.raises(gpxpy.gpx.GPXXMLSyntaxException):
         MapData(str(gpx_path), coords_type="file")
 
 

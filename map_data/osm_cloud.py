@@ -13,7 +13,12 @@ from rclpy.qos import QoSDurabilityPolicy, QoSProfile
 from ros2_numpy import msgify, numpify
 from scipy.spatial import cKDTree
 from sensor_msgs.msg import PointCloud2
-from tf2_ros import Buffer, StaticTransformBroadcaster, TransformListener
+from tf2_ros import (
+    Buffer,
+    StaticTransformBroadcaster,
+    TransformException,
+    TransformListener,
+)
 from visualization_msgs.msg import Marker, MarkerArray
 
 import map_data.map_data as md
@@ -175,7 +180,7 @@ class OSMCloud(Node):
             self.get_logger().info("Rebuilding grid cloud due to parameter change")
             try:
                 self.grid_cloud = self.get_cloud()
-            except Exception as e:
+            except (ValueError, TypeError, RuntimeError) as e:
                 self.get_logger().error("Failed to rebuild grid cloud: %s", e)
                 return SetParametersResult(successful=False, reason=str(e))
 
@@ -183,7 +188,7 @@ class OSMCloud(Node):
             self.get_logger().info("Rebuilding intersections due to parameter change")
             try:
                 self.poses, self.markers = self.get_intersections()
-            except Exception as e:
+            except (ValueError, TypeError, RuntimeError) as e:
                 self.get_logger().error("Failed to rebuild intersections: %s", e)
                 return SetParametersResult(successful=False, reason=str(e))
 
@@ -222,7 +227,7 @@ class OSMCloud(Node):
                 self.utm_to_local = numpify(utm_to_local.transform)
                 self.get_logger().info("Got UTM to local transform: %s", self.utm_to_local)
                 break
-            except Exception as e:
+            except (TransformException, RuntimeError, TypeError, ValueError) as e:
                 self.get_logger().warning("Failed to get UTM to local transform: %s", e)
                 rclpy.spin_once(self, timeout_sec=1.0)
 
@@ -372,9 +377,11 @@ def create_cloud(points: np.ndarray) -> PointCloud2:
     if not isinstance(points, np.ndarray):
         points = np.array(points)
     if points.ndim != 2:
-        raise ValueError(f"points must be a 2-D array, got {points.ndim}-D")
+        msg = f"points must be a 2-D array, got {points.ndim}-D"
+        raise ValueError(msg)
     if points.shape[1] != 4:
-        raise ValueError(f"points must have 4 columns (x, y, z, cost), got {points.shape[1]}")
+        msg = f"points must have 4 columns (x, y, z, cost), got {points.shape[1]}"
+        raise ValueError(msg)
 
     points_f32 = points.astype(np.float32)
     cloud: PointCloud2 = msgify(
@@ -457,9 +464,11 @@ def transform_points(
 
         """
         if not isinstance(point, np.ndarray):
-            raise TypeError(f"point must be np.ndarray, got {type(point).__name__}")
+            msg = f"point must be np.ndarray, got {type(point).__name__}"
+            raise TypeError(msg)
         if not isinstance(transform_mat, np.ndarray):
-            raise TypeError(f"transform_mat must be np.ndarray, got {type(transform_mat).__name__}")
+            msg = f"transform_mat must be np.ndarray, got {type(transform_mat).__name__}"
+            raise TypeError(msg)
 
         return np.dot(transform_mat[:3, :3], point) + transform_mat[:3, 3:]
 
@@ -495,7 +504,7 @@ def split_ways(
     """
     waypoints = []
     for way in ways.get("footways", []):
-        for i, (n0, n1) in enumerate(zip(way.nodes, way.nodes[1:])):
+        for i, (n0, n1) in enumerate(zip(way.nodes, way.nodes[1:], strict=True)):
             id0 = getattr(n0, "id", n0)
             id1 = getattr(n1, "id", n1)
             point0 = points[id0].ravel()[:2]

@@ -89,5 +89,5 @@ class OverpassClient:
                     if "Available slots: 0" in text:
                         logger.info("Overpass busy (0 slots), waiting 15s...")
                         time.sleep(15)
-        except Exception as e:
+        except requests.RequestException as e:
             logger.debug("Could not check Overpass status at %s: %s", status_url, e)

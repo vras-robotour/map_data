@@ -24,7 +24,7 @@ def parse_osm_ways(osm_ways_data: overpy.Result, nodes_cache: dict[int, dict[str
         lats = np.array([float(n.lat) for n in way.nodes])
         lons = np.array([float(n.lon) for n in way.nodes])
         easting, northing, _, _ = utm.from_latlon(lats, lons)
-        coords = list(zip(easting, northing))
+        coords = list(zip(easting, northing, strict=True))
 
         for n in way.nodes:
             if n.id not in nodes_cache:

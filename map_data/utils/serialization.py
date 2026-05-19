@@ -80,7 +80,8 @@ def load_mapdata(md_class: type["MapData"], path: str | Path) -> "MapData":
             "Please re-parse the data from the original GPX/YAML file.",
             path,
         )
-        raise ValueError(f"Legacy pickle format no longer supported: {path}")
+        msg = f"Legacy pickle format no longer supported: {path}"
+        raise ValueError(msg)
 
     # Try JSON
     with p.open(encoding="utf-8") as f:

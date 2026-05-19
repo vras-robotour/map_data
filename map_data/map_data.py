@@ -119,7 +119,8 @@ class MapData:
                     points.extend([[p.latitude, p.longitude] for p in route.points])
 
             if not points:
-                raise ValueError(f"No points (waypoints, tracks or routes) found in {coords}")
+                msg = f"No points (waypoints, tracks or routes) found in {coords}"
+                raise ValueError(msg)
 
             latlon = np.array(points)
             self.waypoints, self.zone_number, self.zone_letter = self._latlon_to_utm(latlon)
@@ -129,7 +130,8 @@ class MapData:
             self.zone_letter = coords[2]
             self.coords_file = None
         else:
-            raise ValueError(f"Unknown coords_type: {coords_type!r}")
+            msg = f"Unknown coords_type: {coords_type!r}"
+            raise ValueError(msg)
 
         if flip:
             self.waypoints = np.flip(self.waypoints, 0)
@@ -158,7 +160,7 @@ class MapData:
         self.coords_data = CoordsData(self.min_long, self.max_long, self.min_lat, self.max_lat)
         self._check_utm_zone_boundary()
         self.points = [
-            geometry.Point(x, y) for x, y in zip(self.waypoints[:, 0], self.waypoints[:, 1])
+            geometry.Point(x, y) for x, y in zip(self.waypoints[:, 0], self.waypoints[:, 1], strict=True)
         ]
 
         self.nodes_cache: dict[int, dict[str, Any]] = {}
@@ -199,7 +201,7 @@ class MapData:
 
             _, package_path = get_resource("packages", "map_data")
             params_path = Path(package_path) / "share" / "map_data" / "parameters"
-        except Exception:
+        except (ImportError, LookupError):
             params_path = (Path(__file__).parent / ".." / "parameters").resolve()
 
         self.BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
@@ -250,7 +252,7 @@ class MapData:
             with path.open("w", encoding="utf-8") as f:
                 json.dump(cache_data, f)
             logger.info("Saved OSM response cache to %s", path)
-        except Exception as e:
+        except (OSError, TypeError) as e:
             logger.warning("Could not save OSM cache: %s", e)
 
     def _load_osm_cache(self) -> dict[str, str] | None:
@@ -279,7 +281,7 @@ class MapData:
                 "rels": cache_data["rels"],
                 "nodes": cache_data["nodes"],
             }
-        except Exception as e:
+        except (OSError, json.JSONDecodeError, KeyError) as e:
             logger.debug("Could not load OSM cache: %s", e)
             return None
 

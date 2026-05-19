@@ -145,7 +145,7 @@ def _get_data_dir() -> Path:
 
         _, pkg = get_resource("packages", "map_data")
         return Path(pkg) / "share" / "map_data" / "data"
-    except Exception:
+    except (ImportError, LookupError):
         # Fallback to the local data directory relative to this file
         return (Path(__file__).parent / ".." / ".." / "data").resolve()
 
@@ -1251,7 +1251,7 @@ def get_cost_grid() -> Response:
         try:
             custom_costs = json.loads(highway_costs)
             replanner.HIGHWAY_COSTS = custom_costs
-        except Exception as e:
+        except json.JSONDecodeError as e:
             logger.warning("Failed to parse custom highway costs: %s", e)
 
     surface_costs = request.args.get("surface_costs")
@@ -1259,7 +1259,7 @@ def get_cost_grid() -> Response:
         try:
             custom_surf_costs = json.loads(surface_costs)
             replanner.SURFACE_COSTS = custom_surf_costs
-        except Exception as e:
+        except json.JSONDecodeError as e:
             logger.warning("Failed to parse custom surface costs: %s", e)
 
     replanner.fill_grid(md, highway_types=["footway", "road"])
@@ -1320,7 +1320,8 @@ class WormholeManager:
             )
         except Exception as e:
             shutil.rmtree(temp_dir)
-            raise RuntimeError(f"Failed to start wormhole process: {e}") from e
+            msg = f"Failed to start wormhole process: {e}"
+            raise RuntimeError(msg) from e
 
         logger.info("Starting wormhole transfer %s: %s", transfer_id, " ".join(cmd))
         logger.info("Process ID for transfer %s: %s", transfer_id, process.pid)
@@ -1502,12 +1503,12 @@ def create_replan() -> Response:
         if highway_costs:
             try:
                 replanner.HIGHWAY_COSTS = highway_costs
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 logger.warning("Failed to set custom highway costs: %s", e)
         if surface_costs:
             try:
                 replanner.SURFACE_COSTS = surface_costs
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 logger.warning("Failed to set custom surface costs: %s", e)
         replanner.fill_grid(md, highway_types=highway_types)
         res = replanner.replan(utm_path, algorithm=sub_algorithm)

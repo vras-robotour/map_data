@@ -83,6 +83,7 @@ class MockMapData:
             for node_id, coord in zip(
                 way.nodes,
                 way.line.exterior.coords if hasattr(way.line, "exterior") else way.line.coords,
+                strict=True,
             ):
                 points[node_id] = np.array(coord).reshape(1, -1)
         return points

@@ -75,7 +75,7 @@ def mapdata_to_geojson(map_data: "MapData") -> dict[str, Any]:
         for way in ways:
             try:
                 geom = geom_to_geojson(way.line, zn, zl) if way.line else None  # type: ignore[arg-type]
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 logger.warning("Failed to convert geometry for way %s: %s", way.id, e)
                 continue
             if geom is None:
@@ -447,7 +447,7 @@ def apply_node_position_overrides(
                     return way
                 try:
                     w.line = _SPoly(ring)
-                except Exception:
+                except (ValueError, TypeError):
                     return way
             else:
                 # Closed road/footway: flat Polygon if area=yes, else re-buffer the loop
@@ -459,7 +459,7 @@ def apply_node_position_overrides(
                         return way
                     try:
                         w.line = _SPoly(utm_coords)
-                    except Exception:
+                    except (ValueError, TypeError):
                         return way
                 else:
                     ls = _SLS(utm_coords)
@@ -474,11 +474,11 @@ def apply_node_position_overrides(
                     r = max(r, 0.01)
                     try:
                         w.line = ls.buffer(r)
-                    except Exception:
+                    except (ValueError, TypeError):
                         if len(utm_coords) >= 4:
                             try:
                                 w.line = _SPoly(utm_coords)
-                            except Exception:
+                            except (ValueError, TypeError):
                                 return None
                         else:
                             return None
@@ -492,12 +492,12 @@ def apply_node_position_overrides(
             r = max(r, 0.01)
             try:
                 w.line = ls.buffer(r)
-            except Exception:
+            except (ValueError, TypeError):
                 if len(utm_coords) >= 3:
                     closed = [*utm_coords, utm_coords[0]]
                     try:
                         w.line = _SPoly(closed)
-                    except Exception:
+                    except (ValueError, TypeError):
                         return None
                 else:
                     return None
@@ -608,7 +608,7 @@ def rebuild_way_without_nodes(
                         return None
                     try:
                         w.line = _SPoly(ring)
-                    except Exception:
+                    except (ValueError, TypeError):
                         return None
                 else:
                     # Closed road/footway: flat Polygon if area=yes, else re-buffer the loop
@@ -620,7 +620,7 @@ def rebuild_way_without_nodes(
                             return None
                         try:
                             w.line = _SPoly(utm_coords)
-                        except Exception:
+                        except (ValueError, TypeError):
                             return None
                     else:
                         ls = _SLS(utm_coords)
@@ -630,7 +630,7 @@ def rebuild_way_without_nodes(
                         r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else a / p
                         try:
                             w.line = ls.buffer(r)
-                        except Exception:
+                        except (ValueError, TypeError):
                             w.line = ls
             else:
                 # Open way stored as buffered polygon: re-buffer the centerline
@@ -641,7 +641,7 @@ def rebuild_way_without_nodes(
                 r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else a / p
                 try:
                     w.line = ls.buffer(r)
-                except Exception:
+                except (ValueError, TypeError):
                     w.line = ls
         else:
             coords = list(geom.exterior.coords)
