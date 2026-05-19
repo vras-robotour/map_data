@@ -47,7 +47,7 @@ def process_map_data(file_name: str, *, download: bool) -> None:
             map_data.save()
         logger.info("Successfully processed map data for %s", file_name)
     except Exception as e:
-        logger.exception("Error processing map data: %s", e)
+        logger.exception("Error processing map data")
         raise SystemExit(1) from e
 
 

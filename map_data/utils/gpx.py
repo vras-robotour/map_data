@@ -42,8 +42,8 @@ def parse_gpx_file(gpx_file: str) -> tuple[np.ndarray, int, str] | list:
                 "ele": waypoint.elevation or 0,
             }
             waypoints.append(convert_waypoint(point))
-    except Exception as e:
-        logger.exception("Error parsing GPX file: %s", e)
+    except Exception:
+        logger.exception("Error parsing GPX file")
         return []
     if not waypoints:
         logger.warning("No waypoints found in GPX file.")
@@ -70,8 +70,8 @@ def parse_yaml_file(yaml_file: str) -> tuple[np.ndarray, int, str] | list:
             else:
                 point["ele"] = 0
             waypoints.append(convert_waypoint(point))
-    except Exception as e:
-        logger.exception("Error parsing YAML file: %s", e)
+    except Exception:
+        logger.exception("Error parsing YAML file")
         return []
     if not waypoints:
         logger.warning("No waypoints found in YAML file.")

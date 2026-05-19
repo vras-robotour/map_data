@@ -34,8 +34,8 @@ def load_config(filename: str) -> dict[str, Any]:
         try:
             with config_path.open() as f:
                 return yaml.safe_load(f) or {}
-        except Exception as e:
-            logger.exception("Error loading config file %s: %s", config_path, e)
+        except Exception:
+            logger.exception("Error loading config file %s", config_path)
             return {}
 
     logger.debug("Config file not found: %s", config_path)

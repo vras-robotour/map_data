@@ -173,7 +173,8 @@ class MapData:
         self.coords_data = CoordsData(self.min_long, self.max_long, self.min_lat, self.max_lat)
         self._check_utm_zone_boundary()
         self.points = [
-            geometry.Point(x, y) for x, y in zip(self.waypoints[:, 0], self.waypoints[:, 1], strict=True)
+            geometry.Point(x, y)
+            for x, y in zip(self.waypoints[:, 0], self.waypoints[:, 1], strict=True)
         ]
 
         self.nodes_cache: dict[int, dict[str, Any]] = {}
@@ -499,8 +500,10 @@ class MapData:
             f"  Source: {source}\n"
             f"  Waypoints: {len(self.waypoints)}\n"
             f"  UTM Zone: {self.zone_number}{self.zone_letter}\n"
-            f"  Bounds: X[{self.min_x:.1f}, {self.max_x:.1f}], Y[{self.min_y:.1f}, {self.max_y:.1f}]\n"
-            f"  Features: {len(self.roads_list)} roads, {len(self.footways_list)} footways, {len(self.barriers_list)} barriers"
+            f"  Bounds: X[{self.min_x:.1f}, {self.max_x:.1f}], "
+            f"Y[{self.min_y:.1f}, {self.max_y:.1f}]\n"
+            f"  Features: {len(self.roads_list)} roads, "
+            f"{len(self.footways_list)} footways, {len(self.barriers_list)} barriers"
         )
 
     def get_points(self, z: float = 0.0) -> dict[int, np.ndarray]:

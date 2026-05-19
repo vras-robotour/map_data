@@ -303,7 +303,7 @@ class OSMCloud(Node):
         marker_array = MarkerArray()
 
         marker_id = 0
-        for _, point in transformed_points.items():
+        for point in transformed_points.values():
             p = point.ravel()
 
             # Spatial filtering based on local frame coordinates
@@ -537,8 +537,7 @@ def split_ways_to_points(
             vec = (point1 - point0) / dist
             num = int(np.ceil(dist / max_dist))
             step = dist / num
-            for j in range(num):
-                waypoints.append(point0 + (j + 1) * step * vec)
+            waypoints.extend(point0 + (j + 1) * step * vec for j in range(num))
 
     return np.array(waypoints) if waypoints else np.empty((0, 2))
 

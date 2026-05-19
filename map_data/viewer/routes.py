@@ -15,8 +15,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-
-SIGNIFICANT_CHANGE_TOLERANCE = 0.1
 import utm
 from flask import (
     Blueprint,
@@ -59,6 +57,8 @@ from .helpers import (
     split_way,
 )
 
+SIGNIFICANT_CHANGE_TOLERANCE = 0.1
+
 logger = logging.getLogger(__name__)
 bp = Blueprint("viewer", __name__)
 
@@ -95,7 +95,7 @@ def _apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                     continue
                 del_nids = get_deleted_node_ids(store, w.id)
                 if del_nids:
-                    w = rebuild_way_without_nodes(w, del_nids, zn, zl, nodes_cache, category=cat)
+                    w = rebuild_way_without_nodes(w, del_nids, zn, zl, nodes_cache, category=cat)  # noqa: PLW2901
                     if w is None:
                         continue
                 split_nids = get_split_node_ids(store, w.id)
@@ -106,7 +106,7 @@ def _apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                         seg.id = virtual_id
                         seg_del_nids = get_deleted_node_ids(store, virtual_id)
                         if seg_del_nids:
-                            seg = rebuild_way_without_nodes(
+                            seg = rebuild_way_without_nodes(  # noqa: PLW2901
                                 seg, seg_del_nids, zn, zl, nodes_cache, category=cat,
                             )
                             if seg is None:
@@ -124,18 +124,17 @@ def _apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
             for w in getattr(md, lst_name):
                 ov = get_node_position_overrides(store, w.id)
                 if ov:
-                    w = (
-                        apply_node_position_overrides(
-                            w,
-                            ov,
-                            zn,
-                            zl,
-                            nodes_cache,
-                            category=_CAT_FOR_LIST[lst_name],
-                        )
-                        or w
+                    result = apply_node_position_overrides(
+                        w,
+                        ov,
+                        zn,
+                        zl,
+                        nodes_cache,
+                        category=_CAT_FOR_LIST[lst_name],
                     )
-                new_lst.append(w)
+                    new_lst.append(result or w)
+                else:
+                    new_lst.append(w)
             setattr(md, lst_name, new_lst)
 
 
@@ -389,7 +388,7 @@ def upload_gpx() -> Response:
             },
         )
     except Exception as e:
-        logger.error("Error processing GPX upload: %s", e, exc_info=True)
+        logger.exception("Error processing GPX upload")
         abort(500, str(e))
     finally:
         if gpx_tmp_path.exists():
@@ -774,7 +773,7 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
         # Apply segment-specific deletions to segment geometry
         seg_del_nids = get_deleted_node_ids(store, virtual_id)
         if seg_del_nids:
-            seg = rebuild_way_without_nodes(
+            seg = rebuild_way_without_nodes(  # noqa: PLW2901
                 seg, seg_del_nids, zn, zl, md.nodes_cache, category=category,
             )
             if seg is None:
@@ -1373,8 +1372,8 @@ class WormholeManager:
 
             process.wait(timeout=60)
             transfer_info["status"] = "completed" if process.returncode == 0 else "failed"
-        except Exception as e:
-            logger.exception("Error in wormhole thread for %s: %s", transfer_id, e)
+        except Exception:
+            logger.exception("Error in wormhole thread for %s", transfer_id)
             transfer_info["status"] = "failed"
             if process.poll() is None:
                 process.kill()
@@ -1408,8 +1407,8 @@ class WormholeManager:
         if transfer and transfer.get("temp_dir"):
             try:
                 shutil.rmtree(transfer["temp_dir"])
-            except Exception as e:
-                logger.exception("Error cleaning temp dir for %s: %s", transfer_id, e)
+            except Exception:
+                logger.exception("Error cleaning temp dir for %s", transfer_id)
 
 
 wormhole_manager = WormholeManager()
@@ -1431,7 +1430,7 @@ def create_wormhole() -> Response:
             {"success": False, "message": "Failed to capture wormhole code in time"},
         ), 500
     except Exception as e:
-        logger.error("Error creating wormhole: %s", e, exc_info=True)
+        logger.exception("Error creating wormhole")
         return jsonify({"success": False, "message": str(e)}), 500
 
 
@@ -1531,7 +1530,11 @@ def create_replan() -> Response:
         lat, lon = utm.to_latlon(res[i][0], res[i][1], zn, zl)
         new_path.append([lat, lon])
         # Simple heuristic to check if it actually changed significantly
-        if not changed and i < len(utm_path) and np.linalg.norm(res[i] - utm_path[i]) > SIGNIFICANT_CHANGE_TOLERANCE:
+        if (
+            not changed
+            and i < len(utm_path)
+            and np.linalg.norm(res[i] - utm_path[i]) > SIGNIFICANT_CHANGE_TOLERANCE
+        ):
             changed = True
 
     if changed:

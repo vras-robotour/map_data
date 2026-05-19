@@ -5,6 +5,7 @@ This module provides the RRTStar class for finding optimal paths in continuous
 space with obstacle avoidance and cost-aware steering.
 """
 
+import logging
 import random
 from collections.abc import Iterator
 
@@ -15,6 +16,8 @@ from shapely.geometry import LineString, Point
 from shapely.strtree import STRtree
 
 from map_data.utils.config import load_config
+
+logger = logging.getLogger(__name__)
 
 # Rebuild the spatial index after this many new nodes are added since the last build.
 # Balances rebuild cost (O(n log n)) against linear-scan cost for the unindexed tail.
@@ -196,7 +199,8 @@ class RRTStar:
         )
 
         for px, py in self._bresenham(p1_grid, p2_grid):
-            if 0 <= px < self.grid_shape[1] and 0 <= py < self.grid_shape[0] and self.grid[py, px] >= self.traversability_threshold:
+            in_bounds = 0 <= px < self.grid_shape[1] and 0 <= py < self.grid_shape[0]
+            if in_bounds and self.grid[py, px] >= self.traversability_threshold:
                 return True
         return False
 
@@ -334,7 +338,9 @@ class RRTStar:
             Returns ``(True, inf)`` on collision.
 
         """
-        if self.obstacles_tree and len(self.obstacles_tree.query(LineString([start, end]), predicate="intersects")) > 0:
+        if self.obstacles_tree and len(
+            self.obstacles_tree.query(LineString([start, end]), predicate="intersects"),
+        ) > 0:
             return True, float("inf")
 
         p1_grid = (
@@ -358,7 +364,7 @@ class RRTStar:
                 count += 1
 
         avg_c = total_grid_cost / count if count > 0 else 0.0
-        # Cost = dist * (1 + avg_grid_cost * penalty)
+        # Cost = dist * (1 + avg_grid_cost * penalty)  # noqa: ERA001
         # We use GRID_COST_WEIGHT to match A* logic
         return False, np.linalg.norm(end - start) * (1.0 + avg_c * GRID_COST_WEIGHT)
 
@@ -520,8 +526,8 @@ if __name__ == "__main__":
     path = rrt_star.find_path()
 
     if path is not None:
-        print("Path found:")
+        logger.info("Path found:")
         for point in path:
-            print(f"({point[0]:.2f}, {point[1]:.2f})")
+            logger.info("(%.2f, %.2f)", point[0], point[1])
     else:
-        print("No path found.")
+        logger.info("No path found.")

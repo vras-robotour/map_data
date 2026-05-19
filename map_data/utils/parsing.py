@@ -18,7 +18,9 @@ OBSTACLE_RADIUS = _DEFAULTS.get("obstacle_radius", 2.0)
 BUFFER_WIDTHS = _DEFAULTS.get("buffer_widths", {"road": 7, "footway": 3, "barrier": 2})
 
 
-def parse_osm_ways(osm_ways_data: overpy.Result, nodes_cache: dict[int, dict[str, Any]]) -> dict[int, Way]:
+def parse_osm_ways(
+    osm_ways_data: overpy.Result, nodes_cache: dict[int, dict[str, Any]],
+) -> dict[int, Way]:
     ways = {}
     for way in tqdm(osm_ways_data.ways, desc="Parse ways"):
         lats = np.array([float(n.lat) for n in way.nodes])
@@ -50,7 +52,7 @@ def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
         outer_ids, inner_ids = [], []
 
         for member in rel.members:
-            if member._type_value == "way" and int(member.ref) in ways:
+            if member._type_value == "way" and int(member.ref) in ways:  # noqa: SLF001
                 (outer_ids if member.role == "outer" else inner_ids).append(int(member.ref))
 
         outer_ids = combine_ways(outer_ids, ways)
@@ -213,7 +215,7 @@ def separate_ways(
             footways.append(buffer_line(way, width=BUFFER_WIDTHS.get("footway", 3)))
         elif way.is_barrier(barrier_tags, not_barrier_tags, anti_barrier_tags):
             if not way.is_area:
-                way = buffer_line(way, width=BUFFER_WIDTHS.get("barrier", 2))
+                buffer_line(way, width=BUFFER_WIDTHS.get("barrier", 2))
             barriers.append(way)
     return roads, footways, barriers
 

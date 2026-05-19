@@ -150,7 +150,7 @@ class ReplanPath:
 
     def replan(self, path: np.ndarray, algorithm: str = "astar") -> np.ndarray | None:
         def process_segment(
-            i: int, path: np.ndarray, args: argparse.Namespace,
+            i: int, path: np.ndarray, _args: argparse.Namespace,
         ) -> tuple[list[np.ndarray] | None, int]:
             if _is_cancelled(self.transfer_id):
                 return None, i
@@ -256,14 +256,14 @@ class ReplanPath:
 
     def _create_grid(
         self,
-        low: tuple[float, float],
-        high: tuple[float, float],
-        cell_size: float = 0.25,
+        _low: tuple[float, float],
+        _high: tuple[float, float],
+        _cell_size: float = 0.25,
     ) -> np.ndarray:
         """
         Compatibility delegate for _create_grid.
         """
-        return self.path_grid._create_empty_grid()
+        return self.path_grid.create_empty_grid()
 
     def _burn_obstacles_into_grid(self, grid_2d: np.ndarray) -> np.ndarray:
         """

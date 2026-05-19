@@ -9,7 +9,7 @@ def astar_search[N](
     heuristic_func: Callable[[N], float],
 ) -> list[N] | None:
     """
-    A generic A* search implementation.
+    Search a graph using the A* algorithm.
 
     Parameters
     ----------
@@ -30,7 +30,7 @@ def astar_search[N](
     """
     count = 0
     # Priority queue stores (f_score, count, current_node)
-    # f_score = cost + heuristic
+    # f_score = cost + heuristic  # noqa: ERA001
     q = [(0, count, start_node)]
 
     # visited maps node -> (cost, parent)

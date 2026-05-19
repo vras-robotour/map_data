@@ -1,5 +1,6 @@
 import argparse
 import logging
+import sys
 import threading
 import time
 from pathlib import Path
@@ -11,6 +12,7 @@ from werkzeug.routing import IntegerConverter
 from .ros_node import ROS_AVAILABLE, TrackerNode
 from .routes import bp
 
+logger = logging.getLogger(__name__)
 socketio = SocketIO(cors_allowed_origins="*")
 tracker_node = None
 
@@ -30,8 +32,8 @@ def telemetry_broadcaster() -> None:
                 data = tracker_node.get_telemetry()
                 if data:
                     socketio.emit("telemetry", data)
-            except Exception as e:
-                logging.exception("Error in telemetry broadcaster: %s", e)
+            except Exception:
+                logger.exception("Error in telemetry broadcaster")
         time.sleep(0.5)  # 2 Hz update rate
 
 
@@ -75,9 +77,9 @@ def create_app(data_dir: str | None = None) -> Flask:
             broadcaster_thread = threading.Thread(target=telemetry_broadcaster, daemon=True)
             broadcaster_thread.start()
 
-            logging.info("ROS2 TrackerNode initialized and spinning.")
-        except Exception as e:
-            logging.exception("Failed to initialize ROS2: %s", e)
+            logger.info("ROS2 TrackerNode initialized and spinning.")
+        except Exception:
+            logger.exception("Failed to initialize ROS2")
             tracker_node = None
 
     return app
@@ -90,8 +92,6 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=5000)
 
     # Filter out ROS-specific arguments before parsing
-    import sys
-
     ros_args = []
     try:
         from rclpy.utilities import remove_ros_args

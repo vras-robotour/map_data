@@ -114,5 +114,5 @@ def generate_launch_description():
             config_file_arg,
             osm_grid_params_arg,
             OpaqueFunction(function=launch_setup),
-        ]
+        ],
     )

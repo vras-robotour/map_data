@@ -257,7 +257,9 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
             10,
         )
 
-    _COLLISION_ACTIONS: ClassVar[dict[int, str]] = {0: "STOP", 1: "SLOWDOWN", 2: "LIMIT", 3: "PASSTHROUGH"}
+    _COLLISION_ACTIONS: ClassVar[dict[int, str]] = {
+        0: "STOP", 1: "SLOWDOWN", 2: "LIMIT", 3: "PASSTHROUGH",
+    }
 
     def _build_status_locked(self) -> dict[str, Any]:
         """
@@ -312,10 +314,10 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
     ) -> list[dict[str, float]]:
         waypoints_gps: list[dict[str, float]] = []
         if ROS_AVAILABLE and isinstance(msg, FollowGPSWaypoints.Goal):
-            for pose in msg.gps_poses:
-                waypoints_gps.append(
-                    {"lat": pose.position.latitude, "lon": pose.position.longitude},
-                )
+            waypoints_gps.extend(
+                {"lat": pose.position.latitude, "lon": pose.position.longitude}
+                for pose in msg.gps_poses
+            )
         elif ROS_AVAILABLE:
             try:
                 # Non-blocking: use latest cached transform rather than waiting up to 5s
@@ -462,7 +464,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
             )
             self._dirty = True
 
-    def _recovery_callback(self, msg: Header) -> None:
+    def _recovery_callback(self, _msg: Header) -> None:
         with self._lock:
             self._last_recovery_time = time.time()
             self._dirty = True

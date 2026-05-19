@@ -30,10 +30,10 @@ class PathGrid:
         self.default_off_path_cost = default_off_path_cost
         self.path_cost_cap = path_cost_cap
 
-        self.grid = self._create_empty_grid()
+        self.grid = self.create_empty_grid()
         self.grid_2d_cache: np.ndarray | None = None
 
-    def _create_empty_grid(self) -> np.ndarray:
+    def create_empty_grid(self) -> np.ndarray:
         xs = np.linspace(
             self.low[0],
             self.high[0],

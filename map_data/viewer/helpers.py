@@ -8,7 +8,7 @@ import numpy as np
 import utm
 from shapely.affinity import translate as _affine_translate
 from shapely.geometry import (
-    LineString as _SLS,
+    LineString as _LineString,
 )
 from shapely.geometry import (
     MultiPolygon as _SMPoly,
@@ -42,7 +42,7 @@ def ring_to_latlon(
 
 
 def geom_to_geojson(
-    geom: "_SLS | _SPoly | _SMPoly", zone_number: int, zone_letter: str,
+    geom: "_LineString | _SPoly | _SMPoly", zone_number: int, zone_letter: str,
 ) -> dict[str, Any] | None:
     gtype = geom.geom_type
     if gtype == "Polygon":
@@ -61,7 +61,7 @@ def geom_to_geojson(
             polygons.append([exterior, *interiors])
         return {"type": "MultiPolygon", "coordinates": polygons}
     if gtype == "LineString":
-        if not isinstance(geom, _SLS) :
+        if not isinstance(geom, _LineString) :
             return None
         return {
             "type": "LineString",
@@ -245,7 +245,7 @@ def split_way(
             if len(current_nodes) >= 2:
                 w = copy.copy(way)
                 w.nodes = current_nodes
-                ls = _SLS(current_coords)
+                ls = _LineString(current_coords)
                 w.line = ls.buffer(radius) if is_buffered else ls
                 segments.append(w)
 
@@ -257,7 +257,7 @@ def split_way(
     if len(current_nodes) >= 2:
         w = copy.copy(way)
         w.nodes = current_nodes
-        ls = _SLS(current_coords)
+        ls = _LineString(current_coords)
         w.line = ls.buffer(radius) if is_buffered else ls
         segments.append(w)
 
@@ -329,9 +329,11 @@ def migrate_change_log(store: dict[str, Any]) -> None:
     untracked_splits = []
     for wid_str, nids in store.get("split_ways", {}).items():
         wid = int(wid_str)
-        for nid in nids:
-            if (wid, nid) not in tracked_splits:
-                untracked_splits.append({"type": "split", "way_id": wid, "node_id": nid})
+        untracked_splits.extend(
+            {"type": "split", "way_id": wid, "node_id": nid}
+            for nid in nids
+            if (wid, nid) not in tracked_splits
+        )
 
     if untracked_ways or untracked_nodes or untracked_tags or untracked_moves or untracked_splits:
         nw, nn = len(untracked_ways), len(untracked_nodes)
@@ -349,7 +351,9 @@ def migrate_change_log(store: dict[str, Any]) -> None:
     store["change_log_migration"] = _MIGRATION_VERSION
 
 
-def get_node_position_overrides(store: dict[str, Any], way_id: int | str) -> dict[int, dict[str, float]]:
+def get_node_position_overrides(
+    store: dict[str, Any], way_id: int | str,
+) -> dict[int, dict[str, float]]:
     """
     Return {node_id (int): {lat, lon}} for position overrides on a given way.
     """
@@ -436,7 +440,7 @@ def apply_node_position_overrides(
 
     w = copy.copy(way)
     if geom.geom_type == "LineString":
-        w.line = _SLS(utm_coords)
+        w.line = _LineString(utm_coords)
     elif geom.geom_type == "Polygon":
         if len(utm_coords) < 2:
             return way
@@ -465,7 +469,7 @@ def apply_node_position_overrides(
                     except (ValueError, TypeError):
                         return way
                 else:
-                    ls = _SLS(utm_coords)
+                    ls = _LineString(utm_coords)
                     p = geom.length
                     a = geom.area
                     disc = p * p - 4 * np.pi * a
@@ -487,7 +491,7 @@ def apply_node_position_overrides(
                             return None
         else:
             # Open way stored as buffered polygon: re-buffer the centerline
-            ls = _SLS(utm_coords)
+            ls = _LineString(utm_coords)
             p = geom.length
             a = geom.area
             disc = p * p - 4 * np.pi * a
@@ -533,7 +537,7 @@ def geojson_geom_to_utm(
 
     gtype = geometry.get("type")
     if gtype == "LineString":
-        return _SLS([pt(c) for c in geometry["coordinates"]])
+        return _LineString([pt(c) for c in geometry["coordinates"]])
     if gtype == "Polygon":
         rings = [[pt(c) for c in ring] for ring in geometry["coordinates"]]
         return _SPoly(rings[0], rings[1:])
@@ -575,7 +579,7 @@ def rebuild_way_without_nodes(
         _is_closed = (len(node_ids) >= 2 and node_ids[0] == node_ids[-1]) or geom.is_closed
         if _is_closed and new_coords[0] != new_coords[-1]:
             new_coords.append(new_coords[0])
-        w.line = _SLS(new_coords)
+        w.line = _LineString(new_coords)
 
     elif geom.geom_type == "Polygon":
         if zone_number is not None:
@@ -626,7 +630,7 @@ def rebuild_way_without_nodes(
                         except (ValueError, TypeError):
                             return None
                     else:
-                        ls = _SLS(utm_coords)
+                        ls = _LineString(utm_coords)
                         p = geom.length
                         a = geom.area
                         disc = p * p - 4 * np.pi * a
@@ -637,7 +641,7 @@ def rebuild_way_without_nodes(
                             w.line = ls
             else:
                 # Open way stored as buffered polygon: re-buffer the centerline
-                ls = _SLS(utm_coords)
+                ls = _LineString(utm_coords)
                 p = geom.length
                 a = geom.area
                 disc = p * p - 4 * np.pi * a
