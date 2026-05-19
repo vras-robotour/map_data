@@ -32,6 +32,9 @@ try:
 except ImportError:
     ROS_AVAILABLE = False
 
+RECOVERY_TIMEOUT = 5.0
+TELEOP_TIMEOUT = 2.0
+
 
 class TrackerNode(Node if ROS_AVAILABLE else object):
     def __init__(self) -> None:
@@ -274,8 +277,9 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
             "speed_limit": dict(self.speed_limit) if self.speed_limit else None,
             "collision_action": self.collision_action,
             "recovery_active": self._last_recovery_time > 0
-            and (now - self._last_recovery_time) < 5.0,
-            "teleop_active": self._last_teleop_time > 0 and (now - self._last_teleop_time) < 2.0,
+            and (now - self._last_recovery_time) < RECOVERY_TIMEOUT,
+            "teleop_active": self._last_teleop_time > 0
+            and (now - self._last_teleop_time) < TELEOP_TIMEOUT,
             "nav_state": self.nav_state,
             "localization_state": self.localization_state,
             "last_speech": dict(self.last_speech) if self.last_speech else None,

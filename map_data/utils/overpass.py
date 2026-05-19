@@ -1,3 +1,4 @@
+import http
 import logging
 import re
 import time
@@ -38,7 +39,7 @@ class OverpassClient:
             logger.debug("Query string: %s", query_str)
             try:
                 response = self.session.post(endpoint, data={"data": query_str}, timeout=180)
-                if response.status_code == 200:
+                if response.status_code == http.HTTPStatus.OK:
                     return response.text
 
                 if response.status_code in (429, 406):
@@ -74,7 +75,7 @@ class OverpassClient:
         status_url = endpoint.replace("/api/interpreter", "/api/status")
         try:
             resp = self.session.get(status_url, timeout=10)
-            if resp.status_code == 200:
+            if resp.status_code == http.HTTPStatus.OK:
                 text = resp.text
                 if "slots available now" in text:
                     m = re.search(r"(\d+) slots available now", text)

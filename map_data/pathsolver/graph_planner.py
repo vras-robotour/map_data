@@ -1,3 +1,10 @@
+"""
+Graph-based path planning on OSM ways.
+
+This module provides the GraphPlanner class which builds a graph from
+OpenStreetMap ways and finds paths using Dijkstra or A*.
+"""
+
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -5,6 +12,8 @@ from shapely.geometry import LineString, Point
 from shapely.strtree import STRtree
 
 from map_data.pathsolver.astar import astar_search
+
+TOLERANCE = 1e-3
 
 if TYPE_CHECKING:
     from map_data.map_data import MapData
@@ -26,6 +35,8 @@ class GraphPlanner:
 
     def __init__(self, map_data: "MapData", highway_types: list[str] | None = None) -> None:
         """
+        Initialize the graph planner.
+
         Parameters
         ----------
         map_data : MapData
@@ -309,10 +320,10 @@ class GraphPlanner:
             final_segment.append(p_start)
 
             for p in segment:
-                if np.linalg.norm(p - final_segment[-1]) > 1e-3:
+                if np.linalg.norm(p - final_segment[-1]) > TOLERANCE:
                     final_segment.append(p)
 
-            if np.linalg.norm(p_goal - final_segment[-1]) > 1e-3:
+            if np.linalg.norm(p_goal - final_segment[-1]) > TOLERANCE:
                 final_segment.append(p_goal)
 
             if i > 0:

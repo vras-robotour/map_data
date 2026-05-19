@@ -5,6 +5,8 @@ import shapely as sh
 from matplotlib.path import Path
 from scipy.spatial import cKDTree
 
+TOLERANCE = 1e-3
+
 if TYPE_CHECKING:
     from map_data.map_data import MapData
 
@@ -134,7 +136,7 @@ class PathGrid:
                 if i == 0:
                     path_points.append(p0)
                     path_point_costs.append(way_cost)
-                if dist <= 1e-3:
+                if dist <= TOLERANCE:
                     path_points.append(p1)
                     path_point_costs.append(way_cost)
                     continue

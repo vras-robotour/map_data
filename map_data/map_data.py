@@ -1,3 +1,10 @@
+"""
+Central data class for OSM-based map data.
+
+This module provides the MapData class which orchestrates downloading,
+caching, and parsing OpenStreetMap data for use in path planning.
+"""
+
 import concurrent.futures
 import json
 import logging
@@ -27,9 +34,12 @@ logger = logging.getLogger(__name__)
 _DEFAULTS = load_config("planner_defaults.yaml")
 OSM_MARGIN: float = _DEFAULTS.get("osm_margin", 100)
 RESERVE: float = _DEFAULTS.get("reserve_margin", 50)
+BBOX_LEN = 4
 
 
 class CoordsData:
+    """Bounding box and coordinate metadata for map data."""
+
     def __init__(self, min_long: float, max_long: float, min_lat: float, max_lat: float) -> None:
         self.min_long = min_long
         self.max_long = max_long
@@ -82,9 +92,12 @@ class MapData:
         coords: str | tuple[np.ndarray, int, str],
         coords_type: str = "file",
         current_robot_position: np.ndarray | None = None,
+        *,
         flip: bool = False,
     ) -> None:
         """
+        Initialize MapData from a GPX file or coordinate array.
+
         Parameters
         ----------
         coords : str or array-like
@@ -267,7 +280,7 @@ class MapData:
             # Validate bbox
             stored_bbox = cache_data.get("bbox")
             current_bbox = [self.min_lat, self.min_long, self.max_lat, self.max_long]
-            if not stored_bbox or len(stored_bbox) != 4:
+            if not stored_bbox or len(stored_bbox) != BBOX_LEN:
                 return None
 
             # 1e-6 degree tolerance (~11cm at equator)
@@ -285,7 +298,7 @@ class MapData:
             logger.debug("Could not load OSM cache: %s", e)
             return None
 
-    def run_queries(self, use_cache: bool = True) -> None:
+    def run_queries(self, *, use_cache: bool = True) -> None:
         """
         Download OSM ways, relations, and nodes from the Overpass API.
 
@@ -422,7 +435,7 @@ class MapData:
     # High-level API
     # ------------------------------------------------------------------
 
-    def run_all(self, save: bool = True) -> None:
+    def run_all(self, *, save: bool = True) -> None:
         """
         Download OSM data, parse it, and optionally save the result.
 

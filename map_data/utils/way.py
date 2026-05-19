@@ -110,7 +110,7 @@ class Way:
         )
         return has_barrier_tag and not has_anti_tag
 
-    def to_pcd_points(self, density: float = 2.0, filled: bool = True) -> np.ndarray:
+    def to_pcd_points(self, density: float = 2.0, *, filled: bool = True) -> np.ndarray:
         """
         Convert the way's geometry to a dense 2-D point cloud.
 

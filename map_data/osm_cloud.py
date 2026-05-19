@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""
+ROS2 node for publishing OSM map data as a point cloud.
+
+This module provides the OSMCloud class which converts parsed MapData
+into ROS2 PointCloud2 and MarkerArray messages for visualization.
+"""
 
 import sys
 from typing import Any
@@ -23,8 +29,13 @@ from visualization_msgs.msg import Marker, MarkerArray
 
 import map_data.map_data as md
 
+CLOUD_COLS = 4
+TOLERANCE = 1e-3
+
 
 class OSMCloud(Node):
+    """ROS2 node that publishes OSM data as point clouds and markers."""
+
     def __init__(self) -> None:
         super().__init__("osm_cloud")
         self.utm_frame: str = self.declare_parameter("utm_frame", "utm").value
@@ -213,6 +224,8 @@ class OSMCloud(Node):
 
     def get_utm_to_local(self) -> None:
         """
+        Poll for the UTM to local coordinate transform.
+
         While rclpy is not shutdown, try to get the UTM to local transform every second or
         until successful.
         """
@@ -247,7 +260,7 @@ class OSMCloud(Node):
             ((0, 0), (0, 1)),
         )
         waypoints = np.pad(
-            split_ways(points, self.map_data.get_ways(), self.grid_res),
+            split_ways_to_points(points, self.map_data.get_ways(), self.grid_res),
             ((0, 0), (0, 1)),
         )
 
@@ -379,8 +392,8 @@ def create_cloud(points: np.ndarray) -> PointCloud2:
     if points.ndim != 2:
         msg = f"points must be a 2-D array, got {points.ndim}-D"
         raise ValueError(msg)
-    if points.shape[1] != 4:
-        msg = f"points must have 4 columns (x, y, z, cost), got {points.shape[1]}"
+    if points.shape[1] != CLOUD_COLS:
+        msg = f"points must have {CLOUD_COLS} columns (x, y, z, cost), got {points.shape[1]}"
         raise ValueError(msg)
 
     points_f32 = points.astype(np.float32)
@@ -479,17 +492,19 @@ def transform_points(
             transformed[pid][2] = z
     return transformed
 
-
-def split_ways(
+def split_ways_to_points(
     points: dict[int, np.ndarray], ways: dict[str, list[Any]], max_dist: float = 0.25,
 ) -> np.ndarray:
     """
+    Split OSM ways into equidistant points.
+
     Equidistantly split ways into points with a maximal step size. Also only use footways
     from map data, as we are not allowed to leave the footways.
 
     Parameters
     ----------
     points : dict
+    ...
         Points to split ways on.
     ways : dict
         Ways to split.
@@ -515,7 +530,7 @@ def split_ways(
 
             dist = float(np.linalg.norm(point1 - point0))
 
-            if dist <= 1e-3:
+            if dist <= TOLERANCE:
                 waypoints.append(point1)
                 continue
 

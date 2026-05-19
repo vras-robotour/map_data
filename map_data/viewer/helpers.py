@@ -46,12 +46,14 @@ def geom_to_geojson(
 ) -> dict[str, Any] | None:
     gtype = geom.geom_type
     if gtype == "Polygon":
-        assert isinstance(geom, _SPoly)
+        if not isinstance(geom, _SPoly):
+            return None
         exterior = ring_to_latlon(geom.exterior.coords, zone_number, zone_letter)
         interiors = [ring_to_latlon(r.coords, zone_number, zone_letter) for r in geom.interiors]
         return {"type": "Polygon", "coordinates": [exterior, *interiors]}
     if gtype == "MultiPolygon":
-        assert isinstance(geom, _SMPoly)
+        if not isinstance(geom, _SMPoly):
+            return None
         polygons = []
         for poly in geom.geoms:
             exterior = ring_to_latlon(poly.exterior.coords, zone_number, zone_letter)
@@ -59,7 +61,8 @@ def geom_to_geojson(
             polygons.append([exterior, *interiors])
         return {"type": "MultiPolygon", "coordinates": polygons}
     if gtype == "LineString":
-        assert isinstance(geom, _SLS)
+        if not isinstance(geom, _SLS) :
+            return None
         return {
             "type": "LineString",
             "coordinates": ring_to_latlon(geom.coords, zone_number, zone_letter),

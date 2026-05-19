@@ -1,3 +1,10 @@
+"""
+RRT* (Rapidly-exploring Random Tree Star) path planning.
+
+This module provides the RRTStar class for finding optimal paths in continuous
+space with obstacle avoidance and cost-aware steering.
+"""
+
 import random
 from collections.abc import Iterator
 
@@ -15,6 +22,7 @@ _KDTREE_REBUILD_INTERVAL = 50
 
 _DEFAULTS = load_config("planner_defaults.yaml")
 GRID_COST_WEIGHT = _DEFAULTS.get("grid_cost_weight", 5.0)
+GOAL_SAMPLE_BIAS = 0.1
 
 
 class RRTStar:
@@ -50,11 +58,14 @@ class RRTStar:
         step_size: float = 2.0,
         neighbor_radius: float = 5.0,
         traversability_threshold: float = 10.0,  # inf is blocked, high values are expensive
+        *,
         simplify: bool = True,
         transfer_id: str | None = None,
         improve_after_goal: bool = False,
     ) -> None:
         """
+        Initialize the RRT* planner.
+
         Parameters
         ----------
         start : np.ndarray
@@ -235,7 +246,7 @@ class RRTStar:
         """
         Sample a random point, biased toward traversable grid cells (90 % of the time).
         """
-        if self._trav_xs is not None and random.random() > 0.1:
+        if self._trav_xs is not None and random.random() > GOAL_SAMPLE_BIAS:
             idx = random.randrange(len(self._trav_xs))
             return np.array(
                 [
@@ -376,7 +387,7 @@ class RRTStar:
             if _is_cancelled(self.transfer_id):
                 return None
 
-            rand_point = self.goal if random.random() < 0.1 else self._sample_point()
+            rand_point = self.goal if random.random() < GOAL_SAMPLE_BIAS else self._sample_point()
             nearest_idx = self._nearest_node(rand_point)
             new_point = self._steer(self.nodes[nearest_idx], rand_point)
 

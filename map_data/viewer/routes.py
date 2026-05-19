@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+SIGNIFICANT_CHANGE_TOLERANCE = 0.1
 import utm
 from flask import (
     Blueprint,
@@ -818,7 +820,7 @@ def split_way_endpoint() -> Response:
         abort(400, "Invalid way_id or node_id")
 
     # If way_id is virtual (e.g. 123:0), get original ID
-    original_way_id = way_id_val.split(":")[0]
+    original_way_id = way_id_val.split(":", maxsplit=1)[0]
 
     ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
@@ -1223,7 +1225,8 @@ def get_cost_grid() -> Response:
 
     if not all([filename, min_lat, min_lon, max_lat, max_lon]):
         abort(400, "Missing required parameters")
-    assert filename is not None
+    if filename is None:
+        abort(400, "Filename cannot be None")
 
     md, _ = get_merged_mapdata(filename)
     if md is None:
@@ -1528,7 +1531,7 @@ def create_replan() -> Response:
         lat, lon = utm.to_latlon(res[i][0], res[i][1], zn, zl)
         new_path.append([lat, lon])
         # Simple heuristic to check if it actually changed significantly
-        if not changed and i < len(utm_path) and np.linalg.norm(res[i] - utm_path[i]) > 0.1:
+        if not changed and i < len(utm_path) and np.linalg.norm(res[i] - utm_path[i]) > SIGNIFICANT_CHANGE_TOLERANCE:
             changed = True
 
     if changed:

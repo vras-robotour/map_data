@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO, format="[%(levelname)s] [%(name)s]: %(me
 logger = logging.getLogger("create_mapdata")
 
 
-def process_map_data(file_name: str, download: bool) -> None:
+def process_map_data(file_name: str, *, download: bool) -> None:
     """
     Process map data based on command-line arguments.
     """

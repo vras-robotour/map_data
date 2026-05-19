@@ -1,3 +1,10 @@
+"""
+Configuration loading utilities for map_data.
+
+This module provides helpers for loading YAML configuration files from
+the package's config directory, with ROS2 integration.
+"""
+
 import logging
 from pathlib import Path
 from typing import Any
@@ -10,6 +17,7 @@ logger = logging.getLogger(__name__)
 def load_config(filename: str) -> dict[str, Any]:
     """
     Load a YAML configuration file from the package's config directory.
+
     Attempts to find the file via ROS2 resource index, falling back to
     relative path from this file.
     """

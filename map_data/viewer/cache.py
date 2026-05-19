@@ -7,6 +7,7 @@ from map_data.map_data import MapData
 # ------------------------------------------------------------------
 
 _mapdata_cache: dict = {}
+CACHE_CAPACITY = 3
 
 
 def load_mapdata_cached(path: str) -> MapData:
@@ -18,7 +19,7 @@ def load_mapdata_cached(path: str) -> MapData:
         for k in [k for k in _mapdata_cache if k[0] == path]:
             del _mapdata_cache[k]
         # Evict oldest entry if over capacity
-        while len(_mapdata_cache) >= 3:
+        while len(_mapdata_cache) >= CACHE_CAPACITY:
             del _mapdata_cache[next(iter(_mapdata_cache))]
 
         _mapdata_cache[key] = MapData.load(path)

@@ -18,6 +18,7 @@ def grid_astar(
     goal_utm: tuple[float, float] | np.ndarray,
     low: tuple[float, float],
     cs: float,
+    *,
     simplify_path: bool = True,
 ) -> np.ndarray | None:
     """
