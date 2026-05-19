@@ -72,7 +72,9 @@ _CAT_FOR_LIST = {
 
 
 def _apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
-    """Apply deletions, node deletions, splits, and position overrides to md in-place."""
+    """
+    Apply deletions, node deletions, splits, and position overrides to md in-place.
+    """
     zn, zl = md.zone_number, md.zone_letter
     nodes_cache = getattr(md, "nodes_cache", {})
 
@@ -147,7 +149,8 @@ def _get_data_dir() -> str:
 
 
 def _safe_data_path(filename: str) -> str:
-    """Resolve a user-supplied filename within the data directory.
+    """
+    Resolve a user-supplied filename within the data directory.
 
     Aborts with 400 if the resolved path would escape the data directory
     (e.g. via '../' traversal sequences).
@@ -1349,7 +1352,7 @@ class WormholeManager:
                         if match:
                             wormhole_code = match.group(1)
                             logger.info(
-                                f"Wormhole code captured for transfer {transfer_id}: {wormhole_code}"
+                                f"Wormhole code for transfer {transfer_id}: {wormhole_code}"
                             )
                         elif stream == process.stderr:
                             logger.warning(f"Wormhole stderr ({transfer_id}): {line}")

@@ -51,7 +51,9 @@ def _discard_cancelled(transfer_id: str | None) -> None:
 
 
 def load_planner_defaults() -> dict[str, Any]:
-    """Load default planner configuration from config/planner_defaults.yaml."""
+    """
+    Load default planner configuration from config/planner_defaults.yaml.
+    """
     return load_config("planner_defaults.yaml")
 
 
@@ -125,7 +127,9 @@ class ReplanPath:
 
     @property
     def grid(self) -> np.ndarray:
-        """Compatibility property for old access to the raw point grid."""
+        """
+        Compatibility property for old access to the raw point grid.
+        """
         return self.path_grid.grid
 
     @grid.setter
@@ -134,7 +138,9 @@ class ReplanPath:
 
     @property
     def _reshaped_grid_cache(self) -> np.ndarray | None:
-        """Compatibility property for the 2D cost grid."""
+        """
+        Compatibility property for the 2D cost grid.
+        """
         return self.path_grid.grid_2d_cache
 
     @_reshaped_grid_cache.setter
@@ -184,7 +190,9 @@ class ReplanPath:
         return self._post_process_path(np.array(new_path))
 
     def _post_process_path(self, path: np.ndarray | None) -> np.ndarray | None:
-        """Simplify and optionally smooth the final path."""
+        """
+        Simplify and optionally smooth the final path.
+        """
         if path is None or len(path) <= 2:
             return path
 
@@ -251,11 +259,15 @@ class ReplanPath:
         high: tuple[float, float],
         cell_size: float = 0.25,
     ) -> np.ndarray:
-        """Compatibility delegate for _create_grid."""
+        """
+        Compatibility delegate for _create_grid.
+        """
         return self.path_grid._create_empty_grid()
 
     def _burn_obstacles_into_grid(self, grid_2d: np.ndarray) -> np.ndarray:
-        """Compatibility delegate for _burn_obstacles_into_grid."""
+        """
+        Compatibility delegate for _burn_obstacles_into_grid.
+        """
         return self.path_grid.burn_obstacles(grid_2d, self.obstacles)
 
     def fill_grid(
@@ -264,7 +276,9 @@ class ReplanPath:
         highway_types: list[str] | None = None,
         max_path_dist: float = 2.0,
     ) -> None:
-        """Populate the grid with costs based on map data."""
+        """
+        Populate the grid with costs based on map data.
+        """
         self.path_grid.fill(
             map_data,
             self.obstacles,
@@ -273,7 +287,9 @@ class ReplanPath:
         )
 
     def visualize(self, path: np.ndarray | None, old_path: np.ndarray | None = None) -> None:
-        """Visualize the grid, obstacles, and path using Matplotlib."""
+        """
+        Visualize the grid, obstacles, and path using Matplotlib.
+        """
         grid_2d = self.path_grid.get_grid_2d()
         visualize_replan(
             path,

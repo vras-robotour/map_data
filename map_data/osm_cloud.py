@@ -207,7 +207,8 @@ class OSMCloud(Node):
 
     def get_utm_to_local(self) -> None:
         """
-        While rclpy is not shutdown, try to get the UTM to local transform every second or until successful.
+        While rclpy is not shutdown, try to get the UTM to local transform every second or
+        until successful.
         """
         while rclpy.ok():
             try:
@@ -282,7 +283,7 @@ class OSMCloud(Node):
         marker_array = MarkerArray()
 
         marker_id = 0
-        for pid, point in transformed_points.items():
+        for _, point in transformed_points.items():
             p = point.ravel()
 
             # Spatial filtering based on local frame coordinates
@@ -470,8 +471,8 @@ def split_ways(
     points: dict[int, np.ndarray], ways: dict[str, list[Any]], max_dist: float = 0.25
 ) -> np.ndarray:
     """
-    Equidistantly split ways into points with a maximal step size. Also only use footways from map data,
-    as we are not allowed to leave the footways.
+    Equidistantly split ways into points with a maximal step size. Also only use footways
+    from map data, as we are not allowed to leave the footways.
 
     Parameters:
     -----------

@@ -11,7 +11,9 @@ from map_data.viewer.app import create_app
 
 
 def _make_mapdata(path):
-    """Write a minimal valid .mapdata file with one footway to `path`."""
+    """
+    Write a minimal valid .mapdata file with one footway to `path`.
+    """
     lat, lon = 50.0, 14.0
     e, n, zn, zl = utm.from_latlon(lat, lon)
     waypoints = np.array([[e, n], [e + 100, n + 100]])
@@ -302,7 +304,9 @@ def test_move_way_nodes(app_client_with_file):
 
 
 def _make_mapdata_3node(path):
-    """Write a .mapdata file with a 3-node footway (so a middle split is possible)."""
+    """
+    Write a .mapdata file with a 3-node footway (so a middle split is possible).
+    """
     lat, lon = 50.0, 14.0
     e, n, zn, zl = utm.from_latlon(lat, lon)
     waypoints = np.array([[e, n], [e + 100, n + 100]])

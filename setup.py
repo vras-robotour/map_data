@@ -46,7 +46,8 @@ setup(
     zip_safe=False,
     maintainer="vlkjan6",
     maintainer_email="vlkjan6@fel.cvut.cz",
-    description="ROS2 package for downloading, parsing, and visualizing OSM map data with integrated A* and RRT* path planners.",
+    description="ROS2 package for downloading, parsing, and visualizing OSM map data with\
+                 integrated A* and RRT* path planners.",
     license="BSD-3-Clause",
     tests_require=["pytest"],
     entry_points={

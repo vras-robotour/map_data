@@ -25,7 +25,8 @@ FOOTWAY_VALUES = frozenset(
 
 @dataclass
 class Way:
-    """Represents a single OSM feature with geometry and tags.
+    """
+    Represents a single OSM feature with geometry and tags.
 
     A ``Way`` is the fundamental unit of map data. It wraps an OSM way or
     relation with its parsed geometry and tag dictionary, and provides
@@ -61,12 +62,16 @@ class Way:
     pcd_points: np.ndarray | None = field(default=None, repr=False)
 
     def is_road(self) -> bool:
-        """Return ``True`` if this way is a vehicle road (any ``highway`` value not in footway types)."""
+        """
+        Return ``True`` if this way is a vehicle road (any ``highway`` value not in footway types).
+        """
         hw = self.tags.get("highway")
         return bool(hw and hw not in FOOTWAY_VALUES)
 
     def is_footway(self) -> bool:
-        """Return ``True`` if this way is a pedestrian footway (``highway`` in the footway value set)."""
+        """
+        Return ``True`` if this way is a pedestrian footway (``highway`` in the footway value set).
+        """
         hw = self.tags.get("highway")
         return bool(hw and hw in FOOTWAY_VALUES)
 
@@ -76,7 +81,8 @@ class Way:
         not_tags: dict[str, list[str]],
         anti_tags: dict[str, list[str]],
     ) -> bool:
-        """Return ``True`` if this way should be classified as an untraversable barrier.
+        """
+        Return ``True`` if this way should be classified as an untraversable barrier.
 
         Parameters
         ----------
@@ -103,7 +109,8 @@ class Way:
         return has_barrier_tag and not has_anti_tag
 
     def to_pcd_points(self, density: float = 2.0, filled: bool = True) -> np.ndarray:
-        """Convert the way's geometry to a dense 2-D point cloud.
+        """
+        Convert the way's geometry to a dense 2-D point cloud.
 
         For closed polygon areas the interior is filled with a regular grid
         of points. For linestrings (or unfilled polygons) points are sampled
@@ -153,10 +160,7 @@ class Way:
         else:
             # For LineString or unfilled Polygon
             geom = self.line
-            if hasattr(geom, "exterior"):
-                coords = list(geom.exterior.coords)
-            else:
-                coords = list(geom.coords)
+            coords = list(geom.exterior.coords if hasattr(geom, "exterior") else geom.coords)
 
             pcd_points = np.empty((0, 2))
             for i in range(len(coords) - 1):

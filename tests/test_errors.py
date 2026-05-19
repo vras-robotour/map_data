@@ -68,7 +68,9 @@ def test_run_parse_without_queries_returns_error():
 
 
 def test_rrt_star_goal_in_isolated_obstacle():
-    """When start is free but the rest of the grid is blocked, path is None."""
+    """
+    When start is free but the rest of the grid is blocked, path is None.
+    """
     grid = np.ones((100, 100), dtype=float)
     grid[0:5, 0:5] = 0.0  # tiny free patch around start at (0,0)
 

@@ -45,7 +45,8 @@ class CoordsData:
 
 
 class MapData:
-    """Central data class for OSM-based map data.
+    """
+    Central data class for OSM-based map data.
 
     Parses GPS waypoints from a GPX file (or a raw coordinate array),
     downloads the corresponding OSM features via the Overpass API, and
@@ -282,7 +283,8 @@ class MapData:
             return None
 
     def run_queries(self, use_cache: bool = True) -> None:
-        """Download OSM ways, relations, and nodes from the Overpass API.
+        """
+        Download OSM ways, relations, and nodes from the Overpass API.
 
         Fires three concurrent Overpass queries covering the bounding box of
         the loaded waypoints and stores the raw JSON responses internally.
@@ -334,7 +336,8 @@ class MapData:
         self._save_osm_cache(ways_raw, rels_raw, nodes_raw)
 
     def run_parse(self) -> int:
-        """Parse the downloaded OSM data into categorised Way lists.
+        """
+        Parse the downloaded OSM data into categorised Way lists.
 
         Populates :attr:`roads_list`, :attr:`footways_list`,
         :attr:`barriers_list`, and :attr:`crossroads_list`. The raw OSM
@@ -377,7 +380,9 @@ class MapData:
         return 0
 
     def parse_intersections(self, ways_dict: dict[int, Way]) -> list[Way]:
-        """Identify nodes shared by multiple footways and return them as crossroad Ways."""
+        """
+        Identify nodes shared by multiple footways and return them as crossroad Ways.
+        """
         node_usage: dict[int, list[bool]] = {}
 
         footways = [w for w in ways_dict.values() if w.is_footway()]
@@ -413,7 +418,8 @@ class MapData:
     # ------------------------------------------------------------------
 
     def run_all(self, save: bool = True) -> None:
-        """Download OSM data, parse it, and optionally save the result.
+        """
+        Download OSM data, parse it, and optionally save the result.
 
         Convenience wrapper that calls :meth:`run_queries`, :meth:`run_parse`,
         and :meth:`save` in sequence.
@@ -429,7 +435,8 @@ class MapData:
             self.save()
 
     def save(self, path: str | None = None) -> None:
-        """Serialize this object to a ``.mapdata`` file.
+        """
+        Serialize this object to a ``.mapdata`` file.
 
         Parameters
         ----------
@@ -449,7 +456,8 @@ class MapData:
 
     @classmethod
     def load(cls, path: str) -> "MapData":
-        """Load a previously saved ``.mapdata`` file.
+        """
+        Load a previously saved ``.mapdata`` file.
 
         Parameters
         ----------
@@ -475,7 +483,8 @@ class MapData:
         )
 
     def get_points(self, z: float = 0.0) -> dict[int, np.ndarray]:
-        """Return all cached OSM nodes as a dictionary of UTM coordinates.
+        """
+        Return all cached OSM nodes as a dictionary of UTM coordinates.
 
         Parameters
         ----------
@@ -495,7 +504,8 @@ class MapData:
         return points
 
     def get_ways(self) -> dict[str, list[Way]]:
-        """Return all parsed way lists grouped by category.
+        """
+        Return all parsed way lists grouped by category.
 
         Returns
         -------

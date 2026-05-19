@@ -17,7 +17,8 @@ GRID_COST_WEIGHT = _DEFAULTS.get("grid_cost_weight", 5.0)
 
 
 class RRTStar:
-    """Rapidly-exploring Random Tree Star (RRT*) path planner.
+    """
+    Rapidly-exploring Random Tree Star (RRT*) path planner.
 
     Builds a collision-free tree by randomly sampling the free space and
     rewiring edges to minimise path cost. The planner is asymptotically
@@ -156,7 +157,8 @@ class RRTStar:
             self._trav_ys = None
 
     def _is_collision(self, point1: np.ndarray, point2: np.ndarray | None = None) -> bool:
-        """Return ``True`` if a point or segment intersects an obstacle.
+        """
+        Return ``True`` if a point or segment intersects an obstacle.
 
         Checks both the Shapely obstacle polygons (via STRtree) and the cost
         grid (via Bresenham rasterisation). A point is in collision if its
@@ -189,7 +191,9 @@ class RRTStar:
     def _bresenham(
         self, start: tuple[int, int], goal: tuple[int, int]
     ) -> Iterator[tuple[int, int]]:
-        """Yield integer grid cells along the line from *start* to *goal* (Bresenham)."""
+        """
+        Yield integer grid cells along the line from *start* to *goal* (Bresenham).
+        """
         x0, y0 = start
         x1, y1 = goal
         dx, dy = abs(x1 - x0), abs(y1 - y0)
@@ -217,7 +221,9 @@ class RRTStar:
         yield (x1, y1)
 
     def _get_grid_cost(self, point: np.ndarray) -> float:
-        """Return the grid cost at *point*, clamped to grid bounds."""
+        """
+        Return the grid cost at *point*, clamped to grid bounds.
+        """
         ix = int((point[0] - self.low[0]) / self.grid_scale)
         iy = int((point[1] - self.low[1]) / self.grid_scale)
         ix = np.clip(ix, 0, self.grid_shape[1] - 1)
@@ -225,7 +231,9 @@ class RRTStar:
         return float(self.grid[iy, ix])
 
     def _sample_point(self) -> np.ndarray:
-        """Sample a random point, biased toward traversable grid cells (90 % of the time)."""
+        """
+        Sample a random point, biased toward traversable grid cells (90 % of the time).
+        """
         if self._trav_xs is not None and random.random() > 0.1:
             idx = random.randrange(len(self._trav_xs))
             return np.array(
@@ -242,7 +250,8 @@ class RRTStar:
         )
 
     def _nearest_node(self, point: np.ndarray) -> int:
-        """Return the index of the tree node closest to *point*.
+        """
+        Return the index of the tree node closest to *point*.
 
         Uses a lazily rebuilt KD-tree for the bulk of the tree, plus a
         linear scan over nodes added since the last rebuild.
@@ -265,7 +274,9 @@ class RRTStar:
         return int(best_idx)
 
     def _steer(self, start: np.ndarray, target: np.ndarray) -> np.ndarray:
-        """Return a point at most *step_size* metres from *start* toward *target*."""
+        """
+        Return a point at most *step_size* metres from *start* toward *target*.
+        """
         direction = target - start
         dist = np.linalg.norm(direction)
         if dist < self.step_size:
@@ -273,7 +284,9 @@ class RRTStar:
         return start + (direction / dist) * self.step_size
 
     def _get_near_nodes(self, new_point: np.ndarray) -> list[int]:
-        """Return indices of all tree nodes within *neighbor_radius* of *new_point*."""
+        """
+        Return indices of all tree nodes within *neighbor_radius* of *new_point*.
+        """
         n = len(self.nodes)
         new_idx = n - 1  # node just appended by the caller
         r2 = self.neighbor_radius**2
@@ -297,7 +310,8 @@ class RRTStar:
         return result
 
     def _segment_cost(self, start: np.ndarray, end: np.ndarray) -> tuple[bool, float]:
-        """Compute the cost of the segment from *start* to *end*.
+        """
+        Compute the cost of the segment from *start* to *end*.
 
         Returns
         -------
@@ -337,7 +351,8 @@ class RRTStar:
         return False, np.linalg.norm(end - start) * (1.0 + avg_c * GRID_COST_WEIGHT)
 
     def find_path(self) -> np.ndarray | None:
-        """Run the RRT* algorithm and return the planned path.
+        """
+        Run the RRT* algorithm and return the planned path.
 
         Iterates up to *max_iter* times, growing the tree from ``start``
         toward randomly sampled points and rewiring edges to reduce cost.
@@ -424,7 +439,9 @@ class RRTStar:
         return None
 
     def _reconstruct_path(self, goal_idx: int) -> list[np.ndarray]:
-        """Walk the parent chain from *goal_idx* back to the root and return the path."""
+        """
+        Walk the parent chain from *goal_idx* back to the root and return the path.
+        """
         path = []
         curr = goal_idx
         while curr is not None:
@@ -436,7 +453,9 @@ class RRTStar:
         return path
 
     def _simplify_path(self, path: list[np.ndarray]) -> list[np.ndarray]:
-        """Greedily remove intermediate waypoints that have line-of-sight to a later node."""
+        """
+        Greedily remove intermediate waypoints that have line-of-sight to a later node.
+        """
         if len(path) <= 2:
             return path
         simplified = [path[0]]

@@ -14,7 +14,9 @@ logger = logging.getLogger("create_mapdata")
 
 
 def process_map_data(file_name: str, download: bool) -> None:
-    """Process map data based on command-line arguments."""
+    """
+    Process map data based on command-line arguments.
+    """
     # Try to use file_name as a direct path first
     if os.path.exists(file_name):
         full_path = os.path.abspath(file_name)

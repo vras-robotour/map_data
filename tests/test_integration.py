@@ -154,7 +154,9 @@ def test_osm_cache_missing_file_returns_none(tmp_path):
 
 
 def test_parse_intersections_finds_shared_node():
-    """Node shared by two footways at a non-endpoint position → crossroad."""
+    """
+    Node shared by two footways at a non-endpoint position → crossroad.
+    """
     import utm as _utm
 
     md = _make_md()
@@ -194,7 +196,9 @@ def test_parse_intersections_finds_shared_node():
 
 
 def test_parse_intersections_no_shared_nodes():
-    """Two footways with no shared nodes → no crossroads."""
+    """
+    Two footways with no shared nodes → no crossroads.
+    """
     import utm as _utm
 
     md = _make_md()
@@ -232,7 +236,9 @@ def test_parse_intersections_no_shared_nodes():
 
 
 def test_parse_intersections_three_way_junction():
-    """Node appearing in three footways → crossroad with count=3."""
+    """
+    Node appearing in three footways → crossroad with count=3.
+    """
     import utm as _utm
 
     md = _make_md()

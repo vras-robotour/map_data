@@ -31,7 +31,9 @@ def _make_footway(way_id, node_ids, nodes_coords):
 
 
 def test_graph_planner_simple_path():
-    """Straight three-node footway: plan from one end to the other."""
+    """
+    Straight three-node footway: plan from one end to the other.
+    """
     nodes_coords = {100: (0.0, 0.0), 101: (10.0, 0.0), 102: (20.0, 0.0)}
     way = _make_footway(1, [100, 101, 102], nodes_coords)
     md = MockMapData([way], nodes_coords)
@@ -46,7 +48,9 @@ def test_graph_planner_simple_path():
 
 
 def test_graph_planner_disjoint_network():
-    """Two disconnected footway segments: no path should be found."""
+    """
+    Two disconnected footway segments: no path should be found.
+    """
     nodes_coords = {
         100: (0.0, 0.0),
         101: (5.0, 0.0),
@@ -64,7 +68,9 @@ def test_graph_planner_disjoint_network():
 
 
 def test_graph_planner_same_edge():
-    """Start and goal both snap to the same edge: direct connection is added."""
+    """
+    Start and goal both snap to the same edge: direct connection is added.
+    """
     nodes_coords = {100: (0.0, 0.0), 101: (10.0, 0.0)}
     way = _make_footway(1, [100, 101], nodes_coords)
     md = MockMapData([way], nodes_coords)
@@ -80,7 +86,9 @@ def test_graph_planner_same_edge():
 
 
 def test_graph_planner_l_shaped():
-    """L-shaped footway: path must navigate around the corner."""
+    """
+    L-shaped footway: path must navigate around the corner.
+    """
     nodes_coords = {100: (0.0, 0.0), 101: (10.0, 0.0), 102: (10.0, 10.0)}
     way = _make_footway(1, [100, 101, 102], nodes_coords)
     md = MockMapData([way], nodes_coords)

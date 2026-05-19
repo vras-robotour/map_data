@@ -154,7 +154,9 @@ def test_post_process_path_simplification():
 
 
 def test_astar_grid_goal_outside_boundary():
-    """Goal UTM outside the grid is caught — returns None."""
+    """
+    Goal UTM outside the grid is caught — returns None.
+    """
     args = Args()
     replanner = ReplanPath(args, [])
     replanner._reshaped_grid_cache = np.zeros((20, 20), dtype=float)
@@ -167,7 +169,9 @@ def test_astar_grid_goal_outside_boundary():
 
 
 def test_astar_grid_start_equals_goal_same_cell():
-    """Points that map to the same grid cell return a 2-point trivial path."""
+    """
+    Points that map to the same grid cell return a 2-point trivial path.
+    """
     args = Args()
     replanner = ReplanPath(args, [])
     replanner._reshaped_grid_cache = np.zeros((20, 20), dtype=float)

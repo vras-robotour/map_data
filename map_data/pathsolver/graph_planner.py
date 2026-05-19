@@ -11,7 +11,8 @@ if TYPE_CHECKING:
 
 
 class GraphPlanner:
-    """Graph-based path planner that routes along the OSM road and footway network.
+    """
+    Graph-based path planner that routes along the OSM road and footway network.
 
     Builds an undirected weighted graph from the ways stored in a
     :class:`~map_data.map_data.MapData` instance. Manually annotated paths
@@ -40,7 +41,8 @@ class GraphPlanner:
         self._build_graph()
 
     def _build_graph(self) -> None:
-        """Build the adjacency graph and spatial index from the allowed ways.
+        """
+        Build the adjacency graph and spatial index from the allowed ways.
 
         Annotation ways (negative integer IDs) are connected to the OSM graph
         by projecting their endpoints onto the nearest existing edge and
@@ -148,14 +150,18 @@ class GraphPlanner:
         self._edge_tree = STRtree(final_edge_segments) if final_edge_segments else None
 
     def _add_edge(self, u: int, v: int, d: float) -> None:
-        """Add an undirected edge of length *d* between nodes *u* and *v*."""
+        """
+        Add an undirected edge of length *d* between nodes *u* and *v*.
+        """
         self.graph.setdefault(u, []).append((v, d))
         self.graph.setdefault(v, []).append((u, d))
 
     def _find_closest_edge(
         self, point_utm: np.ndarray
     ) -> tuple[tuple[int, int, np.ndarray] | None, float]:
-        """Find the closest edge using an STRtree spatial index."""
+        """
+        Find the closest edge using an STRtree spatial index.
+        """
         if self._edge_tree is None:
             return None, float("inf")
 
@@ -174,7 +180,8 @@ class GraphPlanner:
     def a_star(
         self, start_node, goal_node, extra_nodes: dict | None = None
     ) -> list[np.ndarray] | None:
-        """Run A* between two graph nodes and return the path as UTM coordinates.
+        """
+        Run A* between two graph nodes and return the path as UTM coordinates.
 
         Parameters
         ----------
@@ -222,7 +229,8 @@ class GraphPlanner:
         return self.nodes[node_id].ravel()[:2]
 
     def plan(self, path_utm: np.ndarray) -> np.ndarray | None:
-        """Plan a path through a sequence of UTM waypoints along the graph.
+        """
+        Plan a path through a sequence of UTM waypoints along the graph.
 
         Each consecutive pair of waypoints is routed independently. The
         waypoints are snapped to the nearest graph edge before planning,

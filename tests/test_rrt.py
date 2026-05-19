@@ -73,7 +73,9 @@ def test_rrt_star_with_obstacle():
 
 
 def test_rrt_star_near_equal_start_goal():
-    """Start and goal closer than step_size: path should be found in very few iterations."""
+    """
+    Start and goal closer than step_size: path should be found in very few iterations.
+    """
     start = np.array([5.0, 5.0])
     goal = np.array([5.5, 5.5])  # distance ~0.7 < step_size=1.0
     grid = np.zeros((100, 100), dtype=float)

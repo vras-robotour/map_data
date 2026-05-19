@@ -12,7 +12,9 @@ _E0, _N0 = 458000.0, 5550500.0
 
 
 def _make_md_with_footway():
-    """MapData with a 16m footway running along the grid midline."""
+    """
+    MapData with a 16m footway running along the grid midline.
+    """
     waypoints = np.array([[_E0, _N0], [_E0 + 20, _N0 + 20]])
     md = MapData([waypoints, _ZN, _ZL], coords_type="array")
 

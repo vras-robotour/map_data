@@ -20,7 +20,9 @@ class SignedIntConverter(IntegerConverter):
 
 
 def telemetry_broadcaster() -> None:
-    """Background thread to broadcast ROS2 telemetry via WebSockets."""
+    """
+    Background thread to broadcast ROS2 telemetry via WebSockets.
+    """
     global tracker_node
     while True:
         if tracker_node:

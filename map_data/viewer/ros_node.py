@@ -250,7 +250,9 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
     _COLLISION_ACTIONS = {0: "STOP", 1: "SLOWDOWN", 2: "LIMIT", 3: "PASSTHROUGH"}
 
     def _build_status_locked(self):
-        """Build status snapshot. Caller must hold self._lock."""
+        """
+        Build status snapshot. Caller must hold self._lock.
+        """
         now = time.time()
         return {
             "battery": {

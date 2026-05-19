@@ -13,7 +13,9 @@ def visualize_replan(
     old_path: np.ndarray | None = None,
     save_path: str = "replan.png",
 ) -> None:
-    """Visualize the grid, obstacles, and path using Matplotlib."""
+    """
+    Visualize the grid, obstacles, and path using Matplotlib.
+    """
     _, ax = plt.subplots()
 
     # Plot grid as a heatmap (0: white, 1: gray)

@@ -122,13 +122,17 @@ def save_annotations(path: str, data: dict[str, Any]) -> None:
 
 
 def get_deleted_way_ids(store):
-    """Return set of deleted way IDs, handling both old (int list) and new (dict list) formats."""
+    """
+    Return set of deleted way IDs, handling both old (int list) and new (dict list) formats.
+    """
     dw = store.get("deleted_ways", [])
     return {(d["id"] if isinstance(d, dict) else d) for d in dw}
 
 
 def get_deleted_node_ids(store, way_id):
-    """Return set of deleted node IDs for a given way_id, handling both storage formats."""
+    """
+    Return set of deleted node IDs for a given way_id, handling both storage formats.
+    """
     dn = store.get("deleted_nodes", [])
     if isinstance(dn, dict):
         return set(dn.get(str(way_id), []))
@@ -136,7 +140,9 @@ def get_deleted_node_ids(store, way_id):
 
 
 def get_split_node_ids(store, way_id):
-    """Return list of node IDs where the given way should be split."""
+    """
+    Return list of node IDs where the given way should be split.
+    """
     splits = store.get("split_ways") or {}
     way_splits = splits.get(str(way_id), [])
     # Ensure they are integers for comparison with OSM node IDs
@@ -144,7 +150,9 @@ def get_split_node_ids(store, way_id):
 
 
 def split_way(way, split_nids, zone_number=None, zone_letter=None, nodes_cache=None):
-    """Split a way at specified node IDs into a list of new Way objects."""
+    """
+    Split a way at specified node IDs into a list of new Way objects.
+    """
     if not split_nids:
         return [way]
 
@@ -246,7 +254,8 @@ _MIGRATION_VERSION = "v2"
 
 
 def migrate_change_log(store):
-    """Ensure change_log covers all existing changes with proportional way/node interleaving.
+    """
+    Ensure change_log covers all existing changes with proportional way/node interleaving.
 
     On first call (or when migration is outdated): entries without a "ts" key are
     considered legacy and are replaced by a fresh proportionally-interleaved block.
@@ -320,7 +329,9 @@ def migrate_change_log(store):
 
 
 def get_node_position_overrides(store, way_id):
-    """Return {node_id (int): {lat, lon}} for position overrides on a given way."""
+    """
+    Return {node_id (int): {lat, lon}} for position overrides on a given way.
+    """
     original_way_id_str = str(way_id).split(":")[0]
     return {
         int(k): v
@@ -331,7 +342,8 @@ def get_node_position_overrides(store, way_id):
 def apply_node_position_overrides(
     way, overrides, zone_number, zone_letter, nodes_cache=None, category=None
 ):
-    """Return a copy of way with geometry updated from node position overrides.
+    """
+    Return a copy of way with geometry updated from node position overrides.
 
     overrides: {node_id (int): {"lat": float, "lon": float}}
     For non-overridden nodes, nodes_cache is consulted before falling back to
@@ -478,7 +490,9 @@ def apply_node_position_overrides(
 
 
 def geojson_geom_to_utm(geometry, zone_number, zone_letter):
-    """GeoJSON geometry (lon/lat) → Shapely geometry (UTM, same zone as mapdata)."""
+    """
+    GeoJSON geometry (lon/lat) → Shapely geometry (UTM, same zone as mapdata).
+    """
 
     def pt(c):
         e, n, _, _ = utm.from_latlon(
@@ -507,7 +521,9 @@ def geojson_geom_to_utm(geometry, zone_number, zone_letter):
 def rebuild_way_without_nodes(
     way, del_nids, zone_number=None, zone_letter=None, nodes_cache=None, category=None
 ):
-    """Return a shallow copy of way with del_nids removed, or None if geometry becomes invalid."""
+    """
+    Return a shallow copy of way with del_nids removed, or None if geometry becomes invalid.
+    """
     node_ids = [getattr(n, "id", n) for n in way.nodes]
     keep = [i for i, nid in enumerate(node_ids) if nid not in del_nids]
     if len(keep) < 2:
