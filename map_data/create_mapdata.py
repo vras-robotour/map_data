@@ -43,7 +43,8 @@ def process_map_data(file_name: str, *, download: bool) -> None:
                 raise SystemExit(1)
             map_data.save()
         else:
-            map_data = md.MapData.load(str(full_path))
+            mapdata_path = str(full_path.with_suffix(".mapdata"))
+            map_data = md.MapData.load(mapdata_path)
             map_data.save()
         logger.info("Successfully processed map data for %s", file_name)
     except Exception as e:
@@ -62,7 +63,7 @@ def main() -> None:
     parser.add_argument("-d", "--download", action="store_true", help="Download data from OSM")
     args = parser.parse_args()
 
-    process_map_data(args.file, args.download)
+    process_map_data(args.file, download=args.download)
 
 
 if __name__ == "__main__":
