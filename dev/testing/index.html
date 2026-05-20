@@ -13,8 +13,10 @@
       
       
       
-        <link rel="prev" href="../todo/">
+        <link rel="prev" href="../contributing/">
       
+      
+        <link rel="next" href="../todo/">
       
       
         
@@ -25,7 +27,7 @@
     
     
       
-        <title>Changelog - map_data</title>
+        <title>Testing - map_data</title>
       
     
     
@@ -80,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#changelog" class="md-skip">
+        <a href="#testing" class="md-skip">
           Skip to content
         </a>
       
@@ -114,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Changelog
+              Testing
             
           </span>
         </div>
@@ -1085,10 +1087,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../testing/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1104,6 +1133,175 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#running-the-suite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running the suite
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test files
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-design-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test design principles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#module-by-module-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Module-by-module notes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Module-by-module notes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#test_rrtpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        test_rrt.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_parsingpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        test_parsing.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_fill_gridpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        test_fill_grid.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_overpasspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        test_overpass.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_viewer_helperspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        test_viewer_helpers.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_viewer_routespy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        test_viewer_routes.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_integrationpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        test_integration.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_errorspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        test_errors.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-new-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding new tests
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1141,37 +1339,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Changelog
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
         
   
   
@@ -1187,76 +1358,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#unreleased" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Unreleased
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Unreleased">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#added" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Added
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#changed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Changed
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#fixed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Fixed
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1296,22 +1397,55 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#unreleased" class="md-nav__link">
+  <a href="#running-the-suite" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Unreleased
+        Running the suite
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Unreleased">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test files
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-design-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test design principles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#module-by-module-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Module-by-module notes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Module-by-module notes">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#added" class="md-nav__link">
+  <a href="#test_rrtpy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Added
+        test_rrt.py
       
     </span>
   </a>
@@ -1319,10 +1453,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed" class="md-nav__link">
+  <a href="#test_parsingpy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Changed
+        test_parsing.py
       
     </span>
   </a>
@@ -1330,10 +1464,65 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#fixed" class="md-nav__link">
+  <a href="#test_fill_gridpy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Fixed
+        test_fill_grid.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_overpasspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        test_overpass.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_viewer_helperspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        test_viewer_helpers.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_viewer_routespy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        test_viewer_routes.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_integrationpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        test_integration.py
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#test_errorspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        test_errors.py
       
     </span>
   </a>
@@ -1342,6 +1531,17 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-new-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding new tests
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1365,55 +1565,166 @@
   
 
 
-<h1 id="changelog">Changelog</h1>
-<h2 id="unreleased">Unreleased</h2>
-<h3 id="added">Added</h3>
+<h1 id="testing">Testing</h1>
+<h2 id="running-the-suite">Running the suite</h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pytest<span class="w"> </span>tests/<span class="w"> </span>-v
+</span></code></pre></div>
+<p>No ROS2 context, no network access, and no external services are required — all external dependencies are mocked.</p>
+<p>Run a single file:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pytest<span class="w"> </span>tests/test_viewer_routes.py<span class="w"> </span>-v
+</span></code></pre></div>
+<p>Run tests matching a keyword:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pytest<span class="w"> </span>tests/<span class="w"> </span>-k<span class="w"> </span><span class="s2">&quot;overpass&quot;</span><span class="w"> </span>-v
+</span></code></pre></div>
+<h2 id="test-files">Test files</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Scope</th>
+<th>Key dependencies mocked</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_core.py</code></td>
+<td><code>Way</code> classification, serialization, <code>combine_ways</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>test_astar.py</code></td>
+<td>Grid A* planner</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>test_rrt.py</code></td>
+<td>RRT* planner — path found, collision avoidance, edge cases</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>test_graph_planner.py</code></td>
+<td>Graph-based planner</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>test_overpass.py</code></td>
+<td><code>OverpassClient</code> — retry logic, rate limiting, status polling</td>
+<td><code>requests.Session</code>, <code>time.sleep</code></td>
+</tr>
+<tr>
+<td><code>test_parsing.py</code></td>
+<td><code>parse_osm_ways</code>, <code>separate_ways</code>, <code>parse_osm_nodes</code> — OSM element classification and buffering</td>
+<td><code>overpy.Overpass</code> (fixture JSON)</td>
+</tr>
+<tr>
+<td><code>test_fill_grid.py</code></td>
+<td><code>ReplanPath.fill_grid</code> — footway cost assignment, barrier cell marking</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>test_viewer_helpers.py</code></td>
+<td><code>helpers.py</code> — GeoJSON conversion, way splitting, node overrides, annotation I/O, change log migration</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>test_viewer_routes.py</code></td>
+<td>Flask REST API — annotation CRUD, file listing, mapdata fetch, way operations, path-traversal security</td>
+<td>Filesystem (temp dir)</td>
+</tr>
+<tr>
+<td><code>test_integration.py</code></td>
+<td>Full pipeline — GPX parse, save/reload roundtrip, OSM cache, mocked Overpass query, <code>parse_intersections</code></td>
+<td><code>OverpassClient</code></td>
+</tr>
+<tr>
+<td><code>test_errors.py</code></td>
+<td>Error paths — malformed GPX, corrupt files, Overpass timeouts, planning failures</td>
+<td><code>requests.Session</code>, <code>time.sleep</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="test-design-principles">Test design principles</h2>
+<p><strong>No network.</strong> Every test that would otherwise reach the Overpass API patches <code>requests.Session.post</code> / <code>requests.Session.get</code> via <code>unittest.mock.patch</code>. <code>time.sleep</code> is patched alongside so retries complete instantly.</p>
+<p><strong>No ROS2.</strong> The Flask app is created via <code>create_app(data_dir=...)</code> which bypasses the ROS2 node initialisation (guarded by <code>ROS_AVAILABLE</code>).</p>
+<p><strong>Real filesystem, isolated.</strong> Route tests use pytest's <code>tmp_path</code> fixture, giving each test function its own directory. The <code>load_mapdata_cached</code> cache keys on <code>(path, mtime)</code> so cross-test contamination cannot occur.</p>
+<p><strong>Minimal fixtures.</strong> Shared helper functions (e.g. <code>_make_mapdata</code>) are plain functions defined in the test module, not conftest fixtures, to keep test files self-contained.</p>
+<h2 id="module-by-module-notes">Module-by-module notes</h2>
+<h3 id="test_rrtpy"><code>test_rrt.py</code></h3>
+<p><code>test_rrt_star_with_obstacle</code> checks obstacle avoidance at two levels:</p>
+<ol>
+<li><strong>Node check</strong> — each waypoint in the returned path must have grid cost <code>&lt; 0.95</code>.</li>
+<li><strong>Segment check</strong> — 20 linearly-interpolated samples along each segment between consecutive waypoints must also have grid cost <code>&lt; 0.95</code>.</li>
+</ol>
+<p>The segment check is critical: without it a two-point path <code>[start, goal]</code> passes the node check even when the straight line between them cuts directly through the obstacle region.</p>
+<p>The test sets <code>traversability_threshold=0.5</code> so that cells with the obstacle value <code>1.0</code> are treated as hard collisions by the planner.</p>
+<p>The segment check excludes the single outer ring of boundary cells (rows/columns 40 and 59) to account for a known Bresenham corner artefact where a diagonal segment can graze a single boundary cell that the rasteriser does not visit.</p>
+<h3 id="test_parsingpy"><code>test_parsing.py</code></h3>
+<p>Tests the three OSM parsing functions directly using <code>overpy.Overpass().parse_json(fixture_json)</code> as input — no real network call:</p>
 <ul>
-<li>Interactive viewer: Tracker mode for live robot position via ROS2</li>
-<li>Interactive viewer: way splitting, node deletion, and node position drag editing</li>
-<li>Interactive viewer: audit change log stored in <code>.annotations.json</code></li>
-<li>Interactive viewer: tag editing with save and undo support</li>
-<li>Interactive viewer: feature search by ID or name in the sidebar</li>
-<li>Interactive viewer: category and subtype visibility toggles</li>
-<li>Interactive viewer: Leaflet.Snap integration for precise annotation alignment</li>
-<li>Interactive viewer: vertex-level editing for manual annotations in Edit mode</li>
-<li>Interactive viewer: GPX file import for waypoint overlays</li>
-<li>Interactive viewer: planner mode can download and parse OSM data on demand</li>
-<li>Interactive viewer: GPX upload modal with map name input (previously a stub)</li>
-<li>Path planning module (<code>pathsolver</code>) with A* graph search and cost-grid support</li>
-<li>Path planning: annotated paths take priority over obstacle cells</li>
-<li>Path planning: paths-only planning mode (constrained to mapped ways)</li>
-<li>Path planning: cancellable planning requests</li>
-<li><code>map_data_info</code> CLI tool to print statistics about a <code>.mapdata</code> file</li>
-<li>YAML waypoint format as an alternative to GPX</li>
-<li><code>osm_cloud</code> launch file with configurable grid topic and static transform publishing</li>
-<li><code>osm_cloud</code>: dynamic reconfigure support for runtime tuning of <code>max_path_dist</code>, <code>neighbor_cost</code>, and <code>grid_res</code></li>
-<li>Documentation site (MkDocs Material)</li>
-<li>Type hints across core and utility modules</li>
-<li>pytest suite covering core logic and path planning edge cases</li>
-<li>OSM response caching: Overpass query results are persisted to a <code>.osm_cache.json</code> sidecar file and reused on subsequent loads when the bounding box matches, avoiding redundant network requests</li>
-<li>New planner config parameters in <code>planner_defaults.yaml</code>: <code>grid_cost_weight</code>, <code>obstacle_radius</code>, and per-type <code>buffer_widths</code> (<code>road</code>, <code>footway</code>, <code>barrier</code>) — previously hardcoded in source</li>
+<li><code>parse_osm_ways</code> — footway produces a <code>LineString</code>, road is classified via <code>is_road()</code>, closed way produces a <code>Polygon</code>.</li>
+<li><code>separate_ways</code> — footway goes to the footways list (buffered to Polygon); road goes to roads; barrier way (with <code>barrier: *</code> tag dict) goes to barriers. <code>BUFFER_WIDTHS</code> for road &gt; footway.</li>
+<li><code>parse_osm_nodes</code> — node with <code>barrier: block</code> produces a buffered-Point <code>Way</code>; nodes in <code>way_node_ids</code> are skipped; non-obstacle nodes are excluded.</li>
 </ul>
-<h3 id="changed">Changed</h3>
+<h3 id="test_fill_gridpy"><code>test_fill_grid.py</code></h3>
+<p>Tests <code>ReplanPath.fill_grid</code> with a hand-built <code>MapData</code> containing a 16 m footway in a 20 × 20 m grid (UTM zone 33U). Key assertions:</p>
 <ul>
-<li>Core architecture split into modular components: <code>OverpassClient</code>, <code>parsing</code>, <code>serialization</code></li>
-<li><code>Way</code> class refactored to a <code>@dataclass</code> with full type hints</li>
-<li><code>.mapdata</code> serialisation migrated from pickle to JSON + WKT; legacy pickle support was subsequently removed for security reasons</li>
-<li>Overpass queries parallelised for faster map data loading</li>
-<li><code>ReplanPath</code> refactored into focused sub-modules: grid construction moved to <code>PathGrid</code> (<code>pathsolver/grid_constructor.py</code>), path smoothing to <code>smooth_path</code> (<code>pathsolver/smoothing.py</code>), and matplotlib debug visualization to <code>visualize_replan</code> (<code>pathsolver/visualizer.py</code>)</li>
-<li>Config loading centralized to <code>map_data/utils/config.py</code>, eliminating duplicated YAML-loading logic from <code>map_data.py</code> and <code>replan.py</code></li>
-<li><code>visualize_mapdata</code> CLI tool removed; the browser-based viewer supersedes it</li>
+<li>Cells exactly on the footway centreline have cost <code>&lt; DEFAULT_OFF_PATH_COST</code> (0.9).</li>
+<li>Cells at the far corner (&gt; <code>max_path_dist</code> from any path) have cost ≥ 0.85.</li>
+<li>Cells inside a 2 × 2 m barrier polygon passed as an obstacle are <code>np.inf</code> in the 2-D grid cache.</li>
+<li>Cells clearly outside the barrier are finite.</li>
 </ul>
-<h3 id="fixed">Fixed</h3>
+<h3 id="test_overpasspy"><code>test_overpass.py</code></h3>
+<p><code>OverpassClient</code> is instantiated directly and its <code>session</code> attribute is patched in place, which avoids replacing the class globally and keeps each test independent. The nine tests cover:</p>
 <ul>
-<li>Multi-zone UTM boundary warning when loaded area spans two UTM zones</li>
-<li>Annotation deletion via the Del key in the viewer</li>
-<li>Path planning with split ways</li>
-<li>Thread-safe cancellation in the replanning module</li>
-<li><code>parse_yaml_file</code> now wraps all parse errors in a try/except and returns <code>[]</code> with a log message, matching the error contract of <code>parse_gpx_file</code></li>
-<li>Path traversal vulnerability in viewer API: user-supplied <code>file</code> parameter is now validated against the resolved data directory before any file access</li>
-<li><code>/api/fetch_area</code> now rejects requests where <code>min_lat &gt;= max_lat</code> or <code>min_lon &gt;= max_lon</code></li>
+<li>Successful query returning an <code>overpy.Result</code></li>
+<li>429/406 response rotating the active endpoint</li>
+<li>500 response triggering a retry on the same endpoint</li>
+<li>All retries exhausted → <code>None</code></li>
+<li><code>requests.Timeout</code> → <code>None</code></li>
+<li><code>_wait_for_slot</code> short-circuiting for non-<code>overpass-api.de</code> endpoints</li>
+<li><code>_wait_for_slot</code> returning immediately when slots are available</li>
+<li><code>_wait_for_slot</code> sleeping the correct number of seconds when no slots are available</li>
 </ul>
+<h3 id="test_viewer_helperspy"><code>test_viewer_helpers.py</code></h3>
+<p>Pure functions in <code>helpers.py</code> are tested in isolation using hand-constructed <code>Way</code> objects and fixed UTM coordinates in zone 33U (Prague area, easting ≈ 458 000, northing ≈ 5 550 500). Notable cases:</p>
+<ul>
+<li><strong>GeoJSON roundtrip</strong> — <code>geom_to_geojson</code> followed by <code>geojson_geom_to_utm</code> must recover the original geometry within 2 m (<code>equals_exact(tolerance=2.0)</code>).</li>
+<li><strong>Way splitting</strong> — a five-node <code>LineString</code> way split at its middle node must yield two segments with virtual IDs <code>"{id}:0"</code> and <code>"{id}:1"</code> and the correct node subsets.</li>
+<li><strong>Node deletion</strong> — removing a node from a four-node way must return a three-node way; removing a node from a two-node way must return <code>None</code>.</li>
+<li><strong>Change log migration</strong> — <code>migrate_change_log</code> populates the log for untracked deletions, is idempotent once the migration version matches, drops legacy entries without a <code>ts</code> key on re-migration, and preserves entries that carry a timestamp.</li>
+</ul>
+<h3 id="test_viewer_routespy"><code>test_viewer_routes.py</code></h3>
+<p>A <code>_make_mapdata</code> helper creates a minimal <code>.mapdata</code> file (one footway <code>Way</code>, two entries in <code>nodes_cache</code>) and writes it to a <code>tmp_path</code>. Two fixtures build on this:</p>
+<ul>
+<li><code>app_client</code> — empty data directory, used for 400/404 edge cases.</li>
+<li><code>app_client_with_file</code> — data directory pre-populated with <code>test.mapdata</code>.</li>
+</ul>
+<p>The annotation lifecycle (create → update → delete) is tested end-to-end: each step checks both the HTTP status code and the persisted state. Additional coverage includes:</p>
+<ul>
+<li><strong>Path-traversal security</strong> — <code>GET /api/mapdata?file=../../../etc/passwd</code> must return 400.</li>
+<li><strong>Way tag overrides</strong> — <code>PUT /api/ways/{id}/tags</code> stores tag overrides; <code>DELETE</code> removes them.</li>
+<li><strong>Hide / show / restore</strong> — the hide, show, and restore endpoints return 204 and update the annotations file correctly.</li>
+<li><strong>Node operations</strong> — node deletion and position-override move operations.</li>
+<li><strong>Way splitting</strong> — a 3-node footway can be split at its middle node, returning two segments; undoing the split restores one segment.</li>
+</ul>
+<h3 id="test_integrationpy"><code>test_integration.py</code></h3>
+<p><code>test_run_parse_with_mocked_overpass</code> patches <code>map_data.map_data.OverpassClient</code> at the class level, replacing <code>query_raw</code> with a return value of a minimal Overpass JSON string containing one footway way. <code>client.api</code> is set to a real <code>overpy.Overpass()</code> instance so that <code>parse_json</code> works correctly. After <code>run_queries(use_cache=False)</code> and <code>run_parse()</code>, the test asserts that at least one footway was classified.</p>
+<p>Additional coverage:</p>
+<ul>
+<li><strong>OSM cache roundtrip</strong> — <code>_save_osm_cache</code> then <code>_load_osm_cache</code> returns the same raw JSON strings.</li>
+<li><strong>OSM cache bbox mismatch</strong> — shifting <code>min_lat</code> by 1° makes <code>_load_osm_cache</code> return <code>None</code>.</li>
+<li><strong><code>parse_intersections</code></strong> — two footways sharing a middle node produce exactly one crossroad <code>Way</code> at that node; no shared nodes → no crossroads; three footways sharing one endpoint → crossroad.</li>
+</ul>
+<h3 id="test_errorspy"><code>test_errors.py</code></h3>
+<p><code>test_rrt_star_goal_in_isolated_obstacle</code> creates a grid that is entirely blocked except for a small free patch around the start. Since the goal lies within the blocked region and no path can reach it, <code>find_path</code> must return <code>None</code>.</p>
+<h2 id="adding-new-tests">Adding new tests</h2>
+<ol>
+<li>Place the test file in <code>tests/</code>.</li>
+<li>Import only from <code>map_data.*</code> — do not import from neighbouring test modules.</li>
+<li>Mock any external I/O at the lowest sensible level (<code>requests.Session</code>, not the whole <code>requests</code> module).</li>
+<li>Use <code>tmp_path</code> for any test that reads or writes files.</li>
+<li>Run <code>pytest tests/ -v</code> before opening a pull request.</li>
+</ol>
 
 
 
