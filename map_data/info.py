@@ -1,6 +1,6 @@
 import argparse
 import logging
-import os
+from pathlib import Path
 
 from map_data.map_data import MapData
 
@@ -9,18 +9,19 @@ logger = logging.getLogger("map_data_info")
 
 
 def get_stats(path: str) -> None:
-    if not os.path.isfile(path):
-        logger.error(f"File not found: {path}")
+    p = Path(path)
+    if not p.is_file():
+        logger.error("File not found: %s", path)
         return
 
     try:
         md = MapData.load(path)
-    except Exception as e:
-        logger.error(f"Failed to load map data: {e}")
+    except Exception:
+        logger.exception("Failed to load map data")
         return
 
     print("=" * 40)
-    print(f"MAP DATA STATISTICS: {os.path.basename(path)}")
+    print(f"MAP DATA STATISTICS: {p.name}")
     print("=" * 40)
 
     source = f"File: {md.coords_file}" if md.coords_file else "Array"
@@ -41,11 +42,11 @@ def get_stats(path: str) -> None:
     print(f"Total Footway Distance: {total_footway_len:.1f} m")
 
     # Check for annotations sidecar
-    ann_path = path.rsplit(".", 1)[0] + ".annotations.json"
-    if os.path.isfile(ann_path):
+    ann_path = p.with_suffix(".annotations.json")
+    if ann_path.is_file():
         import json
 
-        with open(ann_path) as f:
+        with ann_path.open() as f:
             ann_data = json.load(f)
             anns = ann_data.get("annotations", [])
             print(f"Annotations: {len(anns)} (manual edits)")
@@ -54,9 +55,7 @@ def get_stats(path: str) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Display statistics for a .mapdata file"
-    )
+    parser = argparse.ArgumentParser(description="Display statistics for a .mapdata file")
     parser.add_argument("file", help="Path to the .mapdata file")
     args = parser.parse_args()
 

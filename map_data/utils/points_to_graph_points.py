@@ -1,12 +1,10 @@
-from typing import Tuple
-
 import numpy as np
 from shapely.geometry import MultiPoint, Point
 
 
 def get_point_line(
-    p1: Point, p2: Point, density: float, increase: int = 0
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    p1: Point, p2: Point, density: float, increase: int = 0,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Get the line between two points.
     """
@@ -29,8 +27,8 @@ def get_point_line(
 
 
 def increase_line(
-    line: np.ndarray, dist_line: np.ndarray, vec: np.ndarray, n: int, density: float
-) -> Tuple[np.ndarray, np.ndarray]:
+    line: np.ndarray, dist_line: np.ndarray, vec: np.ndarray, n: int, density: float,
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Increase the line by n points in the direction of vec.
     """
@@ -44,7 +42,7 @@ def increase_line(
 
     line = np.concatenate((before, line, after), axis=0)
     dist_line = np.concatenate(
-        (np.flip(arange_increase_vec, axis=0), dist_line, arange_increase_vec), axis=0
+        (np.flip(arange_increase_vec, axis=0), dist_line, arange_increase_vec), axis=0,
     )
     return line, dist_line
 
@@ -63,13 +61,13 @@ def get_equidistant_points(p1: np.ndarray, p2: np.ndarray, n: int) -> np.ndarray
 
 
 def points_to_graph_points(
-    point1: Point, point2: Point, density: float = 1.0, width: float = 10.0
-) -> Tuple[MultiPoint, MultiPoint, np.ndarray]:
+    point1: Point, point2: Point, density: float = 1.0, width: float = 10.0,
+) -> tuple[MultiPoint, MultiPoint, np.ndarray]:
     """
     Transform point into graph point.
     """
-    perpendicular_increase = int(round(width / 2 / density))
-    parallel_increase = int(round(width / 4 / density))
+    perpendicular_increase = round(width / 2 / density)
+    parallel_increase = round(width / 4 / density)
 
     if point1.bounds == point2.bounds:
         return (
@@ -77,17 +75,14 @@ def points_to_graph_points(
             MultiPoint([[point1.x, point1.y]]),
             np.zeros((1, 1)),
         )
-    else:
-        vec, point_line, dist_line = get_point_line(
-            point1, point2, density, parallel_increase
-        )
+    vec, point_line, dist_line = get_point_line(point1, point2, density, parallel_increase)
 
     normal_vec = np.matmul(
         np.array(
             [
                 [np.cos(np.pi / 2), -np.sin(np.pi / 2)],
                 [np.sin(np.pi / 2), np.cos(np.pi / 2)],
-            ]
+            ],
         ),
         vec,
     ) / np.linalg.norm(vec)

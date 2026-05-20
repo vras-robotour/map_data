@@ -1,20 +1,21 @@
-import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon as MplPolygon
-from typing import List, Optional, Tuple
+import numpy as np
 import shapely as sh
+from matplotlib.patches import Polygon as MplPolygon
 
 
 def visualize_replan(
-    path: Optional[np.ndarray],
+    path: np.ndarray | None,
     grid_2d: np.ndarray,
-    low: Tuple[float, float],
-    high: Tuple[float, float],
-    obstacles: List[sh.geometry.base.BaseGeometry],
-    old_path: Optional[np.ndarray] = None,
+    low: tuple[float, float],
+    high: tuple[float, float],
+    obstacles: list[sh.geometry.base.BaseGeometry],
+    old_path: np.ndarray | None = None,
     save_path: str = "replan.png",
 ) -> None:
-    """Visualize the grid, obstacles, and path using Matplotlib."""
+    """
+    Visualize the grid, obstacles, and path using Matplotlib.
+    """
     _, ax = plt.subplots()
 
     # Plot grid as a heatmap (0: white, 1: gray)
@@ -34,11 +35,11 @@ def visualize_replan(
     for obstacle in obstacles:
         if obstacle.geom_type == "Polygon":
             x, y = obstacle.exterior.xy
-            ax.add_patch(MplPolygon(list(zip(x, y)), color="red", alpha=0.5))
+            ax.add_patch(MplPolygon(list(zip(x, y, strict=True)), color="red", alpha=0.5))
         elif obstacle.geom_type == "MultiPolygon":
             for poly in obstacle.geoms:
                 x, y = poly.exterior.xy
-                ax.add_patch(MplPolygon(list(zip(x, y)), color="red", alpha=0.5))
+                ax.add_patch(MplPolygon(list(zip(x, y, strict=True)), color="red", alpha=0.5))
 
     # Plot old path if provided
     if old_path is not None:

@@ -1,17 +1,18 @@
 import argparse
 import logging
-import os
+import sys
 import threading
 import time
-from typing import Optional
+from pathlib import Path
 
 from flask import Flask
 from flask_socketio import SocketIO
 from werkzeug.routing import IntegerConverter
 
+from .ros_node import ROS_AVAILABLE, TrackerNode
 from .routes import bp
-from .ros_node import TrackerNode, ROS_AVAILABLE
 
+logger = logging.getLogger(__name__)
 socketio = SocketIO(cors_allowed_origins="*")
 tracker_node = None
 
@@ -21,7 +22,9 @@ class SignedIntConverter(IntegerConverter):
 
 
 def telemetry_broadcaster() -> None:
-    """Background thread to broadcast ROS2 telemetry via WebSockets."""
+    """
+    Background thread to broadcast ROS2 telemetry via WebSockets.
+    """
     global tracker_node
     while True:
         if tracker_node:
@@ -29,18 +32,18 @@ def telemetry_broadcaster() -> None:
                 data = tracker_node.get_telemetry()
                 if data:
                     socketio.emit("telemetry", data)
-            except Exception as e:
-                logging.error(f"Error in telemetry broadcaster: {e}")
+            except Exception:
+                logger.exception("Error in telemetry broadcaster")
         time.sleep(0.5)  # 2 Hz update rate
 
 
-def create_app(data_dir: Optional[str] = None) -> Flask:
+def create_app(data_dir: str | None = None) -> Flask:
     # Explicitly set paths relative to this file
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    template_dir = os.path.join(base_dir, "templates")
-    static_dir = os.path.join(base_dir, "static")
+    base_dir = Path(__file__).parent
+    template_dir = base_dir / "templates"
+    static_dir = base_dir / "static"
 
-    app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
+    app = Flask(__name__, template_folder=str(template_dir), static_folder=str(static_dir))
     app.url_map.converters["signed_int"] = SignedIntConverter
 
     if data_dir:
@@ -51,8 +54,8 @@ def create_app(data_dir: Optional[str] = None) -> Flask:
 
     # Context processor to expose ROS status to templates
     @app.context_processor
-    def inject_vars():
-        return dict(ros_available=ROS_AVAILABLE)
+    def inject_vars() -> dict[str, bool]:
+        return {"ros_available": ROS_AVAILABLE}
 
     global tracker_node
     if ROS_AVAILABLE:
@@ -64,21 +67,19 @@ def create_app(data_dir: Optional[str] = None) -> Flask:
             tracker_node = TrackerNode()
 
             # Start ROS2 spin in a separate thread
-            def ros_spin():
+            def ros_spin() -> None:
                 rclpy.spin(tracker_node)
 
             spin_thread = threading.Thread(target=ros_spin, daemon=True)
             spin_thread.start()
 
             # Start telemetry broadcaster
-            broadcaster_thread = threading.Thread(
-                target=telemetry_broadcaster, daemon=True
-            )
+            broadcaster_thread = threading.Thread(target=telemetry_broadcaster, daemon=True)
             broadcaster_thread.start()
 
-            logging.info("ROS2 TrackerNode initialized and spinning.")
-        except Exception as e:
-            logging.error(f"Failed to initialize ROS2: {e}")
+            logger.info("ROS2 TrackerNode initialized and spinning.")
+        except Exception:
+            logger.exception("Failed to initialize ROS2")
             tracker_node = None
 
     return app
@@ -91,8 +92,6 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=5000)
 
     # Filter out ROS-specific arguments before parsing
-    import sys
-
     ros_args = []
     try:
         from rclpy.utilities import remove_ros_args
@@ -101,21 +100,19 @@ def main() -> None:
     except ImportError:
         ros_args = sys.argv[1:]
 
-    args, unknown = parser.parse_known_args(args=ros_args)
+    args, _ = parser.parse_known_args(args=ros_args)
 
     data_dir = None
 
     if args.data_dir:
-        data_dir = os.path.realpath(args.data_dir)
+        data_dir = str(Path(args.data_dir).resolve())
 
     app = create_app(data_dir=data_dir)
 
     logging.basicConfig(level=logging.INFO)
     # Using socketio.run instead of app.run
     # Disable debug mode to prevent the Flask reloader from initializing the ROS node twice
-    socketio.run(
-        app, host=args.host, port=args.port, debug=False, allow_unsafe_werkzeug=True
-    )
+    socketio.run(app, host=args.host, port=args.port, debug=False, allow_unsafe_werkzeug=True)
 
 
 if __name__ == "__main__":

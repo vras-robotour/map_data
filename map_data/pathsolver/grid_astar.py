@@ -1,9 +1,8 @@
 import heapq
 import logging
-import numpy as np
 
+import numpy as np
 from shapely.geometry import LineString
-from typing import Optional, Tuple, Union
 
 from map_data.utils.config import load_config
 
@@ -15,12 +14,13 @@ GRID_COST_WEIGHT = _DEFAULTS.get("grid_cost_weight", 5.0)
 
 def grid_astar(
     grid: np.ndarray,
-    start_utm: Union[Tuple[float, float], np.ndarray],
-    goal_utm: Union[Tuple[float, float], np.ndarray],
-    low: Tuple[float, float],
+    start_utm: tuple[float, float] | np.ndarray,
+    goal_utm: tuple[float, float] | np.ndarray,
+    low: tuple[float, float],
     cs: float,
+    *,
     simplify_path: bool = True,
-) -> Optional[np.ndarray]:
+) -> np.ndarray | None:
     """
     Optimized A* search on a 2D grid.
 
@@ -43,11 +43,12 @@ def grid_astar(
     -------
     np.ndarray or None
         Found path as UTM coordinate array, or ``None`` if no path exists.
+
     """
     ny, nx = grid.shape
 
     # Convert UTM to grid indices
-    def to_idx(p):
+    def to_idx(p: tuple[float, float] | np.ndarray) -> tuple[int, int]:
         ix = int(np.floor((p[0] - low[0]) / cs))
         iy = int(np.floor((p[1] - low[1]) / cs))
         return ix, iy
@@ -56,14 +57,10 @@ def grid_astar(
     goal_ix, goal_iy = to_idx(goal_utm)
 
     if not (0 <= goal_ix < nx and 0 <= goal_iy < ny):
-        logger.warning(
-            "Goal %s is outside the grid bounds; cannot plan path.", goal_utm
-        )
+        logger.warning("Goal %s is outside the grid bounds; cannot plan path.", goal_utm)
         return None
     if not (0 <= start_ix < nx and 0 <= start_iy < ny):
-        logger.warning(
-            "Start %s is outside the grid bounds; cannot plan path.", start_utm
-        )
+        logger.warning("Start %s is outside the grid bounds; cannot plan path.", start_utm)
         return None
 
     if start_ix == goal_ix and start_iy == goal_iy:
@@ -102,7 +99,7 @@ def grid_astar(
     flat_costs = padded_costs.ravel()
 
     while pq:
-        f, g_pushed, ix, iy = heapq.heappop(pq)
+        _f, g_pushed, ix, iy = heapq.heappop(pq)
 
         u_flat = (iy + 1) * p_nx + (ix + 1)
         if g_scores[u_flat] < g_pushed - 1e-4:
@@ -119,9 +116,7 @@ def grid_astar(
             path_indices.reverse()
 
             # Convert back to UTM
-            path = np.array(
-                [[ix * cs + low[0], iy * cs + low[1]] for ix, iy in path_indices]
-            )
+            path = np.array([[ix * cs + low[0], iy * cs + low[1]] for ix, iy in path_indices])
 
             # Simplify path
             if simplify_path and len(path) > 2:

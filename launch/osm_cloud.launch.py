@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
-import os
+from pathlib import Path
+
 from ament_index_python.packages import get_package_share_directory
-from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+from launch import LaunchDescription
 
 
 def launch_setup(context, *args, **kwargs):
@@ -17,28 +19,31 @@ def launch_setup(context, *args, **kwargs):
     osm_grid_params = LaunchConfiguration("osm_grid_params").perform(context)
 
     # Resolve config_file if it's just a filename
-    if not os.path.isabs(config_file):
+    config_path = Path(config_file)
+    if not config_path.is_absolute():
         package_share = get_package_share_directory("map_data")
-        potential_path = os.path.join(package_share, "config", config_file)
-        if os.path.exists(potential_path):
-            config_file = potential_path
+        potential_path = Path(package_share) / "config" / config_file
+        if potential_path.exists():
+            config_file = str(potential_path)
         else:
             # Try in current directory
-            potential_path = os.path.abspath(config_file)
-            if os.path.exists(potential_path):
-                config_file = potential_path
+            potential_path = config_path.resolve()
+            if potential_path.exists():
+                config_file = str(potential_path)
 
     # Resolve osm_grid_params if it's just a filename
-    if not os.path.isabs(osm_grid_params):
+    osm_path = Path(osm_grid_params)
+    if not osm_path.is_absolute():
         package_share = get_package_share_directory("map_data")
-        potential_path = os.path.join(package_share, "config", osm_grid_params)
-        if os.path.exists(potential_path):
-            osm_grid_params = potential_path
+        potential_path = Path(package_share) / "config" / osm_grid_params
+        if potential_path.exists():
+            osm_grid_params = str(potential_path)
         else:
             # Try in current directory
-            potential_path = os.path.abspath(osm_grid_params)
-            if os.path.exists(potential_path):
-                osm_grid_params = potential_path
+            potential_path = osm_path.resolve()
+            if potential_path.exists():
+                osm_grid_params = str(potential_path)
+
 
     # Define the osm_cloud node
     osm_cloud_node = Node(
@@ -52,13 +57,9 @@ def launch_setup(context, *args, **kwargs):
             config_file,
             osm_grid_params,
             {
-                "mapdata_file": PathJoinSubstitution(
-                    [mapdata_path, mapdata_file]
-                ),
-                "gpx_file": PathJoinSubstitution(
-                    [mapdata_path, gpx_file]
-                ),
-            }
+                "mapdata_file": PathJoinSubstitution([mapdata_path, mapdata_file]),
+                "gpx_file": PathJoinSubstitution([mapdata_path, gpx_file]),
+            },
         ],
     )
 
@@ -113,7 +114,5 @@ def generate_launch_description():
             config_file_arg,
             osm_grid_params_arg,
             OpaqueFunction(function=launch_setup),
-        ]
+        ],
     )
-
-

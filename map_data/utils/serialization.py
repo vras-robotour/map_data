@@ -1,16 +1,20 @@
 import json
 import logging
-from typing import Any, Dict
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from shapely import wkt
 
 from map_data.utils.way import Way
 
+if TYPE_CHECKING:
+    from map_data.map_data import MapData
+
 logger = logging.getLogger(__name__)
 
 
-def way_to_dict(way: Way) -> Dict[str, Any]:
+def way_to_dict(way: Way) -> dict[str, Any]:
     return {
         "id": way.id,
         "is_area": way.is_area,
@@ -21,7 +25,7 @@ def way_to_dict(way: Way) -> Dict[str, Any]:
     }
 
 
-def way_from_dict(data: Dict[str, Any]) -> Way:
+def way_from_dict(data: dict[str, Any]) -> Way:
     line = wkt.loads(data["line"]) if data.get("line") else None
     return Way(
         id=data["id"],
@@ -33,7 +37,7 @@ def way_from_dict(data: Dict[str, Any]) -> Way:
     )
 
 
-def map_data_to_dict(md: Any) -> Dict[str, Any]:
+def map_data_to_dict(md: "MapData") -> dict[str, Any]:
     return {
         "metadata": {
             "zone_number": md.zone_number,
@@ -57,27 +61,30 @@ def map_data_to_dict(md: Any) -> Dict[str, Any]:
     }
 
 
-def save_mapdata(md: Any, path: str) -> None:
+def save_mapdata(md: "MapData", path: str | Path) -> None:
     data = map_data_to_dict(md)
-    with open(path, "w", encoding="utf-8") as f:
+    with Path(path).open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
 
-def load_mapdata(md_class: Any, path: str) -> Any:
+def load_mapdata(md_class: type["MapData"], path: str | Path) -> "MapData":
+    p = Path(path)
     # Check if it's a legacy pickle file (starts with 0x80)
-    with open(path, "rb") as f:
+    with p.open("rb") as f:
         header = f.read(1)
 
     if header == b"\x80":
         logger.error(
-            f"Detected legacy pickle format for {path}. "
+            "Detected legacy pickle format for %s. "
             "Pickle support has been removed for security reasons. "
-            "Please re-parse the data from the original GPX/YAML file."
+            "Please re-parse the data from the original GPX/YAML file.",
+            path,
         )
-        raise ValueError(f"Legacy pickle format no longer supported: {path}")
+        msg = f"Legacy pickle format no longer supported: {path}"
+        raise ValueError(msg)
 
     # Try JSON
-    with open(path, "r", encoding="utf-8") as f:
+    with p.open(encoding="utf-8") as f:
         data = json.load(f)
 
     meta = data["metadata"]

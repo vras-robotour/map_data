@@ -294,40 +294,10 @@
 
   const ITEMS = [
     {
-      type: 'testing', sev: 'minor',
-      title: 'No unit tests for OverpassClient',
-      desc: 'The Overpass client logic, including its retry and status-check mechanism, is untested. Mocking the API responses would allow for testing various error scenarios (429, 500, timeouts).',
-      file: 'map_data/utils/overpass.py'
-    },
-    {
       type: 'improvement', sev: 'nice-to-have',
       title: 'Expose more planning parameters in the viewer',
       desc: 'The newly promoted parameters in <code>planner_defaults.yaml</code> (grid cost weight, obstacle radius, buffer widths) should be added to the viewer configuration UI to allow for easier experimentation without manual YAML edits.',
       file: 'viewer'
-    },
-    {
-      type: 'testing', sev: 'important',
-      title: 'No integration tests for the full pipeline',
-      desc: 'There are no end-to-end tests covering GPX parse → Overpass query → feature classification → save → reload. Regressions in parsing are only caught during manual testing.',
-      file: null
-    },
-    {
-      type: 'testing', sev: 'important',
-      title: 'Viewer has zero test coverage',
-      desc: '<code>routes.py</code> and <code>helpers.py</code> contain the most complex logic in the package — annotation CRUD, way splitting, GeoJSON export — but are entirely untested.',
-      file: 'map_data/viewer/routes.py, map_data/viewer/helpers.py'
-    },
-    {
-      type: 'testing', sev: 'minor',
-      title: 'RRT* tests do not verify obstacle avoidance',
-      desc: '<code>test_rrt.py</code> checks that a path is returned but not that it avoids the obstacle cell. The test passes even if the planner ignores obstacles entirely.',
-      file: 'tests/test_rrt.py'
-    },
-    {
-      type: 'testing', sev: 'minor',
-      title: 'No error-scenario tests',
-      desc: 'No tests exercise error paths: malformed GPX input, corrupt <code>.mapdata</code> files, Overpass timeouts, or planning with an empty <code>MapData</code> object.',
-      file: null
     },
     {
       type: 'improvement', sev: 'nice-to-have',

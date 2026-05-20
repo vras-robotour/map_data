@@ -1,20 +1,18 @@
 import heapq
-from typing import Callable, Iterable, List, Optional, Tuple, TypeVar
-
-_N = TypeVar("_N")
+from collections.abc import Callable, Iterable
 
 
-def astar_search(
-    start_node: _N,
-    goal_node: _N,
-    get_neighbors_func: Callable[[_N], Iterable[Tuple[_N, float]]],
-    heuristic_func: Callable[[_N], float],
-) -> Optional[List[_N]]:
+def astar_search[N](
+    start_node: N,
+    goal_node: N,
+    get_neighbors_func: Callable[[N], Iterable[tuple[N, float]]],
+    heuristic_func: Callable[[N], float],
+) -> list[N] | None:
     """
-    A generic A* search implementation.
+    Search a graph using the A* algorithm.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     start_node : object
         The starting node.
     goal_node : object
@@ -24,14 +22,15 @@ def astar_search(
     heuristic_func : callable
         A function that takes a node and returns the estimated cost to the goal.
 
-    Returns:
-    --------
+    Returns
+    -------
     path : list or None
         The path from start to goal as a list of nodes, or None if no path exists.
+
     """
     count = 0
     # Priority queue stores (f_score, count, current_node)
-    # f_score = cost + heuristic
+    # f_score = cost + heuristic  # noqa: ERA001
     q = [(0, count, start_node)]
 
     # visited maps node -> (cost, parent)
@@ -39,7 +38,7 @@ def astar_search(
     closed = set()
 
     while q:
-        (f_score, _, u) = heapq.heappop(q)
+        (_f_score, _, u) = heapq.heappop(q)
         if u in closed:
             continue
         closed.add(u)

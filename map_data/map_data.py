@@ -1,15 +1,23 @@
+"""
+Central data class for OSM-based map data.
+
+This module provides the MapData class which orchestrates downloading,
+caching, and parsing OpenStreetMap data for use in path planning.
+"""
+
 import concurrent.futures
 import json
 import logging
-import os
-import yaml
-from typing import Any, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any
 
 import numpy as np
-import shapely.geometry as geometry
+import overpy
 import utm
 from gpxpy import parse as gpxparse
+from shapely import geometry
 
+from map_data.utils.config import load_config
 from map_data.utils.overpass import OverpassClient
 from map_data.utils.parsing import (
     parse_osm_nodes,
@@ -17,7 +25,6 @@ from map_data.utils.parsing import (
     parse_osm_ways,
     separate_ways,
 )
-from map_data.utils.config import load_config
 from map_data.utils.serialization import load_mapdata, save_mapdata
 from map_data.utils.way import Way
 
@@ -27,19 +34,20 @@ logger = logging.getLogger(__name__)
 _DEFAULTS = load_config("planner_defaults.yaml")
 OSM_MARGIN: float = _DEFAULTS.get("osm_margin", 100)
 RESERVE: float = _DEFAULTS.get("reserve_margin", 50)
+BBOX_LEN = 4
 
 
 class CoordsData:
-    def __init__(
-        self, min_long: float, max_long: float, min_lat: float, max_lat: float
-    ) -> None:
+    """Bounding box and coordinate metadata for map data."""
+
+    def __init__(self, min_long: float, max_long: float, min_lat: float, max_lat: float) -> None:
         self.min_long = min_long
         self.max_long = max_long
         self.min_lat = min_lat
         self.max_lat = max_lat
         self.x_margin, self.y_margin = self._compute_margin()
 
-    def _compute_margin(self) -> Tuple[float, float]:
+    def _compute_margin(self) -> tuple[float, float]:
         margin = max(
             (self.max_lat - self.min_lat) * 0.1,
             (self.max_long - self.min_long) * 0.1,
@@ -48,7 +56,8 @@ class CoordsData:
 
 
 class MapData:
-    """Central data class for OSM-based map data.
+    """
+    Central data class for OSM-based map data.
 
     Parses GPS waypoints from a GPX file (or a raw coordinate array),
     downloads the corresponding OSM features via the Overpass API, and
@@ -75,16 +84,20 @@ class MapData:
         Parsed barrier features (walls, buildings, fences, water, …).
     crossroads_list : list of Way
         Footway intersection points detected during parsing.
+
     """
 
     def __init__(
         self,
-        coords: Any,
+        coords: str | tuple[np.ndarray, int, str],
         coords_type: str = "file",
-        current_robot_position: Optional[np.ndarray] = None,
+        current_robot_position: np.ndarray | None = None,
+        *,
         flip: bool = False,
     ) -> None:
         """
+        Initialize MapData from a GPX file or coordinate array.
+
         Parameters
         ----------
         coords : str or array-like
@@ -100,11 +113,12 @@ class MapData:
             current position is included in the bounding box calculation.
         flip : bool
             If ``True``, reverse the order of the parsed waypoints.
+
         """
         if coords_type == "file":
-            with open(coords, "r") as f:
+            with Path(coords).open() as f:
                 gpx_object = gpxparse(f)
-            self.coords_file: Optional[str] = coords
+            self.coords_file: str | None = coords
 
             points = []
             if gpx_object.waypoints:
@@ -112,29 +126,25 @@ class MapData:
             elif gpx_object.tracks:
                 for track in gpx_object.tracks:
                     for segment in track.segments:
-                        points.extend(
-                            [[p.latitude, p.longitude] for p in segment.points]
-                        )
+                        points.extend([[p.latitude, p.longitude] for p in segment.points])
             elif gpx_object.routes:
                 for route in gpx_object.routes:
                     points.extend([[p.latitude, p.longitude] for p in route.points])
 
             if not points:
-                raise ValueError(
-                    f"No points (waypoints, tracks or routes) found in {coords}"
-                )
+                msg = f"No points (waypoints, tracks or routes) found in {coords}"
+                raise ValueError(msg)
 
             latlon = np.array(points)
-            self.waypoints, self.zone_number, self.zone_letter = self._latlon_to_utm(
-                latlon
-            )
+            self.waypoints, self.zone_number, self.zone_letter = self._latlon_to_utm(latlon)
         elif coords_type == "array":
             self.waypoints = np.array(coords[0])
             self.zone_number = coords[1]
             self.zone_letter = coords[2]
             self.coords_file = None
         else:
-            raise ValueError(f"Unknown coords_type: {coords_type!r}")
+            msg = f"Unknown coords_type: {coords_type!r}"
+            raise ValueError(msg)
 
         if flip:
             self.waypoints = np.flip(self.waypoints, 0)
@@ -160,25 +170,23 @@ class MapData:
             self.zone_letter,
         )
 
-        self.coords_data = CoordsData(
-            self.min_long, self.max_long, self.min_lat, self.max_lat
-        )
+        self.coords_data = CoordsData(self.min_long, self.max_long, self.min_lat, self.max_lat)
         self._check_utm_zone_boundary()
         self.points = [
             geometry.Point(x, y)
-            for x, y in zip(self.waypoints[:, 0], self.waypoints[:, 1])
+            for x, y in zip(self.waypoints[:, 0], self.waypoints[:, 1], strict=True)
         ]
 
-        self.nodes_cache: Dict[int, Any] = {}
-        self.roads_list: List[Way] = []
-        self.footways_list: List[Way] = []
-        self.barriers_list: List[Way] = []
-        self.crossroads_list: List[Way] = []
+        self.nodes_cache: dict[int, dict[str, Any]] = {}
+        self.roads_list: list[Way] = []
+        self.footways_list: list[Way] = []
+        self.barriers_list: list[Way] = []
+        self.crossroads_list: list[Way] = []
 
         # Raw data stored temporarily during parsing
-        self.osm_ways_data: Optional[Any] = None
-        self.osm_rels_data: Optional[Any] = None
-        self.osm_nodes_data: Optional[Any] = None
+        self.osm_ways_data: overpy.Result | None = None
+        self.osm_rels_data: overpy.Result | None = None
+        self.osm_nodes_data: overpy.Result | None = None
 
         self._load_tag_configs()
 
@@ -206,47 +214,43 @@ class MapData:
             from ament_index_python.resources import get_resource
 
             _, package_path = get_resource("packages", "map_data")
-            params_path = os.path.join(package_path, "share", "map_data", "parameters")
-        except Exception:
-            params_path = os.path.realpath(
-                os.path.join(os.path.dirname(__file__), "..", "parameters")
-            )
+            params_path = Path(package_path) / "share" / "map_data" / "parameters"
+        except (ImportError, LookupError):
+            params_path = (Path(__file__).parent / ".." / "parameters").resolve()
 
-        self.BARRIER_TAGS: Dict[str, List[str]] = self._csv_to_dict(
-            os.path.join(params_path, "barrier_tags.csv")
+        self.BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
+            params_path / "barrier_tags.csv",
         )
-        self.NOT_BARRIER_TAGS: Dict[str, List[str]] = self._csv_to_dict(
-            os.path.join(params_path, "not_barrier_tags.csv")
+        self.NOT_BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
+            params_path / "not_barrier_tags.csv",
         )
-        self.ANTI_BARRIER_TAGS: Dict[str, List[str]] = self._csv_to_dict(
-            os.path.join(params_path, "anti_barrier_tags.csv")
+        self.ANTI_BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
+            params_path / "anti_barrier_tags.csv",
         )
-        self.OBSTACLE_TAGS: Dict[str, List[str]] = self._csv_to_dict(
-            os.path.join(params_path, "obstacle_tags.csv")
+        self.OBSTACLE_TAGS: dict[str, list[str]] = self._csv_to_dict(
+            params_path / "obstacle_tags.csv",
         )
-        self.NOT_OBSTACLE_TAGS: Dict[str, List[str]] = self._csv_to_dict(
-            os.path.join(params_path, "not_obstacle_tags.csv")
+        self.NOT_OBSTACLE_TAGS: dict[str, list[str]] = self._csv_to_dict(
+            params_path / "not_obstacle_tags.csv",
         )
 
     @staticmethod
-    def _csv_to_dict(path: str) -> Dict[str, List[str]]:
+    def _csv_to_dict(path: str | Path) -> dict[str, list[str]]:
         arr = np.genfromtxt(path, dtype=str, delimiter=",")
-        result: Dict[str, List[str]] = {}
+        result: dict[str, list[str]] = {}
         for row in arr:
             result.setdefault(row[0], []).append(row[1])
         return result
 
     @staticmethod
-    def _latlon_to_utm(latlon: np.ndarray) -> Tuple[np.ndarray, int, str]:
-        easting, northing, zone_number, zone_letter = utm.from_latlon(
-            latlon[:, 0], latlon[:, 1]
-        )
+    def _latlon_to_utm(latlon: np.ndarray) -> tuple[np.ndarray, int, str]:
+        easting, northing, zone_number, zone_letter = utm.from_latlon(latlon[:, 0], latlon[:, 1])
         return np.column_stack([easting, northing]), zone_number, zone_letter
 
-    def _get_osm_cache_path(self) -> Optional[str]:
+    def _get_osm_cache_path(self) -> Path | None:
         if not self.coords_file:
             return None
-        return self.coords_file.rsplit(".", 1)[0] + ".osm_cache.json"
+        return Path(self.coords_file).with_suffix(".osm_cache.json")
 
     def _save_osm_cache(self, ways_raw: str, rels_raw: str, nodes_raw: str) -> None:
         path = self._get_osm_cache_path()
@@ -259,25 +263,25 @@ class MapData:
             "nodes": nodes_raw,
         }
         try:
-            with open(path, "w", encoding="utf-8") as f:
+            with path.open("w", encoding="utf-8") as f:
                 json.dump(cache_data, f)
-            logger.info(f"Saved OSM response cache to {path}")
-        except Exception as e:
-            logger.warning(f"Could not save OSM cache: {e}")
+            logger.info("Saved OSM response cache to %s", path)
+        except (OSError, TypeError) as e:
+            logger.warning("Could not save OSM cache: %s", e)
 
-    def _load_osm_cache(self) -> Optional[Dict[str, str]]:
+    def _load_osm_cache(self) -> dict[str, str] | None:
         path = self._get_osm_cache_path()
-        if not path or not os.path.exists(path):
+        if not path or not path.exists():
             return None
 
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with path.open(encoding="utf-8") as f:
                 cache_data = json.load(f)
 
             # Validate bbox
             stored_bbox = cache_data.get("bbox")
             current_bbox = [self.min_lat, self.min_long, self.max_lat, self.max_long]
-            if not stored_bbox or len(stored_bbox) != 4:
+            if not stored_bbox or len(stored_bbox) != BBOX_LEN:
                 return None
 
             # 1e-6 degree tolerance (~11cm at equator)
@@ -285,18 +289,19 @@ class MapData:
                 logger.info("OSM cache found but bounding box has changed. Re-querying.")
                 return None
 
-            logger.info(f"Using cached OSM responses from {path}")
+            logger.info("Using cached OSM responses from %s", path)
             return {
                 "ways": cache_data["ways"],
                 "rels": cache_data["rels"],
                 "nodes": cache_data["nodes"],
             }
-        except Exception as e:
-            logger.debug(f"Could not load OSM cache: {e}")
+        except (OSError, json.JSONDecodeError, KeyError) as e:
+            logger.debug("Could not load OSM cache: %s", e)
             return None
 
-    def run_queries(self, use_cache: bool = True) -> None:
-        """Download OSM ways, relations, and nodes from the Overpass API.
+    def run_queries(self, *, use_cache: bool = True) -> None:
+        """
+        Download OSM ways, relations, and nodes from the Overpass API.
 
         Fires three concurrent Overpass queries covering the bounding box of
         the loaded waypoints and stores the raw JSON responses internally.
@@ -308,6 +313,7 @@ class MapData:
         use_cache : bool
             If ``True`` (default), attempt to load responses from a local
             ``.osm_cache.json`` file before querying the API.
+
         """
         if use_cache:
             cache = self._load_osm_cache()
@@ -327,7 +333,7 @@ class MapData:
 
         client = OverpassClient()
 
-        def _fetch(q: str) -> Optional[str]:
+        def _fetch(q: str) -> str | None:
             return client.query_raw(q)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
@@ -348,7 +354,8 @@ class MapData:
         self._save_osm_cache(ways_raw, rels_raw, nodes_raw)
 
     def run_parse(self) -> int:
-        """Parse the downloaded OSM data into categorised Way lists.
+        """
+        Parse the downloaded OSM data into categorised Way lists.
 
         Populates :attr:`roads_list`, :attr:`footways_list`,
         :attr:`barriers_list`, and :attr:`crossroads_list`. The raw OSM
@@ -359,11 +366,9 @@ class MapData:
         int
             ``0`` on success, ``1`` if OSM data has not been downloaded yet
             (call :meth:`run_queries` first).
+
         """
-        if any(
-            d is None
-            for d in (self.osm_ways_data, self.osm_rels_data, self.osm_nodes_data)
-        ):
+        if any(d is None for d in (self.osm_ways_data, self.osm_rels_data, self.osm_nodes_data)):
             logger.error("Missing OSM data. Run run_queries() first.")
             return 1
 
@@ -381,7 +386,7 @@ class MapData:
         )
 
         self.roads_list, self.footways_list, parsed_barriers = separate_ways(
-            ways_dict, self.BARRIER_TAGS, self.NOT_BARRIER_TAGS, self.ANTI_BARRIER_TAGS
+            ways_dict, self.BARRIER_TAGS, self.NOT_BARRIER_TAGS, self.ANTI_BARRIER_TAGS,
         )
         self.barriers_list = parsed_barriers + node_barriers
         self.crossroads_list = self.parse_intersections(ways_dict)
@@ -393,9 +398,11 @@ class MapData:
         logger.info("Parsing finished.")
         return 0
 
-    def parse_intersections(self, ways_dict: Dict[int, Way]) -> List[Way]:
-        """Identify nodes shared by multiple footways and return them as crossroad Ways."""
-        node_usage: Dict[int, List[bool]] = {}
+    def parse_intersections(self, ways_dict: dict[int, Way]) -> list[Way]:
+        """
+        Identify nodes shared by multiple footways and return them as crossroad Ways.
+        """
+        node_usage: dict[int, list[bool]] = {}
 
         footways = [w for w in ways_dict.values() if w.is_footway()]
 
@@ -421,7 +428,7 @@ class MapData:
                         is_area=True,
                         tags={"type": "footway_intersection", "count": str(count)},
                         line=geometry.Point(e, n).buffer(1.5),
-                    )
+                    ),
                 )
         return crossroads
 
@@ -429,8 +436,9 @@ class MapData:
     # High-level API
     # ------------------------------------------------------------------
 
-    def run_all(self, save: bool = True) -> None:
-        """Download OSM data, parse it, and optionally save the result.
+    def run_all(self, *, save: bool = True) -> None:
+        """
+        Download OSM data, parse it, and optionally save the result.
 
         Convenience wrapper that calls :meth:`run_queries`, :meth:`run_parse`,
         and :meth:`save` in sequence.
@@ -440,13 +448,15 @@ class MapData:
         save : bool
             If ``True`` (default), write a ``.mapdata`` file after successful
             parsing.
+
         """
         self.run_queries()
         if self.run_parse() == 0 and save:
             self.save()
 
-    def save(self, path: Optional[str] = None) -> None:
-        """Serialize this object to a ``.mapdata`` file.
+    def save(self, path: str | None = None) -> None:
+        """
+        Serialize this object to a ``.mapdata`` file.
 
         Parameters
         ----------
@@ -454,19 +464,21 @@ class MapData:
             Output file path. Defaults to the source GPX filename with its
             extension replaced by ``.mapdata``. Logs an error and returns
             without writing if no path can be determined.
+
         """
         if path is None:
             if self.coords_file:
-                path = self.coords_file.rsplit(".", 1)[0] + ".mapdata"
+                path = str(Path(self.coords_file).with_suffix(".mapdata"))
             else:
                 logger.error("No save path provided and no source file available.")
                 return
         save_mapdata(self, path)
-        logger.info(f"Map data saved to {path}")
+        logger.info("Map data saved to %s", path)
 
     @classmethod
     def load(cls, path: str) -> "MapData":
-        """Load a previously saved ``.mapdata`` file.
+        """
+        Load a previously saved ``.mapdata`` file.
 
         Parameters
         ----------
@@ -477,6 +489,7 @@ class MapData:
         -------
         MapData
             Restored instance with all way lists populated.
+
         """
         return load_mapdata(cls, path)
 
@@ -487,12 +500,15 @@ class MapData:
             f"  Source: {source}\n"
             f"  Waypoints: {len(self.waypoints)}\n"
             f"  UTM Zone: {self.zone_number}{self.zone_letter}\n"
-            f"  Bounds: X[{self.min_x:.1f}, {self.max_x:.1f}], Y[{self.min_y:.1f}, {self.max_y:.1f}]\n"
-            f"  Features: {len(self.roads_list)} roads, {len(self.footways_list)} footways, {len(self.barriers_list)} barriers"
+            f"  Bounds: X[{self.min_x:.1f}, {self.max_x:.1f}], "
+            f"Y[{self.min_y:.1f}, {self.max_y:.1f}]\n"
+            f"  Features: {len(self.roads_list)} roads, "
+            f"{len(self.footways_list)} footways, {len(self.barriers_list)} barriers"
         )
 
-    def get_points(self, z: float = 0.0) -> Dict[int, np.ndarray]:
-        """Return all cached OSM nodes as a dictionary of UTM coordinates.
+    def get_points(self, z: float = 0.0) -> dict[int, np.ndarray]:
+        """
+        Return all cached OSM nodes as a dictionary of UTM coordinates.
 
         Parameters
         ----------
@@ -504,6 +520,7 @@ class MapData:
         dict of {int: np.ndarray}
             Mapping of OSM node ID → column vector of shape ``(3, 1)``
             containing ``[easting, northing, z]``.
+
         """
         points = {}
         for node_id, data in self.nodes_cache.items():
@@ -511,14 +528,16 @@ class MapData:
             points[node_id] = np.array([e, n, z]).reshape(3, 1)
         return points
 
-    def get_ways(self) -> Dict[str, List[Way]]:
-        """Return all parsed way lists grouped by category.
+    def get_ways(self) -> dict[str, list[Way]]:
+        """
+        Return all parsed way lists grouped by category.
 
         Returns
         -------
         dict of {str: list of Way}
             Keys are ``"roads"``, ``"footways"``, ``"barriers"``, and
             ``"crossroads"``.
+
         """
         return {
             "roads": self.roads_list,

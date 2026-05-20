@@ -84,5 +84,6 @@ nav:
       - Planner Configuration: dev/planner_config.md
       - Data Formats: dev/data_formats.md
       - Contributing: dev/contributing.md
+      - Testing: dev/testing.md
       - Known Issues & Backlog: dev/todo.md
       - Changelog: dev/changelog.md

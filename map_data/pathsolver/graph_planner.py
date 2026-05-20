@@ -1,15 +1,27 @@
+"""
+Graph-based path planning on OSM ways.
+
+This module provides the GraphPlanner class which builds a graph from
+OpenStreetMap ways and finds paths using Dijkstra or A*.
+"""
+
+from typing import TYPE_CHECKING
+
 import numpy as np
-from shapely.geometry import Point, LineString
+from shapely.geometry import LineString, Point
 from shapely.strtree import STRtree
+
 from map_data.pathsolver.astar import astar_search
-from typing import Dict, List, Optional, Tuple, Union, TYPE_CHECKING
+
+TOLERANCE = 1e-3
 
 if TYPE_CHECKING:
     from map_data.map_data import MapData
 
 
 class GraphPlanner:
-    """Graph-based path planner that routes along the OSM road and footway network.
+    """
+    Graph-based path planner that routes along the OSM road and footway network.
 
     Builds an undirected weighted graph from the ways stored in a
     :class:`~map_data.map_data.MapData` instance. Manually annotated paths
@@ -21,8 +33,10 @@ class GraphPlanner:
     entirely in UTM coordinates.
     """
 
-    def __init__(self, map_data: "MapData", highway_types: Optional[List[str]] = None) -> None:
+    def __init__(self, map_data: "MapData", highway_types: list[str] | None = None) -> None:
         """
+        Initialize the graph planner.
+
         Parameters
         ----------
         map_data : MapData
@@ -30,15 +44,17 @@ class GraphPlanner:
         highway_types : list of str, optional
             Way categories to include in the graph. Supported values are
             ``"footway"`` and ``"road"``. Defaults to ``["footway"]``.
+
         """
         self.map_data = map_data
         self.highway_types = highway_types or ["footway"]
-        self.nodes: Dict[int, np.ndarray] = self.map_data.get_points()
-        self.graph: Dict[int, List[Tuple[int, float]]] = {}
+        self.nodes: dict[int, np.ndarray] = self.map_data.get_points()
+        self.graph: dict[int, list[tuple[int, float]]] = {}
         self._build_graph()
 
     def _build_graph(self) -> None:
-        """Build the adjacency graph and spatial index from the allowed ways.
+        """
+        Build the adjacency graph and spatial index from the allowed ways.
 
         Annotation ways (negative integer IDs) are connected to the OSM graph
         by projecting their endpoints onto the nearest existing edge and
@@ -106,13 +122,13 @@ class GraphPlanner:
 
                         proj_node_id = new_internal_id
                         new_internal_id -= 1
-                        self.nodes[proj_node_id] = np.array(
-                            [p_proj[0], p_proj[1], 0.0]
-                        ).reshape(3, 1)
+                        self.nodes[proj_node_id] = np.array([p_proj[0], p_proj[1], 0.0]).reshape(
+                            3, 1,
+                        )
 
                         target_way, segment_idx = edge_way_info[best_idx]
                         splits.setdefault((id(target_way), segment_idx), []).append(
-                            (proj_dist, proj_node_id, node_id, min_dist)
+                            (proj_dist, proj_node_id, node_id, min_dist),
                         )
 
         # Apply splits to _allowed_ways by inserting new nodes
@@ -146,12 +162,18 @@ class GraphPlanner:
         self._edge_tree = STRtree(final_edge_segments) if final_edge_segments else None
 
     def _add_edge(self, u: int, v: int, d: float) -> None:
-        """Add an undirected edge of length *d* between nodes *u* and *v*."""
+        """
+        Add an undirected edge of length *d* between nodes *u* and *v*.
+        """
         self.graph.setdefault(u, []).append((v, d))
         self.graph.setdefault(v, []).append((u, d))
 
-    def _find_closest_edge(self, point_utm: np.ndarray) -> Tuple[Optional[Tuple[int, int, np.ndarray]], float]:
-        """Find the closest edge using an STRtree spatial index."""
+    def _find_closest_edge(
+        self, point_utm: np.ndarray,
+    ) -> tuple[tuple[int, int, np.ndarray] | None, float]:
+        """
+        Find the closest edge using an STRtree spatial index.
+        """
         if self._edge_tree is None:
             return None, float("inf")
 
@@ -167,8 +189,14 @@ class GraphPlanner:
         projected_point = np.array(line.interpolate(proj_dist).coords[0])
         return (n1, n2, projected_point), min_dist
 
-    def a_star(self, start_node, goal_node, extra_nodes: Optional[Dict] = None) -> Optional[List[np.ndarray]]:
-        """Run A* between two graph nodes and return the path as UTM coordinates.
+    def a_star(
+        self,
+        start_node: int | str,
+        goal_node: int | str,
+        extra_nodes: dict | None = None,
+    ) -> list[np.ndarray] | None:
+        """
+        Run A* between two graph nodes and return the path as UTM coordinates.
 
         Parameters
         ----------
@@ -187,10 +215,13 @@ class GraphPlanner:
         list of np.ndarray or None
             Sequence of ``[x, y]`` UTM positions along the path, or
             ``None`` if no path exists.
+
         """
 
-        def get_neighbors(u):
-            neighs = list(self.graph.get(u, []))
+        def get_neighbors(u: int | str) -> list[tuple[int | str, float]]:
+            neighs: list[tuple[int | str, float]] = []
+            if isinstance(u, int):
+                neighs.extend(self.graph.get(u, []))
             if extra_nodes and u in extra_nodes:
                 neighs.extend(extra_nodes[u])
             return neighs
@@ -198,10 +229,10 @@ class GraphPlanner:
         if not get_neighbors(start_node) and start_node != goal_node:
             return None
 
-        def heuristic(u):
+        def heuristic(u: int | str) -> float:
             p1 = self._get_node_pos(u, extra_nodes)
             p2 = self._get_node_pos(goal_node, extra_nodes)
-            return np.linalg.norm(p1 - p2)
+            return float(np.linalg.norm(p1 - p2))
 
         node_path = astar_search(start_node, goal_node, get_neighbors, heuristic)
 
@@ -210,13 +241,14 @@ class GraphPlanner:
 
         return [self._get_node_pos(node, extra_nodes) for node in node_path]
 
-    def _get_node_pos(self, node_id: Union[int, str], extra_nodes_data: Optional[Dict] = None) -> np.ndarray:
+    def _get_node_pos(self, node_id: int | str, extra_nodes_data: dict | None = None) -> np.ndarray:
         if isinstance(node_id, str) and node_id.startswith("temp_"):
             return extra_nodes_data["positions"][node_id]
         return self.nodes[node_id].ravel()[:2]
 
-    def plan(self, path_utm: np.ndarray) -> Optional[np.ndarray]:
-        """Plan a path through a sequence of UTM waypoints along the graph.
+    def plan(self, path_utm: np.ndarray) -> np.ndarray | None:
+        """
+        Plan a path through a sequence of UTM waypoints along the graph.
 
         Each consecutive pair of waypoints is routed independently. The
         waypoints are snapped to the nearest graph edge before planning,
@@ -233,6 +265,7 @@ class GraphPlanner:
         np.ndarray or None
             Concatenated path as an ``(M, 2)`` UTM coordinate array, or
             ``None`` if any segment could not be routed.
+
         """
         full_path = []
 
@@ -287,10 +320,10 @@ class GraphPlanner:
             final_segment.append(p_start)
 
             for p in segment:
-                if np.linalg.norm(p - final_segment[-1]) > 1e-3:
+                if np.linalg.norm(p - final_segment[-1]) > TOLERANCE:
                     final_segment.append(p)
 
-            if np.linalg.norm(p_goal - final_segment[-1]) > 1e-3:
+            if np.linalg.norm(p_goal - final_segment[-1]) > TOLERANCE:
                 final_segment.append(p_goal)
 
             if i > 0:

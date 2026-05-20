@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "map_data"
+version = "0.0.1"
+dynamic = ["description", "license", "maintainers", "scripts"]
+dependencies = [
+    "flask",
+    "flask-socketio",
+    "gpxpy",
+    "numpy",
+    "overpy",
+    "shapely",
+    "utm",
+    "tqdm",
+    "requests",
+    "PyYAML",
+    "matplotlib",
+    "scipy",
+    "joblib",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "B008",   # do not perform function calls in default arguments (common in ROS)
+    "D212",   # multi-line docstring summary should start at the first line
+    "D200",   # one-line docstring should fit on one line with quotes
+    "FBT003", # boolean positional value in function call (common in libraries)
+    "D103",   # missing docstring in public function
+    "D100",   # missing docstring in public module
+    "D101",   # missing docstring in public class
+    "D102",   # missing docstring in public method
+    "D104",   # missing docstring in public package
+    "D105",   # missing docstring in magic method
+    "D107",   # missing docstring in __init__
+    "D401",   # first line of docstring should be in imperative mood
+    "D417",   # missing argument description in docstring
+    "S311",   # pseudo-random not suitable for crypto (used for RRT* sampling)
+    "EXE001", # shebang present but file not executable (macOS checkout)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"launch/*.py" = ["ARG001", "ARG002", "ANN001", "ANN002", "ANN003", "ANN201"]
+"map_data/info.py" = ["T201", "PLC0415"]
+"map_data/map_data.py" = ["PLC0415"]
+"map_data/pathsolver/rrt_star.py" = ["PLC0415"]
+"map_data/utils/config.py" = ["PLC0415"]
+"map_data/utils/serialization.py" = ["PLC0415"]
+"map_data/viewer/app.py" = ["PLC0415"]
+"map_data/viewer/routes.py" = ["PLC0415"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["map_data"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true

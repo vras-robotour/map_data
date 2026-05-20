@@ -1,17 +1,27 @@
 import copy
 import json
 import logging
-import os
-from typing import Any, Dict, List, Tuple
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import utm
 from shapely.affinity import translate as _affine_translate
 from shapely.geometry import (
-    LineString as _SLS,
+    LineString as _LineString,
+)
+from shapely.geometry import (
     MultiPolygon as _SMPoly,
+)
+from shapely.geometry import (
     Polygon as _SPoly,
 )
+
+if TYPE_CHECKING:
+    from shapely.geometry.base import BaseGeometry
+
+    from map_data.map_data import MapData
+    from map_data.utils.way import Way
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +32,8 @@ logger = logging.getLogger(__name__)
 
 
 def ring_to_latlon(
-    coords: List[Tuple[float, float]], zone_number: int, zone_letter: str
-) -> List[List[float]]:
+    coords: list[tuple[float, float]], zone_number: int, zone_letter: str,
+) -> list[list[float]]:
     result = []
     for x, y in coords:
         lat, lon = utm.to_latlon(x, y, zone_number, zone_letter)
@@ -31,25 +41,28 @@ def ring_to_latlon(
     return result
 
 
-def geom_to_geojson(geom, zone_number, zone_letter):
+def geom_to_geojson(
+    geom: "_LineString | _SPoly | _SMPoly", zone_number: int, zone_letter: str,
+) -> dict[str, Any] | None:
     gtype = geom.geom_type
     if gtype == "Polygon":
+        if not isinstance(geom, _SPoly):
+            return None
         exterior = ring_to_latlon(geom.exterior.coords, zone_number, zone_letter)
-        interiors = [
-            ring_to_latlon(r.coords, zone_number, zone_letter) for r in geom.interiors
-        ]
-        return {"type": "Polygon", "coordinates": [exterior] + interiors}
+        interiors = [ring_to_latlon(r.coords, zone_number, zone_letter) for r in geom.interiors]
+        return {"type": "Polygon", "coordinates": [exterior, *interiors]}
     if gtype == "MultiPolygon":
+        if not isinstance(geom, _SMPoly):
+            return None
         polygons = []
         for poly in geom.geoms:
             exterior = ring_to_latlon(poly.exterior.coords, zone_number, zone_letter)
-            interiors = [
-                ring_to_latlon(r.coords, zone_number, zone_letter)
-                for r in poly.interiors
-            ]
-            polygons.append([exterior] + interiors)
+            interiors = [ring_to_latlon(r.coords, zone_number, zone_letter) for r in poly.interiors]
+            polygons.append([exterior, *interiors])
         return {"type": "MultiPolygon", "coordinates": polygons}
     if gtype == "LineString":
+        if not isinstance(geom, _LineString) :
+            return None
         return {
             "type": "LineString",
             "coordinates": ring_to_latlon(geom.coords, zone_number, zone_letter),
@@ -57,15 +70,15 @@ def geom_to_geojson(geom, zone_number, zone_letter):
     return None
 
 
-def mapdata_to_geojson(map_data):
+def mapdata_to_geojson(map_data: "MapData") -> dict[str, Any]:
     features = []
     zn, zl = map_data.zone_number, map_data.zone_letter
 
-    def add_ways(ways, category):
+    def add_ways(ways: list["Way"], category: str) -> None:
         for way in ways:
             try:
-                geom = geom_to_geojson(way.line, zn, zl)
-            except Exception as e:
+                geom = geom_to_geojson(way.line, zn, zl) if way.line else None  # type: ignore[arg-type]
+            except (ValueError, TypeError) as e:
                 logger.warning("Failed to convert geometry for way %s: %s", way.id, e)
                 continue
             if geom is None:
@@ -82,7 +95,7 @@ def mapdata_to_geojson(map_data):
                         "tags": way.tags or {},
                         "in_out": way.in_out,
                     },
-                }
+                },
             )
 
     add_ways(map_data.roads_list, "road")
@@ -99,7 +112,7 @@ def mapdata_to_geojson(map_data):
                 "id": f"wp_{i}",
                 "geometry": {"type": "Point", "coordinates": [lon, lat]},
                 "properties": {"category": "waypoint", "index": i},
-            }
+            },
         )
 
     return {"type": "FeatureCollection", "features": features}
@@ -110,42 +123,57 @@ def mapdata_to_geojson(map_data):
 # ------------------------------------------------------------------
 
 
-def load_annotations(path: str) -> Dict[str, Any]:
-    if os.path.isfile(path):
-        with open(path) as f:
+def load_annotations(path: str) -> dict[str, Any]:
+    p = Path(path)
+    if p.is_file():
+        with p.open() as f:
             return json.load(f)
     return {"version": 1, "annotations": []}
 
 
-def save_annotations(path: str, data: Dict[str, Any]) -> None:
-    with open(path, "w") as f:
+def save_annotations(path: str, data: dict[str, Any]) -> None:
+    with Path(path).open("w") as f:
         json.dump(data, f, indent=2)
 
 
-def get_deleted_way_ids(store):
-    """Return set of deleted way IDs, handling both old (int list) and new (dict list) formats."""
+def get_deleted_way_ids(store: dict[str, Any]) -> set[int | str]:
+    """
+    Return set of deleted way IDs, handling both old (int list) and new (dict list) formats.
+    """
     dw = store.get("deleted_ways", [])
     return {(d["id"] if isinstance(d, dict) else d) for d in dw}
 
 
-def get_deleted_node_ids(store, way_id):
-    """Return set of deleted node IDs for a given way_id, handling both storage formats."""
+def get_deleted_node_ids(store: dict[str, Any], way_id: int | str) -> set[int]:
+    """
+    Return set of deleted node IDs for a given way_id, handling both storage formats.
+    """
     dn = store.get("deleted_nodes", [])
     if isinstance(dn, dict):
         return set(dn.get(str(way_id), []))
     return {d["node_id"] for d in dn if d["way_id"] == way_id}
 
 
-def get_split_node_ids(store, way_id):
-    """Return list of node IDs where the given way should be split."""
+def get_split_node_ids(store: dict[str, Any], way_id: int | str) -> list[int]:
+    """
+    Return list of node IDs where the given way should be split.
+    """
     splits = store.get("split_ways") or {}
     way_splits = splits.get(str(way_id), [])
     # Ensure they are integers for comparison with OSM node IDs
     return [int(nid) for nid in way_splits]
 
 
-def split_way(way, split_nids, zone_number=None, zone_letter=None, nodes_cache=None):
-    """Split a way at specified node IDs into a list of new Way objects."""
+def split_way(
+    way: "Way",
+    split_nids: list[int],
+    zone_number: int | None = None,
+    zone_letter: str | None = None,
+    nodes_cache: dict[int, dict[str, Any]] | None = None,
+) -> list["Way"]:
+    """
+    Split a way at specified node IDs into a list of new Way objects.
+    """
     if not split_nids:
         return [way]
 
@@ -206,7 +234,7 @@ def split_way(way, split_nids, zone_number=None, zone_letter=None, nodes_cache=N
     current_nodes = []
     current_coords = []
 
-    split_set = set(int(nid) for nid in split_nids)
+    split_set = {int(nid) for nid in split_nids}
     for i, nid in enumerate(node_ids):
         current_nodes.append(way.nodes[i])
         if i < len(raw_coords):
@@ -217,7 +245,7 @@ def split_way(way, split_nids, zone_number=None, zone_letter=None, nodes_cache=N
             if len(current_nodes) >= 2:
                 w = copy.copy(way)
                 w.nodes = current_nodes
-                ls = _SLS(current_coords)
+                ls = _LineString(current_coords)
                 w.line = ls.buffer(radius) if is_buffered else ls
                 segments.append(w)
 
@@ -229,7 +257,7 @@ def split_way(way, split_nids, zone_number=None, zone_letter=None, nodes_cache=N
     if len(current_nodes) >= 2:
         w = copy.copy(way)
         w.nodes = current_nodes
-        ls = _SLS(current_coords)
+        ls = _LineString(current_coords)
         w.line = ls.buffer(radius) if is_buffered else ls
         segments.append(w)
 
@@ -246,8 +274,9 @@ def split_way(way, split_nids, zone_number=None, zone_letter=None, nodes_cache=N
 _MIGRATION_VERSION = "v2"
 
 
-def migrate_change_log(store):
-    """Ensure change_log covers all existing changes with proportional way/node interleaving.
+def migrate_change_log(store: dict[str, Any]) -> None:
+    """
+    Ensure change_log covers all existing changes with proportional way/node interleaving.
 
     On first call (or when migration is outdated): entries without a "ts" key are
     considered legacy and are replaced by a fresh proportionally-interleaved block.
@@ -280,7 +309,7 @@ def migrate_change_log(store):
             key = (d["way_id"], d["node_id"])
             if key not in tracked_nodes:
                 untracked_nodes.append(
-                    {"type": "node", "way_id": d["way_id"], "node_id": d["node_id"]}
+                    {"type": "node", "way_id": d["way_id"], "node_id": d["node_id"]},
                 )
 
     untracked_tags = []
@@ -294,29 +323,19 @@ def migrate_change_log(store):
     for wid_str in store.get("node_position_overrides", {}):
         wid = int(wid_str)
         if wid not in tracked_moves:
-            untracked_moves.append(
-                {"type": "move", "id": wid, "category": "unknown", "label": ""}
-            )
+            untracked_moves.append({"type": "move", "id": wid, "category": "unknown", "label": ""})
 
-    tracked_splits = {
-        (e.get("way_id"), e.get("node_id")) for e in cl if e.get("type") == "split"
-    }
+    tracked_splits = {(e.get("way_id"), e.get("node_id")) for e in cl if e.get("type") == "split"}
     untracked_splits = []
     for wid_str, nids in store.get("split_ways", {}).items():
         wid = int(wid_str)
-        for nid in nids:
-            if (wid, nid) not in tracked_splits:
-                untracked_splits.append(
-                    {"type": "split", "way_id": wid, "node_id": nid}
-                )
+        untracked_splits.extend(
+            {"type": "split", "way_id": wid, "node_id": nid}
+            for nid in nids
+            if (wid, nid) not in tracked_splits
+        )
 
-    if (
-        untracked_ways
-        or untracked_nodes
-        or untracked_tags
-        or untracked_moves
-        or untracked_splits
-    ):
+    if untracked_ways or untracked_nodes or untracked_tags or untracked_moves or untracked_splits:
         nw, nn = len(untracked_ways), len(untracked_nodes)
         if nw == 0 or nn == 0:
             interleaved = untracked_ways + untracked_nodes
@@ -327,28 +346,34 @@ def migrate_change_log(store):
             ]
             items.sort(key=lambda x: x[0])
             interleaved = [e for _, e in items]
-        store["change_log"] = (
-            interleaved + untracked_tags + untracked_moves + untracked_splits + cl
-        )
+        store["change_log"] = interleaved + untracked_tags + untracked_moves + untracked_splits + cl
 
     store["change_log_migration"] = _MIGRATION_VERSION
 
 
-def get_node_position_overrides(store, way_id):
-    """Return {node_id (int): {lat, lon}} for position overrides on a given way."""
+def get_node_position_overrides(
+    store: dict[str, Any], way_id: int | str,
+) -> dict[int, dict[str, float]]:
+    """
+    Return {node_id (int): {lat, lon}} for position overrides on a given way.
+    """
     original_way_id_str = str(way_id).split(":")[0]
     return {
         int(k): v
-        for k, v in store.get("node_position_overrides", {})
-        .get(original_way_id_str, {})
-        .items()
+        for k, v in store.get("node_position_overrides", {}).get(original_way_id_str, {}).items()
     }
 
 
 def apply_node_position_overrides(
-    way, overrides, zone_number, zone_letter, nodes_cache=None, category=None
-):
-    """Return a copy of way with geometry updated from node position overrides.
+    way: "Way",
+    overrides: dict[int, dict[str, float]],
+    zone_number: int,
+    zone_letter: str,
+    nodes_cache: dict[int, dict[str, Any]] | None = None,
+    category: str | None = None,
+) -> "Way":
+    """
+    Return a copy of way with geometry updated from node position overrides.
 
     overrides: {node_id (int): {"lat": float, "lon": float}}
     For non-overridden nodes, nodes_cache is consulted before falling back to
@@ -370,9 +395,7 @@ def apply_node_position_overrides(
             )
             centroid = geom.centroid
             w = copy.copy(way)
-            w.line = _affine_translate(
-                geom, xoff=e_new - centroid.x, yoff=n_new - centroid.y
-            )
+            w.line = _affine_translate(geom, xoff=e_new - centroid.x, yoff=n_new - centroid.y)
             return w
         return way
 
@@ -417,7 +440,7 @@ def apply_node_position_overrides(
 
     w = copy.copy(way)
     if geom.geom_type == "LineString":
-        w.line = _SLS(utm_coords)
+        w.line = _LineString(utm_coords)
     elif geom.geom_type == "Polygon":
         if len(utm_coords) < 2:
             return way
@@ -425,15 +448,13 @@ def apply_node_position_overrides(
             if category == "barrier":
                 # Closed barrier area: reconstruct as flat Polygon from the node ring
                 ring = (
-                    utm_coords
-                    if utm_coords[0] == utm_coords[-1]
-                    else utm_coords + [utm_coords[0]]
+                    utm_coords if utm_coords[0] == utm_coords[-1] else [*utm_coords, utm_coords[0]]
                 )
                 if len(ring) < 4:
                     return way
                 try:
                     w.line = _SPoly(ring)
-                except Exception:
+                except (ValueError, TypeError):
                     return way
             else:
                 # Closed road/footway: flat Polygon if area=yes, else re-buffer the loop
@@ -445,10 +466,10 @@ def apply_node_position_overrides(
                         return way
                     try:
                         w.line = _SPoly(utm_coords)
-                    except Exception:
+                    except (ValueError, TypeError):
                         return way
                 else:
-                    ls = _SLS(utm_coords)
+                    ls = _LineString(utm_coords)
                     p = geom.length
                     a = geom.area
                     disc = p * p - 4 * np.pi * a
@@ -460,34 +481,30 @@ def apply_node_position_overrides(
                     r = max(r, 0.01)
                     try:
                         w.line = ls.buffer(r)
-                    except Exception:
+                    except (ValueError, TypeError):
                         if len(utm_coords) >= 4:
                             try:
                                 w.line = _SPoly(utm_coords)
-                            except Exception:
+                            except (ValueError, TypeError):
                                 return None
                         else:
                             return None
         else:
             # Open way stored as buffered polygon: re-buffer the centerline
-            ls = _SLS(utm_coords)
+            ls = _LineString(utm_coords)
             p = geom.length
             a = geom.area
             disc = p * p - 4 * np.pi * a
-            r = (
-                (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi)
-                if disc >= 0
-                else (a / p if p else 0)
-            )
+            r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else (a / p if p else 0)
             r = max(r, 0.01)
             try:
                 w.line = ls.buffer(r)
-            except Exception:
+            except (ValueError, TypeError):
                 if len(utm_coords) >= 3:
-                    closed = utm_coords + [utm_coords[0]]
+                    closed = [*utm_coords, utm_coords[0]]
                     try:
                         w.line = _SPoly(closed)
-                    except Exception:
+                    except (ValueError, TypeError):
                         return None
                 else:
                     return None
@@ -502,10 +519,14 @@ def apply_node_position_overrides(
 # ------------------------------------------------------------------
 
 
-def geojson_geom_to_utm(geometry, zone_number, zone_letter):
-    """GeoJSON geometry (lon/lat) → Shapely geometry (UTM, same zone as mapdata)."""
+def geojson_geom_to_utm(
+    geometry: dict[str, Any], zone_number: int, zone_letter: str,
+) -> "BaseGeometry | None":
+    """
+    GeoJSON geometry (lon/lat) → Shapely geometry (UTM, same zone as mapdata).
+    """
 
-    def pt(c):
+    def pt(c: list[float] | tuple[float, float]) -> tuple[float, float]:
         e, n, _, _ = utm.from_latlon(
             c[1],
             c[0],
@@ -516,7 +537,7 @@ def geojson_geom_to_utm(geometry, zone_number, zone_letter):
 
     gtype = geometry.get("type")
     if gtype == "LineString":
-        return _SLS([pt(c) for c in geometry["coordinates"]])
+        return _LineString([pt(c) for c in geometry["coordinates"]])
     if gtype == "Polygon":
         rings = [[pt(c) for c in ring] for ring in geometry["coordinates"]]
         return _SPoly(rings[0], rings[1:])
@@ -530,9 +551,16 @@ def geojson_geom_to_utm(geometry, zone_number, zone_letter):
 
 
 def rebuild_way_without_nodes(
-    way, del_nids, zone_number=None, zone_letter=None, nodes_cache=None, category=None
-):
-    """Return a shallow copy of way with del_nids removed, or None if geometry becomes invalid."""
+    way: "Way",
+    del_nids: set[int] | list[int],
+    zone_number: int | None = None,
+    zone_letter: str | None = None,
+    nodes_cache: dict[int, dict[str, Any]] | None = None,
+    category: str | None = None,
+) -> "Way | None":
+    """
+    Return a shallow copy of way with del_nids removed, or None if geometry becomes invalid.
+    """
     node_ids = [getattr(n, "id", n) for n in way.nodes]
     keep = [i for i, nid in enumerate(node_ids) if nid not in del_nids]
     if len(keep) < 2:
@@ -548,12 +576,10 @@ def rebuild_way_without_nodes(
             return None
         # Preserve closure: primary signal is node_ids[0] == node_ids[-1] (closed OSM
         # way); geom.is_closed is the fallback for geometries that stored the repeat.
-        _is_closed = (
-            len(node_ids) >= 2 and node_ids[0] == node_ids[-1]
-        ) or geom.is_closed
+        _is_closed = (len(node_ids) >= 2 and node_ids[0] == node_ids[-1]) or geom.is_closed
         if _is_closed and new_coords[0] != new_coords[-1]:
             new_coords.append(new_coords[0])
-        w.line = _SLS(new_coords)
+        w.line = _LineString(new_coords)
 
     elif geom.geom_type == "Polygon":
         if zone_number is not None:
@@ -583,19 +609,17 @@ def rebuild_way_without_nodes(
                     ring = (
                         utm_coords
                         if utm_coords[0] == utm_coords[-1]
-                        else utm_coords + [utm_coords[0]]
+                        else [*utm_coords, utm_coords[0]]
                     )
                     if len(ring) < 4:
                         return None
                     try:
                         w.line = _SPoly(ring)
-                    except Exception:
+                    except (ValueError, TypeError):
                         return None
                 else:
                     # Closed road/footway: flat Polygon if area=yes, else re-buffer the loop
-                    is_area_way = (getattr(way, "tags", None) or {}).get(
-                        "area"
-                    ) == "yes"
+                    is_area_way = (getattr(way, "tags", None) or {}).get("area") == "yes"
                     if utm_coords[0] != utm_coords[-1]:
                         utm_coords.append(utm_coords[0])
                     if is_area_way:
@@ -603,32 +627,28 @@ def rebuild_way_without_nodes(
                             return None
                         try:
                             w.line = _SPoly(utm_coords)
-                        except Exception:
+                        except (ValueError, TypeError):
                             return None
                     else:
-                        ls = _SLS(utm_coords)
+                        ls = _LineString(utm_coords)
                         p = geom.length
                         a = geom.area
                         disc = p * p - 4 * np.pi * a
-                        r = (
-                            (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi)
-                            if disc >= 0
-                            else a / p
-                        )
+                        r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else a / p
                         try:
                             w.line = ls.buffer(r)
-                        except Exception:
+                        except (ValueError, TypeError):
                             w.line = ls
             else:
                 # Open way stored as buffered polygon: re-buffer the centerline
-                ls = _SLS(utm_coords)
+                ls = _LineString(utm_coords)
                 p = geom.length
                 a = geom.area
                 disc = p * p - 4 * np.pi * a
                 r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else a / p
                 try:
                     w.line = ls.buffer(r)
-                except Exception:
+                except (ValueError, TypeError):
                     w.line = ls
         else:
             coords = list(geom.exterior.coords)

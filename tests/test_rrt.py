@@ -1,4 +1,5 @@
 import numpy as np
+
 from map_data.pathsolver.rrt_star import RRTStar
 
 
@@ -45,6 +46,7 @@ def test_rrt_star_with_obstacle():
         step_size=0.5,
         neighbor_radius=2.0,
         grid_scale=0.1,
+        traversability_threshold=0.5,
     )
     path = rrt_star.find_path()
     assert path is not None
@@ -56,9 +58,24 @@ def test_rrt_star_with_obstacle():
         if 0 <= i < 100 and 0 <= j < 100:
             assert grid[i, j] < 0.95
 
+    # Verify that path segments don't cut through the obstacle interior.
+    # Boundary cells (row/col 40 and 59) are excluded because Bresenham rasterisation
+    # can miss a single-cell corner at the boundary — that is expected behaviour.
+    for idx in range(len(path) - 1):
+        p1 = np.array(path[idx])
+        p2 = np.array(path[idx + 1])
+        for t in np.linspace(0, 1, 20):
+            pt = p1 + t * (p2 - p1)
+            i = int(pt[1] / 0.1)
+            j = int(pt[0] / 0.1)
+            if 41 <= i <= 58 and 41 <= j <= 58:
+                assert grid[i, j] < 0.95, f"Segment crosses obstacle interior at {pt}"
+
 
 def test_rrt_star_near_equal_start_goal():
-    """Start and goal closer than step_size: path should be found in very few iterations."""
+    """
+    Start and goal closer than step_size: path should be found in very few iterations.
+    """
     start = np.array([5.0, 5.0])
     goal = np.array([5.5, 5.5])  # distance ~0.7 < step_size=1.0
     grid = np.zeros((100, 100), dtype=float)

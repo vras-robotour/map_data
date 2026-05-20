@@ -1,5 +1,6 @@
 import numpy as np
 import shapely.geometry as sh
+
 from map_data.pathsolver.replan import ReplanPath
 
 
@@ -81,9 +82,8 @@ class MockMapData:
         for way in self.footways_list:
             for node_id, coord in zip(
                 way.nodes,
-                way.line.exterior.coords
-                if hasattr(way.line, "exterior")
-                else way.line.coords,
+                way.line.exterior.coords if hasattr(way.line, "exterior") else way.line.coords,
+                strict=True,
             ):
                 points[node_id] = np.array(coord).reshape(1, -1)
         return points
@@ -144,7 +144,7 @@ def test_post_process_path_simplification():
     # Create a path with many points very close to each other along a line
     # (5, 0), (5, 0.01), (5, 0.02), ..., (5, 1), then (5, 10)
     noisy_segment = [[5.0, y] for y in np.arange(0, 1.01, 0.01)]
-    path = np.array(noisy_segment + [[5.0, 10.0]])
+    path = np.array([*noisy_segment, [5.0, 10.0]])
 
     processed_path = replanner._post_process_path(path)
 
@@ -155,20 +155,24 @@ def test_post_process_path_simplification():
 
 
 def test_astar_grid_goal_outside_boundary():
-    """Goal UTM outside the grid is caught — returns None."""
+    """
+    Goal UTM outside the grid is caught — returns None.
+    """
     args = Args()
     replanner = ReplanPath(args, [])
     replanner._reshaped_grid_cache = np.zeros((20, 20), dtype=float)
 
     start = (1.0, 1.0)
-    goal = (15.0, 15.0)  # beyond 10×10 grid
+    goal = (15.0, 15.0)  # beyond 10x10 grid
     path = replanner._astar(start, goal)
 
     assert path is None
 
 
 def test_astar_grid_start_equals_goal_same_cell():
-    """Points that map to the same grid cell return a 2-point trivial path."""
+    """
+    Points that map to the same grid cell return a 2-point trivial path.
+    """
     args = Args()
     replanner = ReplanPath(args, [])
     replanner._reshaped_grid_cache = np.zeros((20, 20), dtype=float)
@@ -183,9 +187,7 @@ def test_astar_grid_start_equals_goal_same_cell():
 
 def test_post_process_path_very_close_points():
     args = Args()
-    args.simplify_path = (
-        False  # Disable DP simplification to test only distance-based removal
-    )
+    args.simplify_path = False  # Disable DP simplification to test only distance-based removal
     replanner = ReplanPath(args, [])
 
     # Two points extremely close to each other

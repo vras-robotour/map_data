@@ -1,5 +1,4 @@
-import os
-from glob import glob
+from pathlib import Path
 
 from setuptools import find_packages, setup
 
@@ -12,12 +11,12 @@ setup(
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
-        (os.path.join("share", package_name, "launch"), glob("launch/*.launch.py")),
-        (os.path.join("share", package_name, "config"), glob("config/*.yaml")),
-        (os.path.join("share", package_name, "data"), glob("data/*.gpx")),
-        (os.path.join("share", package_name, "data"), glob("data/*.mapdata")),
-        (os.path.join("share", package_name, "data"), glob("data/*.annotations.json")),
-        (os.path.join("share", package_name, "parameters"), glob("parameters/*.csv")),
+        (str(Path("share") / package_name / "launch"), [str(p) for p in Path("launch").glob("*.launch.py")]),
+        (str(Path("share") / package_name / "config"), [str(p) for p in Path("config").glob("*.yaml")]),
+        (str(Path("share") / package_name / "data"), [str(p) for p in Path("data").glob("*.gpx")]),
+        (str(Path("share") / package_name / "data"), [str(p) for p in Path("data").glob("*.mapdata")]),
+        (str(Path("share") / package_name / "data"), [str(p) for p in Path("data").glob("*.annotations.json")]),
+        (str(Path("share") / package_name / "parameters"), [str(p) for p in Path("parameters").glob("*.csv")]),
     ],
     install_requires=[
         "setuptools",
@@ -46,7 +45,8 @@ setup(
     zip_safe=False,
     maintainer="vlkjan6",
     maintainer_email="vlkjan6@fel.cvut.cz",
-    description="ROS2 package for downloading, parsing, and visualizing OSM map data with integrated A* and RRT* path planners.",
+    description="ROS2 package for downloading, parsing, and visualizing OSM map data with\
+                 integrated A* and RRT* path planners.",
     license="BSD-3-Clause",
     tests_require=["pytest"],
     entry_points={

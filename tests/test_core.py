@@ -59,13 +59,17 @@ def test_way_pcd_points():
 
 
 def test_way_is_barrier_wildcard():
-    """Wildcard '*' in yes_tags matches any tag value."""
+    """
+    Wildcard '*' in yes_tags matches any tag value.
+    """
     way = Way(tags={"barrier": "anything"})
     assert way.is_barrier({"barrier": ["*"]}, {}, {})
 
 
 def test_way_is_barrier_anti_tag():
-    """Anti-tag blocks a way that would otherwise qualify as a barrier."""
+    """
+    Anti-tag blocks a way that would otherwise qualify as a barrier.
+    """
     way = Way(tags={"barrier": "wall", "access": "yes"})
     yes_tags = {"barrier": ["*"]}
     anti_tags = {"access": ["yes"]}
@@ -73,7 +77,9 @@ def test_way_is_barrier_anti_tag():
 
 
 def test_combine_ways_reversed():
-    """combine_ways handles a segment whose endpoint order is reversed."""
+    """
+    combine_ways handles a segment whose endpoint order is reversed.
+    """
     # w1: 10→11, w2: 12→11 — they share node 11 but w2's end is first
     w1 = Way(id=1, nodes=[10, 11], line=LineString([(0, 0), (1, 0)]))
     w2 = Way(id=2, nodes=[12, 11], line=LineString([(2, 0), (1, 0)]))
@@ -87,7 +93,9 @@ def test_combine_ways_reversed():
 
 
 def test_way_pcd_points_filled_polygon():
-    """to_pcd_points with filled=True returns interior grid points for a polygon."""
+    """
+    to_pcd_points with filled=True returns interior grid points for a polygon.
+    """
     poly = Polygon([(0, 0), (4, 0), (4, 4), (0, 4)])
     way = Way(line=poly, is_area=True)
     pts = way.to_pcd_points(density=1.0, filled=True)
