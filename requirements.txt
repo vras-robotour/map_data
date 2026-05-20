@@ -11,7 +11,6 @@ joblib
 scipy
 matplotlib
 PyYAML
-ros2_numpy
 mkdocs
 mkdocs-material
 mkdocstrings[python]

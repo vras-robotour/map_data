@@ -38,7 +38,7 @@ def astar_search[N](
     closed = set()
 
     while q:
-        (_f_score, _, u) = heapq.heappop(q)
+        (_, _, u) = heapq.heappop(q)
         if u in closed:
             continue
         closed.add(u)
