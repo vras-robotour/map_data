@@ -4,6 +4,9 @@
 
 ### Added
 
+- Expanded test suite: `test_overpass.py` (retry logic, rate limiting, status polling), `test_errors.py` (malformed GPX, corrupt files, Overpass timeouts, planning failures), `test_parsing.py` (OSM element classification and buffering), `test_fill_grid.py` (footway cost assignment, barrier cell marking), `test_viewer_helpers.py` (GeoJSON roundtrip, way splitting, change log migration), `test_viewer_routes.py` (annotation CRUD, path-traversal security, way operations), and extended `test_integration.py` (OSM cache roundtrip, bbox mismatch, `parse_intersections`)
+- Dedicated `Testing` documentation page (`docs/dev/testing.md`) with per-module design notes and guidance for adding new tests
+- `pyproject.toml` with ruff configuration for code style enforcement, compatible with ROS2 builds
 - Interactive viewer: Tracker mode for live robot position via ROS2
 - Interactive viewer: way splitting, node deletion, and node position drag editing
 - Interactive viewer: audit change log stored in `.annotations.json`
@@ -31,6 +34,9 @@
 
 ### Changed
 
+- `os.path` replaced with `pathlib.Path` throughout the codebase
+- Code formatting standardized via ruff across all source modules
+- `pyproject.toml` and `setup.py` aligned for ROS2 build compatibility
 - Core architecture split into modular components: `OverpassClient`, `parsing`, `serialization`
 - `Way` class refactored to a `@dataclass` with full type hints
 - `.mapdata` serialisation migrated from pickle to JSON + WKT; legacy pickle support was subsequently removed for security reasons
@@ -41,6 +47,8 @@
 
 ### Fixed
 
+- `create_mapdata` node: existing file load was missing the `.mapdata` suffix, causing `MapData.load` to receive an incorrect path
+- `create_mapdata` node: `--download` flag was passed as a positional argument to `process_map_data`, now correctly passed as a keyword argument
 - Multi-zone UTM boundary warning when loaded area spans two UTM zones
 - Annotation deletion via the Del key in the viewer
 - Path planning with split ways
