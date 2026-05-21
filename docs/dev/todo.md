@@ -312,12 +312,6 @@
       file: 'viewer'
     },
     {
-      type: 'improvement', sev: 'important',
-      title: 'Rerendering of Reverted Changes',
-      desc: 'When reverting an annotation edit, the viewer updates the data but does not trigger a rerender, leaving stale old geometry on the map, alongside the new reverted geometry, until the next load. This can cause confusion about whether the revert action succeeded.',
-      file: 'viewer'
-    },
-    {
       type: 'improvement', sev: 'minor',
       title: 'Improve Node Editing',
       desc: 'Update the editing of nodes to be more responsive. Curently, clicking a node does not always trigger a drag of the node. Also true for path points in planner.',

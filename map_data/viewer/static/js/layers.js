@@ -220,12 +220,13 @@ async function refreshMetadata(filename, { refreshAnnotations = false } = {}) {
         const rawChangeLog = (annData.change_log && annData.change_log.length > 0) ? annData.change_log : null;
         if (rawChangeLog) {
             const wayMap = new Map(deletedWays.map(d => [d.id, d]));
-            const tagMap = new Map(tagOverrides.map(d => [d.id, d]));
+            // Use string keys: server stores tag ids as strings, tagOverrides.id is a number (+sid)
+            const tagMap = new Map(tagOverrides.map(d => [String(d.id), d]));
             const nodePosOverrides = annData.node_position_overrides || {};
             const sorted = [...rawChangeLog].sort((a, b) => (a.ts || 0) - (b.ts || 0));
             changeLog = sorted.flatMap(e => {
                 if (e.type === 'way') { const d = wayMap.get(e.id); return d ? [{ type: 'way', ts: e.ts, ...d }] : []; }
-                if (e.type === 'tag') { const d = tagMap.get(e.id); return d ? [{ type: 'tag', ts: e.ts, ...d }] : []; }
+                if (e.type === 'tag') { const d = tagMap.get(String(e.id)); return d ? [{ type: 'tag', ts: e.ts, ...d }] : []; }
                 if (e.type === 'node') {
                     const d = deletedNodes.find(n => n.way_id === e.way_id && n.node_id === e.node_id);
                     return d ? [{ type: 'node', ts: e.ts, ...d }] : [];
@@ -369,12 +370,12 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         const rawChangeLog = (annData.change_log && annData.change_log.length > 0) ? annData.change_log : null;
         if (rawChangeLog) {
             const wayMap = new Map(deletedWays.map(d => [d.id, d]));
-            const tagMap = new Map(tagOverrides.map(d => [d.id, d]));
+            const tagMap = new Map(tagOverrides.map(d => [String(d.id), d]));
             const nodePosOverrides = annData.node_position_overrides || {};
             const sorted = [...rawChangeLog].sort((a, b) => (a.ts || 0) - (b.ts || 0));
             changeLog = sorted.flatMap(e => {
                 if (e.type === 'way') { const d = wayMap.get(e.id); return d ? [{ type: 'way', ts: e.ts, ...d }] : []; }
-                if (e.type === 'tag') { const d = tagMap.get(e.id); return d ? [{ type: 'tag', ts: e.ts, ...d }] : []; }
+                if (e.type === 'tag') { const d = tagMap.get(String(e.id)); return d ? [{ type: 'tag', ts: e.ts, ...d }] : []; }
                 if (e.type === 'node') {
                     const d = deletedNodes.find(n => n.way_id === e.way_id && n.node_id === e.node_id);
                     return d ? [{ type: 'node', ts: e.ts, ...d }] : [];
@@ -460,103 +461,37 @@ function clearMapData() {
 async function _reloadWay(wayId) {
     if (!currentFile) return;
 
+    // Always use the segments endpoint so that split segments are removed and
+    // re-added atomically — the old non-split path used strict id equality which
+    // failed to remove virtual "id:n" layers when the original numeric id was given.
     const originalWayId = String(wayId).split(':')[0];
-    const isSplit = String(wayId).includes(':');
 
-    if (isSplit) {
-        try {
-            const data = await fetchWaySegmentsApi(currentFile, originalWayId);
-            const newLayer = updateWayWithSegments(originalWayId, data.segments);
-            _enforceLayerOrder();
-            clearNodes();
-            await _refreshAnnotationsState();
+    try {
+        const data = await fetchWaySegmentsApi(currentFile, originalWayId);
+        updateWayWithSegments(originalWayId, data.segments);
+        ['road', 'footway', 'barrier'].forEach(c => renderSubtypeFilters(c));
+        _enforceLayerOrder();
+        clearNodes();
+        await _refreshAnnotationsState();
 
-            // Try to re-select the specific segment we were working on, or fallback to any segment of that way
-            if (!_reselectFeature(wayId)) {
-                if (!_reselectFeature(originalWayId)) {
-                    // Try any segment
-                    for (let i = 0; i < 10; i++) {
-                        if (_reselectFeature(`${originalWayId}:${i}`)) break;
-                    }
-                }
-            }
-        } catch (err) {
-            console.error('Failed to reload split way segments:', err);
-        }
-        return;
-    }
-
-    const affectedCats = new Set();
-    for (const cat of ['road', 'footway', 'barrier']) {
-        for (const st of Object.keys(subtypeLayers[cat])) {
-            const before = subtypeLayers[cat][st];
-            const toRemove = before.filter(l => l._featureId === wayId);
-            if (!toRemove.length) continue;
-            affectedCats.add(cat);
-            toRemove.forEach(l => geoLayers[cat]?.removeLayer(l));
-            subtypeLayers[cat][st] = before.filter(l => l._featureId !== wayId);
-        }
-    }
-
-    const res = await fetchWayApi(currentFile, wayId);
-    if (res.ok) {
-        const feature = await res.json();
-        const newCat = feature.properties.category;
-        const catLayer = geoLayers[newCat];
-        if (catLayer) {
-            const tmpGeo = L.geoJSON(feature, {
-                style: () => STYLES[newCat],
-            });
-            const newLayer = tmpGeo.getLayers()[0];
-            if (newLayer) {
-                tmpGeo.removeLayer(newLayer);
-                const st = getSubtype(feature, newCat);
-                if (!subtypeLayers[newCat][st]) { subtypeLayers[newCat][st] = []; subtypeFilters[newCat][st] = true; }
-                subtypeLayers[newCat][st].push(newLayer);
-                newLayer._featureId = feature.properties.id;
-                newLayer._featureRef = feature;
-                newLayer.on('click', e => {
-                    if (currentAppMode === 'planner') return;
-                    L.DomEvent.stopPropagation(e);
-                    if (currentMode === 'view') {
-                        if (currentClickedLayer && currentClickedLayer !== newLayer) {
-                            const oldCat = currentClickedLayer._osmCat;
-                            currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
-                        }
-                        newLayer._osmCat = newCat;
-                        currentClickedLayer = newLayer;
-                        newLayer.setStyle(HIGHLIGHT_STYLES[newCat]);
-                        showProps(feature.properties, feature);
-                    } else if (currentMode === 'edit' && newCat !== 'crossroad') {
-                        if (currentClickedLayer && currentClickedLayer !== newLayer) {
-                            const oldCat = currentClickedLayer._osmCat;
-                            currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
-                        }
-                        newLayer._osmCat = newCat;
-                        currentClickedLayer = newLayer;
-                        currentClickedFeature = feature;
-                        newLayer.setStyle(HIGHLIGHT_STYLES[newCat]);
-                        loadNodesForEditing(feature, newLayer);
-                    } else if (currentMode === 'delete' && newCat !== 'crossroad') {
-                        newLayer._osmCat = newCat;
-                        currentClickedLayer = newLayer;
-                        currentClickedFeature = feature;
-                        deleteCurrentWay();
-                    }
-                });
-                if (subtypeFilters[newCat][st] !== false && !hiddenWayIds.has(feature.properties.id))
-                    catLayer.addLayer(newLayer);
-                affectedCats.add(newCat);
+        // Try the exact id first, then the bare original id, then any segment
+        let reselected = _reselectFeature(wayId);
+        if (!reselected) reselected = _reselectFeature(originalWayId);
+        if (!reselected) {
+            for (let i = 0; i < 10; i++) {
+                if (_reselectFeature(`${originalWayId}:${i}`)) { reselected = true; break; }
             }
         }
-    }
-
-    affectedCats.forEach(c => renderSubtypeFilters(c));
-    _enforceLayerOrder();
-    clearNodes();
-    await _refreshAnnotationsState();
-    if (!_reselectFeature(wayId)) {
-        currentClickedLayer = null; currentClickedFeature = null;
+        if (!reselected) {
+            currentClickedLayer = null;
+            currentClickedFeature = null;
+            document.getElementById('props-content').innerHTML =
+                '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+        }
+    } catch (err) {
+        console.error('Failed to reload way:', err);
+        currentClickedLayer = null;
+        currentClickedFeature = null;
         document.getElementById('props-content').innerHTML =
             '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
     }

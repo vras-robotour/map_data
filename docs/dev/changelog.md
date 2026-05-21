@@ -47,6 +47,8 @@
 
 ### Fixed
 
+- Interactive viewer: reverting any annotation edit (tag override, node deletion, node move) on a way that had also been split left the stale pre-revert geometry on the map alongside the newly restored geometry until page reload; `_reloadWay` now always uses the segments endpoint so split virtual layers (`id:n`) are atomically replaced
+- Interactive viewer: tag change-log entries silently disappeared from the changes panel after any metadata refresh (`refreshMetadata` / `loadMapData`) because `tagMap` used numeric keys while the server's `change_log` stores tag ids as strings; both call-sites now normalise to string keys
 - `create_mapdata` node: existing file load was missing the `.mapdata` suffix, causing `MapData.load` to receive an incorrect path
 - `create_mapdata` node: `--download` flag was passed as a positional argument to `process_map_data`, now correctly passed as a keyword argument
 - Multi-zone UTM boundary warning when loaded area spans two UTM zones
