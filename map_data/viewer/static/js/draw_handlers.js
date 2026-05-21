@@ -4,10 +4,18 @@ const editDrag = { active: false, layer: null, startLatLng: null, origLatLngs: n
 
 function _onEditDragDown(e) {
     L.DomEvent.stopPropagation(e);
-    // Selection highlight
-    if (editSelectedLayer && editSelectedLayer !== e.target && editSelectedLayer.setStyle)
-        editSelectedLayer.setStyle({ ..._layerBaseStyle(editSelectedLayer), cursor: 'move' });
+    // Deselect previously active annotation
+    if (editSelectedLayer && editSelectedLayer !== e.target) {
+        if (editSelectedLayer.editing) editSelectedLayer.editing.disable();
+        if (editSelectedLayer.setStyle)
+            editSelectedLayer.setStyle({ ..._layerBaseStyle(editSelectedLayer), cursor: 'move' });
+    }
     editSelectedLayer = e.target;
+    // Enable vertex editing handles on the newly selected annotation
+    if (e.target.editing && !e.target.editing._enabled) {
+        e.target.editing.enable();
+        if (e.target.snapediting && !e.target.snapediting._enabled) e.target.snapediting.enable();
+    }
     if (e.target.setStyle)
         e.target.setStyle({ ..._layerBaseStyle(e.target), color: '#ff4400', weight: 3, cursor: 'grabbing' });
     editDrag.active = true;
@@ -63,13 +71,11 @@ function enableAnnotationEditMode() {
     map.on('mouseup', _onEditDragUp);
     const targets = getSnappableLayers();
     drawnItems.eachLayer(layer => {
-        if (layer.editing) {
-            layer.editing.enable();
-            if (layer.snapediting) {
-                layer.snapediting = new L.Handler.PolylineSnap(map, layer);
-                targets.forEach(t => layer.snapediting.addGuideLayer(t));
-                layer.snapediting.enable();
-            }
+        // Set up snapping guide layers but don't enable handles yet —
+        // handles are shown only when the user clicks an annotation (_onEditDragDown).
+        if (layer.editing && layer.snapediting) {
+            layer.snapediting = new L.Handler.PolylineSnap(map, layer);
+            targets.forEach(t => layer.snapediting.addGuideLayer(t));
         }
         layer.on('mousedown', _onEditDragDown);
         if (layer.setStyle) layer.setStyle({ ..._layerBaseStyle(layer), cursor: 'move' });
@@ -99,9 +105,11 @@ function disableAnnotationEditMode() {
 
 const osmDrag = {
     active: false,
-    type: null,        // 'node' | 'way'
+    type: null,        // 'node' | 'way' | 'midpoint'
     wayId: null,
     nodeIndex: -1,
+    afterNodeId: null,   // node ID after which to insert (for 'midpoint' type)
+    dragMarker: null,    // the midpoint marker being dragged
     startLatLng: null,
     origPositions: [],    // [{lat, lon}] snapshot of currentNodes at drag start
     origLayerLatLngs: null, // snapshot of layer latlngs at drag start (for way drag)
@@ -138,6 +146,23 @@ function _onOsmWayDragDown(e) {
     map.on('mouseup', _onOsmDragUp);
 }
 
+function _onMidpointDragDown(e, segmentIndex) {
+    if (currentMode !== 'edit') return;
+    L.DomEvent.stopPropagation(e);
+    osmDrag.active = true;
+    osmDrag.type = 'midpoint';
+    osmDrag.wayId = currentClickedFeature?.properties?.id ?? null;
+    osmDrag.nodeIndex = segmentIndex;
+    osmDrag.afterNodeId = currentNodes[segmentIndex]?.id ?? null;
+    osmDrag.startLatLng = e.latlng;
+    osmDrag.origPositions = currentNodes.map(n => ({ lat: n.lat, lon: n.lon }));
+    osmDrag.dragMarker = midpointMarkers[segmentIndex] ?? null;
+    map.dragging.disable();
+    map.getContainer().style.cursor = 'crosshair';
+    map.on('mousemove', _onOsmDragMove);
+    map.on('mouseup', _onOsmDragUp);
+}
+
 function _onOsmDragMove(e) {
     if (!osmDrag.active) return;
     const dlat = e.latlng.lat - osmDrag.startLatLng.lat;
@@ -148,6 +173,8 @@ function _onOsmDragMove(e) {
         const newLng = osmDrag.origPositions[ni].lon + dlng;
         nodeMarkers[ni]?.setLatLng([newLat, newLng]);
         _updateOsmWayVisualNode(ni, newLat, newLng);
+    } else if (osmDrag.type === 'midpoint') {
+        osmDrag.dragMarker?.setLatLng(e.latlng);
     } else {
         for (let i = 0; i < nodeMarkers.length; i++) {
             nodeMarkers[i]?.setLatLng([
@@ -166,11 +193,25 @@ async function _onOsmDragUp(e) {
     map.dragging.enable();
     map.getContainer().style.cursor = currentMode === 'edit' ? 'move' : '';
 
-    const { type, wayId, nodeIndex, startLatLng, origPositions } = osmDrag;
+    const { type, wayId, nodeIndex, startLatLng, origPositions, afterNodeId } = osmDrag;
     osmDrag.active = false;
     osmDrag.type = null;
     osmDrag.wayId = null;
     osmDrag.origLayerLatLngs = null;
+    osmDrag.afterNodeId = null;
+    osmDrag.dragMarker = null;
+
+    if (type === 'midpoint') {
+        if (!currentFile || !wayId) return;
+        const res = await addWayNodeApi(currentFile, wayId, afterNodeId, e.latlng.lat, e.latlng.lng);
+        if (!res.ok) { setStatus('Add node failed', 'text-danger'); return; }
+        await _reloadWay(wayId);
+        if (currentClickedFeature && currentClickedLayer) {
+            await loadNodesForEditing(currentClickedFeature, currentClickedLayer);
+        }
+        setStatus('Node added', 'text-success');
+        return;
+    }
 
     const dlat = e.latlng.lat - startLatLng.lat;
     const dlng = e.latlng.lng - startLatLng.lng;

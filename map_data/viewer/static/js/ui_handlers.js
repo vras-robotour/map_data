@@ -328,6 +328,7 @@ function clearNodes() {
     nodeCount = 0;
     currentNodes = [];
     nodeMarkers = [];
+    midpointMarkers = [];
     selectedNodeIndex = -1;
 }
 
@@ -364,19 +365,10 @@ async function loadNodesForEditing(feature, layer) {
         });
     }
     if (osmDragGhost) {
-        osmDragGhost.on('mousedown', e => {
-            // The SVG ghost is always above the canvas node markers in the DOM, so it intercepts
-            // all mousedowns. Route to node drag if click is within 10px of a marker, else way drag.
-            const clickPt = map.latLngToContainerPoint(e.latlng);
-            for (let i = 0; i < nodeMarkers.length; i++) {
-                if (!nodeMarkers[i]) continue;
-                if (clickPt.distanceTo(map.latLngToContainerPoint(nodeMarkers[i].getLatLng())) <= 10) {
-                    _onOsmNodeDragDown(e, i);
-                    return;
-                }
-            }
-            _onOsmWayDragDown(e);
-        });
+        // Node and midpoint markers use SVG renderer and are added to the map after the ghost,
+        // so they sit higher in the SVG DOM and receive their own mousedown events directly.
+        // The ghost only needs to handle clicks on the way body (i.e. way drag).
+        osmDragGhost.on('mousedown', _onOsmWayDragDown);
         osmDragGhost.addTo(map);
     }
 
@@ -386,12 +378,35 @@ async function loadNodesForEditing(feature, layer) {
             radius: 5, color: '#fff', weight: 2,
             fillColor: '#f0a500', fillOpacity: 0.9,
             bubblingMouseEvents: false,
+            renderer: L.svg(),
         });
         marker.on('mousedown', e => _onOsmNodeDragDown(e, i));
         marker.on('add', () => { const el = marker.getElement(); if (el) el.style.cursor = 'grab'; });
         nodeLayer.addLayer(marker);
         return marker;
     });
+
+    // Midpoint handles between consecutive nodes for inserting new nodes.
+    // Added after node markers so they sit below nodes in the SVG DOM.
+    midpointMarkers = [];
+    const isClosed = currentNodes.length >= 2 &&
+        currentNodes[0].id === currentNodes[currentNodes.length - 1].id;
+    const mpEnd = isClosed ? currentNodes.length - 1 : currentNodes.length - 1;
+    for (let i = 0; i < mpEnd; i++) {
+        const a = currentNodes[i], b = currentNodes[i + 1];
+        const mlat = (a.lat + b.lat) / 2, mlon = (a.lon + b.lon) / 2;
+        const mp = L.circleMarker([mlat, mlon], {
+            radius: 4, color: '#4af', weight: 1.5,
+            fillColor: '#4af', fillOpacity: 0.7,
+            bubblingMouseEvents: false,
+            renderer: L.svg(),
+        });
+        mp.on('mousedown', e => _onMidpointDragDown(e, i));
+        mp.on('add', () => { const el = mp.getElement(); if (el) el.style.cursor = 'crosshair'; });
+        nodeLayer.addLayer(mp);
+        midpointMarkers.push(mp);
+    }
+
     nodeLayer.addTo(map);
 
     const props = feature.properties;

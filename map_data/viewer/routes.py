@@ -42,6 +42,7 @@ from map_data.utils.way import FOOTWAY_VALUES, Way
 
 from .cache import load_mapdata_cached
 from .helpers import (
+    apply_added_nodes,
     apply_node_position_overrides,
     geojson_geom_to_utm,
     geom_to_geojson,
@@ -506,6 +507,27 @@ def get_way_nodes() -> Response:
                 n["lat"] = pos_overrides[n["id"]]["lat"]
                 n["lon"] = pos_overrides[n["id"]]["lon"]
 
+    # Insert any synthetic added nodes at the correct positions
+    added_for_way = [a for a in store.get("added_nodes", []) if a.get("way_id") == search_id]
+    if added_for_way:
+        pos_ov_raw = store.get("node_position_overrides", {}).get(str(search_id), {})
+        node_ids = [n["id"] for n in nodes]
+        offset = 0
+        for a in added_for_way:
+            synth_id = a["id"]
+            after_id = a["after_node_id"]
+            try:
+                idx = node_ids.index(after_id)
+            except ValueError:
+                continue
+            ov = pos_ov_raw.get(str(synth_id))
+            lat_n = float(ov["lat"] if ov else a["lat"])
+            lon_n = float(ov["lon"] if ov else a["lon"])
+            insert_pos = idx + 1 + offset
+            nodes.insert(insert_pos, {"id": synth_id, "lat": lat_n, "lon": lon_n, "tags": {}})
+            node_ids.insert(insert_pos, synth_id)
+            offset += 1
+
     return jsonify({"way_id": way_id, "nodes": nodes})
 
 
@@ -556,6 +578,10 @@ def get_way(way_id: str) -> Response:
         )
         if way is None:
             abort(404, f"Way {way_id} reduced to nothing by node deletions")
+
+    # Apply synthetic added nodes before position overrides so that overrides
+    # for synthetic nodes are picked up correctly by apply_node_position_overrides.
+    way = apply_added_nodes(way, store, zn, zl)
 
     pos_overrides = get_node_position_overrides(store, search_id)
     if pos_overrides:
@@ -970,6 +996,43 @@ def restore_way(way_id: str) -> Response:
     return Response("", 204)
 
 
+@bp.route("/api/way_node", methods=["POST"])
+def add_way_node() -> Response:
+    filename = request.args.get("file")
+    way_id = request.args.get("way_id")
+    if not filename or way_id is None:
+        abort(400, "Missing required query parameters")
+
+    original_way_id_str = str(way_id).split(":")[0]
+    try:
+        way_id_int = int(original_way_id_str)
+    except (ValueError, TypeError):
+        abort(400, "way_id must be an integer")
+
+    body = request.get_json(force=True) or {}
+    after_node_id = body.get("after_node_id")
+    lat = body.get("lat")
+    lon = body.get("lon")
+    if after_node_id is None or lat is None or lon is None:
+        abort(400, "Request body must include after_node_id, lat, lon")
+
+    ann_path = str(_annotation_path(filename))
+    store = load_annotations(ann_path)
+
+    existing_ids = [a["id"] for a in store.get("added_nodes", []) if a["id"] < 0]
+    synth_id = (min(existing_ids) - 1) if existing_ids else -1
+
+    store.setdefault("added_nodes", []).append({
+        "id": synth_id,
+        "way_id": way_id_int,
+        "after_node_id": int(after_node_id),
+        "lat": float(lat),
+        "lon": float(lon),
+    })
+    save_annotations(ann_path, store)
+    return jsonify({"id": synth_id, "lat": float(lat), "lon": float(lon)})
+
+
 @bp.route("/api/way_node", methods=["DELETE"])
 def delete_way_node() -> Response:
     filename = request.args.get("file")
@@ -988,6 +1051,17 @@ def delete_way_node() -> Response:
     ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     migrate_change_log(store)
+
+    # Synthetic nodes (negative IDs) live in added_nodes, not in the OSM node list
+    if node_id < 0:
+        store["added_nodes"] = [
+            a for a in store.get("added_nodes", [])
+            if not (a.get("way_id") == way_id_int and a.get("id") == node_id)
+        ]
+        pos_ov = store.get("node_position_overrides", {}).get(str(way_id_int), {})
+        pos_ov.pop(str(node_id), None)
+        save_annotations(ann_path, store)
+        return Response("", 204)
 
     dn = store.setdefault("deleted_nodes", [])
     if isinstance(dn, dict):

@@ -9,6 +9,7 @@ let nodeLayer = null;   // L.LayerGroup of node circle markers
 let nodeCount = 0;      // actual OSM node count from last fetch
 let currentNodes = [];     // fetched OSM node objects for the active way
 let nodeMarkers = [];     // L.CircleMarker refs, same order as currentNodes
+let midpointMarkers = [];  // L.CircleMarker refs for midpoint insert handles between nodes
 let selectedNodeIndex = -1;     // currently selected node index
 let currentClickedFeature = null; // last GeoJSON feature clicked in view mode
 let currentClickedLayer = null;  // Leaflet layer for the selected OSM feature

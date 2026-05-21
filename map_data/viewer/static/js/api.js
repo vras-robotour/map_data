@@ -83,6 +83,14 @@ async function deleteNodeApi(filename, wayId, nodeId) {
     return res;
 }
 
+async function addWayNodeApi(filename, wayId, afterNodeId, lat, lon) {
+    return await fetch(`/api/way_node?file=${encodeURIComponent(filename)}&way_id=${wayId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ after_node_id: afterNodeId, lat, lon }),
+    });
+}
+
 async function splitWayApi(filename, wayId, nodeId) {
     const res = await fetch(`/api/ways/split?file=${encodeURIComponent(filename)}`, {
         method: 'POST',

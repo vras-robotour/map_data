@@ -306,18 +306,6 @@
       file: null
     },
     {
-      type: 'improvement', sev: 'minor',
-      title: 'Annotated Objects in Edit Mode',
-      desc: 'Do not show the editable parts of annotated objects before the user clicks them. The current behaviour is a bit noisy and may overwhelm new users. Also have the same editing UI for OSM objects and for user-created annotations.',
-      file: 'viewer'
-    },
-    {
-      type: 'improvement', sev: 'minor',
-      title: 'Improve Node Editing',
-      desc: 'Update the editing of nodes to be more responsive. Curently, clicking a node does not always trigger a drag of the node. Also true for path points in planner.',
-      file: 'viewer'
-    },
-    {
       type: 'improvement', sev: 'nice-to-have',
       title: 'Viewer File Loading',
     desc: 'Allow for drag-and-drop loading of <code>.mapdata</code> files in the viewer, in addition to the existing file dialog. This would speed up testing of different files and be more intuitive for users. Also allow for droppning GPX/YAML files to trigger parsing. Check for file API support of YAML files.',
