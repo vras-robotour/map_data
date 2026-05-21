@@ -437,10 +437,10 @@ function clickNode(index) {
 function showOsmNodeProps(node, index, total) {
     const wayFeature = currentClickedFeature;
     const isPath = wayFeature && ['road', 'footway'].includes(wayFeature.properties.category);
-    // Simple heuristic for "not enclosed": check if it's a LineString and start != end
-    // Actually, we can just check if the backend would allow it.
-    // For UI, we'll show it if it's a road/footway and not the first/last node.
-    const canSplit = isPath && index > 0 && index < total - 1;
+    const isOpenBarrier = wayFeature && wayFeature.properties.category === 'barrier'
+        && currentNodes.length >= 2
+        && currentNodes[0]?.id !== currentNodes[currentNodes.length - 1]?.id;
+    const canSplit = (isPath || isOpenBarrier) && index > 0 && index < total - 1;
 
     const tagRows = Object.entries(node.tags || {})
         .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
@@ -556,7 +556,10 @@ function showNodeContextMenu(node, index, latlng) {
     const wayId = wayFeature.properties.id;
     const total = currentNodes.length;
     const isPath = ['road', 'footway'].includes(wayFeature.properties.category);
-    const canSplit = isPath && index > 0 && index < total - 1;
+    const isOpenBarrier = wayFeature.properties.category === 'barrier'
+        && currentNodes.length >= 2
+        && currentNodes[0]?.id !== currentNodes[currentNodes.length - 1]?.id;
+    const canSplit = (isPath || isOpenBarrier) && index > 0 && index < total - 1;
 
     const container = document.createElement('div');
     container.className = 'context-menu';

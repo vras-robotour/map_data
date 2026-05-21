@@ -104,6 +104,8 @@ def _apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                     for i, seg in enumerate(segments):
                         virtual_id = f"{w.id}:{i}"
                         seg.id = virtual_id
+                        if virtual_id in deleted_way_ids:
+                            continue
                         seg_del_nids = get_deleted_node_ids(store, virtual_id)
                         if seg_del_nids:
                             seg = rebuild_way_without_nodes(  # noqa: PLW2901
@@ -628,27 +630,32 @@ def delete_way(way_id: str) -> Response:
     if not filename:
         abort(400, "Missing 'file' query parameter")
 
-    original_way_id_str = str(way_id).split(":")[0]
+    way_id_str = str(way_id)
+    original_way_id_str = way_id_str.split(":")[0]
     try:
-        way_id_int = int(original_way_id_str)
+        int(original_way_id_str)
     except ValueError:
         abort(400, "Invalid way ID")
+
+    # Segments (virtual IDs like "123:0") are stored as strings so that only the
+    # specific segment is suppressed on reload, not the whole original way.
+    stored_id: int | str = way_id_str if ":" in way_id_str else int(original_way_id_str)
 
     body = request.get_json(force=True) or {}
     ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     migrate_change_log(store)
-    if way_id_int not in get_deleted_way_ids(store):
+    if stored_id not in get_deleted_way_ids(store):
         store.setdefault("deleted_ways", []).append(
             {
-                "id": way_id_int,
+                "id": stored_id,
                 "category": body.get("category", "unknown"),
                 "label": body.get("label", ""),
             },
         )
         cl = store.setdefault("change_log", [])
-        if not any(e.get("type") == "way" and e.get("id") == way_id_int for e in cl):
-            cl.append({"type": "way", "id": way_id_int, "ts": time.time()})
+        if not any(e.get("type") == "way" and e.get("id") == stored_id for e in cl):
+            cl.append({"type": "way", "id": stored_id, "ts": time.time()})
     save_annotations(ann_path, store)
     return Response("", 204)
 
@@ -942,19 +949,22 @@ def restore_way(way_id: str) -> Response:
     if not filename:
         abort(400, "Missing 'file' query parameter")
 
-    original_way_id_str = str(way_id).split(":")[0]
+    way_id_str = str(way_id)
+    original_way_id_str = way_id_str.split(":")[0]
     try:
-        way_id_int = int(original_way_id_str)
+        int(original_way_id_str)
     except ValueError:
         abort(400, "Invalid way ID")
+
+    stored_id: int | str = way_id_str if ":" in way_id_str else int(original_way_id_str)
 
     ann_path = str(_annotation_path(filename))
     store = load_annotations(ann_path)
     dw = store.get("deleted_ways", [])
-    store["deleted_ways"] = [d for d in dw if (d["id"] if isinstance(d, dict) else d) != way_id_int]
+    store["deleted_ways"] = [d for d in dw if (d["id"] if isinstance(d, dict) else d) != stored_id]
     cl = store.get("change_log", [])
     store["change_log"] = [
-        e for e in cl if not (e.get("type") == "way" and e.get("id") == way_id_int)
+        e for e in cl if not (e.get("type") == "way" and e.get("id") == stored_id)
     ]
     save_annotations(ann_path, store)
     return Response("", 204)
