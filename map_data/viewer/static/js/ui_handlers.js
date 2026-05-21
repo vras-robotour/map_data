@@ -380,9 +380,19 @@ async function loadNodesForEditing(feature, layer) {
             bubblingMouseEvents: false,
             renderer: L.svg(),
         });
-        marker.on('mousedown', e => _onOsmNodeDragDown(e, i));
+        const onNodeDown = e => _onOsmNodeDragDown(e, i);
+        marker.on('mousedown', onNodeDown);
         marker.on('add', () => { const el = marker.getElement(); if (el) el.style.cursor = 'grab'; });
         nodeLayer.addLayer(marker);
+
+        // Transparent larger hit target so small nodes are easier to grab
+        const hit = L.circleMarker([node.lat, node.lon], {
+            radius: 12, fillOpacity: 0, opacity: 0,
+            bubblingMouseEvents: false, renderer: L.svg(), interactive: true,
+        });
+        hit.on('mousedown', onNodeDown);
+        hit.on('add', () => { const el = hit.getElement(); if (el) el.style.cursor = 'grab'; });
+        nodeLayer.addLayer(hit);
         return marker;
     });
 
@@ -401,9 +411,19 @@ async function loadNodesForEditing(feature, layer) {
             bubblingMouseEvents: false,
             renderer: L.svg(),
         });
-        mp.on('mousedown', e => _onMidpointDragDown(e, i));
+        const onMpDown = e => _onMidpointDragDown(e, i);
+        mp.on('mousedown', onMpDown);
         mp.on('add', () => { const el = mp.getElement(); if (el) el.style.cursor = 'crosshair'; });
         nodeLayer.addLayer(mp);
+
+        // Transparent larger hit target for midpoints
+        const mpHit = L.circleMarker([mlat, mlon], {
+            radius: 10, fillOpacity: 0, opacity: 0,
+            bubblingMouseEvents: false, renderer: L.svg(), interactive: true,
+        });
+        mpHit.on('mousedown', onMpDown);
+        mpHit.on('add', () => { const el = mpHit.getElement(); if (el) el.style.cursor = 'crosshair'; });
+        nodeLayer.addLayer(mpHit);
         midpointMarkers.push(mp);
     }
 
@@ -918,6 +938,16 @@ async function undoNodeDeletion(wayId, nodeId) {
     }
 }
 
+async function undoNodeAddition(wayId, nodeId) {
+    if (!currentFile) return;
+    const res = await deleteNodeApi(currentFile, wayId, nodeId);
+    if (res.ok) {
+        changeLog = changeLog.filter(c => !(c.type === 'add_node' && c.way_id === wayId && c.node_id === nodeId));
+        await _reloadWay(wayId);
+        await refreshMetadata(currentFile);
+    }
+}
+
 async function undoWayNodeMoves(wayId) {
     if (!currentFile) return;
     // Pass original way ID to backend, but use virtual ID for local state
@@ -961,10 +991,11 @@ function renderAnnotationList() {
     const el = document.getElementById('ann-list');
     const count = document.getElementById('ann-count');
     if (!panel || !el || !count) return;
-    if (!annotations.length || currentAppMode === 'planner') { panel.style.display = 'none'; return; }
+    const addedNodeEntries = changeLog.filter(c => c.type === 'add_node');
+    if (!annotations.length && !addedNodeEntries.length || currentAppMode === 'planner') { panel.style.display = 'none'; return; }
     panel.style.display = '';
-    count.textContent = `(${annotations.length})`;
-    el.innerHTML = annotations.map(a => `
+    count.textContent = `(${annotations.length + addedNodeEntries.length})`;
+    const annHtml = annotations.map(a => `
     <div class="ann-item">
       <div>
         <span>${escHtml(a.type)}</span>
@@ -978,6 +1009,19 @@ function renderAnnotationList() {
       </div>
     </div>
   `).join('');
+    const nodeHtml = addedNodeEntries.map(d => {
+        const wayIdJson = JSON.stringify(d.way_id);
+        return `
+    <div class="ann-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
+      <div>
+        <span>add node to way</span>
+        <br><span class="ann-id">#${d.node_id} &rarr; #${d.way_id}</span>
+      </div>
+      <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
+              title="Undo node addition" onclick='event.stopPropagation(); undoNodeAddition(${wayIdJson}, ${d.node_id})'>&#8617;</button>
+    </div>`;
+    }).join('');
+    el.innerHTML = annHtml + nodeHtml;
 }
 
 async function deleteSelectedAnnotation() {

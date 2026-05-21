@@ -365,12 +365,21 @@ class PlannerMode {
 
       // Custom drag handling for CircleMarker
       let dragging = false;
-      marker.on('mousedown', (e) => {
+      const onWpDown = (e) => {
         L.DomEvent.stopPropagation(e);
         dragging = true;
         this.isDragging = true;
         map.dragging.disable();
-      });
+      };
+      marker.on('mousedown', onWpDown);
+
+      // Transparent larger hit target so waypoints are easier to grab
+      const wpHit = L.circleMarker([p.lat, p.lon], {
+        radius: 14, fillOpacity: 0, opacity: 0,
+        bubblingMouseEvents: false, interactive: true,
+      }).addTo(map);
+      wpHit.on('mousedown', onWpDown);
+      this.markerLayer.addLayer(wpHit);
 
       map.on('mousemove', (e) => {
         if (dragging) {
@@ -396,11 +405,13 @@ class PlannerMode {
       marker.on('mouseup', stopDrag);
 
       // Right click to delete
-      marker.on('contextmenu', (e) => {
+      const onWpContext = (e) => {
         L.DomEvent.preventDefault(e);
         L.DomEvent.stopPropagation(e);
         this.showContextMenu(p, e.latlng);
-      });
+      };
+      marker.on('contextmenu', onWpContext);
+      wpHit.on('contextmenu', onWpContext);
 
       this.markerLayer.addLayer(marker);
       p.marker = marker;

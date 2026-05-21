@@ -218,11 +218,13 @@ async function refreshMetadata(filename, { refreshAnnotations = false } = {}) {
         hiddenWayIds = new Set(hiddenWays.map(d => d.id));
 
         const rawChangeLog = (annData.change_log && annData.change_log.length > 0) ? annData.change_log : null;
+        const addedNodes = annData.added_nodes || [];
         if (rawChangeLog) {
             const wayMap = new Map(deletedWays.map(d => [d.id, d]));
             // Use string keys: server stores tag ids as strings, tagOverrides.id is a number (+sid)
             const tagMap = new Map(tagOverrides.map(d => [String(d.id), d]));
             const nodePosOverrides = annData.node_position_overrides || {};
+            const addedNodeMap = new Map(addedNodes.map(a => [a.id, a]));
             const sorted = [...rawChangeLog].sort((a, b) => (a.ts || 0) - (b.ts || 0));
             changeLog = sorted.flatMap(e => {
                 if (e.type === 'way') { const d = wayMap.get(e.id); return d ? [{ type: 'way', ts: e.ts, ...d }] : []; }
@@ -237,6 +239,9 @@ async function refreshMetadata(filename, { refreshAnnotations = false } = {}) {
                 if (e.type === 'split') {
                     return [{ type: 'split', ts: e.ts, way_id: e.way_id, node_id: e.node_id }];
                 }
+                if (e.type === 'add_node') {
+                    return addedNodeMap.has(e.node_id) ? [{ type: 'add_node', ts: e.ts, way_id: e.way_id, node_id: e.node_id }] : [];
+                }
                 return [];
             });
         } else {
@@ -247,12 +252,13 @@ async function refreshMetadata(filename, { refreshAnnotations = false } = {}) {
                 ...deletedNodes.map(d => ({ type: 'node', ...d })),
                 ...tagOverrides.map(d => ({ type: 'tag', ...d })),
                 ...splitItems,
+                ...addedNodes.map(a => ({ type: 'add_node', way_id: a.way_id, node_id: a.id })),
             ];
         }
         if (refreshAnnotations) {
             renderAnnotationLayer();
-            renderAnnotationList();
         }
+        renderAnnotationList();
         renderChangesPanel();
         renderHiddenPanel();
     } catch (err) {
@@ -368,10 +374,12 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         hiddenWays = _loadHiddenMeta;
         hiddenWayIds = _loadHiddenIds;
         const rawChangeLog = (annData.change_log && annData.change_log.length > 0) ? annData.change_log : null;
+        const addedNodes = annData.added_nodes || [];
         if (rawChangeLog) {
             const wayMap = new Map(deletedWays.map(d => [d.id, d]));
             const tagMap = new Map(tagOverrides.map(d => [String(d.id), d]));
             const nodePosOverrides = annData.node_position_overrides || {};
+            const addedNodeMap = new Map(addedNodes.map(a => [a.id, a]));
             const sorted = [...rawChangeLog].sort((a, b) => (a.ts || 0) - (b.ts || 0));
             changeLog = sorted.flatMap(e => {
                 if (e.type === 'way') { const d = wayMap.get(e.id); return d ? [{ type: 'way', ts: e.ts, ...d }] : []; }
@@ -386,6 +394,9 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
                 if (e.type === 'split') {
                     return [{ type: 'split', ts: e.ts, way_id: e.way_id, node_id: e.node_id }];
                 }
+                if (e.type === 'add_node') {
+                    return addedNodeMap.has(e.node_id) ? [{ type: 'add_node', ts: e.ts, way_id: e.way_id, node_id: e.node_id }] : [];
+                }
                 return [];
             });
         } else {
@@ -396,6 +407,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
                 ...deletedNodes.map(d => ({ type: 'node', ...d })),
                 ...tagOverrides.map(d => ({ type: 'tag', ...d })),
                 ...splitItems,
+                ...addedNodes.map(a => ({ type: 'add_node', way_id: a.way_id, node_id: a.id })),
             ];
         }
         renderAnnotationLayer();

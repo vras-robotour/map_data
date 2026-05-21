@@ -454,6 +454,25 @@ def get_way_nodes() -> Response:
             or way
         )
 
+    # Apply added nodes so synth nodes appear in way.nodes and split at them works
+    way = apply_added_nodes(way, store, zn, zl)
+
+    # Build effective nodes_cache including synthetic node positions
+    synth_nc: dict[int, dict[str, Any]] = {}
+    for a in store.get("added_nodes", []):
+        if a.get("way_id") == search_id:
+            pos_ov = (
+                store.get("node_position_overrides", {})
+                .get(str(search_id), {})
+                .get(str(a["id"]))
+            )
+            synth_nc[a["id"]] = {
+                "lat": float(pos_ov["lat"] if pos_ov else a["lat"]),
+                "lon": float(pos_ov["lon"] if pos_ov else a["lon"]),
+                "tags": {},
+            }
+    effective_nc = {**nodes_cache, **synth_nc}
+
     # Handle split segments if it's a virtual ID
     if ":" in str(way_id):
         try:
@@ -463,14 +482,14 @@ def get_way_nodes() -> Response:
 
         split_nids = get_split_node_ids(store, search_id)
         if split_nids:
-            segments = split_way(way, split_nids, zn, zl, nodes_cache)
+            segments = split_way(way, split_nids, zn, zl, effective_nc)
             if segment_idx < len(segments):
                 way = segments[segment_idx]
                 # Apply segment-specific deletions
                 seg_del_nids = get_deleted_node_ids(store, way_id)
                 if seg_del_nids:
                     way = rebuild_way_without_nodes(
-                        way, seg_del_nids, zn, zl, nodes_cache, category=category,
+                        way, seg_del_nids, zn, zl, effective_nc, category=category,
                     )
                     if way is None:
                         return jsonify({"way_id": way_id, "nodes": []})
@@ -481,9 +500,9 @@ def get_way_nodes() -> Response:
     geom_latlon = None
     for i, nid_obj in enumerate(way.nodes):
         nid = getattr(nid_obj, "id", nid_obj)
-        if nid in nodes_cache:
-            nd = nodes_cache[nid]
-            nodes.append({"id": nid, "lat": nd["lat"], "lon": nd["lon"], "tags": nd["tags"]})
+        if nid in effective_nc:
+            nd = effective_nc[nid]
+            nodes.append({"id": nid, "lat": nd["lat"], "lon": nd["lon"], "tags": nd.get("tags", {})})
         else:
             # Fallback to geometry
             if geom_latlon is None:
@@ -506,27 +525,6 @@ def get_way_nodes() -> Response:
             if n["id"] in pos_overrides:
                 n["lat"] = pos_overrides[n["id"]]["lat"]
                 n["lon"] = pos_overrides[n["id"]]["lon"]
-
-    # Insert any synthetic added nodes at the correct positions
-    added_for_way = [a for a in store.get("added_nodes", []) if a.get("way_id") == search_id]
-    if added_for_way:
-        pos_ov_raw = store.get("node_position_overrides", {}).get(str(search_id), {})
-        node_ids = [n["id"] for n in nodes]
-        offset = 0
-        for a in added_for_way:
-            synth_id = a["id"]
-            after_id = a["after_node_id"]
-            try:
-                idx = node_ids.index(after_id)
-            except ValueError:
-                continue
-            ov = pos_ov_raw.get(str(synth_id))
-            lat_n = float(ov["lat"] if ov else a["lat"])
-            lon_n = float(ov["lon"] if ov else a["lon"])
-            insert_pos = idx + 1 + offset
-            nodes.insert(insert_pos, {"id": synth_id, "lat": lat_n, "lon": lon_n, "tags": {}})
-            node_ids.insert(insert_pos, synth_id)
-            offset += 1
 
     return jsonify({"way_id": way_id, "nodes": nodes})
 
@@ -793,8 +791,27 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
             or original_way
         )
 
+    # Apply added nodes so split at synthetic IDs works
+    original_way = apply_added_nodes(original_way, store, zn, zl)
+
+    # Build effective nodes_cache including synthetic node positions
+    synth_nc: dict[int, dict[str, Any]] = {}
+    for a in store.get("added_nodes", []):
+        if a.get("way_id") == search_id:
+            pos_ov = (
+                store.get("node_position_overrides", {})
+                .get(str(search_id), {})
+                .get(str(a["id"]))
+            )
+            synth_nc[a["id"]] = {
+                "lat": float(pos_ov["lat"] if pos_ov else a["lat"]),
+                "lon": float(pos_ov["lon"] if pos_ov else a["lon"]),
+                "tags": {},
+            }
+    effective_nc = {**md.nodes_cache, **synth_nc}
+
     split_nids = get_split_node_ids(store, search_id)
-    segments = split_way(original_way, split_nids, zn, zl, md.nodes_cache)
+    segments = split_way(original_way, split_nids, zn, zl, effective_nc)
 
     features = []
     tag_overrides = store.get("tag_overrides", {})
@@ -807,7 +824,7 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
         seg_del_nids = get_deleted_node_ids(store, virtual_id)
         if seg_del_nids:
             seg = rebuild_way_without_nodes(  # noqa: PLW2901
-                seg, seg_del_nids, zn, zl, md.nodes_cache, category=category,
+                seg, seg_del_nids, zn, zl, effective_nc, category=category,
             )
             if seg is None:
                 continue
@@ -1029,6 +1046,13 @@ def add_way_node() -> Response:
         "lat": float(lat),
         "lon": float(lon),
     })
+    cl = store.setdefault("change_log", [])
+    cl.append({
+        "type": "add_node",
+        "way_id": way_id_int,
+        "node_id": synth_id,
+        "ts": time.time(),
+    })
     save_annotations(ann_path, store)
     return jsonify({"id": synth_id, "lat": float(lat), "lon": float(lon)})
 
@@ -1060,6 +1084,10 @@ def delete_way_node() -> Response:
         ]
         pos_ov = store.get("node_position_overrides", {}).get(str(way_id_int), {})
         pos_ov.pop(str(node_id), None)
+        store["change_log"] = [
+            e for e in store.get("change_log", [])
+            if not (e.get("type") == "add_node" and e.get("way_id") == way_id_int and e.get("node_id") == node_id)
+        ]
         save_annotations(ann_path, store)
         return Response("", 204)
 
