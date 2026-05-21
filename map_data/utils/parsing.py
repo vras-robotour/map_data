@@ -221,7 +221,13 @@ def separate_ways(
 
 
 def buffer_line(way: Way, width: float) -> Way:
-    way.line = way.line.buffer(width / 2)
+    line = way.line
+    # Closed roads/footways (e.g. roundabouts) are parsed as Polygon because first==last
+    # node. Buffering a Polygon fills its interior; convert to LineString first so the
+    # buffer produces an annular ring around the path instead.
+    if isinstance(line, geometry.Polygon) and way.tags.get("area") != "yes":
+        line = geometry.LineString(line.exterior.coords)
+    way.line = line.buffer(width / 2)
     way.is_area = True
     return way
 
