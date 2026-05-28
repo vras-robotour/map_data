@@ -420,6 +420,36 @@ def upload_gpx() -> Response:
             gpx_tmp_path.unlink()
 
 
+@bp.route("/api/upload_mapdata", methods=["POST"])
+def upload_mapdata() -> Response:
+    if "file" not in request.files:
+        abort(400, "No file part")
+    file = request.files["file"]
+    if not file.filename or not file.filename.lower().endswith(".mapdata"):
+        abort(400, "File must have a .mapdata extension")
+
+    data_dir = _get_data_dir()
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_name = Path(file.filename).name
+    dest = data_dir / safe_name
+    stem, suffix = dest.stem, dest.suffix
+    counter = 1
+    while dest.exists():
+        dest = data_dir / f"{stem}_{counter}{suffix}"
+        counter += 1
+
+    file.save(dest)
+
+    try:
+        MapData.load(str(dest))
+    except Exception:
+        dest.unlink(missing_ok=True)
+        abort(400, "Invalid .mapdata file")
+
+    return jsonify({"filename": dest.name})
+
+
 @bp.route("/api/way_nodes")
 def get_way_nodes() -> Response:
     filename = request.args.get("file")

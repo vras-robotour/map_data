@@ -1137,6 +1137,23 @@ function openAnnEditModal(annId) {
     new bootstrap.Modal(document.getElementById('ann-detail-modal')).show();
 }
 
+async function handleMapdataUpload(file) {
+    setStatus(`Uploading ${file.name}...`, 'text-info');
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const data = await uploadMapdataApi(formData);
+        const sel = document.getElementById('file-select');
+        if (sel && ![...sel.options].some(o => o.value === data.filename)) {
+            sel.appendChild(new Option(data.filename, data.filename));
+        }
+        if (sel) sel.value = data.filename;
+        await loadMapData(data.filename);
+    } catch (err) {
+        setStatus(`Upload failed: ${err.message}`, 'text-danger');
+    }
+}
+
 let pendingGpxFile = null;
 
 function handleGpxMapCreation(file) {

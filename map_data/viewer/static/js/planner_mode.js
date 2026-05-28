@@ -609,13 +609,20 @@ class PlannerMode {
       dropzone.classList.remove('active');
 
       const file = e.dataTransfer.files[0];
-      if (!file || !file.name.toLowerCase().endsWith('.gpx')) return;
+      if (!file) return;
+      const ext = file.name.toLowerCase().split('.').pop();
 
-      if (currentAppMode === 'planner') {
-        this.loadGpxFile(file);
-      } else {
-        if (typeof handleGpxMapCreation === 'function') {
-          handleGpxMapCreation(file);
+      if (ext === 'mapdata') {
+        if (typeof handleMapdataUpload === 'function') {
+          handleMapdataUpload(file);
+        }
+      } else if (ext === 'gpx') {
+        if (currentAppMode === 'planner') {
+          this.loadGpxFile(file);
+        } else {
+          if (typeof handleGpxMapCreation === 'function') {
+            handleGpxMapCreation(file);
+          }
         }
       }
     });

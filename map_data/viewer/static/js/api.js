@@ -174,3 +174,12 @@ async function uploadGpxApi(formData) {
     if (!res.ok) throw new Error(await res.text());
     return await res.json();
 }
+
+async function uploadMapdataApi(formData) {
+    const res = await fetch('/api/upload_mapdata', {
+        method: 'POST',
+        body: formData,
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return await res.json();
+}
