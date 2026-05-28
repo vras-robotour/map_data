@@ -295,24 +295,6 @@
   const ITEMS = [
     {
       type: 'improvement', sev: 'nice-to-have',
-      title: 'Expose more planning parameters in the viewer',
-      desc: 'The newly promoted parameters in <code>planner_defaults.yaml</code> (grid cost weight, obstacle radius, buffer widths) should be added to the viewer configuration UI to allow for easier experimentation without manual YAML edits.',
-      file: 'viewer'
-    },
-    {
-      type: 'improvement', sev: 'nice-to-have',
-      title: 'OSM grid margin',
-      desc: 'The OSM grid margin at parsing currently uses two variables. Replace them with a single <code>GRID_MARGIN</code> variable with a default in config file. Also make it changable in the viewer in Fetch and GPX parse dialogs.',
-      file: null
-    },
-    {
-      type: 'improvement', sev: 'nice-to-have',
-      title: 'Viewer File Loading',
-    desc: 'Allow for drag-and-drop loading of <code>.mapdata</code> files in the viewer, in addition to the existing file dialog. This would speed up testing of different files and be more intuitive for users. Also allow for droppning GPX/YAML files to trigger parsing. Check for file API support of YAML files.',
-      file: 'viewer'
-    },
-    {
-      type: 'improvement', sev: 'nice-to-have',
       title: 'Speed up planning hot paths with native extensions',
       desc: 'The main bottlenecks are the Python <code>_bresenham</code> generator and <code>_segment_cost</code> in RRT* (called O(max_iter × neighbors) times), and the <code>heapq</code> loop in <code>grid_astar</code>. Recommended approach: (1) try <code>@numba.njit</code> on these inner loops first — zero build overhead, easy to toggle; (2) replace <code>grid_astar</code> with <code>skimage.graph.route_through_array</code> which is C-backed; (3) Cython or pybind11 only if numba is unacceptable for deployment. Full C/C++ rewrite is not justified given that numpy, cKDTree, and Shapely/GEOS are already native.',
       file: 'map_data/pathsolver/rrt_star.py, map_data/pathsolver/grid_astar.py'
