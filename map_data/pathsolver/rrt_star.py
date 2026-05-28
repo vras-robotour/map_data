@@ -61,6 +61,7 @@ class RRTStar:
         step_size: float = 2.0,
         neighbor_radius: float = 5.0,
         traversability_threshold: float = 10.0,  # inf is blocked, high values are expensive
+        grid_cost_weight: float = GRID_COST_WEIGHT,
         *,
         simplify: bool = True,
         transfer_id: str | None = None,
@@ -133,6 +134,7 @@ class RRTStar:
         self._nodes_buf[0] = self.start
         self.goal_tolerance = step_size
         self.traversability_threshold = traversability_threshold
+        self.grid_cost_weight = grid_cost_weight
         self.simplify = simplify
         self.transfer_id = transfer_id
         self.improve_after_goal = improve_after_goal
@@ -365,8 +367,8 @@ class RRTStar:
 
         avg_c = total_grid_cost / count if count > 0 else 0.0
         # Cost = dist * (1 + avg_grid_cost * penalty)  # noqa: ERA001
-        # We use GRID_COST_WEIGHT to match A* logic
-        return False, np.linalg.norm(end - start) * (1.0 + avg_c * GRID_COST_WEIGHT)
+        # We use grid_cost_weight to match A* logic
+        return False, np.linalg.norm(end - start) * (1.0 + avg_c * self.grid_cost_weight)
 
     def find_path(self) -> np.ndarray | None:
         """

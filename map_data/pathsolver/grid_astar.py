@@ -20,6 +20,7 @@ def grid_astar(
     cs: float,
     *,
     simplify_path: bool = True,
+    grid_cost_weight: float = GRID_COST_WEIGHT,
 ) -> np.ndarray | None:
     """
     Optimized A* search on a 2D grid.
@@ -68,8 +69,8 @@ def grid_astar(
 
     # Pre-calculate costs and pad with infinity to avoid boundary checks
     # grid is assumed to be 0.0 near paths, 1.0 away from paths.
-    # Base traversal cost is 1.0 + grid_value * GRID_COST_WEIGHT
-    costs = 1.0 + grid * GRID_COST_WEIGHT
+    # Base traversal cost is 1.0 + grid_value * grid_cost_weight
+    costs = 1.0 + grid * grid_cost_weight
     padded_costs = np.full((ny + 2, nx + 2), np.inf, dtype=np.float32)
     padded_costs[1:-1, 1:-1] = costs
 
