@@ -72,6 +72,7 @@ def parse_osm_nodes(
     way_node_ids: set[int],
     obstacle_tags: dict[str, list[str]],
     not_obstacle_tags: dict[str, list[str]],
+    obstacle_radius: float | None = None,
 ) -> list[Way]:
     barriers = []
     for node in tqdm(osm_nodes_data.nodes, desc="Parse nodes"):
@@ -99,12 +100,13 @@ def parse_osm_nodes(
 
         if is_obstacle:
             easting, northing, _, _ = utm.from_latlon(float(node.lat), float(node.lon))
+            radius = obstacle_radius if obstacle_radius is not None else OBSTACLE_RADIUS
             barriers.append(
                 Way(
                     id=node.id,
                     is_area=True,
                     tags=dict(node.tags) if node.tags else {},
-                    line=geometry.Point(easting, northing).buffer(OBSTACLE_RADIUS),
+                    line=geometry.Point(easting, northing).buffer(radius),
                 ),
             )
     return barriers
@@ -204,18 +206,20 @@ def separate_ways(
     barrier_tags: dict[str, list[str]],
     not_barrier_tags: dict[str, list[str]],
     anti_barrier_tags: dict[str, list[str]],
+    buffer_widths: dict[str, float] | None = None,
 ) -> tuple[list[Way], list[Way], list[Way]]:
+    bw = buffer_widths if buffer_widths is not None else BUFFER_WIDTHS
     roads: list[Way] = []
     footways: list[Way] = []
     barriers: list[Way] = []
     for way in tqdm(ways.values(), desc="Separate ways"):
         if way.is_road():
-            roads.append(buffer_line(way, width=BUFFER_WIDTHS.get("road", 7)))
+            roads.append(buffer_line(way, width=bw.get("road", 7)))
         elif way.is_footway():
-            footways.append(buffer_line(way, width=BUFFER_WIDTHS.get("footway", 3)))
+            footways.append(buffer_line(way, width=bw.get("footway", 3)))
         elif way.is_barrier(barrier_tags, not_barrier_tags, anti_barrier_tags):
             if not way.is_area:
-                buffer_line(way, width=BUFFER_WIDTHS.get("barrier", 2))
+                buffer_line(way, width=bw.get("barrier", 2))
             barriers.append(way)
     return roads, footways, barriers
 
