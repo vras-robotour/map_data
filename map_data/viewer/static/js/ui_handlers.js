@@ -1160,6 +1160,15 @@ document.getElementById('gpx-upload-submit')?.addEventListener('click', async ()
     const formData = new FormData();
     formData.append('file', pendingGpxFile);
     formData.append('name', name);
+    formData.append('options', JSON.stringify({
+        grid_margin: parseFloat(document.getElementById('gpx-grid-margin')?.value) || 150,
+        obstacle_radius: parseFloat(document.getElementById('gpx-obstacle-radius')?.value) || 2.0,
+        buffer_widths: {
+            road: parseFloat(document.getElementById('gpx-buf-road')?.value) || 7.0,
+            footway: parseFloat(document.getElementById('gpx-buf-footway')?.value) || 3.0,
+            barrier: parseFloat(document.getElementById('gpx-buf-barrier')?.value) || 2.0,
+        },
+    }));
 
     try {
         const data = await uploadGpxApi(formData);

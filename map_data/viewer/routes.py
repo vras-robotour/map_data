@@ -306,6 +306,10 @@ def fetch_area() -> Response:
     if not name:
         abort(400, "name is empty after sanitizing")
 
+    grid_margin = body.get("grid_margin")
+    obstacle_radius = body.get("obstacle_radius")
+    buffer_widths = body.get("buffer_widths")
+
     data_dir = _get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
     out_path = data_dir / f"{name}.mapdata"
@@ -321,7 +325,13 @@ def fetch_area() -> Response:
     easting, northing, zone_number, zone_letter = utm.from_latlon(corners[:, 0], corners[:, 1])
     waypoints = np.column_stack([easting, northing])
 
-    md = MapData([waypoints, zone_number, zone_letter], coords_type="array")
+    md = MapData(
+        [waypoints, zone_number, zone_letter],
+        coords_type="array",
+        grid_margin=grid_margin,
+        obstacle_radius=obstacle_radius,
+        buffer_widths=buffer_widths,
+    )
     md.run_queries()
     if any(d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)):
         abort(503, "Overpass API unavailable — try again later")
@@ -358,6 +368,12 @@ def upload_gpx() -> Response:
     if not name:
         abort(400, "name is empty after sanitizing")
 
+    import json as _json
+    _parse_opts = _json.loads(request.form.get("options", "{}"))
+    grid_margin = _parse_opts.get("grid_margin")
+    obstacle_radius = _parse_opts.get("obstacle_radius")
+    buffer_widths = _parse_opts.get("buffer_widths")
+
     data_dir = _get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -367,7 +383,13 @@ def upload_gpx() -> Response:
         gpx_tmp_path = Path(tmp.name)
 
     try:
-        md = MapData(str(gpx_tmp_path), coords_type="file")
+        md = MapData(
+            str(gpx_tmp_path),
+            coords_type="file",
+            grid_margin=grid_margin,
+            obstacle_radius=obstacle_radius,
+            buffer_widths=buffer_widths,
+        )
         # Restore the original filename for metadata purposes
         md.coords_file = file.filename
 
@@ -1569,6 +1591,7 @@ def create_replan() -> Response:
     inflate_obstacles = body.get("inflate_obstacles", 0.25)
     simplify_path = body.get("simplify_path", True)
     smooth_path = body.get("smooth_path", False)
+    grid_cost_weight = body.get("grid_cost_weight")
 
     if not path_data or not filename:
         abort(400, "Missing points or file parameter")
@@ -1613,7 +1636,7 @@ def create_replan() -> Response:
         filtered_barriers = [w for w in md.barriers_list if w.line and w.line.intersects(bbox)]
 
         obstacles = ways_to_shapely(filtered_barriers)
-        replanner = ReplanPath(args, obstacles, transfer_id=transfer_id)
+        replanner = ReplanPath(args, obstacles, transfer_id=transfer_id, grid_cost_weight=grid_cost_weight)
         if highway_costs:
             try:
                 replanner.HIGHWAY_COSTS = highway_costs

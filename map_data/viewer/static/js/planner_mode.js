@@ -39,8 +39,28 @@ class PlannerMode {
       // Update UI fields if they exist
       if (data.cell_size) document.getElementById('planner-cell-size').value = data.cell_size;
       if (data.inflate_obstacles) document.getElementById('planner-inflate').value = data.inflate_obstacles;
+      if (data.grid_cost_weight) document.getElementById('planner-grid-cost-weight').value = data.grid_cost_weight;
       if (data.simplify_path !== undefined) document.getElementById('planner-simplify').checked = data.simplify_path;
       if (data.smooth_path !== undefined) document.getElementById('planner-smooth').checked = data.smooth_path;
+
+      // Populate advanced fields in all fetch/GPX modals with defaults
+      const gridMarginDefault = data.grid_margin ?? 150;
+      const obstacleRadiusDefault = data.obstacle_radius ?? 2.0;
+      const bwRoad = data.buffer_widths?.road ?? 7.0;
+      const bwFootway = data.buffer_widths?.footway ?? 3.0;
+      const bwBarrier = data.buffer_widths?.barrier ?? 2.0;
+      for (const prefix of ['fetch', 'gpx', 'planner-fetch']) {
+        const gm = document.getElementById(`${prefix}-grid-margin`);
+        const or = document.getElementById(`${prefix}-obstacle-radius`);
+        const br = document.getElementById(`${prefix}-buf-road`);
+        const bf = document.getElementById(`${prefix}-buf-footway`);
+        const bb = document.getElementById(`${prefix}-buf-barrier`);
+        if (gm) gm.value = gridMarginDefault;
+        if (or) or.value = obstacleRadiusDefault;
+        if (br) br.value = bwRoad;
+        if (bf) bf.value = bwFootway;
+        if (bb) bb.value = bwBarrier;
+      }
       
     } catch (err) {
       console.error('Failed to fetch planner defaults:', err);
@@ -117,13 +137,20 @@ class PlannerMode {
     });
 
     // Add a small margin (approx 50m in degrees)
-    const margin = 0.0005; 
+    const margin = 0.0005;
     const bbox = {
       min_lat: minLat - margin,
       max_lat: maxLat + margin,
       min_lon: minLon - margin,
       max_lon: maxLon + margin,
-      name: name
+      name: name,
+      grid_margin: parseFloat(document.getElementById('planner-fetch-grid-margin')?.value) || 150,
+      obstacle_radius: parseFloat(document.getElementById('planner-fetch-obstacle-radius')?.value) || 2.0,
+      buffer_widths: {
+        road: parseFloat(document.getElementById('planner-fetch-buf-road')?.value) || 7.0,
+        footway: parseFloat(document.getElementById('planner-fetch-buf-footway')?.value) || 3.0,
+        barrier: parseFloat(document.getElementById('planner-fetch-buf-barrier')?.value) || 2.0,
+      },
     };
 
     setStatus('Fetching & parsing OSM data for the area...', 'text-warning');
@@ -626,6 +653,7 @@ class PlannerMode {
     const subAlgorithm = document.getElementById('sub-algorithm-select').value;
     const cellSize = parseFloat(document.getElementById('planner-cell-size').value) || 0.25;
     const inflate = parseFloat(document.getElementById('planner-inflate').value) || 0.25;
+    const gridCostWeight = parseFloat(document.getElementById('planner-grid-cost-weight').value) || 5.0;
     const simplify = document.getElementById('planner-simplify').checked;
     const smooth = document.getElementById('planner-smooth').checked;
 
@@ -642,6 +670,7 @@ class PlannerMode {
           sub_algorithm: subAlgorithm,
           cell_size: cellSize,
           inflate_obstacles: inflate,
+          grid_cost_weight: gridCostWeight,
           simplify_path: simplify,
           smooth_path: smooth,
           highway_costs: this.highwayCosts,

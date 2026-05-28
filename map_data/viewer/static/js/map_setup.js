@@ -153,7 +153,17 @@ async function initApp() {
         setStatus('Fetching & parsing OSM data… (may take 1–2 min)', 'text-warning');
 
         try {
-            const data = await fetchAreaApi({ ...pendingBbox, name });
+            const data = await fetchAreaApi({
+                ...pendingBbox,
+                name,
+                grid_margin: parseFloat(document.getElementById('fetch-grid-margin')?.value) || 150,
+                obstacle_radius: parseFloat(document.getElementById('fetch-obstacle-radius')?.value) || 2.0,
+                buffer_widths: {
+                    road: parseFloat(document.getElementById('fetch-buf-road')?.value) || 7.0,
+                    footway: parseFloat(document.getElementById('fetch-buf-footway')?.value) || 3.0,
+                    barrier: parseFloat(document.getElementById('fetch-buf-barrier')?.value) || 2.0,
+                },
+            });
             setStatus(
                 `Fetched: ${data.roads} roads, ${data.footways} footways, ${data.barriers} barriers`,
                 'text-success'
