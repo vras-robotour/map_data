@@ -342,18 +342,6 @@
       file: 'map_data/pathsolver/visualizer.py:59–60'
     },
     {
-      type: 'improvement', sev: 'minor',
-      title: 'Implement Informed RRT* for faster convergence',
-      desc: 'Once an initial path is found, RRT* can restrict sampling to an ellipsoidal subset of the state space defined by the current best cost. This significantly accelerates the optimization phase and improves the quality of the final path.',
-      file: 'map_data/pathsolver/rrt_star.py'
-    },
-    {
-      type: 'improvement', sev: 'minor',
-      title: 'Adaptive neighbor radius for RRT*',
-      desc: 'Using a fixed <code>neighbor_radius</code> is sub-optimal as the tree grows. Implementing a radius that shrinks as a function of the number of nodes (log n / n) ensures asymptotic optimality while maintaining a manageable number of rewiring checks.',
-      file: 'map_data/pathsolver/rrt_star.py'
-    },
-    {
       type: 'improvement', sev: 'nice-to-have',
       title: 'Map validation and linting CLI tool',
       desc: 'Create a tool to validate <code>.mapdata</code> files for common structural issues: disconnected footway segments, overlapping barriers that might break planners, or missing metadata. This would help debug parsing errors before they reach the simulator or robot.',
