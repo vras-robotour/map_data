@@ -292,6 +292,50 @@ def delete_annotation(ann_id: str) -> Response:
     return "", 204
 
 
+_fetch_tasks: dict[str, dict[str, Any]] = {}
+
+
+def _run_fetch_task(
+    task_id: str,
+    waypoints: Any,
+    zone_number: Any,
+    zone_letter: Any,
+    out_path: Path,
+    grid_margin: Any,
+    obstacle_radius: Any,
+    buffer_widths: Any,
+) -> None:
+    try:
+        md = MapData(
+            [waypoints, zone_number, zone_letter],
+            coords_type="array",
+            grid_margin=grid_margin,
+            obstacle_radius=obstacle_radius,
+            buffer_widths=buffer_widths,
+        )
+        md.run_queries()
+        if any(d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)):
+            _fetch_tasks[task_id] = {"status": "failed", "error": "Overpass API unavailable — try again later"}
+            return
+        if md.run_parse() != 0:
+            _fetch_tasks[task_id] = {"status": "failed", "error": "Parsing failed"}
+            return
+        md.save(out_path)
+        _fetch_tasks[task_id] = {
+            "status": "done",
+            "result": {
+                "filename": out_path.name,
+                "roads": len(md.roads_list),
+                "footways": len(md.footways_list),
+                "barriers": len(md.barriers_list),
+                "crossroads": len(md.crossroads_list),
+            },
+        }
+    except Exception:
+        logger.exception("fetch task %s failed", task_id)
+        _fetch_tasks[task_id] = {"status": "failed", "error": "Internal server error"}
+
+
 @bp.route("/api/fetch_area", methods=["POST"])
 def fetch_area() -> Response:
     body = request.get_json(force=True) or {}
@@ -325,31 +369,24 @@ def fetch_area() -> Response:
     easting, northing, zone_number, zone_letter = utm.from_latlon(corners[:, 0], corners[:, 1])
     waypoints = np.column_stack([easting, northing])
 
-    md = MapData(
-        [waypoints, zone_number, zone_letter],
-        coords_type="array",
-        grid_margin=grid_margin,
-        obstacle_radius=obstacle_radius,
-        buffer_widths=buffer_widths,
-    )
-    md.run_queries()
-    if any(d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)):
-        abort(503, "Overpass API unavailable — try again later")
+    task_id = str(uuid.uuid4())
+    _fetch_tasks[task_id] = {"status": "pending"}
+    threading.Thread(
+        target=_run_fetch_task,
+        args=(task_id, waypoints, zone_number, zone_letter, out_path, grid_margin, obstacle_radius, buffer_widths),
+        daemon=True,
+    ).start()
+    return jsonify({"task_id": task_id})
 
-    if md.run_parse() != 0:
-        abort(500, "Parsing failed")
 
-    md.save(out_path)
-
-    return jsonify(
-        {
-            "filename": f"{name}.mapdata",
-            "roads": len(md.roads_list),
-            "footways": len(md.footways_list),
-            "barriers": len(md.barriers_list),
-            "crossroads": len(md.crossroads_list),
-        },
-    )
+@bp.route("/api/fetch_area/<task_id>", methods=["GET"])
+def fetch_area_status(task_id: str) -> Response:
+    task = _fetch_tasks.get(task_id)
+    if task is None:
+        abort(404, "Unknown task ID")
+    if task["status"] in ("done", "failed"):
+        _fetch_tasks.pop(task_id, None)
+    return jsonify(task)
 
 
 @bp.route("/api/upload_gpx", methods=["POST"])

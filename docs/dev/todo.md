@@ -348,12 +348,6 @@
       file: 'map_data/pathsolver/visualizer.py:59–60'
     },
     {
-      type: 'bug', sev: 'important',
-      title: 'Blocking time.sleep calls in OverpassClient backoff',
-      desc: 'The <code>_wait_for_slot</code> and <code>query_raw</code> methods use <code>time.sleep()</code> for rate-limit backoff. When running inside the Flask/SocketIO viewer, this blocks the execution thread, potentially causing UI hangs or websocket timeouts during heavy OSM data fetches.',
-      file: 'map_data/utils/overpass.py:46,55,77,81'
-    },
-    {
       type: 'improvement', sev: 'minor',
       title: 'Implement Informed RRT* for faster convergence',
       desc: 'Once an initial path is found, RRT* can restrict sampling to an ellipsoidal subset of the state space defined by the current best cost. This significantly accelerates the optimization phase and improves the quality of the final path.',

@@ -67,6 +67,7 @@
 - Interactive viewer: tag change-log entries silently disappeared from the changes panel after any metadata refresh (`refreshMetadata` / `loadMapData`) because `tagMap` used numeric keys while the server's `change_log` stores tag ids as strings; both call-sites now normalise to string keys
 - Interactive viewer: duplicate `click` listeners on `way-edit-save` and `way-edit-add-prop-btn` caused double row insertion and double API calls on each action
 - Interactive viewer: planner `mousemove`/`mouseup` handlers accumulated on the map with each `redraw()` call; handlers are now tracked in `_mapDragListeners` and removed via `map.off()` before each redraw
+- Interactive viewer: `fetch_area` and OSM data parsing now run in a background thread; the route returns a task ID immediately and the client polls `/api/fetch_area/<task_id>` for completion, preventing UI hangs and WebSocket timeouts during long Overpass fetches
 - Annotation deletion via the Del key in the viewer
 - Path traversal vulnerability in viewer API: user-supplied `file` parameter is now validated against the resolved data directory before any file access
 - `/api/fetch_area` now rejects requests where `min_lat >= max_lat` or `min_lon >= max_lon`

@@ -163,7 +163,15 @@ async function fetchAreaApi(params) {
         body: JSON.stringify(params),
     });
     if (!res.ok) throw new Error(await res.text());
-    return await res.json();
+    const { task_id } = await res.json();
+    while (true) {
+        await new Promise(r => setTimeout(r, 1500));
+        const poll = await fetch(`/api/fetch_area/${task_id}`);
+        if (!poll.ok) throw new Error(await poll.text());
+        const task = await poll.json();
+        if (task.status === 'done') return task.result;
+        if (task.status === 'failed') throw new Error(task.error || 'Fetch failed');
+    }
 }
 
 async function uploadGpxApi(formData) {
