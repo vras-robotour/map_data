@@ -334,7 +334,7 @@ This page describes the internal structure of the `map_data` package. The system
 - relations query — multipolygon relations that reference the above ways
 - nodes query — all standalone point features (obstacle nodes)
 
-The bounding box is the convex hull of the input waypoints expanded by `osm_margin + reserve_margin` metres on all sides (defaults: 100 m + 50 m).
+The bounding box is the convex hull of the input waypoints expanded by `grid_margin` metres on all sides (default: 150 m); `grid_margin` is a per-call override accepted by `MapData.__init__`, `parse_osm_nodes`, and `separate_ways`.
 
 **Core attributes after parsing:**
 
@@ -395,7 +395,7 @@ Orchestrates cost-grid planning. Grid construction, smoothing, and visualization
 |--------|-----------------|----------------|
 | `pathsolver/grid_constructor.py` | `PathGrid` | Builds the cost raster at `cell_size` metre resolution; assigns per-cell costs from highway type, surface, and barrier geometry |
 | `pathsolver/grid_astar.py` | `grid_astar` | Fast, optimal A* search on the discrete grid |
-| `pathsolver/rrt_star.py` | `RRTStar` | Sampling-based planner; produces smoother paths in cluttered environments |
+| `pathsolver/rrt_star.py` | `RRTStar` | Sampling-based planner; supports Informed RRT* (ellipsoidal sampling after first path found) and adaptive neighbor radius (`γ·√(log n/n)`) for asymptotic optimality |
 | `pathsolver/smoothing.py` | `smooth_path` | Gradient-descent path smoothing with optional collision checking |
 | `pathsolver/visualizer.py` | `visualize_replan` | Matplotlib debug visualization of the grid, obstacles, and planned path |
 
@@ -411,12 +411,24 @@ Key parameters now exposed in `planner_defaults.yaml`: `grid_cost_weight`, `obst
 
 ## Viewer
 
-The viewer (`map_data/viewer/`) is a single-page web application consisting of:
+The viewer (`map_data/viewer/`) is a single-page web application with three switchable modes.
 
-- **Flask back-end** (`app.py`, `routes.py`) — serves GeoJSON representations of the `MapData` contents, handles annotation CRUD operations, and exposes a `/export` endpoint that writes a human-readable JSON export of the annotated map
-- **Leaflet front-end** — renders roads, footways, and barriers as coloured polygons on an OpenStreetMap tile layer; provides drawing tools for obstacle annotations and path annotations
+**Back-end** (`app.py`, `routes.py`, `helpers.py`, `cache.py`):
 
-**Sidecar annotation files.** All viewer edits are persisted alongside the `.mapdata` file as `<stem>.annotations.json`. This design keeps the binary/JSON map data immutable while allowing iterative annotation without re-running the Overpass query. The viewer merges the sidecar at load time to produce the rendered view.
+- Serves GeoJSON representations of the `MapData` contents and handles annotation CRUD
+- `/api/fetch_area` runs Overpass queries in a background thread and returns a task ID immediately; the client polls `/api/fetch_area/<task_id>` for completion, preventing UI hangs on long fetches
+- `/export` writes a human-readable JSON snapshot of the annotated map
+- `cache.py` manages the OSM response cache sidecar
+
+**Front-end modes** (Leaflet + Bootstrap, `static/js/`):
+
+| Mode | Entry point | Purpose |
+|------|------------|---------|
+| Viewer | `ui_handlers.js`, `layers.js` | Inspect, edit, annotate, and search OSM features |
+| Planner | `planner_mode.js` | Place waypoints, trigger replanning, download GPX (track or waypoint format) |
+| Tracker | `tracker_mode.js` | Live robot position overlaid on the map via WebSocket / ROS2 |
+
+**Sidecar annotation files.** All viewer edits are persisted alongside the `.mapdata` file as `<stem>.annotations.json`. This design keeps the map data immutable while allowing iterative annotation without re-running the Overpass query. The viewer merges the sidecar at load time to produce the rendered view.
 
 ---
 
@@ -439,3 +451,80 @@ A typical session follows this sequence:
 3. **Annotate** — use the viewer drawing tools to mark obstacles, draw alternative path segments, delete or hide erroneous ways, adjust node positions, and override OSM tags. Changes are saved automatically to `<name>.annotations.json`.
 4. **Export** — click the Export button to produce `<name>.exported.mapdata`, a human-readable JSON snapshot of the annotated map suitable for downstream processing.
 5. **Plan path** — instantiate `GraphPlanner` or `ReplanPath` with the loaded `MapData` object and call `plan()` with the desired waypoints.
+
+---
+
+## Project structure
+
+```
+map_data/                          # repository root
+├── map_data/                      # Python package
+│   ├── __init__.py                # package version
+│   ├── map_data.py                # MapData — central data class
+│   ├── info.py                    # map_data_info CLI tool
+│   ├── create_mapdata.py          # ROS2 node / CLI: parse & save
+│   ├── osm_cloud.py               # ROS2 node: PointCloud2 publisher
+│   ├── pathsolver/
+│   │   ├── astar.py               # graph A* primitives
+│   │   ├── graph_planner.py       # GraphPlanner (on-network A*)
+│   │   ├── grid_constructor.py    # PathGrid — cost raster builder
+│   │   ├── grid_astar.py          # grid A* search
+│   │   ├── replan.py              # ReplanPath orchestrator
+│   │   ├── rrt_star.py            # RRTStar (Informed + adaptive radius)
+│   │   ├── smoothing.py           # gradient-descent path smoother
+│   │   └── visualizer.py          # Matplotlib debug visualizer
+│   ├── utils/
+│   │   ├── config.py              # YAML loading + setup_logging()
+│   │   ├── gpx.py                 # GPX / YAML waypoint parsing
+│   │   ├── overpass.py            # Overpass API client
+│   │   ├── parsing.py             # OSM feature classification & buffering
+│   │   ├── serialization.py       # .mapdata JSON read / write
+│   │   ├── way.py                 # Way dataclass
+│   │   └── points_to_graph_points.py
+│   └── viewer/
+│       ├── app.py                 # Flask app factory + SocketIO
+│       ├── routes.py              # REST API endpoints
+│       ├── helpers.py             # GeoJSON conversion helpers
+│       ├── cache.py               # OSM response cache
+│       ├── ros_node.py            # TrackerNode (optional ROS2)
+│       ├── templates/
+│       │   └── index.html         # single-page app shell
+│       └── static/
+│           ├── css/style.css
+│           └── js/
+│               ├── api.js         # fetch wrappers for all REST calls
+│               ├── draw_handlers.js  # Leaflet.Draw event handlers
+│               ├── layers.js      # layer management & feature search
+│               ├── map_setup.js   # Leaflet map init & mode switching
+│               ├── planner_mode.js   # Planner mode (waypoints, replan, GPX)
+│               ├── state.js       # shared mutable state
+│               ├── tracker_mode.js   # Tracker mode (live robot position)
+│               ├── ui_handlers.js    # sidebar & edit panel handlers
+│               └── utils.js       # shared helpers
+├── config/                        # YAML configuration
+│   ├── planner_defaults.yaml      # planner cost & buffer defaults
+│   ├── osm_grid.yaml              # osm_cloud grid parameters
+│   └── helhest.yaml               # robot-specific parameter overrides
+├── data/                          # default location for .mapdata files
+├── docs/                          # MkDocs documentation source
+├── launch/                        # ROS2 launch files
+├── parameters/                    # ROS2 parameter files
+├── resource/                      # ROS2 ament resource marker
+├── tests/                         # pytest test suite
+│   ├── test_astar.py
+│   ├── test_core.py
+│   ├── test_errors.py
+│   ├── test_fill_grid.py
+│   ├── test_graph_planner.py
+│   ├── test_integration.py
+│   ├── test_overpass.py
+│   ├── test_parsing.py
+│   ├── test_rrt.py
+│   ├── test_smoothing.py
+│   ├── test_viewer_helpers.py
+│   └── test_viewer_routes.py
+├── pyproject.toml                 # build metadata, ruff config
+├── package.xml                    # ROS2 package manifest
+├── setup.py / setup.cfg           # ROS2 ament_python build shims
+└── mkdocs.yml                     # documentation site config
+```

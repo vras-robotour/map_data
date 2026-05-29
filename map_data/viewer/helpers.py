@@ -550,6 +550,76 @@ def geojson_geom_to_utm(
     return None
 
 
+def apply_added_nodes(
+    way: "Way",
+    store: dict[str, Any],
+    zone_number: int,
+    zone_letter: str,
+) -> "Way":
+    """Return a copy of way with synthetic added nodes inserted into nodes list and geometry."""
+    original_id = int(str(way.id).split(":")[0])
+    added_for_way = [a for a in store.get("added_nodes", []) if a.get("way_id") == original_id]
+    if not added_for_way:
+        return way
+
+    pos_ov_raw = store.get("node_position_overrides", {}).get(str(original_id), {})
+
+    w = copy.copy(way)
+    w.nodes = [getattr(n, "id", n) for n in way.nodes]
+    node_ids: list = w.nodes  # mutable reference
+
+    geom = way.line
+    is_linestring = geom.geom_type == "LineString"
+    is_polygon = geom.geom_type == "Polygon"
+    if not is_linestring and not is_polygon:
+        return way
+
+    # For Polygon (buffered) ways the exterior ring is the buffer outline, not the
+    # centerline.  Inserting a centerline coord there would create a spike and corrupt
+    # the buffer shape, so geometry is left unchanged; only way.nodes is updated.
+    coords = list(geom.coords) if is_linestring else None
+
+    offset = 0
+    for a in added_for_way:
+        synth_id = a["id"]
+        after_id = a["after_node_id"]
+
+        try:
+            idx = node_ids.index(after_id)
+        except ValueError:
+            continue  # after_node_id was deleted or not found; skip
+
+        insert_pos = idx + 1 + offset
+        node_ids.insert(insert_pos, synth_id)
+
+        if coords is not None:
+            ov = pos_ov_raw.get(str(synth_id))
+            lat = float(ov["lat"] if ov else a["lat"])
+            lon = float(ov["lon"] if ov else a["lon"])
+            e, n_utm, _, _ = utm.from_latlon(
+                lat, lon, force_zone_number=zone_number, force_zone_letter=zone_letter,
+            )
+            # For closed LineStrings the last coord repeats the first — insert before it.
+            _is_closed = len(node_ids) >= 2 and node_ids[0] == node_ids[-1]
+            coord_limit = len(coords) - 1 if _is_closed and len(coords) > 1 else len(coords)
+            coord_pos = min(insert_pos, coord_limit)
+            coords.insert(coord_pos, (e, n_utm))
+
+        offset += 1
+
+    if offset == 0:
+        return way
+
+    w.nodes = node_ids
+    if coords is not None:
+        try:
+            w.line = _LineString(coords)
+        except (ValueError, TypeError):
+            return way
+
+    return w
+
+
 def rebuild_way_without_nodes(
     way: "Way",
     del_nids: set[int] | list[int],

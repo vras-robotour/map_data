@@ -6,6 +6,7 @@ space with obstacle avoidance and cost-aware steering.
 """
 
 import logging
+import math
 import random
 from collections.abc import Iterator
 
@@ -61,10 +62,13 @@ class RRTStar:
         step_size: float = 2.0,
         neighbor_radius: float = 5.0,
         traversability_threshold: float = 10.0,  # inf is blocked, high values are expensive
+        grid_cost_weight: float = GRID_COST_WEIGHT,
         *,
         simplify: bool = True,
         transfer_id: str | None = None,
         improve_after_goal: bool = False,
+        informed: bool = True,
+        adaptive_radius: bool = True,
     ) -> None:
         """
         Initialize the RRT* planner.
@@ -133,9 +137,13 @@ class RRTStar:
         self._nodes_buf[0] = self.start
         self.goal_tolerance = step_size
         self.traversability_threshold = traversability_threshold
+        self.grid_cost_weight = grid_cost_weight
         self.simplify = simplify
         self.transfer_id = transfer_id
         self.improve_after_goal = improve_after_goal
+        self.informed = informed
+        self.adaptive_radius = adaptive_radius
+        self._best_cost: float = float("inf")
         self._kdtree: cKDTree | None = None
         self._kdtree_n: int = 0
 
@@ -150,6 +158,18 @@ class RRTStar:
         grid_max_y = self.low[1] + self.grid_shape[0] * grid_scale
         self._sample_min = np.maximum(self._sample_min, self.low)
         self._sample_max = np.minimum(self._sample_max, [grid_max_x, grid_max_y])
+
+        # Informed RRT*: precompute ellipse geometry
+        d = self.goal - self.start
+        self._c_min: float = float(np.linalg.norm(d))
+        self._ellipse_center: np.ndarray = (self.start + self.goal) / 2.0
+        theta = math.atan2(float(d[1]), float(d[0]))
+        ct, st = math.cos(theta), math.sin(theta)
+        self._C_be: np.ndarray = np.array([[ct, -st], [st, ct]])
+
+        # Adaptive radius: gamma* for 2-D from the asymptotic optimality formula
+        sample_area = float(np.prod(self._sample_max - self._sample_min))
+        self._gamma: float = 2.449 * math.sqrt(max(sample_area, 1.0) / math.pi)
 
         # Precompute traversable cells for faster sampling
         _xi_lo = max(0, int((self._sample_min[0] - self.low[0]) / grid_scale))
@@ -246,10 +266,32 @@ class RRTStar:
         iy = np.clip(iy, 0, self.grid_shape[0] - 1)
         return float(self.grid[iy, ix])
 
+    def _sample_informed(self) -> np.ndarray:
+        """
+        Sample uniformly from the informed ellipse defined by the current best cost.
+
+        The ellipse contains all points ``x`` where
+        ``d(start, x) + d(x, goal) ≤ c_best``.  Uniform area sampling uses
+        the polar parameterisation with ``r = √U``.
+        """
+        a = self._best_cost / 2.0
+        b = math.sqrt(max(self._best_cost ** 2 - self._c_min ** 2, 0.0)) / 2.0
+        angle = random.uniform(0.0, 2.0 * math.pi)
+        r = math.sqrt(random.random())
+        x_e = np.array([a * r * math.cos(angle), b * r * math.sin(angle)])
+        point = self._ellipse_center + self._C_be @ x_e
+        return np.clip(point, self._sample_min, self._sample_max)
+
     def _sample_point(self) -> np.ndarray:
         """
-        Sample a random point, biased toward traversable grid cells (90 % of the time).
+        Sample a random point.
+
+        When a solution exists and *informed* is enabled, samples uniformly
+        from the informed ellipse.  Otherwise biases toward traversable grid
+        cells 90 % of the time.
         """
+        if self.informed and self._best_cost < float("inf"):
+            return self._sample_informed()
         if self._trav_xs is not None and random.random() > GOAL_SAMPLE_BIAS:
             idx = random.randrange(len(self._trav_xs))
             return np.array(
@@ -299,13 +341,16 @@ class RRTStar:
             return target
         return start + (direction / dist) * self.step_size
 
-    def _get_near_nodes(self, new_point: np.ndarray) -> list[int]:
+    def _get_near_nodes(self, new_point: np.ndarray, radius: float | None = None) -> list[int]:
         """
-        Return indices of all tree nodes within *neighbor_radius* of *new_point*.
+        Return indices of all tree nodes within *radius* of *new_point*.
+
+        *radius* defaults to ``self.neighbor_radius`` when not supplied.
         """
+        r = radius if radius is not None else self.neighbor_radius
         n = len(self.nodes)
         new_idx = n - 1  # node just appended by the caller
-        r2 = self.neighbor_radius**2
+        r2 = r ** 2
 
         if self._kdtree is None:
             sq_dists = ((self._nodes_buf[:n] - new_point) ** 2).sum(axis=1)
@@ -313,7 +358,7 @@ class RRTStar:
 
         # KD-tree covers [0, _kdtree_n); _nearest_node always rebuilds first so
         # new_point is never included in the tree.
-        result: list[int] = list(self._kdtree.query_ball_point(new_point, self.neighbor_radius))
+        result: list[int] = list(self._kdtree.query_ball_point(new_point, r))
 
         # Linear scan over nodes added since the last rebuild, excluding new_point itself
         for i in range(self._kdtree_n, n):
@@ -365,8 +410,8 @@ class RRTStar:
 
         avg_c = total_grid_cost / count if count > 0 else 0.0
         # Cost = dist * (1 + avg_grid_cost * penalty)  # noqa: ERA001
-        # We use GRID_COST_WEIGHT to match A* logic
-        return False, np.linalg.norm(end - start) * (1.0 + avg_c * GRID_COST_WEIGHT)
+        # We use grid_cost_weight to match A* logic
+        return False, np.linalg.norm(end - start) * (1.0 + avg_c * self.grid_cost_weight)
 
     def find_path(self) -> np.ndarray | None:
         """
@@ -410,7 +455,12 @@ class RRTStar:
             min_cost = self.cost[nearest_idx] + nearest_seg_cost
             min_parent = nearest_idx
 
-            near_indices = self._get_near_nodes(new_point)
+            if self.adaptive_radius:
+                n_eff = max(new_idx, int(math.e) + 1)
+                r = min(self._gamma * math.sqrt(math.log(n_eff) / n_eff), self.neighbor_radius)
+            else:
+                r = self.neighbor_radius
+            near_indices = self._get_near_nodes(new_point, r)
             for idx in near_indices:
                 # Reuse already-computed cost for the nearest node
                 if idx == nearest_idx:
@@ -448,6 +498,7 @@ class RRTStar:
                     if new_goal_cost < self.cost.get(goal_idx, float("inf")):
                         self.parent[goal_idx] = new_idx
                         self.cost[goal_idx] = new_goal_cost
+                        self._best_cost = new_goal_cost
                     if not self.improve_after_goal:
                         path = self._reconstruct_path(goal_idx)
                         return np.array(path)

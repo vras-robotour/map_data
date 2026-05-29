@@ -98,9 +98,15 @@ class ReplanPath:
         args: argparse.Namespace,
         obstacles: list[sh.geometry.base.BaseGeometry] | None = None,
         transfer_id: str | None = None,
+        grid_cost_weight: float | None = None,
     ) -> None:
         self.args = args
         self.transfer_id = transfer_id
+        _defaults = self._DEFAULTS
+        self.grid_cost_weight = (
+            grid_cost_weight if grid_cost_weight is not None
+            else _defaults.get("grid_cost_weight", 5.0)
+        )
 
         # Use the decoupled PathGrid component
         self.path_grid = PathGrid(
@@ -229,6 +235,7 @@ class ReplanPath:
             grid=self.path_grid.grid_2d_cache,
             low=self.args.low,
             grid_scale=self.args.cell_size,
+            grid_cost_weight=self.grid_cost_weight,
             transfer_id=self.transfer_id,
             simplify=self.args.simplify_path,
         )
@@ -246,6 +253,7 @@ class ReplanPath:
             self.args.low,
             self.args.cell_size,
             simplify_path=self.args.simplify_path,
+            grid_cost_weight=self.grid_cost_weight,
         )
 
     def _colides(self, path_seg: LineString) -> bool:

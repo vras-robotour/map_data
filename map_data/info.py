@@ -3,9 +3,9 @@ import logging
 from pathlib import Path
 
 from map_data.map_data import MapData
+from map_data.utils.config import setup_logging
 
-logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
-logger = logging.getLogger("map_data_info")
+logger = logging.getLogger(__name__)
 
 
 def get_stats(path: str) -> None:
@@ -55,6 +55,7 @@ def get_stats(path: str) -> None:
 
 
 def main() -> None:
+    setup_logging()
     parser = argparse.ArgumentParser(description="Display statistics for a .mapdata file")
     parser.add_argument("file", help="Path to the .mapdata file")
     args = parser.parse_args()

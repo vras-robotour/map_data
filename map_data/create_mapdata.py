@@ -7,10 +7,9 @@ from pathlib import Path
 from ament_index_python.resources import get_resource
 
 import map_data.map_data as md
+from map_data.utils.config import setup_logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="[%(levelname)s] [%(name)s]: %(message)s")
-logger = logging.getLogger("create_mapdata")
+logger = logging.getLogger(__name__)
 
 
 def process_map_data(file_name: str, *, download: bool) -> None:
@@ -53,6 +52,7 @@ def process_map_data(file_name: str, *, download: bool) -> None:
 
 
 def main() -> None:
+    setup_logging()
     parser = argparse.ArgumentParser(description="Create map data from GPX or download from OSM.")
     parser.add_argument(
         "-f",

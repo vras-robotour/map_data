@@ -1,19 +1,197 @@
 // ── Drawing and Editing Handlers ───────────────────────────────────────────
 
-const editDrag = { active: false, layer: null, startLatLng: null, origLatLngs: null };
+const editDrag = { active: false, layer: null, startLatLng: null, origLatLngs: null, origVertices: null };
+
+// ── Annotation vertex editing (OSM-style markers) ─────────────────────────
+
+const annDrag = {
+    active: false,
+    type: null,        // 'vertex' | 'midpoint'
+    layer: null,
+    vertexIndex: -1,
+    origVertices: null,
+    startLatLng: null,
+    dragMarker: null,
+};
+
+function _getAnnVertices(layer) {
+    const lls = layer.getLatLngs();
+    return Array.isArray(lls[0]) ? lls[0] : lls;
+}
+
+function _setAnnVertex(layer, i, latlng) {
+    const lls = layer.getLatLngs();
+    if (Array.isArray(lls[0])) { lls[0][i] = latlng; } else { lls[i] = latlng; }
+    layer.setLatLngs(lls);
+}
+
+function _loadAnnotationVertices(layer) {
+    _clearAnnotationVertices();
+    const verts = _getAnnVertices(layer);
+    const isPolygon = layer instanceof L.Polygon;
+    annVertexLayer = L.layerGroup();
+
+    annVertexMarkers_ann = verts.map((v, i) => {
+        const m = L.circleMarker([v.lat, v.lng], {
+            radius: 5, color: '#fff', weight: 2,
+            fillColor: '#f0a500', fillOpacity: 0.9,
+            bubblingMouseEvents: false, renderer: L.svg(),
+        });
+        const onVDown = e => _onAnnVertexDragDown(e, i);
+        m.on('mousedown', onVDown);
+        m.on('add', () => { const el = m.getElement(); if (el) el.style.cursor = 'grab'; });
+        annVertexLayer.addLayer(m);
+
+        const vHit = L.circleMarker([v.lat, v.lng], {
+            radius: 12, fillOpacity: 0, opacity: 0,
+            bubblingMouseEvents: false, renderer: L.svg(), interactive: true,
+        });
+        vHit.on('mousedown', onVDown);
+        vHit.on('add', () => { const el = vHit.getElement(); if (el) el.style.cursor = 'grab'; });
+        annVertexLayer.addLayer(vHit);
+        return m;
+    });
+
+    annMidpointMarkers_ann = [];
+    const n = verts.length;
+    const mpCount = isPolygon ? n : n - 1;
+    for (let i = 0; i < mpCount; i++) {
+        const a = verts[i], b = verts[(i + 1) % n];
+        const midLat = (a.lat + b.lat) / 2, midLng = (a.lng + b.lng) / 2;
+        const mp = L.circleMarker([midLat, midLng], {
+            radius: 4, color: '#4af', weight: 1.5,
+            fillColor: '#4af', fillOpacity: 0.7,
+            bubblingMouseEvents: false, renderer: L.svg(),
+        });
+        const onMpDown = e => _onAnnMidpointDragDown(e, i);
+        mp.on('mousedown', onMpDown);
+        mp.on('add', () => { const el = mp.getElement(); if (el) el.style.cursor = 'crosshair'; });
+        annVertexLayer.addLayer(mp);
+
+        const mpHit = L.circleMarker([midLat, midLng], {
+            radius: 10, fillOpacity: 0, opacity: 0,
+            bubblingMouseEvents: false, renderer: L.svg(), interactive: true,
+        });
+        mpHit.on('mousedown', onMpDown);
+        mpHit.on('add', () => { const el = mpHit.getElement(); if (el) el.style.cursor = 'crosshair'; });
+        annVertexLayer.addLayer(mpHit);
+        mp._hitMarker = mpHit;
+        annMidpointMarkers_ann.push(mp);
+    }
+
+    annVertexLayer.addTo(map);
+}
+
+function _clearAnnotationVertices() {
+    if (annVertexLayer) { map.removeLayer(annVertexLayer); annVertexLayer = null; }
+    annVertexMarkers_ann = [];
+    annMidpointMarkers_ann = [];
+}
+
+function _refreshAnnMidpointsNear(vi) {
+    const verts = _getAnnVertices(annDrag.layer);
+    const n = verts.length;
+    const isPolygon = annDrag.layer instanceof L.Polygon;
+    const mpCount = isPolygon ? n : n - 1;
+    const prev = isPolygon ? (vi - 1 + n) % n : vi - 1;
+    for (const mi of [prev, vi]) {
+        if (mi >= 0 && mi < mpCount && annMidpointMarkers_ann[mi]) {
+            const a = verts[mi], b = verts[(mi + 1) % n];
+            const midPos = [(a.lat + b.lat) / 2, (a.lng + b.lng) / 2];
+            annMidpointMarkers_ann[mi].setLatLng(midPos);
+            annMidpointMarkers_ann[mi]._hitMarker?.setLatLng(midPos);
+        }
+    }
+}
+
+function _onAnnVertexDragDown(e, i) {
+    L.DomEvent.stopPropagation(e);
+    annDrag.active = true;
+    annDrag.type = 'vertex';
+    annDrag.layer = editSelectedLayer;
+    annDrag.vertexIndex = i;
+    annDrag.origVertices = _getAnnVertices(editSelectedLayer).map(v => L.latLng(v.lat, v.lng));
+    annDrag.startLatLng = e.latlng;
+    annDrag.dragMarker = annVertexMarkers_ann[i] ?? null;
+    map.dragging.disable();
+    map.getContainer().style.cursor = 'grabbing';
+    map.on('mousemove', _onAnnDragMove);
+    map.on('mouseup', _onAnnDragUp);
+}
+
+function _onAnnMidpointDragDown(e, i) {
+    L.DomEvent.stopPropagation(e);
+    annDrag.active = true;
+    annDrag.type = 'midpoint';
+    annDrag.layer = editSelectedLayer;
+    annDrag.vertexIndex = i;
+    annDrag.origVertices = _getAnnVertices(editSelectedLayer).map(v => L.latLng(v.lat, v.lng));
+    annDrag.startLatLng = e.latlng;
+    annDrag.dragMarker = annMidpointMarkers_ann[i] ?? null;
+    map.dragging.disable();
+    map.getContainer().style.cursor = 'crosshair';
+    map.on('mousemove', _onAnnDragMove);
+    map.on('mouseup', _onAnnDragUp);
+}
+
+function _onAnnDragMove(e) {
+    if (!annDrag.active) return;
+    if (annDrag.type === 'vertex') {
+        _setAnnVertex(annDrag.layer, annDrag.vertexIndex, e.latlng);
+        annDrag.dragMarker?.setLatLng(e.latlng);
+        _refreshAnnMidpointsNear(annDrag.vertexIndex);
+    } else if (annDrag.type === 'midpoint') {
+        annDrag.dragMarker?.setLatLng(e.latlng);
+    }
+}
+
+async function _onAnnDragUp(e) {
+    if (!annDrag.active) return;
+    map.off('mousemove', _onAnnDragMove);
+    map.off('mouseup', _onAnnDragUp);
+    map.dragging.enable();
+    map.getContainer().style.cursor = currentMode === 'edit' ? 'move' : '';
+
+    const { type, layer, vertexIndex } = annDrag;
+    annDrag.active = false;
+    annDrag.type = null;
+    annDrag.layer = null;
+    annDrag.dragMarker = null;
+    annDrag.origVertices = null;
+
+    if (!layer) return;
+
+    if (type === 'vertex') {
+        _setAnnVertex(layer, vertexIndex, e.latlng);
+        _saveAnnotationGeometry(layer);
+        _loadAnnotationVertices(layer);
+    } else if (type === 'midpoint') {
+        const lls = layer.getLatLngs();
+        if (Array.isArray(lls[0])) { lls[0].splice(vertexIndex + 1, 0, e.latlng); }
+        else { lls.splice(vertexIndex + 1, 0, e.latlng); }
+        layer.setLatLngs(lls);
+        _saveAnnotationGeometry(layer);
+        _loadAnnotationVertices(layer);
+    }
+}
+
+// ── Annotation body drag ──────────────────────────────────────────────────
 
 function _onEditDragDown(e) {
     L.DomEvent.stopPropagation(e);
-    // Selection highlight
-    if (editSelectedLayer && editSelectedLayer !== e.target && editSelectedLayer.setStyle)
-        editSelectedLayer.setStyle({ ..._layerBaseStyle(editSelectedLayer), cursor: 'move' });
+    if (editSelectedLayer && editSelectedLayer !== e.target) {
+        if (editSelectedLayer.setStyle)
+            editSelectedLayer.setStyle({ ..._layerBaseStyle(editSelectedLayer), cursor: 'move' });
+    }
     editSelectedLayer = e.target;
+    _loadAnnotationVertices(editSelectedLayer);
     if (e.target.setStyle)
         e.target.setStyle({ ..._layerBaseStyle(e.target), color: '#ff4400', weight: 3, cursor: 'grabbing' });
     editDrag.active = true;
     editDrag.layer = e.target;
     editDrag.startLatLng = e.latlng;
     editDrag.origLatLngs = _cloneLatLngs(e.target.getLatLngs());
+    editDrag.origVertices = annVertexMarkers_ann.map(m => m.getLatLng());
     map.dragging.disable();
     map.getContainer().style.cursor = 'grabbing';
 }
@@ -24,8 +202,23 @@ function _onEditDragMove(e) {
     const dlng = e.latlng.lng - editDrag.startLatLng.lng;
     _applyDeltaInPlace(editDrag.layer._latlngs, editDrag.origLatLngs, dlat, dlng);
     editDrag.layer.redraw();
-    const ed = editDrag.layer.editing;
-    if (ed && ed._enabled) ed.updateMarkers();
+    // Keep vertex and midpoint markers in sync with the moving layer
+    if (editDrag.origVertices && annVertexMarkers_ann.length) {
+        const n = annVertexMarkers_ann.length;
+        const isPolygon = editDrag.layer instanceof L.Polygon;
+        annVertexMarkers_ann.forEach((m, i) => {
+            const orig = editDrag.origVertices[i];
+            m.setLatLng([orig.lat + dlat, orig.lng + dlng]);
+        });
+        const mpCount = isPolygon ? n : n - 1;
+        for (let i = 0; i < mpCount; i++) {
+            if (annMidpointMarkers_ann[i]) {
+                const a = annVertexMarkers_ann[i].getLatLng();
+                const b = annVertexMarkers_ann[(i + 1) % n].getLatLng();
+                annMidpointMarkers_ann[i].setLatLng([(a.lat + b.lat) / 2, (a.lng + b.lng) / 2]);
+            }
+        }
+    }
 }
 
 function _onEditDragUp() {
@@ -35,7 +228,11 @@ function _onEditDragUp() {
     map.getContainer().style.cursor = currentMode === 'edit' ? 'move' : '';
     const layer = editDrag.layer;
     editDrag.layer = null;
-    if (layer) _saveAnnotationGeometry(layer);
+    editDrag.origVertices = null;
+    if (layer) {
+        _saveAnnotationGeometry(layer);
+        if (editSelectedLayer === layer) _loadAnnotationVertices(layer);
+    }
 }
 
 async function _saveAnnotationGeometry(layer) {
@@ -61,16 +258,7 @@ function getSnappableLayers() {
 function enableAnnotationEditMode() {
     map.on('mousemove', _onEditDragMove);
     map.on('mouseup', _onEditDragUp);
-    const targets = getSnappableLayers();
     drawnItems.eachLayer(layer => {
-        if (layer.editing) {
-            layer.editing.enable();
-            if (layer.snapediting) {
-                layer.snapediting = new L.Handler.PolylineSnap(map, layer);
-                targets.forEach(t => layer.snapediting.addGuideLayer(t));
-                layer.snapediting.enable();
-            }
-        }
         layer.on('mousedown', _onEditDragDown);
         if (layer.setStyle) layer.setStyle({ ..._layerBaseStyle(layer), cursor: 'move' });
     });
@@ -80,6 +268,13 @@ function disableAnnotationEditMode() {
     map.off('mousemove', _onEditDragMove);
     map.off('mouseup', _onEditDragUp);
     if (editDrag.active) { editDrag.active = false; map.dragging.enable(); }
+    if (annDrag.active) {
+        annDrag.active = false;
+        map.off('mousemove', _onAnnDragMove);
+        map.off('mouseup', _onAnnDragUp);
+        map.dragging.enable();
+    }
+    _clearAnnotationVertices();
     editSelectedLayer = null;
     if (osmDrag.active) {
         osmDrag.active = false;
@@ -88,7 +283,6 @@ function disableAnnotationEditMode() {
         map.dragging.enable();
     }
     drawnItems.eachLayer(layer => {
-        if (layer.editing) layer.editing.disable();
         layer.off('mousedown', _onEditDragDown);
         if (layer.setStyle) layer.setStyle(_layerBaseStyle(layer));
         _saveAnnotationGeometry(layer);
@@ -99,9 +293,11 @@ function disableAnnotationEditMode() {
 
 const osmDrag = {
     active: false,
-    type: null,        // 'node' | 'way'
+    type: null,        // 'node' | 'way' | 'midpoint'
     wayId: null,
     nodeIndex: -1,
+    afterNodeId: null,   // node ID after which to insert (for 'midpoint' type)
+    dragMarker: null,    // the midpoint marker being dragged
     startLatLng: null,
     origPositions: [],    // [{lat, lon}] snapshot of currentNodes at drag start
     origLayerLatLngs: null, // snapshot of layer latlngs at drag start (for way drag)
@@ -138,6 +334,23 @@ function _onOsmWayDragDown(e) {
     map.on('mouseup', _onOsmDragUp);
 }
 
+function _onMidpointDragDown(e, segmentIndex) {
+    if (currentMode !== 'edit') return;
+    L.DomEvent.stopPropagation(e);
+    osmDrag.active = true;
+    osmDrag.type = 'midpoint';
+    osmDrag.wayId = currentClickedFeature?.properties?.id ?? null;
+    osmDrag.nodeIndex = segmentIndex;
+    osmDrag.afterNodeId = currentNodes[segmentIndex]?.id ?? null;
+    osmDrag.startLatLng = e.latlng;
+    osmDrag.origPositions = currentNodes.map(n => ({ lat: n.lat, lon: n.lon }));
+    osmDrag.dragMarker = midpointMarkers[segmentIndex] ?? null;
+    map.dragging.disable();
+    map.getContainer().style.cursor = 'crosshair';
+    map.on('mousemove', _onOsmDragMove);
+    map.on('mouseup', _onOsmDragUp);
+}
+
 function _onOsmDragMove(e) {
     if (!osmDrag.active) return;
     const dlat = e.latlng.lat - osmDrag.startLatLng.lat;
@@ -148,6 +361,8 @@ function _onOsmDragMove(e) {
         const newLng = osmDrag.origPositions[ni].lon + dlng;
         nodeMarkers[ni]?.setLatLng([newLat, newLng]);
         _updateOsmWayVisualNode(ni, newLat, newLng);
+    } else if (osmDrag.type === 'midpoint') {
+        osmDrag.dragMarker?.setLatLng(e.latlng);
     } else {
         for (let i = 0; i < nodeMarkers.length; i++) {
             nodeMarkers[i]?.setLatLng([
@@ -166,11 +381,26 @@ async function _onOsmDragUp(e) {
     map.dragging.enable();
     map.getContainer().style.cursor = currentMode === 'edit' ? 'move' : '';
 
-    const { type, wayId, nodeIndex, startLatLng, origPositions } = osmDrag;
+    const { type, wayId, nodeIndex, startLatLng, origPositions, afterNodeId } = osmDrag;
     osmDrag.active = false;
     osmDrag.type = null;
     osmDrag.wayId = null;
     osmDrag.origLayerLatLngs = null;
+    osmDrag.afterNodeId = null;
+    osmDrag.dragMarker = null;
+
+    if (type === 'midpoint') {
+        if (!currentFile || !wayId) return;
+        const res = await addWayNodeApi(currentFile, wayId, afterNodeId, e.latlng.lat, e.latlng.lng);
+        if (!res.ok) { setStatus('Add node failed', 'text-danger'); return; }
+        await _reloadWay(wayId);
+        if (currentClickedFeature && currentClickedLayer) {
+            await loadNodesForEditing(currentClickedFeature, currentClickedLayer);
+        }
+        await refreshMetadata(currentFile);
+        setStatus('Node added', 'text-success');
+        return;
+    }
 
     const dlat = e.latlng.lat - startLatLng.lat;
     const dlng = e.latlng.lng - startLatLng.lng;

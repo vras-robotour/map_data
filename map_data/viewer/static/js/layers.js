@@ -17,6 +17,7 @@ function setSubtypeVisible(cat, subtype, visible) {
 function addAnnotationToLayer(ann) {
     L.geoJSON(ann.geometry, { style: _annStyle(ann) }).eachLayer(layer => {
         layer.options._ann_id = ann.id;
+        ann._layer = layer;
         const cat = ann.type === 'path' ? 'path' : 'annotation';
 
         layer.on('click', e => {
@@ -52,40 +53,49 @@ function renderAnnotationLayer() {
 
 function filterLayers(query) {
     const q = query.toLowerCase().trim();
-    ['road', 'footway', 'barrier', 'annotation'].forEach(cat => {
-        const layer = cat === 'annotation' ? drawnItems : geoLayers[cat];
-        if (!layer) return;
 
-        layer.eachLayer(l => {
-            let visible = true;
-            if (q) {
-                const id = String(l._featureId || l.options._ann_id || '').toLowerCase();
-                const tags = l._featureRef?.properties?.tags || {};
-                const name = (tags.name || tags.ref || '').toLowerCase();
-                visible = id.includes(q) || name.includes(q);
-            }
-
-            if (visible) {
-                if (cat === 'annotation') {
-                    if (!drawnItems.hasLayer(l)) drawnItems.addLayer(l);
-                } else {
+    // OSM categories: iterate subtypeLayers (persistent) so removed layers can be restored
+    ['road', 'footway', 'barrier'].forEach(cat => {
+        Object.values(subtypeLayers[cat] || {}).forEach(layers => {
+            layers.forEach(l => {
+                let visible = true;
+                if (q) {
+                    const id = String(l._featureId || '').toLowerCase();
+                    const tags = l._featureRef?.properties?.tags || {};
+                    const tagText = Object.values(tags).join(' ').toLowerCase();
+                    visible = id.includes(q) || tagText.includes(q);
+                }
+                if (visible) {
                     const st = getSubtype(l._featureRef, cat);
                     if (subtypeFilters[cat][st] !== false && !hiddenWayIds.has(l._featureId)) {
                         if (!geoLayers[cat].hasLayer(l)) geoLayers[cat].addLayer(l);
                     } else {
                         geoLayers[cat].removeLayer(l);
                     }
-                }
-            } else {
-                if (cat === 'annotation') {
-                    // For drawnItems, we might want to keep annotations but just not show them
-                    // But drawnItems IS a layer group.
-                    drawnItems.removeLayer(l);
                 } else {
                     geoLayers[cat].removeLayer(l);
                 }
-            }
+            });
         });
+    });
+
+    // Annotations: iterate annotations array (persistent) using stored _layer reference
+    annotations.forEach(ann => {
+        const l = ann._layer;
+        if (!l) return;
+        let visible = true;
+        if (q) {
+            const id = String(ann.id || '').toLowerCase();
+            const props = ann.properties || {};
+            const annText = [ann.type || '', ...Object.keys(props), ...Object.values(props)]
+                .join(' ').toLowerCase();
+            visible = id.includes(q) || annText.includes(q);
+        }
+        if (visible) {
+            if (!drawnItems.hasLayer(l)) drawnItems.addLayer(l);
+        } else {
+            drawnItems.removeLayer(l);
+        }
     });
 }
 
@@ -218,14 +228,17 @@ async function refreshMetadata(filename, { refreshAnnotations = false } = {}) {
         hiddenWayIds = new Set(hiddenWays.map(d => d.id));
 
         const rawChangeLog = (annData.change_log && annData.change_log.length > 0) ? annData.change_log : null;
+        const addedNodes = annData.added_nodes || [];
         if (rawChangeLog) {
             const wayMap = new Map(deletedWays.map(d => [d.id, d]));
-            const tagMap = new Map(tagOverrides.map(d => [d.id, d]));
+            // Use string keys: server stores tag ids as strings, tagOverrides.id is a number (+sid)
+            const tagMap = new Map(tagOverrides.map(d => [String(d.id), d]));
             const nodePosOverrides = annData.node_position_overrides || {};
+            const addedNodeMap = new Map(addedNodes.map(a => [a.id, a]));
             const sorted = [...rawChangeLog].sort((a, b) => (a.ts || 0) - (b.ts || 0));
             changeLog = sorted.flatMap(e => {
                 if (e.type === 'way') { const d = wayMap.get(e.id); return d ? [{ type: 'way', ts: e.ts, ...d }] : []; }
-                if (e.type === 'tag') { const d = tagMap.get(e.id); return d ? [{ type: 'tag', ts: e.ts, ...d }] : []; }
+                if (e.type === 'tag') { const d = tagMap.get(String(e.id)); return d ? [{ type: 'tag', ts: e.ts, ...d }] : []; }
                 if (e.type === 'node') {
                     const d = deletedNodes.find(n => n.way_id === e.way_id && n.node_id === e.node_id);
                     return d ? [{ type: 'node', ts: e.ts, ...d }] : [];
@@ -235,6 +248,9 @@ async function refreshMetadata(filename, { refreshAnnotations = false } = {}) {
                 }
                 if (e.type === 'split') {
                     return [{ type: 'split', ts: e.ts, way_id: e.way_id, node_id: e.node_id }];
+                }
+                if (e.type === 'add_node') {
+                    return addedNodeMap.has(e.node_id) ? [{ type: 'add_node', ts: e.ts, way_id: e.way_id, node_id: e.node_id }] : [];
                 }
                 return [];
             });
@@ -246,12 +262,13 @@ async function refreshMetadata(filename, { refreshAnnotations = false } = {}) {
                 ...deletedNodes.map(d => ({ type: 'node', ...d })),
                 ...tagOverrides.map(d => ({ type: 'tag', ...d })),
                 ...splitItems,
+                ...addedNodes.map(a => ({ type: 'add_node', way_id: a.way_id, node_id: a.id })),
             ];
         }
         if (refreshAnnotations) {
             renderAnnotationLayer();
-            renderAnnotationList();
         }
+        renderAnnotationList();
         renderChangesPanel();
         renderHiddenPanel();
     } catch (err) {
@@ -367,14 +384,16 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         hiddenWays = _loadHiddenMeta;
         hiddenWayIds = _loadHiddenIds;
         const rawChangeLog = (annData.change_log && annData.change_log.length > 0) ? annData.change_log : null;
+        const addedNodes = annData.added_nodes || [];
         if (rawChangeLog) {
             const wayMap = new Map(deletedWays.map(d => [d.id, d]));
-            const tagMap = new Map(tagOverrides.map(d => [d.id, d]));
+            const tagMap = new Map(tagOverrides.map(d => [String(d.id), d]));
             const nodePosOverrides = annData.node_position_overrides || {};
+            const addedNodeMap = new Map(addedNodes.map(a => [a.id, a]));
             const sorted = [...rawChangeLog].sort((a, b) => (a.ts || 0) - (b.ts || 0));
             changeLog = sorted.flatMap(e => {
                 if (e.type === 'way') { const d = wayMap.get(e.id); return d ? [{ type: 'way', ts: e.ts, ...d }] : []; }
-                if (e.type === 'tag') { const d = tagMap.get(e.id); return d ? [{ type: 'tag', ts: e.ts, ...d }] : []; }
+                if (e.type === 'tag') { const d = tagMap.get(String(e.id)); return d ? [{ type: 'tag', ts: e.ts, ...d }] : []; }
                 if (e.type === 'node') {
                     const d = deletedNodes.find(n => n.way_id === e.way_id && n.node_id === e.node_id);
                     return d ? [{ type: 'node', ts: e.ts, ...d }] : [];
@@ -384,6 +403,9 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
                 }
                 if (e.type === 'split') {
                     return [{ type: 'split', ts: e.ts, way_id: e.way_id, node_id: e.node_id }];
+                }
+                if (e.type === 'add_node') {
+                    return addedNodeMap.has(e.node_id) ? [{ type: 'add_node', ts: e.ts, way_id: e.way_id, node_id: e.node_id }] : [];
                 }
                 return [];
             });
@@ -395,6 +417,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
                 ...deletedNodes.map(d => ({ type: 'node', ...d })),
                 ...tagOverrides.map(d => ({ type: 'tag', ...d })),
                 ...splitItems,
+                ...addedNodes.map(a => ({ type: 'add_node', way_id: a.way_id, node_id: a.id })),
             ];
         }
         renderAnnotationLayer();
@@ -460,103 +483,37 @@ function clearMapData() {
 async function _reloadWay(wayId) {
     if (!currentFile) return;
 
+    // Always use the segments endpoint so that split segments are removed and
+    // re-added atomically — the old non-split path used strict id equality which
+    // failed to remove virtual "id:n" layers when the original numeric id was given.
     const originalWayId = String(wayId).split(':')[0];
-    const isSplit = String(wayId).includes(':');
 
-    if (isSplit) {
-        try {
-            const data = await fetchWaySegmentsApi(currentFile, originalWayId);
-            const newLayer = updateWayWithSegments(originalWayId, data.segments);
-            _enforceLayerOrder();
-            clearNodes();
-            await _refreshAnnotationsState();
+    try {
+        const data = await fetchWaySegmentsApi(currentFile, originalWayId);
+        updateWayWithSegments(originalWayId, data.segments);
+        ['road', 'footway', 'barrier'].forEach(c => renderSubtypeFilters(c));
+        _enforceLayerOrder();
+        clearNodes();
+        await _refreshAnnotationsState();
 
-            // Try to re-select the specific segment we were working on, or fallback to any segment of that way
-            if (!_reselectFeature(wayId)) {
-                if (!_reselectFeature(originalWayId)) {
-                    // Try any segment
-                    for (let i = 0; i < 10; i++) {
-                        if (_reselectFeature(`${originalWayId}:${i}`)) break;
-                    }
-                }
-            }
-        } catch (err) {
-            console.error('Failed to reload split way segments:', err);
-        }
-        return;
-    }
-
-    const affectedCats = new Set();
-    for (const cat of ['road', 'footway', 'barrier']) {
-        for (const st of Object.keys(subtypeLayers[cat])) {
-            const before = subtypeLayers[cat][st];
-            const toRemove = before.filter(l => l._featureId === wayId);
-            if (!toRemove.length) continue;
-            affectedCats.add(cat);
-            toRemove.forEach(l => geoLayers[cat]?.removeLayer(l));
-            subtypeLayers[cat][st] = before.filter(l => l._featureId !== wayId);
-        }
-    }
-
-    const res = await fetchWayApi(currentFile, wayId);
-    if (res.ok) {
-        const feature = await res.json();
-        const newCat = feature.properties.category;
-        const catLayer = geoLayers[newCat];
-        if (catLayer) {
-            const tmpGeo = L.geoJSON(feature, {
-                style: () => STYLES[newCat],
-            });
-            const newLayer = tmpGeo.getLayers()[0];
-            if (newLayer) {
-                tmpGeo.removeLayer(newLayer);
-                const st = getSubtype(feature, newCat);
-                if (!subtypeLayers[newCat][st]) { subtypeLayers[newCat][st] = []; subtypeFilters[newCat][st] = true; }
-                subtypeLayers[newCat][st].push(newLayer);
-                newLayer._featureId = feature.properties.id;
-                newLayer._featureRef = feature;
-                newLayer.on('click', e => {
-                    if (currentAppMode === 'planner') return;
-                    L.DomEvent.stopPropagation(e);
-                    if (currentMode === 'view') {
-                        if (currentClickedLayer && currentClickedLayer !== newLayer) {
-                            const oldCat = currentClickedLayer._osmCat;
-                            currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
-                        }
-                        newLayer._osmCat = newCat;
-                        currentClickedLayer = newLayer;
-                        newLayer.setStyle(HIGHLIGHT_STYLES[newCat]);
-                        showProps(feature.properties, feature);
-                    } else if (currentMode === 'edit' && newCat !== 'crossroad') {
-                        if (currentClickedLayer && currentClickedLayer !== newLayer) {
-                            const oldCat = currentClickedLayer._osmCat;
-                            currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
-                        }
-                        newLayer._osmCat = newCat;
-                        currentClickedLayer = newLayer;
-                        currentClickedFeature = feature;
-                        newLayer.setStyle(HIGHLIGHT_STYLES[newCat]);
-                        loadNodesForEditing(feature, newLayer);
-                    } else if (currentMode === 'delete' && newCat !== 'crossroad') {
-                        newLayer._osmCat = newCat;
-                        currentClickedLayer = newLayer;
-                        currentClickedFeature = feature;
-                        deleteCurrentWay();
-                    }
-                });
-                if (subtypeFilters[newCat][st] !== false && !hiddenWayIds.has(feature.properties.id))
-                    catLayer.addLayer(newLayer);
-                affectedCats.add(newCat);
+        // Try the exact id first, then the bare original id, then any segment
+        let reselected = _reselectFeature(wayId);
+        if (!reselected) reselected = _reselectFeature(originalWayId);
+        if (!reselected) {
+            for (let i = 0; i < 10; i++) {
+                if (_reselectFeature(`${originalWayId}:${i}`)) { reselected = true; break; }
             }
         }
-    }
-
-    affectedCats.forEach(c => renderSubtypeFilters(c));
-    _enforceLayerOrder();
-    clearNodes();
-    await _refreshAnnotationsState();
-    if (!_reselectFeature(wayId)) {
-        currentClickedLayer = null; currentClickedFeature = null;
+        if (!reselected) {
+            currentClickedLayer = null;
+            currentClickedFeature = null;
+            document.getElementById('props-content').innerHTML =
+                '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+        }
+    } catch (err) {
+        console.error('Failed to reload way:', err);
+        currentClickedLayer = null;
+        currentClickedFeature = null;
         document.getElementById('props-content').innerHTML =
             '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
     }
@@ -587,7 +544,7 @@ function _reselectFeature(wayId) {
         const catLayer = geoLayers[cat];
         if (!catLayer) continue;
         let found = null;
-        catLayer.eachLayer(layer => { if (layer._featureId === wayId) found = layer; });
+        catLayer.eachLayer(layer => { if (String(layer._featureId) === String(wayId)) found = layer; });
         if (found) {
             if (currentClickedLayer && currentClickedLayer !== found)
                 currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);

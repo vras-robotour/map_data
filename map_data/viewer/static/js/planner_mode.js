@@ -17,6 +17,7 @@ class PlannerMode {
     this.highwayCosts = {};
     this.surfaceCosts = {};
     this.defaults = {};
+    this._mapDragListeners = [];
 
     this.init();
   }
@@ -39,8 +40,28 @@ class PlannerMode {
       // Update UI fields if they exist
       if (data.cell_size) document.getElementById('planner-cell-size').value = data.cell_size;
       if (data.inflate_obstacles) document.getElementById('planner-inflate').value = data.inflate_obstacles;
+      if (data.grid_cost_weight) document.getElementById('planner-grid-cost-weight').value = data.grid_cost_weight;
       if (data.simplify_path !== undefined) document.getElementById('planner-simplify').checked = data.simplify_path;
       if (data.smooth_path !== undefined) document.getElementById('planner-smooth').checked = data.smooth_path;
+
+      // Populate advanced fields in all fetch/GPX modals with defaults
+      const gridMarginDefault = data.grid_margin ?? 150;
+      const obstacleRadiusDefault = data.obstacle_radius ?? 2.0;
+      const bwRoad = data.buffer_widths?.road ?? 7.0;
+      const bwFootway = data.buffer_widths?.footway ?? 3.0;
+      const bwBarrier = data.buffer_widths?.barrier ?? 2.0;
+      for (const prefix of ['fetch', 'gpx', 'planner-fetch']) {
+        const gm = document.getElementById(`${prefix}-grid-margin`);
+        const or = document.getElementById(`${prefix}-obstacle-radius`);
+        const br = document.getElementById(`${prefix}-buf-road`);
+        const bf = document.getElementById(`${prefix}-buf-footway`);
+        const bb = document.getElementById(`${prefix}-buf-barrier`);
+        if (gm) gm.value = gridMarginDefault;
+        if (or) or.value = obstacleRadiusDefault;
+        if (br) br.value = bwRoad;
+        if (bf) bf.value = bwFootway;
+        if (bb) bb.value = bwBarrier;
+      }
       
     } catch (err) {
       console.error('Failed to fetch planner defaults:', err);
@@ -117,13 +138,20 @@ class PlannerMode {
     });
 
     // Add a small margin (approx 50m in degrees)
-    const margin = 0.0005; 
+    const margin = 0.0005;
     const bbox = {
       min_lat: minLat - margin,
       max_lat: maxLat + margin,
       min_lon: minLon - margin,
       max_lon: maxLon + margin,
-      name: name
+      name: name,
+      grid_margin: parseFloat(document.getElementById('planner-fetch-grid-margin')?.value) || 150,
+      obstacle_radius: parseFloat(document.getElementById('planner-fetch-obstacle-radius')?.value) || 2.0,
+      buffer_widths: {
+        road: parseFloat(document.getElementById('planner-fetch-buf-road')?.value) || 7.0,
+        footway: parseFloat(document.getElementById('planner-fetch-buf-footway')?.value) || 3.0,
+        barrier: parseFloat(document.getElementById('planner-fetch-buf-barrier')?.value) || 2.0,
+      },
     };
 
     setStatus('Fetching & parsing OSM data for the area...', 'text-warning');
@@ -365,22 +393,33 @@ class PlannerMode {
 
       // Custom drag handling for CircleMarker
       let dragging = false;
-      marker.on('mousedown', (e) => {
+      const onWpDown = (e) => {
         L.DomEvent.stopPropagation(e);
         dragging = true;
         this.isDragging = true;
         map.dragging.disable();
-      });
+      };
+      marker.on('mousedown', onWpDown);
 
-      map.on('mousemove', (e) => {
+      // Transparent larger hit target so waypoints are easier to grab
+      const wpHit = L.circleMarker([p.lat, p.lon], {
+        radius: 14, fillOpacity: 0, opacity: 0,
+        bubblingMouseEvents: false, interactive: true,
+      }).addTo(map);
+      wpHit.on('mousedown', onWpDown);
+      this.markerLayer.addLayer(wpHit);
+
+      const onMouseMove = (e) => {
         if (dragging) {
           marker.setLatLng(e.latlng);
           p.lat = e.latlng.lat;
           p.lon = e.latlng.lng;
-          this.hasPlannedPath = false; // Point moved, path is invalid
+          this.hasPlannedPath = false;
           this.drawPathLine();
         }
-      });
+      };
+      map.on('mousemove', onMouseMove);
+      this._mapDragListeners.push({ event: 'mousemove', fn: onMouseMove });
 
       const stopDrag = () => {
         if (dragging) {
@@ -388,19 +427,22 @@ class PlannerMode {
           this.isDragging = false;
           this.lastDragEndTime = Date.now();
           map.dragging.enable();
-          this.redraw(); // snap or final update
+          this.redraw();
         }
       };
 
       map.on('mouseup', stopDrag);
+      this._mapDragListeners.push({ event: 'mouseup', fn: stopDrag });
       marker.on('mouseup', stopDrag);
 
       // Right click to delete
-      marker.on('contextmenu', (e) => {
+      const onWpContext = (e) => {
         L.DomEvent.preventDefault(e);
         L.DomEvent.stopPropagation(e);
         this.showContextMenu(p, e.latlng);
-      });
+      };
+      marker.on('contextmenu', onWpContext);
+      wpHit.on('contextmenu', onWpContext);
 
       this.markerLayer.addLayer(marker);
       p.marker = marker;
@@ -453,6 +495,10 @@ class PlannerMode {
   }
 
   clearMarkers() {
+    for (const { event, fn } of this._mapDragListeners) {
+      map.off(event, fn);
+    }
+    this._mapDragListeners = [];
     this.markerLayer.clearLayers();
   }
 
@@ -476,6 +522,7 @@ class PlannerMode {
     }
     document.getElementById('export-gpx-path-btn').disabled = this.points.length < 2;
     document.getElementById('export-wormhole-path-btn').disabled = this.points.length < 2;
+    document.getElementById('planner-clear-btn').disabled = this.points.length === 0;
     document.getElementById('planner-clear-middle-btn').disabled = this.points.length <= 2;
 
     const isAllTerrain = document.getElementById('mode-all-terrain').checked;
@@ -571,13 +618,20 @@ class PlannerMode {
       dropzone.classList.remove('active');
 
       const file = e.dataTransfer.files[0];
-      if (!file || !file.name.toLowerCase().endsWith('.gpx')) return;
+      if (!file) return;
+      const ext = file.name.toLowerCase().split('.').pop();
 
-      if (currentAppMode === 'planner') {
-        this.loadGpxFile(file);
-      } else {
-        if (typeof handleGpxMapCreation === 'function') {
-          handleGpxMapCreation(file);
+      if (ext === 'mapdata') {
+        if (typeof handleMapdataUpload === 'function') {
+          handleMapdataUpload(file);
+        }
+      } else if (ext === 'gpx') {
+        if (currentAppMode === 'planner') {
+          this.loadGpxFile(file);
+        } else {
+          if (typeof handleGpxMapCreation === 'function') {
+            handleGpxMapCreation(file);
+          }
         }
       }
     });
@@ -615,6 +669,7 @@ class PlannerMode {
     const subAlgorithm = document.getElementById('sub-algorithm-select').value;
     const cellSize = parseFloat(document.getElementById('planner-cell-size').value) || 0.25;
     const inflate = parseFloat(document.getElementById('planner-inflate').value) || 0.25;
+    const gridCostWeight = parseFloat(document.getElementById('planner-grid-cost-weight').value) || 5.0;
     const simplify = document.getElementById('planner-simplify').checked;
     const smooth = document.getElementById('planner-smooth').checked;
 
@@ -631,6 +686,7 @@ class PlannerMode {
           sub_algorithm: subAlgorithm,
           cell_size: cellSize,
           inflate_obstacles: inflate,
+          grid_cost_weight: gridCostWeight,
           simplify_path: simplify,
           smooth_path: smooth,
           highway_costs: this.highwayCosts,
@@ -717,6 +773,18 @@ class PlannerMode {
   }
 
   generateGPX() {
+    const fmt = document.querySelector('input[name="gpx-format"]:checked')?.value ?? 'track';
+    if (fmt === 'track') {
+      const trkpts = this.points.map(p => `      <trkpt lat="${p.lat}" lon="${p.lon}"></trkpt>`).join('\n');
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="MapDataPlanner">
+  <trk>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>`;
+    }
     const pts = this.points.map(p => `  <wpt lat="${p.lat}" lon="${p.lon}"></wpt>`).join('\n');
     return `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="MapDataPlanner">

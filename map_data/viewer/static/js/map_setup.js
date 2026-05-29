@@ -153,7 +153,17 @@ async function initApp() {
         setStatus('Fetching & parsing OSM data… (may take 1–2 min)', 'text-warning');
 
         try {
-            const data = await fetchAreaApi({ ...pendingBbox, name });
+            const data = await fetchAreaApi({
+                ...pendingBbox,
+                name,
+                grid_margin: parseFloat(document.getElementById('fetch-grid-margin')?.value) || 150,
+                obstacle_radius: parseFloat(document.getElementById('fetch-obstacle-radius')?.value) || 2.0,
+                buffer_widths: {
+                    road: parseFloat(document.getElementById('fetch-buf-road')?.value) || 7.0,
+                    footway: parseFloat(document.getElementById('fetch-buf-footway')?.value) || 3.0,
+                    barrier: parseFloat(document.getElementById('fetch-buf-barrier')?.value) || 2.0,
+                },
+            });
             setStatus(
                 `Fetched: ${data.roads} roads, ${data.footways} footways, ${data.barriers} barriers`,
                 'text-success'
@@ -205,44 +215,6 @@ async function initApp() {
             currentClickedFeature = null;
             const el = document.getElementById('props-content');
             if (el) el.innerHTML = '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
-        }
-    });
-
-    document.getElementById('way-edit-add-prop-btn')?.addEventListener('click', () => {
-        const div = document.createElement('div');
-        div.className = 'd-flex gap-1 mb-1';
-        div.innerHTML = `
-      <input class="form-control form-control-sm bg-dark text-light border-secondary we-key"
-             placeholder="key" style="flex:1;font-size:0.75rem;">
-      <input class="form-control form-control-sm bg-dark text-light border-secondary we-val"
-             placeholder="value" style="flex:1;font-size:0.75rem;">
-      <button type="button" class="btn btn-sm btn-outline-danger px-1"
-              onclick="this.closest('.d-flex').remove()">×</button>`;
-        document.getElementById('way-edit-props').appendChild(div);
-    });
-
-    document.getElementById('way-edit-save')?.addEventListener('click', async () => {
-        if (!editingWayId || !currentFile) return;
-        const tags = {};
-        document.querySelectorAll('#way-edit-props .d-flex').forEach(row => {
-            const k = row.querySelector('.we-key').value.trim();
-            const v = row.querySelector('.we-val').value.trim();
-            if (k) tags[k] = v;
-        });
-        const savedWayId = editingWayId;
-        const cat = currentClickedFeature?.properties?.category || 'unknown';
-        const lbl = currentClickedFeature?.properties?.tags?.highway
-            || currentClickedFeature?.properties?.tags?.barrier || '';
-        bootstrap.Modal.getInstance(document.getElementById('way-edit-modal')).hide();
-        const res = await updateWayTagsApi(currentFile, savedWayId, tags, cat, lbl);
-        if (res.ok) {
-            const existing = changeLog.findIndex(c => c.type === 'tag' && c.id === savedWayId);
-            if (existing >= 0) changeLog.splice(existing, 1);
-            changeLog.push({ type: 'tag', id: savedWayId, category: cat, label: lbl });
-            setStatus('Properties updated', 'text-success');
-            await _reloadWay(savedWayId);
-        } else {
-            setStatus('Save failed', 'text-danger');
         }
     });
 

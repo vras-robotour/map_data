@@ -35,6 +35,7 @@ def smooth_path(
 
     """
     new_path = np.copy(path)
+    best_path = path  # original is assumed collision-free
     change = tolerance
     while change >= tolerance:
         change = 0.0
@@ -46,8 +47,9 @@ def smooth_path(
                 )
                 change += abs(aux - new_path[i][j])
 
-        # Check for collisions after each iteration
-        if collision_check_func and collision_check_func(LineString(new_path)):
-            return path  # Return original path if smoothing failed safely
+        if collision_check_func:
+            if collision_check_func(LineString(new_path)):
+                return best_path  # Return best collision-free state found so far
+            best_path = np.copy(new_path)
 
     return new_path

@@ -32,8 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 _DEFAULTS = load_config("planner_defaults.yaml")
-OSM_MARGIN: float = _DEFAULTS.get("osm_margin", 100)
-RESERVE: float = _DEFAULTS.get("reserve_margin", 50)
+GRID_MARGIN: float = _DEFAULTS.get("grid_margin", 150)
 BBOX_LEN = 4
 
 
@@ -94,6 +93,9 @@ class MapData:
         current_robot_position: np.ndarray | None = None,
         *,
         flip: bool = False,
+        grid_margin: float | None = None,
+        obstacle_radius: float | None = None,
+        buffer_widths: dict[str, float] | None = None,
     ) -> None:
         """
         Initialize MapData from a GPX file or coordinate array.
@@ -152,10 +154,13 @@ class MapData:
         if current_robot_position is not None:
             self.waypoints = np.concatenate([current_robot_position, self.waypoints])
 
-        self.max_x = float(np.max(self.waypoints[:, 0]) + RESERVE + OSM_MARGIN)
-        self.min_x = float(np.min(self.waypoints[:, 0]) - (RESERVE + OSM_MARGIN))
-        self.max_y = float(np.max(self.waypoints[:, 1]) + RESERVE + OSM_MARGIN)
-        self.min_y = float(np.min(self.waypoints[:, 1]) - (RESERVE + OSM_MARGIN))
+        _margin = grid_margin if grid_margin is not None else GRID_MARGIN
+        self.max_x = float(np.max(self.waypoints[:, 0]) + _margin)
+        self.min_x = float(np.min(self.waypoints[:, 0]) - _margin)
+        self.max_y = float(np.max(self.waypoints[:, 1]) + _margin)
+        self.min_y = float(np.min(self.waypoints[:, 1]) - _margin)
+        self._obstacle_radius = obstacle_radius
+        self._buffer_widths = buffer_widths
 
         self.max_lat, self.max_long = utm.to_latlon(
             self.max_x,
@@ -383,10 +388,15 @@ class MapData:
             way_node_ids,
             self.OBSTACLE_TAGS,
             self.NOT_OBSTACLE_TAGS,
+            obstacle_radius=self._obstacle_radius,
         )
 
         self.roads_list, self.footways_list, parsed_barriers = separate_ways(
-            ways_dict, self.BARRIER_TAGS, self.NOT_BARRIER_TAGS, self.ANTI_BARRIER_TAGS,
+            ways_dict,
+            self.BARRIER_TAGS,
+            self.NOT_BARRIER_TAGS,
+            self.ANTI_BARRIER_TAGS,
+            buffer_widths=self._buffer_widths,
         )
         self.barriers_list = parsed_barriers + node_barriers
         self.crossroads_list = self.parse_intersections(ways_dict)
@@ -522,11 +532,18 @@ class MapData:
             containing ``[easting, northing, z]``.
 
         """
-        points = {}
-        for node_id, data in self.nodes_cache.items():
-            e, n, _, _ = utm.from_latlon(data["lat"], data["lon"])
-            points[node_id] = np.array([e, n, z]).reshape(3, 1)
-        return points
+        if not self.nodes_cache:
+            return {}
+        node_ids = list(self.nodes_cache.keys())
+        lats = np.array([self.nodes_cache[nid]["lat"] for nid in node_ids])
+        lons = np.array([self.nodes_cache[nid]["lon"] for nid in node_ids])
+        eastings, northings, _, _ = utm.from_latlon(
+            lats, lons, force_zone_number=self.zone_number, force_zone_letter=self.zone_letter
+        )
+        return {
+            nid: np.array([e, n, z]).reshape(3, 1)
+            for nid, e, n in zip(node_ids, eastings, northings)
+        }
 
     def get_ways(self) -> dict[str, list[Way]]:
         """

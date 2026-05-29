@@ -328,6 +328,7 @@ function clearNodes() {
     nodeCount = 0;
     currentNodes = [];
     nodeMarkers = [];
+    midpointMarkers = [];
     selectedNodeIndex = -1;
 }
 
@@ -364,19 +365,10 @@ async function loadNodesForEditing(feature, layer) {
         });
     }
     if (osmDragGhost) {
-        osmDragGhost.on('mousedown', e => {
-            // The SVG ghost is always above the canvas node markers in the DOM, so it intercepts
-            // all mousedowns. Route to node drag if click is within 10px of a marker, else way drag.
-            const clickPt = map.latLngToContainerPoint(e.latlng);
-            for (let i = 0; i < nodeMarkers.length; i++) {
-                if (!nodeMarkers[i]) continue;
-                if (clickPt.distanceTo(map.latLngToContainerPoint(nodeMarkers[i].getLatLng())) <= 10) {
-                    _onOsmNodeDragDown(e, i);
-                    return;
-                }
-            }
-            _onOsmWayDragDown(e);
-        });
+        // Node and midpoint markers use SVG renderer and are added to the map after the ghost,
+        // so they sit higher in the SVG DOM and receive their own mousedown events directly.
+        // The ghost only needs to handle clicks on the way body (i.e. way drag).
+        osmDragGhost.on('mousedown', _onOsmWayDragDown);
         osmDragGhost.addTo(map);
     }
 
@@ -386,12 +378,55 @@ async function loadNodesForEditing(feature, layer) {
             radius: 5, color: '#fff', weight: 2,
             fillColor: '#f0a500', fillOpacity: 0.9,
             bubblingMouseEvents: false,
+            renderer: L.svg(),
         });
-        marker.on('mousedown', e => _onOsmNodeDragDown(e, i));
+        const onNodeDown = e => _onOsmNodeDragDown(e, i);
+        marker.on('mousedown', onNodeDown);
         marker.on('add', () => { const el = marker.getElement(); if (el) el.style.cursor = 'grab'; });
         nodeLayer.addLayer(marker);
+
+        // Transparent larger hit target so small nodes are easier to grab
+        const hit = L.circleMarker([node.lat, node.lon], {
+            radius: 12, fillOpacity: 0, opacity: 0,
+            bubblingMouseEvents: false, renderer: L.svg(), interactive: true,
+        });
+        hit.on('mousedown', onNodeDown);
+        hit.on('add', () => { const el = hit.getElement(); if (el) el.style.cursor = 'grab'; });
+        nodeLayer.addLayer(hit);
         return marker;
     });
+
+    // Midpoint handles between consecutive nodes for inserting new nodes.
+    // Added after node markers so they sit below nodes in the SVG DOM.
+    midpointMarkers = [];
+    const isClosed = currentNodes.length >= 2 &&
+        currentNodes[0].id === currentNodes[currentNodes.length - 1].id;
+    const mpEnd = isClosed ? currentNodes.length - 1 : currentNodes.length - 1;
+    for (let i = 0; i < mpEnd; i++) {
+        const a = currentNodes[i], b = currentNodes[i + 1];
+        const mlat = (a.lat + b.lat) / 2, mlon = (a.lon + b.lon) / 2;
+        const mp = L.circleMarker([mlat, mlon], {
+            radius: 4, color: '#4af', weight: 1.5,
+            fillColor: '#4af', fillOpacity: 0.7,
+            bubblingMouseEvents: false,
+            renderer: L.svg(),
+        });
+        const onMpDown = e => _onMidpointDragDown(e, i);
+        mp.on('mousedown', onMpDown);
+        mp.on('add', () => { const el = mp.getElement(); if (el) el.style.cursor = 'crosshair'; });
+        nodeLayer.addLayer(mp);
+
+        // Transparent larger hit target for midpoints
+        const mpHit = L.circleMarker([mlat, mlon], {
+            radius: 10, fillOpacity: 0, opacity: 0,
+            bubblingMouseEvents: false, renderer: L.svg(), interactive: true,
+        });
+        mpHit.on('mousedown', onMpDown);
+        mpHit.on('add', () => { const el = mpHit.getElement(); if (el) el.style.cursor = 'crosshair'; });
+        nodeLayer.addLayer(mpHit);
+        midpointMarkers.push(mp);
+    }
+
     nodeLayer.addTo(map);
 
     const props = feature.properties;
@@ -437,10 +472,10 @@ function clickNode(index) {
 function showOsmNodeProps(node, index, total) {
     const wayFeature = currentClickedFeature;
     const isPath = wayFeature && ['road', 'footway'].includes(wayFeature.properties.category);
-    // Simple heuristic for "not enclosed": check if it's a LineString and start != end
-    // Actually, we can just check if the backend would allow it.
-    // For UI, we'll show it if it's a road/footway and not the first/last node.
-    const canSplit = isPath && index > 0 && index < total - 1;
+    const isOpenBarrier = wayFeature && wayFeature.properties.category === 'barrier'
+        && currentNodes.length >= 2
+        && currentNodes[0]?.id !== currentNodes[currentNodes.length - 1]?.id;
+    const canSplit = (isPath || isOpenBarrier) && index > 0 && index < total - 1;
 
     const tagRows = Object.entries(node.tags || {})
         .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
@@ -556,7 +591,10 @@ function showNodeContextMenu(node, index, latlng) {
     const wayId = wayFeature.properties.id;
     const total = currentNodes.length;
     const isPath = ['road', 'footway'].includes(wayFeature.properties.category);
-    const canSplit = isPath && index > 0 && index < total - 1;
+    const isOpenBarrier = wayFeature.properties.category === 'barrier'
+        && currentNodes.length >= 2
+        && currentNodes[0]?.id !== currentNodes[currentNodes.length - 1]?.id;
+    const canSplit = (isPath || isOpenBarrier) && index > 0 && index < total - 1;
 
     const container = document.createElement('div');
     container.className = 'context-menu';
@@ -616,9 +654,9 @@ document.getElementById('way-edit-save')?.addEventListener('click', async () => 
     const res = await updateWayTagsApi(currentFile, editingWayId, tags, cat, lbl);
     if (!res.ok) { setStatus('Save failed', 'text-danger'); return; }
     bootstrap.Modal.getInstance(document.getElementById('way-edit-modal'))?.hide();
-    if (!changeLog.some(c => c.type === 'tag' && String(c.id) === String(editingWayId))) {
-        changeLog.push({ type: 'tag', id: editingWayId, category: cat, label: lbl });
-    }
+    const existingIdx = changeLog.findIndex(c => c.type === 'tag' && String(c.id) === String(editingWayId));
+    if (existingIdx >= 0) changeLog.splice(existingIdx, 1);
+    changeLog.push({ type: 'tag', id: editingWayId, category: cat, label: lbl });
     await _reloadWay(editingWayId);
     setStatus(`Tags saved for way ${editingWayId}`, 'text-success');
     renderChangesPanel();
@@ -727,7 +765,7 @@ function focusFeatureById(wayId) {
         const catLayer = geoLayers[cat];
         if (!catLayer) continue;
         let found = null;
-        catLayer.eachLayer(l => { if (l._featureId === wayId) found = l; });
+        catLayer.eachLayer(l => { if (String(l._featureId) === String(wayId)) found = l; });
         if (found) {
             if (currentClickedLayer && currentClickedLayer !== found) {
                 const oldCat = currentClickedLayer._osmCat;
@@ -745,7 +783,7 @@ function focusFeatureById(wayId) {
     // Search hidden layers still tracked in subtypeLayers
     for (const cat of ['road', 'footway', 'barrier']) {
         for (const layers of Object.values(subtypeLayers[cat])) {
-            const found = layers.find(l => l._featureId === wayId);
+            const found = layers.find(l => String(l._featureId) === String(wayId));
             if (found) {
                 if (found._featureRef) {
                     currentClickedFeature = found._featureRef;
@@ -900,6 +938,16 @@ async function undoNodeDeletion(wayId, nodeId) {
     }
 }
 
+async function undoNodeAddition(wayId, nodeId) {
+    if (!currentFile) return;
+    const res = await deleteNodeApi(currentFile, wayId, nodeId);
+    if (res.ok) {
+        changeLog = changeLog.filter(c => !(c.type === 'add_node' && c.way_id === wayId && c.node_id === nodeId));
+        await _reloadWay(wayId);
+        await refreshMetadata(currentFile);
+    }
+}
+
 async function undoWayNodeMoves(wayId) {
     if (!currentFile) return;
     // Pass original way ID to backend, but use virtual ID for local state
@@ -943,10 +991,11 @@ function renderAnnotationList() {
     const el = document.getElementById('ann-list');
     const count = document.getElementById('ann-count');
     if (!panel || !el || !count) return;
-    if (!annotations.length || currentAppMode === 'planner') { panel.style.display = 'none'; return; }
+    const addedNodeEntries = changeLog.filter(c => c.type === 'add_node');
+    if (!annotations.length && !addedNodeEntries.length || currentAppMode === 'planner') { panel.style.display = 'none'; return; }
     panel.style.display = '';
-    count.textContent = `(${annotations.length})`;
-    el.innerHTML = annotations.map(a => `
+    count.textContent = `(${annotations.length + addedNodeEntries.length})`;
+    const annHtml = annotations.map(a => `
     <div class="ann-item">
       <div>
         <span>${escHtml(a.type)}</span>
@@ -960,6 +1009,19 @@ function renderAnnotationList() {
       </div>
     </div>
   `).join('');
+    const nodeHtml = addedNodeEntries.map(d => {
+        const wayIdJson = JSON.stringify(d.way_id);
+        return `
+    <div class="ann-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
+      <div>
+        <span>add node to way</span>
+        <br><span class="ann-id">#${d.node_id} &rarr; #${d.way_id}</span>
+      </div>
+      <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
+              title="Undo node addition" onclick='event.stopPropagation(); undoNodeAddition(${wayIdJson}, ${d.node_id})'>&#8617;</button>
+    </div>`;
+    }).join('');
+    el.innerHTML = annHtml + nodeHtml;
 }
 
 async function deleteSelectedAnnotation() {
@@ -1075,6 +1137,23 @@ function openAnnEditModal(annId) {
     new bootstrap.Modal(document.getElementById('ann-detail-modal')).show();
 }
 
+async function handleMapdataUpload(file) {
+    setStatus(`Uploading ${file.name}...`, 'text-info');
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const data = await uploadMapdataApi(formData);
+        const sel = document.getElementById('file-select');
+        if (sel && ![...sel.options].some(o => o.value === data.filename)) {
+            sel.appendChild(new Option(data.filename, data.filename));
+        }
+        if (sel) sel.value = data.filename;
+        await loadMapData(data.filename);
+    } catch (err) {
+        setStatus(`Upload failed: ${err.message}`, 'text-danger');
+    }
+}
+
 let pendingGpxFile = null;
 
 function handleGpxMapCreation(file) {
@@ -1098,6 +1177,15 @@ document.getElementById('gpx-upload-submit')?.addEventListener('click', async ()
     const formData = new FormData();
     formData.append('file', pendingGpxFile);
     formData.append('name', name);
+    formData.append('options', JSON.stringify({
+        grid_margin: parseFloat(document.getElementById('gpx-grid-margin')?.value) || 150,
+        obstacle_radius: parseFloat(document.getElementById('gpx-obstacle-radius')?.value) || 2.0,
+        buffer_widths: {
+            road: parseFloat(document.getElementById('gpx-buf-road')?.value) || 7.0,
+            footway: parseFloat(document.getElementById('gpx-buf-footway')?.value) || 3.0,
+            barrier: parseFloat(document.getElementById('gpx-buf-barrier')?.value) || 2.0,
+        },
+    }));
 
     try {
         const data = await uploadGpxApi(formData);

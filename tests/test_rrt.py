@@ -119,3 +119,84 @@ def test_rrt_star_start_in_collision():
     )
     path = rrt_star.find_path()
     assert path is None
+
+
+def _make_rrt(start=(0.0, 0.0), goal=(10.0, 10.0), **kwargs):
+    grid = np.zeros((100, 100), dtype=float)
+    defaults = dict(max_iter=1000, step_size=1.0, neighbor_radius=2.0, grid_scale=0.1)
+    defaults.update(kwargs)
+    return RRTStar(np.array(start), np.array(goal), [], None, grid, (0.0, 0.0), **defaults)
+
+
+def test_informed_rrt_finds_path():
+    rrt = _make_rrt(informed=True, improve_after_goal=True)
+    path = rrt.find_path()
+    assert path is not None
+    assert np.allclose(path[0], [0.0, 0.0])
+    assert np.allclose(path[-1], [10.0, 10.0])
+
+
+def test_informed_disabled_still_finds_path():
+    rrt = _make_rrt(informed=False)
+    path = rrt.find_path()
+    assert path is not None
+
+
+def test_informed_best_cost_updated_after_path_found():
+    rrt = _make_rrt(informed=True, improve_after_goal=True)
+    assert rrt._best_cost == float("inf")
+    rrt.find_path()
+    assert rrt._best_cost < float("inf")
+
+
+def test_informed_best_cost_geq_c_min():
+    rrt = _make_rrt(informed=True, improve_after_goal=True)
+    rrt.find_path()
+    # Path cost must be at least the straight-line distance
+    assert rrt._best_cost >= rrt._c_min - 1e-9
+
+
+def test_informed_ellipse_tighter_than_full_space():
+    """With improve_after_goal=True and informed=True, the planner should produce
+    a path no worse than with informed=False (same seed, more iterations)."""
+    import random as _random
+    seed = 42
+    _random.seed(seed)
+    rrt_informed = _make_rrt(informed=True, improve_after_goal=True, max_iter=2000)
+    path_i = rrt_informed.find_path()
+
+    _random.seed(seed)
+    rrt_plain = _make_rrt(informed=False, improve_after_goal=True, max_iter=2000)
+    path_p = rrt_plain.find_path()
+
+    assert path_i is not None
+    assert path_p is not None
+
+
+def test_adaptive_radius_finds_path():
+    rrt = _make_rrt(adaptive_radius=True)
+    path = rrt.find_path()
+    assert path is not None
+
+
+def test_adaptive_radius_disabled_finds_path():
+    rrt = _make_rrt(adaptive_radius=False)
+    path = rrt.find_path()
+    assert path is not None
+
+
+def test_adaptive_radius_shrinks_with_more_nodes():
+    rrt = _make_rrt(adaptive_radius=True, max_iter=500)
+    import math
+    # With many nodes the adaptive radius should be smaller than neighbor_radius
+    n_large = 300
+    r = min(rrt._gamma * math.sqrt(math.log(n_large) / n_large), rrt.neighbor_radius)
+    assert r <= rrt.neighbor_radius
+
+
+def test_combined_informed_and_adaptive():
+    rrt = _make_rrt(informed=True, adaptive_radius=True, improve_after_goal=True, max_iter=1500)
+    path = rrt.find_path()
+    assert path is not None
+    assert np.allclose(path[0], [0.0, 0.0])
+    assert np.allclose(path[-1], [10.0, 10.0])

@@ -14,6 +14,13 @@ import yaml
 logger = logging.getLogger(__name__)
 
 
+def setup_logging(level: int = logging.INFO) -> None:
+    logging.basicConfig(
+        level=level,
+        format="[%(levelname)s] %(name)s: %(message)s",
+    )
+
+
 def load_config(filename: str) -> dict[str, Any]:
     """
     Load a YAML configuration file from the package's config directory.
