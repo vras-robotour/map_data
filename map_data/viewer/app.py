@@ -11,6 +11,7 @@ from werkzeug.routing import IntegerConverter
 
 from .ros_node import ROS_AVAILABLE, TrackerNode
 from .routes import bp
+from ..utils.config import setup_logging
 
 logger = logging.getLogger(__name__)
 socketio = SocketIO(cors_allowed_origins="*")
@@ -109,7 +110,7 @@ def main() -> None:
 
     app = create_app(data_dir=data_dir)
 
-    logging.basicConfig(level=logging.INFO)
+    setup_logging()
     # Using socketio.run instead of app.run
     # Disable debug mode to prevent the Flask reloader from initializing the ROS node twice
     socketio.run(app, host=args.host, port=args.port, debug=False, allow_unsafe_werkzeug=True)

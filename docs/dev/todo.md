@@ -341,12 +341,6 @@
       desc: 'The <code>telemetry_broadcaster</code> is hardcoded to 0.5s (2 Hz). For high-speed tracking or smooth visualization, this should be configurable or increased to 10–20 Hz when a ROS2 connection is active.',
       file: 'map_data/viewer/app.py:29'
     },
-    {
-      type: 'improvement', sev: 'minor',
-      title: 'Centralize and standardize logging configuration',
-      desc: 'Multiple scripts call <code>logging.basicConfig</code> in their <code>main()</code> blocks. Centralizing this (e.g., in <code>map_data.utils.config</code>) would ensure consistent log formatting across all CLI tools and the viewer, and prevent library-level side effects.',
-      file: 'map_data/info.py, map_data/viewer/app.py'
-    },
   ];
 
   let groupBy = 'type';

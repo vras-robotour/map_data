@@ -52,6 +52,7 @@
 - `ReplanPath` refactored into focused sub-modules: grid construction moved to `PathGrid` (`pathsolver/grid_constructor.py`), path smoothing to `smooth_path` (`pathsolver/smoothing.py`), and matplotlib debug visualization to `visualize_replan` (`pathsolver/visualizer.py`)
 - Core architecture split into modular components: `OverpassClient`, `parsing`, `serialization`
 - Config loading centralized to `map_data/utils/config.py`, eliminating duplicated YAML-loading logic from `map_data.py` and `replan.py`
+- Logging configuration centralized in `setup_logging()` (`map_data/utils/config.py`); `info.py`, `create_mapdata.py`, and `viewer/app.py` now call it inside `main()` instead of invoking `logging.basicConfig` at module level with inconsistent formats
 - `.mapdata` serialisation migrated from pickle to JSON + WKT; legacy pickle support was subsequently removed for security reasons
 - Overpass queries parallelised for faster map data loading
 - `Way` class refactored to a `@dataclass` with full type hints
