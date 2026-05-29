@@ -38,6 +38,7 @@
 
 ### Changed
 
+- Interactive viewer: GPX download now exports a `<trk><trkseg><trkpt>` track by default; a Track / Waypoints toggle in the planner panel switches back to the legacy `<wpt>` format
 - Interactive viewer: annotation vertex handles in Edit mode now only appear when the annotation is clicked, not for all annotations at once
 - Interactive viewer: annotation vertex handles now use the same orange circle + midpoint style as OSM node editing, replacing Leaflet.draw square handles
 - Interactive viewer: transparent overlay markers provide larger click/drag hit targets for OSM nodes, annotation vertices, and planner waypoints without changing their visual appearance
@@ -60,6 +61,7 @@
 
 ### Fixed
 
+- `visualizer.py`: swapped X/Y axis labels corrected — Easting is now on the X axis, Northing on Y
 - Interactive viewer: node drag in Edit mode missed clicks intermittently because canvas node markers rendered below the SVG ghost layer; node markers now use the SVG renderer so events reach them directly
 - Interactive viewer: adding a node to a buffered (Polygon) way drew a faint spike from the buffer outline back to the new node position because `apply_added_nodes` inserted the centerline coordinate into the exterior ring of the buffer polygon; geometry is now left unchanged for Polygon ways and only `way.nodes` is updated
 - Interactive viewer: split segments of buffered footways and barriers were rendered thinner than the original after a node had been added to the way; the spike inserted into the buffer polygon corrupted its area/perimeter, causing `split_way` to calculate a smaller-than-correct buffer radius

@@ -306,12 +306,6 @@
       file: 'viewer/static/js/layers.js:536 · viewer/static/js/ui_handlers.js:768'
     },
     {
-      type: 'improvement', sev: 'minor',
-      title: 'GPX export generates waypoints instead of a track',
-      desc: '<code>generateGPX()</code> exports path points as <code>&lt;wpt&gt;</code> elements. Most robotic navigation tools and GIS applications (JOSM, QGIS, nav stacks) expect a continuous route as <code>&lt;trk&gt;&lt;trkseg&gt;&lt;trkpt&gt;</code>. The importer already handles both formats; the exporter should output a proper track segment.',
-      file: 'viewer/static/js/planner_mode.js:766–772'
-    },
-    {
       type: 'improvement', sev: 'nice-to-have',
       title: 'Copy lat/lon to clipboard from node inspector',
       desc: 'The node properties panel shows lat/lon as plain text with no way to copy them easily. A small clipboard button next to each coordinate value would speed up workflows that involve cross-referencing node positions in other tools.',
@@ -334,12 +328,6 @@
       title: 'Show actual planned path length separately from straight-line distance',
       desc: '<code>PlannerMode.updateUI()</code> sums straight-line distances between the current waypoint list. Before replanning this is the crow-flies distance; after replanning it approximates the true length since points are densified. Displaying the computed path length explicitly after a successful replan (from the returned path point count × cell size, or by summing the replanned coords) would give more actionable feedback.',
       file: 'viewer/static/js/planner_mode.js:497–521'
-    },
-    {
-      type: 'bug', sev: 'minor',
-      title: 'Swapped Northing/Easting axis labels in visualizer',
-      desc: 'In <code>visualizer.py</code>, <code>ax.set_xlabel("Northing [m]")</code> and <code>ax.set_ylabel("Easting [m]")</code> are swapped. Standard UTM representation maps Easting to X and Northing to Y.',
-      file: 'map_data/pathsolver/visualizer.py:59–60'
     },
     {
       type: 'improvement', sev: 'nice-to-have',

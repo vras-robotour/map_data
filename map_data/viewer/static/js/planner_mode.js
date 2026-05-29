@@ -772,6 +772,18 @@ class PlannerMode {
   }
 
   generateGPX() {
+    const fmt = document.querySelector('input[name="gpx-format"]:checked')?.value ?? 'track';
+    if (fmt === 'track') {
+      const trkpts = this.points.map(p => `      <trkpt lat="${p.lat}" lon="${p.lon}"></trkpt>`).join('\n');
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="MapDataPlanner">
+  <trk>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>`;
+    }
     const pts = this.points.map(p => `  <wpt lat="${p.lat}" lon="${p.lon}"></wpt>`).join('\n');
     return `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="MapDataPlanner">

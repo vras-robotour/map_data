@@ -55,8 +55,8 @@ def visualize_replan(
         ax.plot(path[-1, 0], path[-1, 1], "bo", label="Goal")
 
     # Set plot properties
-    ax.set_xlabel("Northing [m]")
-    ax.set_ylabel("Easting [m]")
+    ax.set_xlabel("Easting [m]")
+    ax.set_ylabel("Northing [m]")
     ax.set_title("Replanned Path")
 
     ax.legend()
