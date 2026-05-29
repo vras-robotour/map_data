@@ -218,44 +218,6 @@ async function initApp() {
         }
     });
 
-    document.getElementById('way-edit-add-prop-btn')?.addEventListener('click', () => {
-        const div = document.createElement('div');
-        div.className = 'd-flex gap-1 mb-1';
-        div.innerHTML = `
-      <input class="form-control form-control-sm bg-dark text-light border-secondary we-key"
-             placeholder="key" style="flex:1;font-size:0.75rem;">
-      <input class="form-control form-control-sm bg-dark text-light border-secondary we-val"
-             placeholder="value" style="flex:1;font-size:0.75rem;">
-      <button type="button" class="btn btn-sm btn-outline-danger px-1"
-              onclick="this.closest('.d-flex').remove()">×</button>`;
-        document.getElementById('way-edit-props').appendChild(div);
-    });
-
-    document.getElementById('way-edit-save')?.addEventListener('click', async () => {
-        if (!editingWayId || !currentFile) return;
-        const tags = {};
-        document.querySelectorAll('#way-edit-props .d-flex').forEach(row => {
-            const k = row.querySelector('.we-key').value.trim();
-            const v = row.querySelector('.we-val').value.trim();
-            if (k) tags[k] = v;
-        });
-        const savedWayId = editingWayId;
-        const cat = currentClickedFeature?.properties?.category || 'unknown';
-        const lbl = currentClickedFeature?.properties?.tags?.highway
-            || currentClickedFeature?.properties?.tags?.barrier || '';
-        bootstrap.Modal.getInstance(document.getElementById('way-edit-modal')).hide();
-        const res = await updateWayTagsApi(currentFile, savedWayId, tags, cat, lbl);
-        if (res.ok) {
-            const existing = changeLog.findIndex(c => c.type === 'tag' && c.id === savedWayId);
-            if (existing >= 0) changeLog.splice(existing, 1);
-            changeLog.push({ type: 'tag', id: savedWayId, category: cat, label: lbl });
-            setStatus('Properties updated', 'text-success');
-            await _reloadWay(savedWayId);
-        } else {
-            setStatus('Save failed', 'text-danger');
-        }
-    });
-
     document.getElementById('ann-add-prop-btn')?.addEventListener('click', () => {
         const div = document.createElement('div');
         div.className = 'd-flex gap-1 mb-1';

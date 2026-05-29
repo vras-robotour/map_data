@@ -654,9 +654,9 @@ document.getElementById('way-edit-save')?.addEventListener('click', async () => 
     const res = await updateWayTagsApi(currentFile, editingWayId, tags, cat, lbl);
     if (!res.ok) { setStatus('Save failed', 'text-danger'); return; }
     bootstrap.Modal.getInstance(document.getElementById('way-edit-modal'))?.hide();
-    if (!changeLog.some(c => c.type === 'tag' && String(c.id) === String(editingWayId))) {
-        changeLog.push({ type: 'tag', id: editingWayId, category: cat, label: lbl });
-    }
+    const existingIdx = changeLog.findIndex(c => c.type === 'tag' && String(c.id) === String(editingWayId));
+    if (existingIdx >= 0) changeLog.splice(existingIdx, 1);
+    changeLog.push({ type: 'tag', id: editingWayId, category: cat, label: lbl });
     await _reloadWay(editingWayId);
     setStatus(`Tags saved for way ${editingWayId}`, 'text-success');
     renderChangesPanel();

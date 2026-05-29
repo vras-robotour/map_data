@@ -300,18 +300,6 @@
       file: 'map_data/pathsolver/rrt_star.py, map_data/pathsolver/grid_astar.py'
     },
     {
-      type: 'bug', sev: 'important',
-      title: 'Duplicate event listeners on way-edit-save and way-edit-add-prop-btn',
-      desc: 'Both <code>ui_handlers.js</code> (top-level, runs on script load) and <code>map_setup.js</code> (inside <code>initApp</code>) attach listeners to the same two buttons. Clicking "Add property" in the way edit modal adds two rows instead of one. Clicking "Save" fires <code>updateWayTagsApi</code> twice, which could cause race conditions.',
-      file: 'viewer/static/js/ui_handlers.js:642,665 · viewer/static/js/map_setup.js:221,234'
-    },
-    {
-      type: 'bug', sev: 'important',
-      title: 'Planner mousemove/mouseup listeners accumulate on map without cleanup',
-      desc: 'In <code>PlannerMode.redraw()</code>, each call registers new <code>map.on(\'mousemove\')</code> and <code>map.on(\'mouseup\')</code> handlers per waypoint marker without ever removing the previous ones. <code>stopDrag</code> calls <code>this.redraw()</code>, which adds yet another round of listeners. The closure\'s <code>dragging</code> flag prevents double-firing, but stale handlers accumulate linearly with usage.',
-      file: 'viewer/static/js/planner_mode.js:411–427'
-    },
-    {
       type: 'bug', sev: 'minor',
       title: 'Feature reselection after reload fails for virtual split-way IDs',
       desc: '<code>_reselectFeature</code> compares <code>layer._featureId === wayId</code> with strict equality. <code>_featureId</code> is set from <code>feature.properties.id</code> — a number for real OSM ways, but a string like <code>"123456:0"</code> for virtual split segments. After <code>_reloadWay</code> converts to string via <code>String(wayId).split[\':\'](0)</code>, the strict comparison fails against numeric IDs and the feature is deselected even when visible. Fix: use <code>String(layer._featureId) === String(wayId)</code> in both <code>_reselectFeature</code> and <code>focusFeatureById</code>.',

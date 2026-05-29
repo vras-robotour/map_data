@@ -17,6 +17,7 @@ class PlannerMode {
     this.highwayCosts = {};
     this.surfaceCosts = {};
     this.defaults = {};
+    this._mapDragListeners = [];
 
     this.init();
   }
@@ -408,15 +409,17 @@ class PlannerMode {
       wpHit.on('mousedown', onWpDown);
       this.markerLayer.addLayer(wpHit);
 
-      map.on('mousemove', (e) => {
+      const onMouseMove = (e) => {
         if (dragging) {
           marker.setLatLng(e.latlng);
           p.lat = e.latlng.lat;
           p.lon = e.latlng.lng;
-          this.hasPlannedPath = false; // Point moved, path is invalid
+          this.hasPlannedPath = false;
           this.drawPathLine();
         }
-      });
+      };
+      map.on('mousemove', onMouseMove);
+      this._mapDragListeners.push({ event: 'mousemove', fn: onMouseMove });
 
       const stopDrag = () => {
         if (dragging) {
@@ -424,11 +427,12 @@ class PlannerMode {
           this.isDragging = false;
           this.lastDragEndTime = Date.now();
           map.dragging.enable();
-          this.redraw(); // snap or final update
+          this.redraw();
         }
       };
 
       map.on('mouseup', stopDrag);
+      this._mapDragListeners.push({ event: 'mouseup', fn: stopDrag });
       marker.on('mouseup', stopDrag);
 
       // Right click to delete
@@ -491,6 +495,10 @@ class PlannerMode {
   }
 
   clearMarkers() {
+    for (const { event, fn } of this._mapDragListeners) {
+      map.off(event, fn);
+    }
+    this._mapDragListeners = [];
     this.markerLayer.clearLayers();
   }
 
