@@ -522,6 +522,7 @@ class PlannerMode {
     }
     document.getElementById('export-gpx-path-btn').disabled = this.points.length < 2;
     document.getElementById('export-wormhole-path-btn').disabled = this.points.length < 2;
+    document.getElementById('planner-clear-btn').disabled = this.points.length === 0;
     document.getElementById('planner-clear-middle-btn').disabled = this.points.length <= 2;
 
     const isAllTerrain = document.getElementById('mode-all-terrain').checked;
