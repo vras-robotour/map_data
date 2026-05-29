@@ -299,6 +299,114 @@
       desc: 'The main bottlenecks are the Python <code>_bresenham</code> generator and <code>_segment_cost</code> in RRT* (called O(max_iter × neighbors) times), and the <code>heapq</code> loop in <code>grid_astar</code>. Recommended approach: (1) try <code>@numba.njit</code> on these inner loops first — zero build overhead, easy to toggle; (2) replace <code>grid_astar</code> with <code>skimage.graph.route_through_array</code> which is C-backed; (3) Cython or pybind11 only if numba is unacceptable for deployment. Full C/C++ rewrite is not justified given that numpy, cKDTree, and Shapely/GEOS are already native.',
       file: 'map_data/pathsolver/rrt_star.py, map_data/pathsolver/grid_astar.py'
     },
+    {
+      type: 'bug', sev: 'important',
+      title: 'Duplicate event listeners on way-edit-save and way-edit-add-prop-btn',
+      desc: 'Both <code>ui_handlers.js</code> (top-level, runs on script load) and <code>map_setup.js</code> (inside <code>initApp</code>) attach listeners to the same two buttons. Clicking "Add property" in the way edit modal adds two rows instead of one. Clicking "Save" fires <code>updateWayTagsApi</code> twice, which could cause race conditions.',
+      file: 'viewer/static/js/ui_handlers.js:642,665 · viewer/static/js/map_setup.js:221,234'
+    },
+    {
+      type: 'bug', sev: 'important',
+      title: 'Planner mousemove/mouseup listeners accumulate on map without cleanup',
+      desc: 'In <code>PlannerMode.redraw()</code>, each call registers new <code>map.on(\'mousemove\')</code> and <code>map.on(\'mouseup\')</code> handlers per waypoint marker without ever removing the previous ones. <code>stopDrag</code> calls <code>this.redraw()</code>, which adds yet another round of listeners. The closure\'s <code>dragging</code> flag prevents double-firing, but stale handlers accumulate linearly with usage.',
+      file: 'viewer/static/js/planner_mode.js:411–427'
+    },
+    {
+      type: 'bug', sev: 'minor',
+      title: 'Feature reselection after reload fails for virtual split-way IDs',
+      desc: '<code>_reselectFeature</code> compares <code>layer._featureId === wayId</code> with strict equality. <code>_featureId</code> is set from <code>feature.properties.id</code> — a number for real OSM ways, but a string like <code>"123456:0"</code> for virtual split segments. After <code>_reloadWay</code> converts to string via <code>String(wayId).split[\':\'](0)</code>, the strict comparison fails against numeric IDs and the feature is deselected even when visible. Fix: use <code>String(layer._featureId) === String(wayId)</code> in both <code>_reselectFeature</code> and <code>focusFeatureById</code>.',
+      file: 'viewer/static/js/layers.js:536 · viewer/static/js/ui_handlers.js:768'
+    },
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'Feature search does not match annotation types or properties',
+      desc: '<code>filterLayers</code> searches by <code>_featureId</code>, <code>tags.name</code>, and <code>tags.ref</code> only. Annotation layers have no <code>_featureId</code> and no <code>tags</code>, so searching for "wall" or "obstacle" finds nothing even when such annotations exist. The filter should also match <code>ann.type</code> and the key property values (e.g. <code>barrier</code>, <code>highway</code>).',
+      file: 'viewer/static/js/layers.js:53–89'
+    },
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'GPX export generates waypoints instead of a track',
+      desc: '<code>generateGPX()</code> exports path points as <code>&lt;wpt&gt;</code> elements. Most robotic navigation tools and GIS applications (JOSM, QGIS, nav stacks) expect a continuous route as <code>&lt;trk&gt;&lt;trkseg&gt;&lt;trkpt&gt;</code>. The importer already handles both formats; the exporter should output a proper track segment.',
+      file: 'viewer/static/js/planner_mode.js:766–772'
+    },
+    {
+      type: 'improvement', sev: 'nice-to-have',
+      title: 'Copy lat/lon to clipboard from node inspector',
+      desc: 'The node properties panel shows lat/lon as plain text with no way to copy them easily. A small clipboard button next to each coordinate value would speed up workflows that involve cross-referencing node positions in other tools.',
+      file: 'viewer/static/js/ui_handlers.js:506–515'
+    },
+    {
+      type: 'improvement', sev: 'nice-to-have',
+      title: 'No undo for annotation geometry edits',
+      desc: 'OSM way changes (deletions, splits, tag edits, node moves) have full undo via the Changes panel. Annotation geometry drags are persisted immediately with no rollback path — <code>_saveAnnotationGeometry</code> overwrites on every mouseup. At minimum, a "revert to last saved geometry" action per annotation in the Annotations panel would help recover from accidental edits.',
+      file: 'viewer/static/js/draw_handlers.js:238–245 · viewer/static/js/ui_handlers.js:989–1024'
+    },
+    {
+      type: 'improvement', sev: 'nice-to-have',
+      title: 'Add satellite tile layer option',
+      desc: 'The viewer only offers OSM tiles. A tile layer switcher (e.g. Esri World Imagery for satellite, or OpenTopoMap) would make it much easier to verify annotation placement — barriers and footways are far easier to confirm against aerial imagery than the OSM vector style.',
+      file: 'viewer/static/js/map_setup.js · viewer/templates/index.html'
+    },
+    {
+      type: 'improvement', sev: 'nice-to-have',
+      title: 'Show actual planned path length separately from straight-line distance',
+      desc: '<code>PlannerMode.updateUI()</code> sums straight-line distances between the current waypoint list. Before replanning this is the crow-flies distance; after replanning it approximates the true length since points are densified. Displaying the computed path length explicitly after a successful replan (from the returned path point count × cell size, or by summing the replanned coords) would give more actionable feedback.',
+      file: 'viewer/static/js/planner_mode.js:497–521'
+    },
+    {
+      type: 'bug', sev: 'minor',
+      title: 'Swapped Northing/Easting axis labels in visualizer',
+      desc: 'In <code>visualizer.py</code>, <code>ax.set_xlabel("Northing [m]")</code> and <code>ax.set_ylabel("Easting [m]")</code> are swapped. Standard UTM representation maps Easting to X and Northing to Y.',
+      file: 'map_data/pathsolver/visualizer.py:59–60'
+    },
+    {
+      type: 'bug', sev: 'important',
+      title: 'Blocking time.sleep calls in OverpassClient backoff',
+      desc: 'The <code>_wait_for_slot</code> and <code>query_raw</code> methods use <code>time.sleep()</code> for rate-limit backoff. When running inside the Flask/SocketIO viewer, this blocks the execution thread, potentially causing UI hangs or websocket timeouts during heavy OSM data fetches.',
+      file: 'map_data/utils/overpass.py:46,55,77,81'
+    },
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'Implement Informed RRT* for faster convergence',
+      desc: 'Once an initial path is found, RRT* can restrict sampling to an ellipsoidal subset of the state space defined by the current best cost. This significantly accelerates the optimization phase and improves the quality of the final path.',
+      file: 'map_data/pathsolver/rrt_star.py'
+    },
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'Adaptive neighbor radius for RRT*',
+      desc: 'Using a fixed <code>neighbor_radius</code> is sub-optimal as the tree grows. Implementing a radius that shrinks as a function of the number of nodes (log n / n) ensures asymptotic optimality while maintaining a manageable number of rewiring checks.',
+      file: 'map_data/pathsolver/rrt_star.py'
+    },
+    {
+      type: 'improvement', sev: 'important',
+      title: 'Vectorize UTM conversions in MapData',
+      desc: '<code>MapData.get_points()</code> iterates through the <code>nodes_cache</code> and calls <code>utm.from_latlon</code> for each node individually. Vectorizing this by passing arrays of lats/lons to the <code>utm</code> library would provide a significant speedup for large maps with thousands of nodes.',
+      file: 'map_data/map_data.py:548–551'
+    },
+    {
+      type: 'improvement', sev: 'important',
+      title: 'Improve path smoothing robustness',
+      desc: 'The current gradient-descent smoother reverts to the original path entirely if any segment collides with an obstacle. A more robust implementation should allow local adjustments (pushing away from obstacles) or find the maximum safe smoothing factor per segment.',
+      file: 'map_data/pathsolver/smoothing.py'
+    },
+    {
+      type: 'improvement', sev: 'nice-to-have',
+      title: 'Map validation and linting CLI tool',
+      desc: 'Create a tool to validate <code>.mapdata</code> files for common structural issues: disconnected footway segments, overlapping barriers that might break planners, or missing metadata. This would help debug parsing errors before they reach the simulator or robot.',
+      file: 'map_data/info.py'
+    },
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'Configurable telemetry broadcast rate',
+      desc: 'The <code>telemetry_broadcaster</code> is hardcoded to 0.5s (2 Hz). For high-speed tracking or smooth visualization, this should be configurable or increased to 10–20 Hz when a ROS2 connection is active.',
+      file: 'map_data/viewer/app.py:29'
+    },
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'Centralize and standardize logging configuration',
+      desc: 'Multiple scripts call <code>logging.basicConfig</code> in their <code>main()</code> blocks. Centralizing this (e.g., in <code>map_data.utils.config</code>) would ensure consistent log formatting across all CLI tools and the viewer, and prevent library-level side effects.',
+      file: 'map_data/info.py, map_data/viewer/app.py'
+    },
   ];
 
   let groupBy = 'type';
