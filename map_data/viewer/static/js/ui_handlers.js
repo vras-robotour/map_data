@@ -765,7 +765,7 @@ function focusFeatureById(wayId) {
         const catLayer = geoLayers[cat];
         if (!catLayer) continue;
         let found = null;
-        catLayer.eachLayer(l => { if (l._featureId === wayId) found = l; });
+        catLayer.eachLayer(l => { if (String(l._featureId) === String(wayId)) found = l; });
         if (found) {
             if (currentClickedLayer && currentClickedLayer !== found) {
                 const oldCat = currentClickedLayer._osmCat;
@@ -783,7 +783,7 @@ function focusFeatureById(wayId) {
     // Search hidden layers still tracked in subtypeLayers
     for (const cat of ['road', 'footway', 'barrier']) {
         for (const layers of Object.values(subtypeLayers[cat])) {
-            const found = layers.find(l => l._featureId === wayId);
+            const found = layers.find(l => String(l._featureId) === String(wayId));
             if (found) {
                 if (found._featureRef) {
                     currentClickedFeature = found._featureRef;

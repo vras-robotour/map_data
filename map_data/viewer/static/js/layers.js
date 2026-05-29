@@ -544,7 +544,7 @@ function _reselectFeature(wayId) {
         const catLayer = geoLayers[cat];
         if (!catLayer) continue;
         let found = null;
-        catLayer.eachLayer(layer => { if (layer._featureId === wayId) found = layer; });
+        catLayer.eachLayer(layer => { if (String(layer._featureId) === String(wayId)) found = layer; });
         if (found) {
             if (currentClickedLayer && currentClickedLayer !== found)
                 currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);

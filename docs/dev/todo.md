@@ -300,12 +300,6 @@
       file: 'map_data/pathsolver/rrt_star.py, map_data/pathsolver/grid_astar.py'
     },
     {
-      type: 'bug', sev: 'minor',
-      title: 'Feature reselection after reload fails for virtual split-way IDs',
-      desc: '<code>_reselectFeature</code> compares <code>layer._featureId === wayId</code> with strict equality. <code>_featureId</code> is set from <code>feature.properties.id</code> — a number for real OSM ways, but a string like <code>"123456:0"</code> for virtual split segments. After <code>_reloadWay</code> converts to string via <code>String(wayId).split[\':\'](0)</code>, the strict comparison fails against numeric IDs and the feature is deselected even when visible. Fix: use <code>String(layer._featureId) === String(wayId)</code> in both <code>_reselectFeature</code> and <code>focusFeatureById</code>.',
-      file: 'viewer/static/js/layers.js:536 · viewer/static/js/ui_handlers.js:768'
-    },
-    {
       type: 'improvement', sev: 'nice-to-have',
       title: 'Copy lat/lon to clipboard from node inspector',
       desc: 'The node properties panel shows lat/lon as plain text with no way to copy them easily. A small clipboard button next to each coordinate value would speed up workflows that involve cross-referencing node positions in other tools.',
