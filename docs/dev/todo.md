@@ -360,18 +360,6 @@
       file: 'map_data/pathsolver/rrt_star.py'
     },
     {
-      type: 'improvement', sev: 'important',
-      title: 'Vectorize UTM conversions in MapData',
-      desc: '<code>MapData.get_points()</code> iterates through the <code>nodes_cache</code> and calls <code>utm.from_latlon</code> for each node individually. Vectorizing this by passing arrays of lats/lons to the <code>utm</code> library would provide a significant speedup for large maps with thousands of nodes.',
-      file: 'map_data/map_data.py:548–551'
-    },
-    {
-      type: 'improvement', sev: 'important',
-      title: 'Improve path smoothing robustness',
-      desc: 'The current gradient-descent smoother reverts to the original path entirely if any segment collides with an obstacle. A more robust implementation should allow local adjustments (pushing away from obstacles) or find the maximum safe smoothing factor per segment.',
-      file: 'map_data/pathsolver/smoothing.py'
-    },
-    {
       type: 'improvement', sev: 'nice-to-have',
       title: 'Map validation and linting CLI tool',
       desc: 'Create a tool to validate <code>.mapdata</code> files for common structural issues: disconnected footway segments, overlapping barriers that might break planners, or missing metadata. This would help debug parsing errors before they reach the simulator or robot.',

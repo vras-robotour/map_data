@@ -44,6 +44,8 @@
 - Interactive viewer: node drag in Edit mode is more responsive
 - `visualize_mapdata` CLI tool removed; the browser-based viewer supersedes it
 - `grid_cost_weight`, `obstacle_radius`, and `buffer_widths` are now per-run arguments to `grid_astar`, `RRTStar`, and `ReplanPath`; `osm_margin + reserve_margin` replaced with a single `grid_margin` constant (150 m default) accepted as a per-call override in `MapData.__init__`, `parse_osm_nodes`, and `separate_ways`
+- `MapData.get_points()` now vectorizes UTM conversion by passing full lat/lon arrays to `utm.from_latlon` in one call instead of looping per node; all nodes are projected into the map's zone for consistency
+- `smooth_path` now returns the best collision-free intermediate state instead of reverting to the original path entirely when a smoothed segment collides with an obstacle
 - `ReplanPath` refactored into focused sub-modules: grid construction moved to `PathGrid` (`pathsolver/grid_constructor.py`), path smoothing to `smooth_path` (`pathsolver/smoothing.py`), and matplotlib debug visualization to `visualize_replan` (`pathsolver/visualizer.py`)
 - Core architecture split into modular components: `OverpassClient`, `parsing`, `serialization`
 - Config loading centralized to `map_data/utils/config.py`, eliminating duplicated YAML-loading logic from `map_data.py` and `replan.py`

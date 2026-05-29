@@ -532,11 +532,18 @@ class MapData:
             containing ``[easting, northing, z]``.
 
         """
-        points = {}
-        for node_id, data in self.nodes_cache.items():
-            e, n, _, _ = utm.from_latlon(data["lat"], data["lon"])
-            points[node_id] = np.array([e, n, z]).reshape(3, 1)
-        return points
+        if not self.nodes_cache:
+            return {}
+        node_ids = list(self.nodes_cache.keys())
+        lats = np.array([self.nodes_cache[nid]["lat"] for nid in node_ids])
+        lons = np.array([self.nodes_cache[nid]["lon"] for nid in node_ids])
+        eastings, northings, _, _ = utm.from_latlon(
+            lats, lons, force_zone_number=self.zone_number, force_zone_letter=self.zone_letter
+        )
+        return {
+            nid: np.array([e, n, z]).reshape(3, 1)
+            for nid, e, n in zip(node_ids, eastings, northings)
+        }
 
     def get_ways(self) -> dict[str, list[Way]]:
         """
