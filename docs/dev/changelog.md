@@ -10,7 +10,7 @@
 - Interactive viewer: vertex-level editing for manual annotations in Edit mode
 - Interactive viewer: tag editing with save and undo support
 - Interactive viewer: audit change log stored in `.annotations.json`
-- Interactive viewer: feature search by ID or name in the sidebar
+- Interactive viewer: feature search by ID or name in the sidebar; search now also matches all OSM tag values and, for annotations, the annotation type and all extra property keys and values (e.g. searching "wall" or "barrier" finds matching annotations)
 - Interactive viewer: category and subtype visibility toggles
 - Interactive viewer: Leaflet.Snap integration for precise annotation alignment
 - Interactive viewer: GPX file import for waypoint overlays

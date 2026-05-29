@@ -17,6 +17,7 @@ function setSubtypeVisible(cat, subtype, visible) {
 function addAnnotationToLayer(ann) {
     L.geoJSON(ann.geometry, { style: _annStyle(ann) }).eachLayer(layer => {
         layer.options._ann_id = ann.id;
+        ann._layer = layer;
         const cat = ann.type === 'path' ? 'path' : 'annotation';
 
         layer.on('click', e => {
@@ -52,40 +53,49 @@ function renderAnnotationLayer() {
 
 function filterLayers(query) {
     const q = query.toLowerCase().trim();
-    ['road', 'footway', 'barrier', 'annotation'].forEach(cat => {
-        const layer = cat === 'annotation' ? drawnItems : geoLayers[cat];
-        if (!layer) return;
 
-        layer.eachLayer(l => {
-            let visible = true;
-            if (q) {
-                const id = String(l._featureId || l.options._ann_id || '').toLowerCase();
-                const tags = l._featureRef?.properties?.tags || {};
-                const name = (tags.name || tags.ref || '').toLowerCase();
-                visible = id.includes(q) || name.includes(q);
-            }
-
-            if (visible) {
-                if (cat === 'annotation') {
-                    if (!drawnItems.hasLayer(l)) drawnItems.addLayer(l);
-                } else {
+    // OSM categories: iterate subtypeLayers (persistent) so removed layers can be restored
+    ['road', 'footway', 'barrier'].forEach(cat => {
+        Object.values(subtypeLayers[cat] || {}).forEach(layers => {
+            layers.forEach(l => {
+                let visible = true;
+                if (q) {
+                    const id = String(l._featureId || '').toLowerCase();
+                    const tags = l._featureRef?.properties?.tags || {};
+                    const tagText = Object.values(tags).join(' ').toLowerCase();
+                    visible = id.includes(q) || tagText.includes(q);
+                }
+                if (visible) {
                     const st = getSubtype(l._featureRef, cat);
                     if (subtypeFilters[cat][st] !== false && !hiddenWayIds.has(l._featureId)) {
                         if (!geoLayers[cat].hasLayer(l)) geoLayers[cat].addLayer(l);
                     } else {
                         geoLayers[cat].removeLayer(l);
                     }
-                }
-            } else {
-                if (cat === 'annotation') {
-                    // For drawnItems, we might want to keep annotations but just not show them
-                    // But drawnItems IS a layer group.
-                    drawnItems.removeLayer(l);
                 } else {
                     geoLayers[cat].removeLayer(l);
                 }
-            }
+            });
         });
+    });
+
+    // Annotations: iterate annotations array (persistent) using stored _layer reference
+    annotations.forEach(ann => {
+        const l = ann._layer;
+        if (!l) return;
+        let visible = true;
+        if (q) {
+            const id = String(ann.id || '').toLowerCase();
+            const props = ann.properties || {};
+            const annText = [ann.type || '', ...Object.keys(props), ...Object.values(props)]
+                .join(' ').toLowerCase();
+            visible = id.includes(q) || annText.includes(q);
+        }
+        if (visible) {
+            if (!drawnItems.hasLayer(l)) drawnItems.addLayer(l);
+        } else {
+            drawnItems.removeLayer(l);
+        }
     });
 }
 

@@ -1,4 +1,5 @@
 html, body { height: 100%; margin: 0; overflow: hidden; font-size: 14px; }
+.form-control.bg-dark::placeholder { color: #6c7a9c; opacity: 1; }
 #app { display: flex; flex-direction: column; height: 100vh; }
 #topbar { flex-shrink: 0; background: #1a1a2e; border-bottom: 1px solid #333; padding: 6px 12px; }
 #main { display: flex; flex: 1; overflow: hidden; }

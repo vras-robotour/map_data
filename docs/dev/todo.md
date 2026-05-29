@@ -307,12 +307,6 @@
     },
     {
       type: 'improvement', sev: 'minor',
-      title: 'Feature search does not match annotation types or properties',
-      desc: '<code>filterLayers</code> searches by <code>_featureId</code>, <code>tags.name</code>, and <code>tags.ref</code> only. Annotation layers have no <code>_featureId</code> and no <code>tags</code>, so searching for "wall" or "obstacle" finds nothing even when such annotations exist. The filter should also match <code>ann.type</code> and the key property values (e.g. <code>barrier</code>, <code>highway</code>).',
-      file: 'viewer/static/js/layers.js:53–89'
-    },
-    {
-      type: 'improvement', sev: 'minor',
       title: 'GPX export generates waypoints instead of a track',
       desc: '<code>generateGPX()</code> exports path points as <code>&lt;wpt&gt;</code> elements. Most robotic navigation tools and GIS applications (JOSM, QGIS, nav stacks) expect a continuous route as <code>&lt;trk&gt;&lt;trkseg&gt;&lt;trkpt&gt;</code>. The importer already handles both formats; the exporter should output a proper track segment.',
       file: 'viewer/static/js/planner_mode.js:766–772'
