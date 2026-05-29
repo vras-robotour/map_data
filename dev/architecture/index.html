@@ -1114,6 +1114,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#project-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project structure
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1451,6 +1462,17 @@
     <span class="md-ellipsis">
       
         Data flow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project structure
       
     </span>
   </a>
@@ -1806,7 +1828,7 @@
 <li>relations query — multipolygon relations that reference the above ways</li>
 <li>nodes query — all standalone point features (obstacle nodes)</li>
 </ul>
-<p>The bounding box is the convex hull of the input waypoints expanded by <code>osm_margin + reserve_margin</code> metres on all sides (defaults: 100 m + 50 m).</p>
+<p>The bounding box is the convex hull of the input waypoints expanded by <code>grid_margin</code> metres on all sides (default: 150 m); <code>grid_margin</code> is a per-call override accepted by <code>MapData.__init__</code>, <code>parse_osm_nodes</code>, and <code>separate_ways</code>.</p>
 <p><strong>Core attributes after parsing:</strong></p>
 <table>
 <thead>
@@ -1911,7 +1933,7 @@
 <tr>
 <td><code>pathsolver/rrt_star.py</code></td>
 <td><code>RRTStar</code></td>
-<td>Sampling-based planner; produces smoother paths in cluttered environments</td>
+<td>Sampling-based planner; supports Informed RRT* (ellipsoidal sampling after first path found) and adaptive neighbor radius (<code>γ·√(log n/n)</code>) for asymptotic optimality</td>
 </tr>
 <tr>
 <td><code>pathsolver/smoothing.py</code></td>
@@ -1934,12 +1956,42 @@
 <p>Key parameters now exposed in <code>planner_defaults.yaml</code>: <code>grid_cost_weight</code>, <code>obstacle_radius</code>, and <code>buffer_widths</code> (per road type).</p>
 <hr />
 <h2 id="viewer">Viewer</h2>
-<p>The viewer (<code>map_data/viewer/</code>) is a single-page web application consisting of:</p>
+<p>The viewer (<code>map_data/viewer/</code>) is a single-page web application with three switchable modes.</p>
+<p><strong>Back-end</strong> (<code>app.py</code>, <code>routes.py</code>, <code>helpers.py</code>, <code>cache.py</code>):</p>
 <ul>
-<li><strong>Flask back-end</strong> (<code>app.py</code>, <code>routes.py</code>) — serves GeoJSON representations of the <code>MapData</code> contents, handles annotation CRUD operations, and exposes a <code>/export</code> endpoint that writes a human-readable JSON export of the annotated map</li>
-<li><strong>Leaflet front-end</strong> — renders roads, footways, and barriers as coloured polygons on an OpenStreetMap tile layer; provides drawing tools for obstacle annotations and path annotations</li>
+<li>Serves GeoJSON representations of the <code>MapData</code> contents and handles annotation CRUD</li>
+<li><code>/api/fetch_area</code> runs Overpass queries in a background thread and returns a task ID immediately; the client polls <code>/api/fetch_area/&lt;task_id&gt;</code> for completion, preventing UI hangs on long fetches</li>
+<li><code>/export</code> writes a human-readable JSON snapshot of the annotated map</li>
+<li><code>cache.py</code> manages the OSM response cache sidecar</li>
 </ul>
-<p><strong>Sidecar annotation files.</strong> All viewer edits are persisted alongside the <code>.mapdata</code> file as <code>&lt;stem&gt;.annotations.json</code>. This design keeps the binary/JSON map data immutable while allowing iterative annotation without re-running the Overpass query. The viewer merges the sidecar at load time to produce the rendered view.</p>
+<p><strong>Front-end modes</strong> (Leaflet + Bootstrap, <code>static/js/</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Entry point</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Viewer</td>
+<td><code>ui_handlers.js</code>, <code>layers.js</code></td>
+<td>Inspect, edit, annotate, and search OSM features</td>
+</tr>
+<tr>
+<td>Planner</td>
+<td><code>planner_mode.js</code></td>
+<td>Place waypoints, trigger replanning, download GPX (track or waypoint format)</td>
+</tr>
+<tr>
+<td>Tracker</td>
+<td><code>tracker_mode.js</code></td>
+<td>Live robot position overlaid on the map via WebSocket / ROS2</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Sidecar annotation files.</strong> All viewer edits are persisted alongside the <code>.mapdata</code> file as <code>&lt;stem&gt;.annotations.json</code>. This design keeps the map data immutable while allowing iterative annotation without re-running the Overpass query. The viewer merges the sidecar at load time to produce the rendered view.</p>
 <hr />
 <h2 id="ros2-nodes">ROS2 nodes</h2>
 <table>
@@ -1978,6 +2030,79 @@
 <li><strong>Export</strong> — click the Export button to produce <code>&lt;name&gt;.exported.mapdata</code>, a human-readable JSON snapshot of the annotated map suitable for downstream processing.</li>
 <li><strong>Plan path</strong> — instantiate <code>GraphPlanner</code> or <code>ReplanPath</code> with the loaded <code>MapData</code> object and call <code>plan()</code> with the desired waypoints.</li>
 </ol>
+<hr />
+<h2 id="project-structure">Project structure</h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>map_data/                          # repository root
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>├── map_data/                      # Python package
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│   ├── __init__.py                # package version
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│   ├── map_data.py                # MapData — central data class
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│   ├── info.py                    # map_data_info CLI tool
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│   ├── create_mapdata.py          # ROS2 node / CLI: parse &amp; save
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│   ├── osm_cloud.py               # ROS2 node: PointCloud2 publisher
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>│   ├── pathsolver/
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>│   │   ├── astar.py               # graph A* primitives
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>│   │   ├── graph_planner.py       # GraphPlanner (on-network A*)
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>│   │   ├── grid_constructor.py    # PathGrid — cost raster builder
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>│   │   ├── grid_astar.py          # grid A* search
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>│   │   ├── replan.py              # ReplanPath orchestrator
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>│   │   ├── rrt_star.py            # RRTStar (Informed + adaptive radius)
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>│   │   ├── smoothing.py           # gradient-descent path smoother
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>│   │   └── visualizer.py          # Matplotlib debug visualizer
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>│   ├── utils/
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>│   │   ├── config.py              # YAML loading + setup_logging()
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>│   │   ├── gpx.py                 # GPX / YAML waypoint parsing
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>│   │   ├── overpass.py            # Overpass API client
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>│   │   ├── parsing.py             # OSM feature classification &amp; buffering
+</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>│   │   ├── serialization.py       # .mapdata JSON read / write
+</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>│   │   ├── way.py                 # Way dataclass
+</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>│   │   └── points_to_graph_points.py
+</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>│   └── viewer/
+</span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>│       ├── app.py                 # Flask app factory + SocketIO
+</span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>│       ├── routes.py              # REST API endpoints
+</span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>│       ├── helpers.py             # GeoJSON conversion helpers
+</span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>│       ├── cache.py               # OSM response cache
+</span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>│       ├── ros_node.py            # TrackerNode (optional ROS2)
+</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>│       ├── templates/
+</span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>│       │   └── index.html         # single-page app shell
+</span><span id="__span-0-33"><a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>│       └── static/
+</span><span id="__span-0-34"><a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>│           ├── css/style.css
+</span><span id="__span-0-35"><a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>│           └── js/
+</span><span id="__span-0-36"><a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>│               ├── api.js         # fetch wrappers for all REST calls
+</span><span id="__span-0-37"><a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>│               ├── draw_handlers.js  # Leaflet.Draw event handlers
+</span><span id="__span-0-38"><a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>│               ├── layers.js      # layer management &amp; feature search
+</span><span id="__span-0-39"><a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>│               ├── map_setup.js   # Leaflet map init &amp; mode switching
+</span><span id="__span-0-40"><a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a>│               ├── planner_mode.js   # Planner mode (waypoints, replan, GPX)
+</span><span id="__span-0-41"><a id="__codelineno-0-41" name="__codelineno-0-41" href="#__codelineno-0-41"></a>│               ├── state.js       # shared mutable state
+</span><span id="__span-0-42"><a id="__codelineno-0-42" name="__codelineno-0-42" href="#__codelineno-0-42"></a>│               ├── tracker_mode.js   # Tracker mode (live robot position)
+</span><span id="__span-0-43"><a id="__codelineno-0-43" name="__codelineno-0-43" href="#__codelineno-0-43"></a>│               ├── ui_handlers.js    # sidebar &amp; edit panel handlers
+</span><span id="__span-0-44"><a id="__codelineno-0-44" name="__codelineno-0-44" href="#__codelineno-0-44"></a>│               └── utils.js       # shared helpers
+</span><span id="__span-0-45"><a id="__codelineno-0-45" name="__codelineno-0-45" href="#__codelineno-0-45"></a>├── config/                        # YAML configuration
+</span><span id="__span-0-46"><a id="__codelineno-0-46" name="__codelineno-0-46" href="#__codelineno-0-46"></a>│   ├── planner_defaults.yaml      # planner cost &amp; buffer defaults
+</span><span id="__span-0-47"><a id="__codelineno-0-47" name="__codelineno-0-47" href="#__codelineno-0-47"></a>│   ├── osm_grid.yaml              # osm_cloud grid parameters
+</span><span id="__span-0-48"><a id="__codelineno-0-48" name="__codelineno-0-48" href="#__codelineno-0-48"></a>│   └── helhest.yaml               # robot-specific parameter overrides
+</span><span id="__span-0-49"><a id="__codelineno-0-49" name="__codelineno-0-49" href="#__codelineno-0-49"></a>├── data/                          # default location for .mapdata files
+</span><span id="__span-0-50"><a id="__codelineno-0-50" name="__codelineno-0-50" href="#__codelineno-0-50"></a>├── docs/                          # MkDocs documentation source
+</span><span id="__span-0-51"><a id="__codelineno-0-51" name="__codelineno-0-51" href="#__codelineno-0-51"></a>├── launch/                        # ROS2 launch files
+</span><span id="__span-0-52"><a id="__codelineno-0-52" name="__codelineno-0-52" href="#__codelineno-0-52"></a>├── parameters/                    # ROS2 parameter files
+</span><span id="__span-0-53"><a id="__codelineno-0-53" name="__codelineno-0-53" href="#__codelineno-0-53"></a>├── resource/                      # ROS2 ament resource marker
+</span><span id="__span-0-54"><a id="__codelineno-0-54" name="__codelineno-0-54" href="#__codelineno-0-54"></a>├── tests/                         # pytest test suite
+</span><span id="__span-0-55"><a id="__codelineno-0-55" name="__codelineno-0-55" href="#__codelineno-0-55"></a>│   ├── test_astar.py
+</span><span id="__span-0-56"><a id="__codelineno-0-56" name="__codelineno-0-56" href="#__codelineno-0-56"></a>│   ├── test_core.py
+</span><span id="__span-0-57"><a id="__codelineno-0-57" name="__codelineno-0-57" href="#__codelineno-0-57"></a>│   ├── test_errors.py
+</span><span id="__span-0-58"><a id="__codelineno-0-58" name="__codelineno-0-58" href="#__codelineno-0-58"></a>│   ├── test_fill_grid.py
+</span><span id="__span-0-59"><a id="__codelineno-0-59" name="__codelineno-0-59" href="#__codelineno-0-59"></a>│   ├── test_graph_planner.py
+</span><span id="__span-0-60"><a id="__codelineno-0-60" name="__codelineno-0-60" href="#__codelineno-0-60"></a>│   ├── test_integration.py
+</span><span id="__span-0-61"><a id="__codelineno-0-61" name="__codelineno-0-61" href="#__codelineno-0-61"></a>│   ├── test_overpass.py
+</span><span id="__span-0-62"><a id="__codelineno-0-62" name="__codelineno-0-62" href="#__codelineno-0-62"></a>│   ├── test_parsing.py
+</span><span id="__span-0-63"><a id="__codelineno-0-63" name="__codelineno-0-63" href="#__codelineno-0-63"></a>│   ├── test_rrt.py
+</span><span id="__span-0-64"><a id="__codelineno-0-64" name="__codelineno-0-64" href="#__codelineno-0-64"></a>│   ├── test_smoothing.py
+</span><span id="__span-0-65"><a id="__codelineno-0-65" name="__codelineno-0-65" href="#__codelineno-0-65"></a>│   ├── test_viewer_helpers.py
+</span><span id="__span-0-66"><a id="__codelineno-0-66" name="__codelineno-0-66" href="#__codelineno-0-66"></a>│   └── test_viewer_routes.py
+</span><span id="__span-0-67"><a id="__codelineno-0-67" name="__codelineno-0-67" href="#__codelineno-0-67"></a>├── pyproject.toml                 # build metadata, ruff config
+</span><span id="__span-0-68"><a id="__codelineno-0-68" name="__codelineno-0-68" href="#__codelineno-0-68"></a>├── package.xml                    # ROS2 package manifest
+</span><span id="__span-0-69"><a id="__codelineno-0-69" name="__codelineno-0-69" href="#__codelineno-0-69"></a>├── setup.py / setup.cfg           # ROS2 ament_python build shims
+</span><span id="__span-0-70"><a id="__codelineno-0-70" name="__codelineno-0-70" href="#__codelineno-0-70"></a>└── mkdocs.yml                     # documentation site config
+</span></code></pre></div>
 
 
 

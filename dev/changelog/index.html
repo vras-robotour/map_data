@@ -1204,15 +1204,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#unreleased" class="md-nav__link">
+  <a href="#100-2026-05-29" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Unreleased
+        [1.0.0] — 2026-05-29
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Unreleased">
+    <nav class="md-nav" aria-label="[1.0.0] — 2026-05-29">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1296,15 +1296,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#unreleased" class="md-nav__link">
+  <a href="#100-2026-05-29" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Unreleased
+        [1.0.0] — 2026-05-29
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Unreleased">
+    <nav class="md-nav" aria-label="[1.0.0] — 2026-05-29">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1366,53 +1366,90 @@
 
 
 <h1 id="changelog">Changelog</h1>
-<h2 id="unreleased">Unreleased</h2>
+<h2 id="100-2026-05-29">[1.0.0] — 2026-05-29</h2>
 <h3 id="added">Added</h3>
 <ul>
-<li>Interactive viewer: Tracker mode for live robot position via ROS2</li>
 <li>Interactive viewer: way splitting, node deletion, and node position drag editing</li>
-<li>Interactive viewer: audit change log stored in <code>.annotations.json</code></li>
+<li>Interactive viewer: nodes can be inserted into OSM ways by dragging the blue midpoint handles between existing nodes in Edit mode</li>
+<li>Interactive viewer: barrier ways can now be split (✂️ button on nodes), matching the existing road and footway split behaviour; closed barriers are excluded</li>
+<li>Interactive viewer: vertex-level editing for manual annotations in Edit mode</li>
 <li>Interactive viewer: tag editing with save and undo support</li>
-<li>Interactive viewer: feature search by ID or name in the sidebar</li>
+<li>Interactive viewer: audit change log stored in <code>.annotations.json</code></li>
+<li>Interactive viewer: feature search by ID or name in the sidebar; search now also matches all OSM tag values and, for annotations, the annotation type and all extra property keys and values (e.g. searching "wall" or "barrier" finds matching annotations)</li>
 <li>Interactive viewer: category and subtype visibility toggles</li>
 <li>Interactive viewer: Leaflet.Snap integration for precise annotation alignment</li>
-<li>Interactive viewer: vertex-level editing for manual annotations in Edit mode</li>
 <li>Interactive viewer: GPX file import for waypoint overlays</li>
-<li>Interactive viewer: planner mode can download and parse OSM data on demand</li>
 <li>Interactive viewer: GPX upload modal with map name input (previously a stub)</li>
+<li>Interactive viewer: drag-and-drop <code>.mapdata</code> file upload; <code>/api/upload_mapdata</code> validates via <code>MapData.load</code> and saves to the data directory with collision-safe naming</li>
+<li>Interactive viewer: Tracker mode for live robot position via ROS2</li>
+<li>Interactive viewer: planner mode can download and parse OSM data on demand</li>
+<li>Interactive viewer: planning parameters (<code>grid_margin</code>, <code>obstacle_radius</code>, <code>buffer_widths</code>, <code>grid_cost_weight</code>) configurable in all three map creation dialogs (fetch area, GPX upload, planner fetch) via collapsible advanced-options panels; server defaults populate fields on load</li>
 <li>Path planning module (<code>pathsolver</code>) with A* graph search and cost-grid support</li>
 <li>Path planning: annotated paths take priority over obstacle cells</li>
 <li>Path planning: paths-only planning mode (constrained to mapped ways)</li>
 <li>Path planning: cancellable planning requests</li>
-<li><code>map_data_info</code> CLI tool to print statistics about a <code>.mapdata</code> file</li>
+<li>New planner config parameters in <code>planner_defaults.yaml</code>: <code>grid_cost_weight</code>, <code>obstacle_radius</code>, and per-type <code>buffer_widths</code> (<code>road</code>, <code>footway</code>, <code>barrier</code>) — previously hardcoded in source</li>
+<li>OSM response caching: Overpass query results are persisted to a <code>.osm_cache.json</code> sidecar file and reused on subsequent loads when the bounding box matches, avoiding redundant network requests</li>
 <li>YAML waypoint format as an alternative to GPX</li>
+<li><code>map_data_info</code> CLI tool to print statistics about a <code>.mapdata</code> file</li>
 <li><code>osm_cloud</code> launch file with configurable grid topic and static transform publishing</li>
 <li><code>osm_cloud</code>: dynamic reconfigure support for runtime tuning of <code>max_path_dist</code>, <code>neighbor_cost</code>, and <code>grid_res</code></li>
 <li>Documentation site (MkDocs Material)</li>
+<li>Dedicated <code>Testing</code> documentation page (<code>docs/dev/testing.md</code>) with per-module design notes and guidance for adding new tests</li>
+<li><code>pyproject.toml</code> with ruff configuration for code style enforcement, compatible with ROS2 builds</li>
 <li>Type hints across core and utility modules</li>
 <li>pytest suite covering core logic and path planning edge cases</li>
-<li>OSM response caching: Overpass query results are persisted to a <code>.osm_cache.json</code> sidecar file and reused on subsequent loads when the bounding box matches, avoiding redundant network requests</li>
-<li>New planner config parameters in <code>planner_defaults.yaml</code>: <code>grid_cost_weight</code>, <code>obstacle_radius</code>, and per-type <code>buffer_widths</code> (<code>road</code>, <code>footway</code>, <code>barrier</code>) — previously hardcoded in source</li>
+<li>Expanded test suite: <code>test_overpass.py</code> (retry logic, rate limiting, status polling), <code>test_errors.py</code> (malformed GPX, corrupt files, Overpass timeouts, planning failures), <code>test_parsing.py</code> (OSM element classification and buffering), <code>test_fill_grid.py</code> (footway cost assignment, barrier cell marking), <code>test_viewer_helpers.py</code> (GeoJSON roundtrip, way splitting, change log migration), <code>test_viewer_routes.py</code> (annotation CRUD, path-traversal security, way operations), and extended <code>test_integration.py</code> (OSM cache roundtrip, bbox mismatch, <code>parse_intersections</code>)</li>
 </ul>
 <h3 id="changed">Changed</h3>
 <ul>
+<li>Interactive viewer: GPX download now exports a <code>&lt;trk&gt;&lt;trkseg&gt;&lt;trkpt&gt;</code> track by default; a Track / Waypoints toggle in the planner panel switches back to the legacy <code>&lt;wpt&gt;</code> format</li>
+<li>Interactive viewer: annotation vertex handles in Edit mode now only appear when the annotation is clicked, not for all annotations at once</li>
+<li>Interactive viewer: annotation vertex handles now use the same orange circle + midpoint style as OSM node editing, replacing Leaflet.draw square handles</li>
+<li>Interactive viewer: transparent overlay markers provide larger click/drag hit targets for OSM nodes, annotation vertices, and planner waypoints without changing their visual appearance</li>
+<li>Interactive viewer: node drag in Edit mode is more responsive</li>
+<li><code>visualize_mapdata</code> CLI tool removed; the browser-based viewer supersedes it</li>
+<li><code>grid_cost_weight</code>, <code>obstacle_radius</code>, and <code>buffer_widths</code> are now per-run arguments to <code>grid_astar</code>, <code>RRTStar</code>, and <code>ReplanPath</code>; <code>osm_margin + reserve_margin</code> replaced with a single <code>grid_margin</code> constant (150 m default) accepted as a per-call override in <code>MapData.__init__</code>, <code>parse_osm_nodes</code>, and <code>separate_ways</code></li>
+<li><code>MapData.get_points()</code> now vectorizes UTM conversion by passing full lat/lon arrays to <code>utm.from_latlon</code> in one call instead of looping per node; all nodes are projected into the map's zone for consistency</li>
+<li><code>RRTStar</code> now supports Informed RRT* sampling (<code>informed=True</code>, default): once an initial path is found, random samples are drawn from an ellipsoidal subset defined by the current best cost, accelerating convergence toward the optimum</li>
+<li><code>RRTStar</code> now supports adaptive neighbor radius (<code>adaptive_radius=True</code>, default): the rewiring radius shrinks as <code>γ·√(log n / n)</code> so the number of rewiring checks stays bounded while preserving asymptotic optimality</li>
+<li><code>smooth_path</code> now returns the best collision-free intermediate state instead of reverting to the original path entirely when a smoothed segment collides with an obstacle</li>
+<li><code>ReplanPath</code> refactored into focused sub-modules: grid construction moved to <code>PathGrid</code> (<code>pathsolver/grid_constructor.py</code>), path smoothing to <code>smooth_path</code> (<code>pathsolver/smoothing.py</code>), and matplotlib debug visualization to <code>visualize_replan</code> (<code>pathsolver/visualizer.py</code>)</li>
 <li>Core architecture split into modular components: <code>OverpassClient</code>, <code>parsing</code>, <code>serialization</code></li>
-<li><code>Way</code> class refactored to a <code>@dataclass</code> with full type hints</li>
+<li>Config loading centralized to <code>map_data/utils/config.py</code>, eliminating duplicated YAML-loading logic from <code>map_data.py</code> and <code>replan.py</code></li>
+<li>Logging configuration centralized in <code>setup_logging()</code> (<code>map_data/utils/config.py</code>); <code>info.py</code>, <code>create_mapdata.py</code>, and <code>viewer/app.py</code> now call it inside <code>main()</code> instead of invoking <code>logging.basicConfig</code> at module level with inconsistent formats</li>
 <li><code>.mapdata</code> serialisation migrated from pickle to JSON + WKT; legacy pickle support was subsequently removed for security reasons</li>
 <li>Overpass queries parallelised for faster map data loading</li>
-<li><code>ReplanPath</code> refactored into focused sub-modules: grid construction moved to <code>PathGrid</code> (<code>pathsolver/grid_constructor.py</code>), path smoothing to <code>smooth_path</code> (<code>pathsolver/smoothing.py</code>), and matplotlib debug visualization to <code>visualize_replan</code> (<code>pathsolver/visualizer.py</code>)</li>
-<li>Config loading centralized to <code>map_data/utils/config.py</code>, eliminating duplicated YAML-loading logic from <code>map_data.py</code> and <code>replan.py</code></li>
-<li><code>visualize_mapdata</code> CLI tool removed; the browser-based viewer supersedes it</li>
+<li><code>Way</code> class refactored to a <code>@dataclass</code> with full type hints</li>
+<li><code>os.path</code> replaced with <code>pathlib.Path</code> throughout the codebase</li>
+<li>Code formatting standardized via ruff across all source modules</li>
+<li><code>pyproject.toml</code> and <code>setup.py</code> aligned for ROS2 build compatibility</li>
 </ul>
 <h3 id="fixed">Fixed</h3>
 <ul>
-<li>Multi-zone UTM boundary warning when loaded area spans two UTM zones</li>
+<li><code>visualizer.py</code>: swapped X/Y axis labels corrected — Easting is now on the X axis, Northing on Y</li>
+<li>Interactive viewer: node drag in Edit mode missed clicks intermittently because canvas node markers rendered below the SVG ghost layer; node markers now use the SVG renderer so events reach them directly</li>
+<li>Interactive viewer: adding a node to a buffered (Polygon) way drew a faint spike from the buffer outline back to the new node position because <code>apply_added_nodes</code> inserted the centerline coordinate into the exterior ring of the buffer polygon; geometry is now left unchanged for Polygon ways and only <code>way.nodes</code> is updated</li>
+<li>Interactive viewer: split segments of buffered footways and barriers were rendered thinner than the original after a node had been added to the way; the spike inserted into the buffer polygon corrupted its area/perimeter, causing <code>split_way</code> to calculate a smaller-than-correct buffer radius</li>
+<li>Interactive viewer: splitting a way at a synthetic (user-added) node failed silently because <code>apply_added_nodes</code> was not called before <code>split_way</code> in the segments and node-list endpoints; synthetic nodes are now inserted into the way geometry and an extended nodes cache is built so the split resolves correctly</li>
+<li>Interactive viewer: added nodes did not appear anywhere in the sidebar; the <code>add_node</code> event is now written to the change log on creation and removed on undo, and added-node entries are shown in the Annotations panel with an undo button</li>
+<li>Interactive viewer: deleting one segment of a split way caused the entire original way to disappear on the next file reload; segment deletions are now stored under their virtual ID (<code>"&lt;id&gt;:&lt;index&gt;"</code>) so only the deleted segment is suppressed while the remaining segments survive</li>
+<li>Interactive viewer: reverting any annotation edit (tag override, node deletion, node move) on a way that had also been split left the stale pre-revert geometry on the map alongside the newly restored geometry until page reload; <code>_reloadWay</code> now always uses the segments endpoint so split virtual layers (<code>id:n</code>) are atomically replaced</li>
+<li>Interactive viewer: Closed roads and footways (e.g. roundabouts) were rendered as filled polygons instead of an annular ring: <code>buffer_line</code> now converts a closed-loop <code>Polygon</code> to a <code>LineString</code> before buffering, unless the way carries <code>area=yes</code></li>
+<li>Interactive viewer: tag change-log entries silently disappeared from the changes panel after any metadata refresh (<code>refreshMetadata</code> / <code>loadMapData</code>) because <code>tagMap</code> used numeric keys while the server's <code>change_log</code> stores tag ids as strings; both call-sites now normalise to string keys</li>
+<li>Interactive viewer: <code>_reselectFeature</code> and <code>focusFeatureById</code> now compare <code>String(_featureId) === String(wayId)</code>; previously strict equality failed to reselect real OSM ways (numeric <code>_featureId</code>) after a reload that converted the ID to a string, leaving the feature visually deselected</li>
+<li>Interactive viewer: duplicate <code>click</code> listeners on <code>way-edit-save</code> and <code>way-edit-add-prop-btn</code> caused double row insertion and double API calls on each action</li>
+<li>Interactive viewer: planner <code>mousemove</code>/<code>mouseup</code> handlers accumulated on the map with each <code>redraw()</code> call; handlers are now tracked in <code>_mapDragListeners</code> and removed via <code>map.off()</code> before each redraw</li>
+<li>Interactive viewer: <code>fetch_area</code> and OSM data parsing now run in a background thread; the route returns a task ID immediately and the client polls <code>/api/fetch_area/&lt;task_id&gt;</code> for completion, preventing UI hangs and WebSocket timeouts during long Overpass fetches</li>
 <li>Annotation deletion via the Del key in the viewer</li>
-<li>Path planning with split ways</li>
-<li>Thread-safe cancellation in the replanning module</li>
-<li><code>parse_yaml_file</code> now wraps all parse errors in a try/except and returns <code>[]</code> with a log message, matching the error contract of <code>parse_gpx_file</code></li>
 <li>Path traversal vulnerability in viewer API: user-supplied <code>file</code> parameter is now validated against the resolved data directory before any file access</li>
 <li><code>/api/fetch_area</code> now rejects requests where <code>min_lat &gt;= max_lat</code> or <code>min_lon &gt;= max_lon</code></li>
+<li><code>parse_yaml_file</code> now wraps all parse errors in a try/except and returns <code>[]</code> with a log message, matching the error contract of <code>parse_gpx_file</code></li>
+<li>Path planning with split ways</li>
+<li>Thread-safe cancellation in the replanning module</li>
+<li><code>create_mapdata</code> node: existing file load was missing the <code>.mapdata</code> suffix, causing <code>MapData.load</code> to receive an incorrect path</li>
+<li><code>create_mapdata</code> node: <code>--download</code> flag was passed as a positional argument to <code>process_map_data</code>, now correctly passed as a keyword argument</li>
+<li>Multi-zone UTM boundary warning when loaded area spans two UTM zones</li>
 </ul>
 
 
