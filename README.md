@@ -2,6 +2,7 @@
 
 ROS2 tools to work with OSM data and perform path planning.
 
+[![CI](https://github.com/vras-robotour/map_data/actions/workflows/ci.yml/badge.svg)](https://github.com/vras-robotour/map_data/actions/workflows/ci.yml)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://vras-robotour.github.io/map_data/)
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://github.com/vras-robotour/map_data/blob/master/LICENSE)
 
