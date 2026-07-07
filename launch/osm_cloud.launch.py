@@ -17,6 +17,7 @@ def launch_setup(context, *args, **kwargs):
     gpx_file = LaunchConfiguration("gpx_file")
     config_file = LaunchConfiguration("config_file").perform(context)
     osm_grid_params = LaunchConfiguration("osm_grid_params").perform(context)
+    publish_static_tf = LaunchConfiguration("publish_static_tf").perform(context).lower() == "true"
 
     # Resolve config_file if it's just a filename
     config_path = Path(config_file)
@@ -58,6 +59,7 @@ def launch_setup(context, *args, **kwargs):
             {
                 "mapdata_file": PathJoinSubstitution([mapdata_path, mapdata_file]),
                 "gpx_file": PathJoinSubstitution([mapdata_path, gpx_file]),
+                "auto_utm": publish_static_tf,
             },
         ],
     )

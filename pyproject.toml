@@ -50,6 +50,7 @@ select = [
 ]
 ignore = [
     "B008", # do not perform function calls in default arguments (common in ROS)
+    "B905", # zip() without strict= — sliding-window pairs intentionally differ in length
 ]
 
 [tool.ruff.lint.isort]

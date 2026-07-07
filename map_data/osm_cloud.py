@@ -133,7 +133,7 @@ class OSMCloud(Node):
         else:
             self.get_utm_to_local()
 
-        self.get_logger().info("Using UTM to local transform: %s", self.utm_to_local)
+        self.get_logger().info(f"Using UTM to local transform: {self.utm_to_local}")
 
         if all(v == 0.0 for v in self.grid_min) and all(v == 0.0 for v in self.grid_max):
             self.get_logger().info("Auto-calculating grid bounds from map data")
@@ -154,9 +154,7 @@ class OSMCloud(Node):
             self.grid_min = [np.min(bounds_local[:, 0]), np.min(bounds_local[:, 1])]
             self.grid_max = [np.max(bounds_local[:, 0]), np.max(bounds_local[:, 1])]
             self.get_logger().info(
-                "Calculated grid bounds: min=%s, max=%s",
-                self.grid_min,
-                self.grid_max,
+                f"Calculated grid bounds: min={self.grid_min}, max={self.grid_max}"
             )
 
         self.grid_cloud: PointCloud2 = self.get_cloud()
@@ -204,7 +202,7 @@ class OSMCloud(Node):
             try:
                 self.grid_cloud = self.get_cloud()
             except (ValueError, TypeError, RuntimeError) as e:
-                self.get_logger().error("Failed to rebuild grid cloud: %s", e)
+                self.get_logger().error(f"Failed to rebuild grid cloud: {e}")
                 return SetParametersResult(successful=False, reason=str(e))
 
         if rebuild_intersections and self.publish_intersections:
@@ -212,7 +210,7 @@ class OSMCloud(Node):
             try:
                 self.poses, self.markers = self.get_intersections()
             except (ValueError, TypeError, RuntimeError) as e:
-                self.get_logger().error("Failed to rebuild intersections: %s", e)
+                self.get_logger().error(f"Failed to rebuild intersections: {e}")
                 return SetParametersResult(successful=False, reason=str(e))
 
         return SetParametersResult(successful=True)
@@ -250,10 +248,10 @@ class OSMCloud(Node):
                     rclpy.duration.Duration(seconds=15.0),
                 )
                 self.utm_to_local = numpify(utm_to_local.transform)
-                self.get_logger().info("Got UTM to local transform: %s", self.utm_to_local)
+                self.get_logger().info(f"Got UTM to local transform: {self.utm_to_local}")
                 break
             except (TransformException, RuntimeError, TypeError, ValueError) as e:
-                self.get_logger().warning("Failed to get UTM to local transform: %s", e)
+                self.get_logger().warning(f"Failed to get UTM to local transform: {e}")
                 rclpy.spin_once(self, timeout_sec=1.0)
 
     def get_cloud(self) -> PointCloud2:
@@ -284,7 +282,7 @@ class OSMCloud(Node):
         elif self.neighbor_cost == "zero":
             grid[:, 3] = 0.0
         else:
-            self.get_logger().warn("Unknown neighbor cost: %s", self.neighbor_cost)
+            self.get_logger().warn(f"Unknown neighbor cost: {self.neighbor_cost}")
 
         grid[:, 3] /= self.max_path_dist**2 if self.neighbor_cost == "quadratic" else 1.0
         cloud = create_cloud(grid)
@@ -538,7 +536,7 @@ def split_ways_to_points(
     """
     waypoints = []
     for way in ways.get("footways", []):
-        for i, (n0, n1) in enumerate(zip(way.nodes, way.nodes[1:], strict=True)):
+        for i, (n0, n1) in enumerate(zip(way.nodes, way.nodes[1:])):
             id0 = getattr(n0, "id", n0)
             id1 = getattr(n1, "id", n1)
             point0 = points[id0].ravel()[:2]
