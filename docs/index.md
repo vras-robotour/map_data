@@ -17,11 +17,11 @@ Parsed features are classified into three categories:
 Additional tools let you visualize the data, annotate it interactively, perform path planning, and publish a
 cost-aware footway point cloud for use in autonomous navigation.
 
-The `MapData` class, the path planning modules, and the interactive viewer work **standalone** — no running ROS2
-context is required for data parsing, annotation, or planning. ROS2 is only needed for the
-`osm_cloud` publisher and the `create_mapdata` CLI node.
+The `MapData` class, the path planning modules, the `create_mapdata` CLI, and the interactive viewer work
+**standalone** — no ROS2 installation is required for data parsing, annotation, or planning. ROS2 is only
+needed for the `osm_cloud` publisher.
 
-The package targets **ROS2 Humble** or later on Ubuntu 22.04.
+The package targets **ROS2 Jazzy** or later on Ubuntu 24.04, and Python 3.12+ for standalone use.
 
 Sample `.gpx` files are provided in `./data/`.
 
@@ -43,6 +43,12 @@ cd map_data
 colcon build --packages-select map_data
 source install/setup.bash
 ```
+
+!!! note "`ros2_numpy` must be built from source"
+    The `osm_cloud` node depends on [`ros2_numpy`](https://github.com/Box-Robotics/ros2_numpy),
+    which is not released as a binary package in any ROS distribution — `rosdep install`
+    cannot resolve it. Clone its `jazzy` branch into your colcon workspace and build it
+    alongside this package.
 
 ## Python Library
 
@@ -79,7 +85,7 @@ print(len(md.barriers_list))
 map_data/
 ├── map_data.py              # MapData class — parses GPX + OSM into roads/footways/barriers
 ├── info.py                  # CLI tool to print information about a .mapdata file
-├── create_mapdata.py        # ROS2 node / CLI: download and parse OSM data
+├── create_mapdata.py        # CLI (standalone or ROS2): download and parse OSM data
 ├── osm_cloud.py             # ROS2 node: publishes footway grid and intersections
 ├── pathsolver/              # Path planning algorithms
 │   ├── graph_planner.py     # Global A* planning on OSM ways

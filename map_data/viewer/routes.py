@@ -110,7 +110,12 @@ def _apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                         seg_del_nids = get_deleted_node_ids(store, virtual_id)
                         if seg_del_nids:
                             seg = rebuild_way_without_nodes(  # noqa: PLW2901
-                                seg, seg_del_nids, zn, zl, nodes_cache, category=cat,
+                                seg,
+                                seg_del_nids,
+                                zn,
+                                zl,
+                                nodes_cache,
+                                category=cat,
                             )
                             if seg is None:
                                 continue
@@ -315,7 +320,10 @@ def _run_fetch_task(
         )
         md.run_queries()
         if any(d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)):
-            _fetch_tasks[task_id] = {"status": "failed", "error": "Overpass API unavailable — try again later"}
+            _fetch_tasks[task_id] = {
+                "status": "failed",
+                "error": "Overpass API unavailable — try again later",
+            }
             return
         if md.run_parse() != 0:
             _fetch_tasks[task_id] = {"status": "failed", "error": "Parsing failed"}
@@ -373,7 +381,16 @@ def fetch_area() -> Response:
     _fetch_tasks[task_id] = {"status": "pending"}
     threading.Thread(
         target=_run_fetch_task,
-        args=(task_id, waypoints, zone_number, zone_letter, out_path, grid_margin, obstacle_radius, buffer_widths),
+        args=(
+            task_id,
+            waypoints,
+            zone_number,
+            zone_letter,
+            out_path,
+            grid_margin,
+            obstacle_radius,
+            buffer_widths,
+        ),
         daemon=True,
     ).start()
     return jsonify({"task_id": task_id})
@@ -406,6 +423,7 @@ def upload_gpx() -> Response:
         abort(400, "name is empty after sanitizing")
 
     import json as _json
+
     _parse_opts = _json.loads(request.form.get("options", "{}"))
     grid_margin = _parse_opts.get("grid_margin")
     obstacle_radius = _parse_opts.get("obstacle_radius")
@@ -538,7 +556,12 @@ def get_way_nodes() -> Response:
     if pos_overrides:
         way = (
             apply_node_position_overrides(
-                way, pos_overrides, zn, zl, nodes_cache, category=category,
+                way,
+                pos_overrides,
+                zn,
+                zl,
+                nodes_cache,
+                category=category,
             )
             or way
         )
@@ -551,9 +574,7 @@ def get_way_nodes() -> Response:
     for a in store.get("added_nodes", []):
         if a.get("way_id") == search_id:
             pos_ov = (
-                store.get("node_position_overrides", {})
-                .get(str(search_id), {})
-                .get(str(a["id"]))
+                store.get("node_position_overrides", {}).get(str(search_id), {}).get(str(a["id"]))
             )
             synth_nc[a["id"]] = {
                 "lat": float(pos_ov["lat"] if pos_ov else a["lat"]),
@@ -578,7 +599,12 @@ def get_way_nodes() -> Response:
                 seg_del_nids = get_deleted_node_ids(store, way_id)
                 if seg_del_nids:
                     way = rebuild_way_without_nodes(
-                        way, seg_del_nids, zn, zl, effective_nc, category=category,
+                        way,
+                        seg_del_nids,
+                        zn,
+                        zl,
+                        effective_nc,
+                        category=category,
                     )
                     if way is None:
                         return jsonify({"way_id": way_id, "nodes": []})
@@ -591,7 +617,9 @@ def get_way_nodes() -> Response:
         nid = getattr(nid_obj, "id", nid_obj)
         if nid in effective_nc:
             nd = effective_nc[nid]
-            nodes.append({"id": nid, "lat": nd["lat"], "lon": nd["lon"], "tags": nd.get("tags", {})})
+            nodes.append(
+                {"id": nid, "lat": nd["lat"], "lon": nd["lon"], "tags": nd.get("tags", {})}
+            )
         else:
             # Fallback to geometry
             if geom_latlon is None:
@@ -661,7 +689,12 @@ def get_way(way_id: str) -> Response:
     del_nids = get_deleted_node_ids(store, search_id)
     if del_nids:
         way = rebuild_way_without_nodes(
-            way, del_nids, zn, zl, getattr(md, "nodes_cache", {}), category=category,
+            way,
+            del_nids,
+            zn,
+            zl,
+            getattr(md, "nodes_cache", {}),
+            category=category,
         )
         if way is None:
             abort(404, f"Way {way_id} reduced to nothing by node deletions")
@@ -700,7 +733,12 @@ def get_way(way_id: str) -> Response:
                 seg_del_nids = get_deleted_node_ids(store, way_id)
                 if seg_del_nids:
                     way = rebuild_way_without_nodes(
-                        way, seg_del_nids, zn, zl, nodes_cache, category=category,
+                        way,
+                        seg_del_nids,
+                        zn,
+                        zl,
+                        nodes_cache,
+                        category=category,
                     )
                     if way is None:
                         abort(
@@ -888,9 +926,7 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
     for a in store.get("added_nodes", []):
         if a.get("way_id") == search_id:
             pos_ov = (
-                store.get("node_position_overrides", {})
-                .get(str(search_id), {})
-                .get(str(a["id"]))
+                store.get("node_position_overrides", {}).get(str(search_id), {}).get(str(a["id"]))
             )
             synth_nc[a["id"]] = {
                 "lat": float(pos_ov["lat"] if pos_ov else a["lat"]),
@@ -913,7 +949,12 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
         seg_del_nids = get_deleted_node_ids(store, virtual_id)
         if seg_del_nids:
             seg = rebuild_way_without_nodes(  # noqa: PLW2901
-                seg, seg_del_nids, zn, zl, effective_nc, category=category,
+                seg,
+                seg_del_nids,
+                zn,
+                zl,
+                effective_nc,
+                category=category,
             )
             if seg is None:
                 continue
@@ -1128,20 +1169,24 @@ def add_way_node() -> Response:
     existing_ids = [a["id"] for a in store.get("added_nodes", []) if a["id"] < 0]
     synth_id = (min(existing_ids) - 1) if existing_ids else -1
 
-    store.setdefault("added_nodes", []).append({
-        "id": synth_id,
-        "way_id": way_id_int,
-        "after_node_id": int(after_node_id),
-        "lat": float(lat),
-        "lon": float(lon),
-    })
+    store.setdefault("added_nodes", []).append(
+        {
+            "id": synth_id,
+            "way_id": way_id_int,
+            "after_node_id": int(after_node_id),
+            "lat": float(lat),
+            "lon": float(lon),
+        }
+    )
     cl = store.setdefault("change_log", [])
-    cl.append({
-        "type": "add_node",
-        "way_id": way_id_int,
-        "node_id": synth_id,
-        "ts": time.time(),
-    })
+    cl.append(
+        {
+            "type": "add_node",
+            "way_id": way_id_int,
+            "node_id": synth_id,
+            "ts": time.time(),
+        }
+    )
     save_annotations(ann_path, store)
     return jsonify({"id": synth_id, "lat": float(lat), "lon": float(lon)})
 
@@ -1168,14 +1213,20 @@ def delete_way_node() -> Response:
     # Synthetic nodes (negative IDs) live in added_nodes, not in the OSM node list
     if node_id < 0:
         store["added_nodes"] = [
-            a for a in store.get("added_nodes", [])
+            a
+            for a in store.get("added_nodes", [])
             if not (a.get("way_id") == way_id_int and a.get("id") == node_id)
         ]
         pos_ov = store.get("node_position_overrides", {}).get(str(way_id_int), {})
         pos_ov.pop(str(node_id), None)
         store["change_log"] = [
-            e for e in store.get("change_log", [])
-            if not (e.get("type") == "add_node" and e.get("way_id") == way_id_int and e.get("node_id") == node_id)
+            e
+            for e in store.get("change_log", [])
+            if not (
+                e.get("type") == "add_node"
+                and e.get("way_id") == way_id_int
+                and e.get("node_id") == node_id
+            )
         ]
         save_annotations(ann_path, store)
         return Response("", 204)
@@ -1538,7 +1589,9 @@ class WormholeManager:
         }
 
         threading.Thread(
-            target=self._capture_wormhole_code_thread, args=(transfer_id,), daemon=True,
+            target=self._capture_wormhole_code_thread,
+            args=(transfer_id,),
+            daemon=True,
         ).start()
         return transfer_id
 
@@ -1559,7 +1612,9 @@ class WormholeManager:
                         if match:
                             wormhole_code = match.group(1)
                             logger.info(
-                                "Wormhole code for transfer %s: %s", transfer_id, wormhole_code,
+                                "Wormhole code for transfer %s: %s",
+                                transfer_id,
+                                wormhole_code,
                             )
                         elif stream == process.stderr:
                             logger.warning("Wormhole stderr (%s): %s", transfer_id, line)
@@ -1703,7 +1758,9 @@ def create_replan() -> Response:
         filtered_barriers = [w for w in md.barriers_list if w.line and w.line.intersects(bbox)]
 
         obstacles = ways_to_shapely(filtered_barriers)
-        replanner = ReplanPath(args, obstacles, transfer_id=transfer_id, grid_cost_weight=grid_cost_weight)
+        replanner = ReplanPath(
+            args, obstacles, transfer_id=transfer_id, grid_cost_weight=grid_cost_weight
+        )
         if highway_costs:
             try:
                 replanner.HIGHWAY_COSTS = highway_costs

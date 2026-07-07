@@ -209,6 +209,7 @@ async function refreshMetadata(filename, { refreshAnnotations = false } = {}) {
         const annData = await fetchAnnotations(filename);
 
         annotations = annData.annotations || [];
+        snapshotAnnBaselines();
         deletedWays = (annData.deleted_ways || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
         deletedNodes = (() => {
             const dn = annData.deleted_nodes || [];
@@ -367,6 +368,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         }
 
         annotations = annData.annotations || [];
+        snapshotAnnBaselines();
         deletedWays = (annData.deleted_ways || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
         deletedNodes = (() => {
             const dn = annData.deleted_nodes || [];
@@ -461,6 +463,7 @@ function clearMapData() {
 
   // Reset data state
   annotations = [];
+  annBaselineGeoms = {};
   deletedWays = [];
   deletedNodes = [];
   tagOverrides = [];

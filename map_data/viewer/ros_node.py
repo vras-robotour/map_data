@@ -72,7 +72,8 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
             "/follow_gps_waypoints/_action/feedback",
         )
         self.declare_parameter(
-            "follow_waypoints_feedback_topic", "/follow_waypoints/_action/feedback",
+            "follow_waypoints_feedback_topic",
+            "/follow_waypoints/_action/feedback",
         )
 
         self.robot_id = self.get_parameter("robot_id").value
@@ -137,7 +138,11 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
         subscribe_if_enabled("path_topic", Path, self._path_callback, 10, "path")
 
         subscribe_if_enabled(
-            "gps_fix_topic", NavSatFix, self._gps_callback, qos_best_effort, "gps_fix",
+            "gps_fix_topic",
+            NavSatFix,
+            self._gps_callback,
+            qos_best_effort,
+            "gps_fix",
         )
         subscribe_if_enabled(
             "gps_filtered_topic",
@@ -156,7 +161,11 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
         )
         subscribe_if_enabled("bus_current_topic", Float32, self._current_callback, qos_best_effort)
         subscribe_if_enabled(
-            "teensy_temp_topic", Float32, self._temp_callback, qos_best_effort, "temp",
+            "teensy_temp_topic",
+            Float32,
+            self._temp_callback,
+            qos_best_effort,
+            "temp",
         )
         subscribe_if_enabled(
             "odrv_error_topic",
@@ -167,10 +176,18 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
         )
 
         subscribe_if_enabled(
-            "azimuth_topic", Imu, self._azimuth_callback, qos_best_effort, "heading",
+            "azimuth_topic",
+            Imu,
+            self._azimuth_callback,
+            qos_best_effort,
+            "heading",
         )
         subscribe_if_enabled(
-            "odom_topic", Odometry, self._odom_speed_callback, qos_best_effort, "speed",
+            "odom_topic",
+            Odometry,
+            self._odom_speed_callback,
+            qos_best_effort,
+            "speed",
         )
 
         subscribe_if_enabled(
@@ -258,7 +275,10 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
         )
 
     _COLLISION_ACTIONS: ClassVar[dict[int, str]] = {
-        0: "STOP", 1: "SLOWDOWN", 2: "LIMIT", 3: "PASSTHROUGH",
+        0: "STOP",
+        1: "SLOWDOWN",
+        2: "LIMIT",
+        3: "PASSTHROUGH",
     }
 
     def _build_status_locked(self) -> dict[str, Any]:
@@ -460,7 +480,8 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
     def _collision_callback(self, msg: CollisionMonitorState) -> None:
         with self._lock:
             self.collision_action = self._COLLISION_ACTIONS.get(
-                msg.action_type, str(msg.action_type),
+                msg.action_type,
+                str(msg.action_type),
             )
             self._dirty = True
 

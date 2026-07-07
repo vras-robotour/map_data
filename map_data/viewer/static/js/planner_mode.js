@@ -518,7 +518,10 @@ class PlannerMode {
         ? `${(totalDist / 1000).toFixed(2)} km`
         : `${totalDist.toFixed(1)} m`;
 
-      countEl.textContent = `${this.points.length} points | ${distStr}`;
+      // Before replanning the sum is crow-flies distance between waypoints;
+      // after replanning the points are densified, so it is the actual path length.
+      const distLabel = this.hasPlannedPath ? 'planned path' : 'straight-line';
+      countEl.textContent = `${this.points.length} points | ${distStr} (${distLabel})`;
     }
     document.getElementById('export-gpx-path-btn').disabled = this.points.length < 2;
     document.getElementById('export-wormhole-path-btn').disabled = this.points.length < 2;

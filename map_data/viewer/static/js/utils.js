@@ -33,6 +33,22 @@ function escHtml(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+async function copyToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(String(text));
+        setStatus(`Copied ${text}`, 'text-success');
+    } catch (_) {
+        setStatus('Clipboard unavailable', 'text-warning');
+    }
+}
+
+function snapshotAnnBaselines() {
+    annBaselineGeoms = {};
+    annotations.forEach(a => {
+        annBaselineGeoms[a.id] = JSON.parse(JSON.stringify(a.geometry));
+    });
+}
+
 function _annStyle(ann) {
     if (!ann) return STYLES.annotation;
     return ann.type === 'path' ? STYLES.path : STYLES.annotation;

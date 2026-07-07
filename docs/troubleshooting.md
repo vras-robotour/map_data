@@ -85,14 +85,15 @@ Annotation files are written to the same directory as the `.mapdata` file. If th
 
 ### `create_mapdata` not found
 
-This is a ROS2 node. It is available only after building the package with `colcon` and sourcing the workspace:
+The command is installed with the package. Standalone, `pip install -e .` puts it on
+your `PATH` directly. In a ROS2 workspace, build with `colcon` and source the workspace:
 
 ```bash
 colcon build --packages-select map_data
 source install/setup.bash
 ```
 
-After that, use `ros2 run map_data create_mapdata ...` rather than calling the script directly.
+After that, use `ros2 run map_data create_mapdata ...`.
 
 ### `osm_cloud` does not publish
 

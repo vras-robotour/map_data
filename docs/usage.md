@@ -3,8 +3,8 @@
 This page covers the core CLI tools and ROS2 nodes for parsing, visualizing, and publishing map data.
 
 !!! note "ROS2 requirement"
-    `create_mapdata` and `osm_cloud` require a sourced ROS2 workspace.
-    The `MapData` class, path planning modules, and the interactive viewer work **standalone**.
+    Only `osm_cloud` requires a sourced ROS2 workspace. The `create_mapdata` CLI,
+    the `MapData` class, path planning modules, and the interactive viewer work **standalone**.
 
 ## What gets downloaded
 
@@ -67,6 +67,15 @@ Annotations: 3 (manual edits)
 
 `map_data_info` is available after installing the package (standalone `pip install -e .` or `colcon build`).
 
+With `--validate`, the tool checks the file for structural issues instead of printing
+statistics: missing metadata fields, ways without geometry, duplicate way IDs, nodes
+missing from the node cache, and disconnected footway networks. It exits non-zero when
+issues are found, so it can be used as a pre-flight check in scripts:
+
+```bash
+map_data_info coords.mapdata --validate
+```
+
 ## Parsing and creating files
 
 `create_mapdata` creates a `.mapdata` file from a `.gpx` or `.yaml` waypoint file, or
@@ -94,6 +103,8 @@ re-parses an existing `.mapdata` with the current tag configuration.
 Download and parse OSM data for a GPX file:
 
 ```bash
+create_mapdata -d -f coords.gpx
+# or, in a sourced ROS2 workspace:
 ros2 run map_data create_mapdata -d -f coords.gpx
 ```
 
@@ -102,7 +113,7 @@ This creates `coords.mapdata` in the package data directory.
 Re-parse an existing `.mapdata` file (e.g. after editing tag CSVs):
 
 ```bash
-ros2 run map_data create_mapdata -f coords.mapdata
+create_mapdata -f coords.mapdata
 ```
 
 ## Publishing a point cloud of footways and intersections

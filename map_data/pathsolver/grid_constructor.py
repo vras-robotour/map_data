@@ -115,7 +115,9 @@ class PathGrid:
                         poly_path = Path(np.array(poly.exterior.coords))
                         mask_inside = poly_path.contains_points(path_grid[mask_bbox, :2])
                         path_grid[mask_bbox, 3] = np.where(
-                            mask_inside, 1.0, path_grid[mask_bbox, 3],
+                            mask_inside,
+                            1.0,
+                            path_grid[mask_bbox, 3],
                         )
 
         # 3. Process ways to set their costs
@@ -170,12 +172,15 @@ class PathGrid:
         x_indices = np.floor((self.grid[:, 0] - self.low[0]) / self.cell_size).astype(int)
         y_indices = np.floor((self.grid[:, 1] - self.low[1]) / self.cell_size).astype(int)
         grid_2d[np.clip(x_indices, 0, num_x - 1), np.clip(y_indices, 0, num_y - 1)] = self.grid[
-            :, 3,
+            :,
+            3,
         ]
         return grid_2d.T
 
     def burn_obstacles(
-        self, grid_2d: np.ndarray, obstacles: list[sh.geometry.base.BaseGeometry],
+        self,
+        grid_2d: np.ndarray,
+        obstacles: list[sh.geometry.base.BaseGeometry],
     ) -> np.ndarray:
         if not obstacles:
             return grid_2d

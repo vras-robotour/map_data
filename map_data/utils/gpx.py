@@ -78,7 +78,8 @@ def parse_yaml_file(yaml_file: str) -> tuple[np.ndarray, int, str] | list:
     else:
         logger.info("Parsed %s waypoints from YAML file.", len(waypoints))
         zone_num, zone_let = utm.from_latlon(
-            file_waypoints[0]["latitude"], file_waypoints[0]["longitude"],
+            file_waypoints[0]["latitude"],
+            file_waypoints[0]["longitude"],
         )[2:]
 
     return np.array(waypoints), zone_num, zone_let

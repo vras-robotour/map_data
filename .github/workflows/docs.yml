@@ -8,7 +8,7 @@ on:
       - "mkdocs.yml"
       - "map_data/**"
       - ".github/workflows/docs.yml"
-      - "requirements.txt"
+      - "pyproject.toml"
 
 permissions:
   contents: write
@@ -29,9 +29,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install setuptools>=61.0
-          pip install -e .
+          pip install -e ".[dev]"
 
       - name: Build and Deploy Documentation
         run: mkdocs gh-deploy --force

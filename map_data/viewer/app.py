@@ -9,9 +9,9 @@ from flask import Flask
 from flask_socketio import SocketIO
 from werkzeug.routing import IntegerConverter
 
+from ..utils.config import setup_logging
 from .ros_node import ROS_AVAILABLE, TrackerNode
 from .routes import bp
-from ..utils.config import setup_logging
 
 logger = logging.getLogger(__name__)
 socketio = SocketIO(cors_allowed_origins="*")
@@ -22,7 +22,7 @@ class SignedIntConverter(IntegerConverter):
     regex = r"-?\d+"
 
 
-def telemetry_broadcaster() -> None:
+def telemetry_broadcaster(interval: float) -> None:
     """
     Background thread to broadcast ROS2 telemetry via WebSockets.
     """
@@ -35,10 +35,10 @@ def telemetry_broadcaster() -> None:
                     socketio.emit("telemetry", data)
             except Exception:
                 logger.exception("Error in telemetry broadcaster")
-        time.sleep(0.5)  # 2 Hz update rate
+        time.sleep(interval)
 
 
-def create_app(data_dir: str | None = None) -> Flask:
+def create_app(data_dir: str | None = None, telemetry_hz: float = 2.0) -> Flask:
     # Explicitly set paths relative to this file
     base_dir = Path(__file__).parent
     template_dir = base_dir / "templates"
@@ -75,7 +75,9 @@ def create_app(data_dir: str | None = None) -> Flask:
             spin_thread.start()
 
             # Start telemetry broadcaster
-            broadcaster_thread = threading.Thread(target=telemetry_broadcaster, daemon=True)
+            broadcaster_thread = threading.Thread(
+                target=telemetry_broadcaster, args=(1.0 / telemetry_hz,), daemon=True
+            )
             broadcaster_thread.start()
 
             logger.info("ROS2 TrackerNode initialized and spinning.")
@@ -91,6 +93,12 @@ def main() -> None:
     parser.add_argument("--data-dir", help="Directory containing .mapdata files")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument(
+        "--telemetry-rate",
+        type=float,
+        default=2.0,
+        help="Tracker telemetry broadcast rate in Hz (default: 2)",
+    )
 
     # Filter out ROS-specific arguments before parsing
     ros_args = []
@@ -102,13 +110,15 @@ def main() -> None:
         ros_args = sys.argv[1:]
 
     args, _ = parser.parse_known_args(args=ros_args)
+    if args.telemetry_rate <= 0:
+        parser.error("--telemetry-rate must be positive")
 
     data_dir = None
 
     if args.data_dir:
         data_dir = str(Path(args.data_dir).resolve())
 
-    app = create_app(data_dir=data_dir)
+    app = create_app(data_dir=data_dir, telemetry_hz=args.telemetry_rate)
 
     setup_logging()
     # Using socketio.run instead of app.run

@@ -104,7 +104,8 @@ class ReplanPath:
         self.transfer_id = transfer_id
         _defaults = self._DEFAULTS
         self.grid_cost_weight = (
-            grid_cost_weight if grid_cost_weight is not None
+            grid_cost_weight
+            if grid_cost_weight is not None
             else _defaults.get("grid_cost_weight", 5.0)
         )
 
@@ -156,7 +157,9 @@ class ReplanPath:
 
     def replan(self, path: np.ndarray, algorithm: str = "astar") -> np.ndarray | None:
         def process_segment(
-            i: int, path: np.ndarray, _args: argparse.Namespace,
+            i: int,
+            path: np.ndarray,
+            _args: argparse.Namespace,
         ) -> tuple[list[np.ndarray] | None, int]:
             if _is_cancelled(self.transfer_id):
                 return None, i

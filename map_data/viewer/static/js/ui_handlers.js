@@ -503,13 +503,19 @@ function showOsmNodeProps(node, index, total) {
       </button>
     </div>`;
 
+    const lat = parseFloat(node.lat).toFixed(7);
+    const lon = parseFloat(node.lon).toFixed(7);
+    const copyBtn = v => `<button class="btn btn-sm btn-outline-secondary py-0 px-1 ms-1"
+        style="font-size:0.62rem;" title="Copy to clipboard"
+        onclick="copyToClipboard('${v}')">&#x2398;</button>`;
+
     document.getElementById('props-content').innerHTML = `
     <table><tbody>
       <tr><td>Type</td><td><span class="badge bg-secondary">node</span></td></tr>
       <tr><td>OSM ID</td><td>${node.id}</td></tr>
       <tr><td>Index</td><td>${index + 1} / ${total}</td></tr>
-      <tr><td>Lat</td><td>${parseFloat(node.lat).toFixed(7)}</td></tr>
-      <tr><td>Lon</td><td>${parseFloat(node.lon).toFixed(7)}</td></tr>
+      <tr><td>Lat</td><td>${lat}${copyBtn(lat)}</td></tr>
+      <tr><td>Lon</td><td>${lon}${copyBtn(lon)}</td></tr>
       ${tagRows}
     </tbody></table>
     ${buttons}`;
@@ -1002,6 +1008,8 @@ function renderAnnotationList() {
         <br><span class="ann-id">${a.id.slice(0, 8)}…</span>
       </div>
       <div class="d-flex gap-1">
+        <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
+                title="Revert geometry to last loaded state" onclick="revertAnnotationGeometry('${a.id}')">&#8634;</button>
         <button class="btn btn-sm btn-outline-info py-0 px-1" style="font-size:0.7rem;"
                 onclick="openAnnEditModal('${a.id}')">&#9998;</button>
         <button class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size:0.7rem;"
@@ -1044,6 +1052,36 @@ async function deleteSelectedAnnotation() {
     } else {
         setStatus('Failed to delete annotation', 'text-danger');
     }
+}
+
+async function revertAnnotationGeometry(id) {
+    if (!currentFile) return;
+    const baseline = annBaselineGeoms[id];
+    const ann = annotations.find(a => a.id === id);
+    if (!baseline || !ann) return;
+    if (JSON.stringify(ann.geometry) === JSON.stringify(baseline)) {
+        setStatus('Annotation geometry unchanged', 'text-info');
+        return;
+    }
+    try {
+        await saveAnnotation(currentFile, id, baseline);
+    } catch (err) {
+        setStatus('Failed to revert annotation geometry', 'text-danger');
+        return;
+    }
+    ann.geometry = JSON.parse(JSON.stringify(baseline));
+    if (editSelectedLayer && editSelectedLayer.options._ann_id === id) {
+        if (editSelectedLayer.editing) editSelectedLayer.editing.disable();
+        editSelectedLayer = null;
+    }
+    renderAnnotationLayer();
+    if (currentMode === 'edit') {
+        // Re-attach drag handlers to the rebuilt annotation layers
+        disableAnnotationEditMode();
+        enableAnnotationEditMode();
+    }
+    renderAnnotationList();
+    setStatus('Annotation geometry reverted', 'text-success');
 }
 
 async function removeAnnotationById(id) {

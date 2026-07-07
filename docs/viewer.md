@@ -19,6 +19,11 @@ python -m map_data.viewer.app --data-dir ./data
 
 Then open `http://127.0.0.1:5000` in a browser.
 
+!!! warning "Trusted networks only"
+    The viewer has no authentication and its API can read and write files in the data
+    directory. Keep the default `--host 127.0.0.1`; only bind to other interfaces
+    (e.g. `--host 0.0.0.0`) on networks where you trust every machine.
+
 ## Loading Map Data
 
 The viewer loads files from its data directory (default: the package `data/` folder,

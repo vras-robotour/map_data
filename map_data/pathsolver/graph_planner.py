@@ -123,7 +123,8 @@ class GraphPlanner:
                         proj_node_id = new_internal_id
                         new_internal_id -= 1
                         self.nodes[proj_node_id] = np.array([p_proj[0], p_proj[1], 0.0]).reshape(
-                            3, 1,
+                            3,
+                            1,
                         )
 
                         target_way, segment_idx = edge_way_info[best_idx]
@@ -169,7 +170,8 @@ class GraphPlanner:
         self.graph.setdefault(v, []).append((u, d))
 
     def _find_closest_edge(
-        self, point_utm: np.ndarray,
+        self,
+        point_utm: np.ndarray,
     ) -> tuple[tuple[int, int, np.ndarray] | None, float]:
         """
         Find the closest edge using an STRtree spatial index.

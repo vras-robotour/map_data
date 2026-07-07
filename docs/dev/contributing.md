@@ -2,9 +2,9 @@
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.12+
 - [`uv`](https://docs.astral.sh/uv/) (preferred) or plain `pip`
-- ROS2 Humble or later — **optional**; only needed for the `create_mapdata` and `osm_cloud` nodes
+- ROS2 Jazzy or later — **optional**; only needed for the `osm_cloud` node
 
 ## Getting the code
 
@@ -18,8 +18,7 @@ cd map_data
 Install the package in editable mode together with the documentation and tooling dependencies:
 
 ```bash
-uv pip install -e .
-uv pip install ruff mkdocs mkdocs-material "mkdocstrings[python]"
+uv pip install -e ".[dev]"
 ```
 
 !!! warning "Use `uv pip`, not plain `pip`"
