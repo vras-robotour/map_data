@@ -1682,7 +1682,9 @@ string to disable the corresponding feature and hide its UI row.</p>
 </tr>
 </tbody>
 </table>
-<p>Telemetry is polled at <strong>2 Hz</strong> and pushed to the browser over a WebSocket.</p>
+<p>Telemetry is polled at <strong>2 Hz</strong> by default and pushed to the browser over a WebSocket.
+The rate is configurable via <code>map_data_viewer --telemetry-rate &lt;Hz&gt;</code> (e.g. <code>10</code> for
+smoother tracking of a fast-moving robot).</p>
 
 
 

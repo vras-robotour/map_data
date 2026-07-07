@@ -1424,9 +1424,9 @@
 <h1 id="contributing">Contributing</h1>
 <h2 id="prerequisites">Prerequisites</h2>
 <ul>
-<li>Python 3.10+</li>
+<li>Python 3.12+</li>
 <li><a href="https://docs.astral.sh/uv/"><code>uv</code></a> (preferred) or plain <code>pip</code></li>
-<li>ROS2 Humble or later — <strong>optional</strong>; only needed for the <code>create_mapdata</code> and <code>osm_cloud</code> nodes</li>
+<li>ROS2 Jazzy or later — <strong>optional</strong>; only needed for the <code>osm_cloud</code> node</li>
 </ul>
 <h2 id="getting-the-code">Getting the code</h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/vras-robotour/map_data.git
@@ -1434,8 +1434,7 @@
 </span></code></pre></div>
 <h2 id="setting-up-the-development-environment">Setting up the development environment</h2>
 <p>Install the package in editable mode together with the documentation and tooling dependencies:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>ruff<span class="w"> </span>mkdocs<span class="w"> </span>mkdocs-material<span class="w"> </span><span class="s2">&quot;mkdocstrings[python]&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[dev]&quot;</span>
 </span></code></pre></div>
 <div class="admonition warning">
 <p class="admonition-title">Use <code>uv pip</code>, not plain <code>pip</code></p>

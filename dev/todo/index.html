@@ -1522,42 +1522,6 @@
       desc: 'The main bottlenecks are the Python <code>_bresenham</code> generator and <code>_segment_cost</code> in RRT* (called O(max_iter × neighbors) times), and the <code>heapq</code> loop in <code>grid_astar</code>. Recommended approach: (1) try <code>@numba.njit</code> on these inner loops first — zero build overhead, easy to toggle; (2) replace <code>grid_astar</code> with <code>skimage.graph.route_through_array</code> which is C-backed; (3) Cython or pybind11 only if numba is unacceptable for deployment. Full C/C++ rewrite is not justified given that numpy, cKDTree, and Shapely/GEOS are already native.',
       file: 'map_data/pathsolver/rrt_star.py, map_data/pathsolver/grid_astar.py'
     },
-    {
-      type: 'improvement', sev: 'nice-to-have',
-      title: 'Copy lat/lon to clipboard from node inspector',
-      desc: 'The node properties panel shows lat/lon as plain text with no way to copy them easily. A small clipboard button next to each coordinate value would speed up workflows that involve cross-referencing node positions in other tools.',
-      file: 'viewer/static/js/ui_handlers.js:506–515'
-    },
-    {
-      type: 'improvement', sev: 'nice-to-have',
-      title: 'No undo for annotation geometry edits',
-      desc: 'OSM way changes (deletions, splits, tag edits, node moves) have full undo via the Changes panel. Annotation geometry drags are persisted immediately with no rollback path — <code>_saveAnnotationGeometry</code> overwrites on every mouseup. At minimum, a "revert to last saved geometry" action per annotation in the Annotations panel would help recover from accidental edits.',
-      file: 'viewer/static/js/draw_handlers.js:238–245 · viewer/static/js/ui_handlers.js:989–1024'
-    },
-    {
-      type: 'improvement', sev: 'nice-to-have',
-      title: 'Add satellite tile layer option',
-      desc: 'The viewer only offers OSM tiles. A tile layer switcher (e.g. Esri World Imagery for satellite, or OpenTopoMap) would make it much easier to verify annotation placement — barriers and footways are far easier to confirm against aerial imagery than the OSM vector style.',
-      file: 'viewer/static/js/map_setup.js · viewer/templates/index.html'
-    },
-    {
-      type: 'improvement', sev: 'nice-to-have',
-      title: 'Show actual planned path length separately from straight-line distance',
-      desc: '<code>PlannerMode.updateUI()</code> sums straight-line distances between the current waypoint list. Before replanning this is the crow-flies distance; after replanning it approximates the true length since points are densified. Displaying the computed path length explicitly after a successful replan (from the returned path point count × cell size, or by summing the replanned coords) would give more actionable feedback.',
-      file: 'viewer/static/js/planner_mode.js:497–521'
-    },
-    {
-      type: 'improvement', sev: 'nice-to-have',
-      title: 'Map validation and linting CLI tool',
-      desc: 'Create a tool to validate <code>.mapdata</code> files for common structural issues: disconnected footway segments, overlapping barriers that might break planners, or missing metadata. This would help debug parsing errors before they reach the simulator or robot.',
-      file: 'map_data/info.py'
-    },
-    {
-      type: 'improvement', sev: 'minor',
-      title: 'Configurable telemetry broadcast rate',
-      desc: 'The <code>telemetry_broadcaster</code> is hardcoded to 0.5s (2 Hz). For high-speed tracking or smooth visualization, this should be configurable or increased to 10–20 Hz when a ROS2 connection is active.',
-      file: 'map_data/viewer/app.py:29'
-    },
   ];
 
   let groupBy = 'type';

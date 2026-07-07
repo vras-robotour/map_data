@@ -1204,15 +1204,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#100-2026-05-29" class="md-nav__link">
+  <a href="#110-2026-07-07" class="md-nav__link">
     <span class="md-ellipsis">
       
-        [1.0.0] — 2026-05-29
+        [1.1.0] — 2026-07-07
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="[1.0.0] — 2026-05-29">
+    <nav class="md-nav" aria-label="[1.1.0] — 2026-07-07">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1239,6 +1239,56 @@
         
           <li class="md-nav__item">
   <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#100-2026-05-29" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [1.0.0] — 2026-05-29
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[1.0.0] — 2026-05-29">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Fixed
@@ -1296,15 +1346,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#100-2026-05-29" class="md-nav__link">
+  <a href="#110-2026-07-07" class="md-nav__link">
     <span class="md-ellipsis">
       
-        [1.0.0] — 2026-05-29
+        [1.1.0] — 2026-07-07
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="[1.0.0] — 2026-05-29">
+    <nav class="md-nav" aria-label="[1.1.0] — 2026-07-07">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1345,6 +1395,56 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#100-2026-05-29" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [1.0.0] — 2026-05-29
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[1.0.0] — 2026-05-29">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1366,8 +1466,30 @@
 
 
 <h1 id="changelog">Changelog</h1>
-<h2 id="100-2026-05-29">[1.0.0] — 2026-05-29</h2>
+<h2 id="110-2026-07-07">[1.1.0] — 2026-07-07</h2>
 <h3 id="added">Added</h3>
+<ul>
+<li>Interactive viewer: base-layer switcher with a satellite imagery option (Esri World Imagery); the selection persists across sessions</li>
+<li>Interactive viewer: copy-to-clipboard buttons for lat/lon in the node inspector</li>
+<li>Interactive viewer: per-annotation "revert geometry" action (↺ in the Annotations panel) to undo geometry drags back to the last loaded state</li>
+<li>Interactive viewer: the planner distance readout now labels whether it shows straight-line waypoint distance or actual planned path length</li>
+<li><code>map_data_viewer --telemetry-rate</code> flag to configure the Tracker telemetry broadcast rate (default 2 Hz)</li>
+<li><code>map_data_info --validate</code> checks a <code>.mapdata</code> file for structural issues (missing metadata or geometry, duplicate way IDs, nodes missing from the cache, disconnected footway networks) and exits non-zero when any are found</li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li>The package now targets ROS2 Jazzy or later and Python 3.12+</li>
+<li><code>create_mapdata</code> no longer requires ROS2 — it falls back to the repo data directory when <code>ament_index_python</code> is unavailable</li>
+<li>Packaging metadata (version, dependencies) is single-sourced in <code>pyproject.toml</code>; <code>requirements.txt</code> was replaced by the <code>[dev]</code> extra</li>
+<li>CI runs ruff lint/format checks and tests on Python 3.12 and 3.13</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li><code>astar_search</code> used syntax unavailable on the previously documented minimum Python version</li>
+<li>Stale version numbers in <code>setup.py</code> and the Overpass User-Agent</li>
+</ul>
+<h2 id="100-2026-05-29">[1.0.0] — 2026-05-29</h2>
+<h3 id="added_1">Added</h3>
 <ul>
 <li>Interactive viewer: way splitting, node deletion, and node position drag editing</li>
 <li>Interactive viewer: nodes can be inserted into OSM ways by dragging the blue midpoint handles between existing nodes in Edit mode</li>
@@ -1401,7 +1523,7 @@
 <li>pytest suite covering core logic and path planning edge cases</li>
 <li>Expanded test suite: <code>test_overpass.py</code> (retry logic, rate limiting, status polling), <code>test_errors.py</code> (malformed GPX, corrupt files, Overpass timeouts, planning failures), <code>test_parsing.py</code> (OSM element classification and buffering), <code>test_fill_grid.py</code> (footway cost assignment, barrier cell marking), <code>test_viewer_helpers.py</code> (GeoJSON roundtrip, way splitting, change log migration), <code>test_viewer_routes.py</code> (annotation CRUD, path-traversal security, way operations), and extended <code>test_integration.py</code> (OSM cache roundtrip, bbox mismatch, <code>parse_intersections</code>)</li>
 </ul>
-<h3 id="changed">Changed</h3>
+<h3 id="changed_1">Changed</h3>
 <ul>
 <li>Interactive viewer: GPX download now exports a <code>&lt;trk&gt;&lt;trkseg&gt;&lt;trkpt&gt;</code> track by default; a Track / Waypoints toggle in the planner panel switches back to the legacy <code>&lt;wpt&gt;</code> format</li>
 <li>Interactive viewer: annotation vertex handles in Edit mode now only appear when the annotation is clicked, not for all annotations at once</li>
@@ -1425,7 +1547,7 @@
 <li>Code formatting standardized via ruff across all source modules</li>
 <li><code>pyproject.toml</code> and <code>setup.py</code> aligned for ROS2 build compatibility</li>
 </ul>
-<h3 id="fixed">Fixed</h3>
+<h3 id="fixed_1">Fixed</h3>
 <ul>
 <li><code>visualizer.py</code>: swapped X/Y axis labels corrected — Easting is now on the X axis, Northing on Y</li>
 <li>Interactive viewer: node drag in Edit mode missed clicks intermittently because canvas node markers rendered below the SVG ghost layer; node markers now use the SVG renderer so events reach them directly</li>

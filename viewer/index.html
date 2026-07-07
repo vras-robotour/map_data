@@ -1351,6 +1351,12 @@ and plan paths — without needing ROS2.</p>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>python<span class="w"> </span>-m<span class="w"> </span>map_data.viewer.app<span class="w"> </span>--data-dir<span class="w"> </span>./data
 </span></code></pre></div>
 <p>Then open <code>http://127.0.0.1:5000</code> in a browser.</p>
+<div class="admonition warning">
+<p class="admonition-title">Trusted networks only</p>
+<p>The viewer has no authentication and its API can read and write files in the data
+directory. Keep the default <code>--host 127.0.0.1</code>; only bind to other interfaces
+(e.g. <code>--host 0.0.0.0</code>) on networks where you trust every machine.</p>
+</div>
 <h2 id="loading-map-data">Loading Map Data</h2>
 <p>The viewer loads files from its data directory (default: the package <code>data/</code> folder,
 overridable with <code>--data-dir</code>). Supported file formats:</p>

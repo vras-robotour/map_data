@@ -1452,8 +1452,8 @@
 <p>This page covers the core CLI tools and ROS2 nodes for parsing, visualizing, and publishing map data.</p>
 <div class="admonition note">
 <p class="admonition-title">ROS2 requirement</p>
-<p><code>create_mapdata</code> and <code>osm_cloud</code> require a sourced ROS2 workspace.
-The <code>MapData</code> class, path planning modules, and the interactive viewer work <strong>standalone</strong>.</p>
+<p>Only <code>osm_cloud</code> requires a sourced ROS2 workspace. The <code>create_mapdata</code> CLI,
+the <code>MapData</code> class, path planning modules, and the interactive viewer work <strong>standalone</strong>.</p>
 </div>
 <h2 id="what-gets-downloaded">What gets downloaded</h2>
 <p>When <code>create_mapdata</code> (or <code>MapData.run_all()</code>) is called, three concurrent
@@ -1534,6 +1534,12 @@ distance, covered area, UTM zone, and any stored annotations.</p>
 </span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>========================================
 </span></code></pre></div>
 <p><code>map_data_info</code> is available after installing the package (standalone <code>pip install -e .</code> or <code>colcon build</code>).</p>
+<p>With <code>--validate</code>, the tool checks the file for structural issues instead of printing
+statistics: missing metadata fields, ways without geometry, duplicate way IDs, nodes
+missing from the node cache, and disconnected footway networks. It exits non-zero when
+issues are found, so it can be used as a pre-flight check in scripts:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>map_data_info<span class="w"> </span>coords.mapdata<span class="w"> </span>--validate
+</span></code></pre></div>
 <h2 id="parsing-and-creating-files">Parsing and creating files</h2>
 <p><code>create_mapdata</code> creates a <code>.mapdata</code> file from a <code>.gpx</code> or <code>.yaml</code> waypoint file, or
 re-parses an existing <code>.mapdata</code> with the current tag configuration.</p>
@@ -1558,21 +1564,23 @@ re-parses an existing <code>.mapdata</code> with the current tag configuration.<
 <div class="admonition tip">
 <p class="admonition-title">YAML waypoint format</p>
 <p>Besides <code>.gpx</code> files, <code>create_mapdata</code> and <code>MapData</code> also accept a simple YAML format:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">waypoints</span><span class="p">:</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">latitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50.1234</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nt">longitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.5678</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="nt">elevation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200.0</span><span class="w">   </span><span class="c1"># optional, defaults to 0</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">latitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50.1240</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="nt">longitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.5690</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">waypoints</span><span class="p">:</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">latitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50.1234</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">longitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.5678</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="nt">elevation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200.0</span><span class="w">   </span><span class="c1"># optional, defaults to 0</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">latitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50.1240</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="nt">longitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.5690</span>
 </span></code></pre></div>
 <p>Save the file with a <code>.yaml</code> extension and use it wherever a <code>.gpx</code> file is accepted.</p>
 </div>
 <p>Download and parse OSM data for a GPX file:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>ros2<span class="w"> </span>run<span class="w"> </span>map_data<span class="w"> </span>create_mapdata<span class="w"> </span>-d<span class="w"> </span>-f<span class="w"> </span>coords.gpx
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>create_mapdata<span class="w"> </span>-d<span class="w"> </span>-f<span class="w"> </span>coords.gpx
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1"># or, in a sourced ROS2 workspace:</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>ros2<span class="w"> </span>run<span class="w"> </span>map_data<span class="w"> </span>create_mapdata<span class="w"> </span>-d<span class="w"> </span>-f<span class="w"> </span>coords.gpx
 </span></code></pre></div>
 <p>This creates <code>coords.mapdata</code> in the package data directory.</p>
 <p>Re-parse an existing <code>.mapdata</code> file (e.g. after editing tag CSVs):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>ros2<span class="w"> </span>run<span class="w"> </span>map_data<span class="w"> </span>create_mapdata<span class="w"> </span>-f<span class="w"> </span>coords.mapdata
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>create_mapdata<span class="w"> </span>-f<span class="w"> </span>coords.mapdata
 </span></code></pre></div>
 <h2 id="publishing-a-point-cloud-of-footways-and-intersections">Publishing a point cloud of footways and intersections</h2>
 <p><code>osm_cloud</code> is a ROS2 node that publishes a <code>sensor_msgs/PointCloud2</code> on the <code>grid</code>
@@ -1658,9 +1666,9 @@ topic (cost-aware footway grid) and optionally publishes intersections as a
 <h3 id="launching">Launching</h3>
 <p>The recommended way to run the node is via the provided launch file, which also sets
 up the required static transforms and enables intersection publishing by default:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>ros2<span class="w"> </span>launch<span class="w"> </span>map_data<span class="w"> </span>osm_cloud.launch.py<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span>mapdata_file:<span class="o">=</span>/path/to/coords.mapdata<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span>grid_topic:<span class="o">=</span>osm_cloud
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>ros2<span class="w"> </span>launch<span class="w"> </span>map_data<span class="w"> </span>osm_cloud.launch.py<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">    </span>mapdata_file:<span class="o">=</span>/path/to/coords.mapdata<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span>grid_topic:<span class="o">=</span>osm_cloud
 </span></code></pre></div>
 <table>
 <thead>

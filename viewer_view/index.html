@@ -1486,14 +1486,21 @@ and edit parsed map features, manage layer visibility, and draw manual annotatio
 </table>
 <p>First three categories also have an expandable sub-filter to toggle individual types.
 Use the <strong>Search</strong> box at the top of the Layers panel to filter features by OSM ID or name.</p>
+<p>A base-layer switcher in the bottom-left corner of the map toggles between the standard
+<strong>OpenStreetMap</strong> tiles and <strong>Satellite</strong> imagery (Esri World Imagery) — useful for
+verifying annotation placement against aerial photos. The choice is remembered across sessions.</p>
 <h2 id="properties-panel">Properties Panel</h2>
 <p>Clicking any map feature in <strong>VIEW</strong> mode opens its properties in the <strong>Properties</strong> panel.
-The panel shows the feature's OSM tags, category, and geometry type.
+The panel shows the feature's OSM tags, category, and geometry type. When inspecting
+individual nodes, the ⎘ buttons next to the latitude and longitude copy the value to
+the clipboard.
 In <strong>VIEW</strong> mode you can also open a feature's properties for editing via the context menu.</p>
 <h2 id="annotation-panels">Annotation Panels</h2>
 <p>Three collapsible panels at the bottom of the sidebar track the state of manual edits:</p>
 <ul>
-<li><strong>Annotations</strong> — list of all drawn obstacles and paths.</li>
+<li><strong>Annotations</strong> — list of all drawn obstacles and paths. The ↺ button reverts an
+  annotation's geometry to the state it had when the file was loaded (geometry drags
+  are saved immediately, so this is the way to recover from an accidental move).</li>
 <li><strong>Changes</strong> — features whose properties have been modified since the file was loaded.</li>
 <li><strong>Hidden</strong> — features that have been hidden from the map via the context menu.</li>
 </ul>

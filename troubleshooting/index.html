@@ -1856,11 +1856,12 @@
 <hr />
 <h2 id="ros2-node-errors">ROS2 node errors</h2>
 <h3 id="create_mapdata-not-found"><code>create_mapdata</code> not found</h3>
-<p>This is a ROS2 node. It is available only after building the package with <code>colcon</code> and sourcing the workspace:</p>
+<p>The command is installed with the package. Standalone, <code>pip install -e .</code> puts it on
+your <code>PATH</code> directly. In a ROS2 workspace, build with <code>colcon</code> and source the workspace:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>colcon<span class="w"> </span>build<span class="w"> </span>--packages-select<span class="w"> </span>map_data
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">source</span><span class="w"> </span>install/setup.bash
 </span></code></pre></div>
-<p>After that, use <code>ros2 run map_data create_mapdata ...</code> rather than calling the script directly.</p>
+<p>After that, use <code>ros2 run map_data create_mapdata ...</code>.</p>
 <h3 id="osm_cloud-does-not-publish"><code>osm_cloud</code> does not publish</h3>
 <ol>
 <li>Check that a <code>.mapdata</code> file path is set via the <code>mapdata_file</code> ROS2 parameter.</li>
