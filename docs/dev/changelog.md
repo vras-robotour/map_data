@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.1.0] — 2026-07-07
+
+### Added
+
+- Interactive viewer: base-layer switcher with a satellite imagery option (Esri World Imagery); the selection persists across sessions
+- Interactive viewer: copy-to-clipboard buttons for lat/lon in the node inspector
+- Interactive viewer: per-annotation "revert geometry" action (↺ in the Annotations panel) to undo geometry drags back to the last loaded state
+- Interactive viewer: the planner distance readout now labels whether it shows straight-line waypoint distance or actual planned path length
+- `map_data_viewer --telemetry-rate` flag to configure the Tracker telemetry broadcast rate (default 2 Hz)
+- `map_data_info --validate` checks a `.mapdata` file for structural issues (missing metadata or geometry, duplicate way IDs, nodes missing from the cache, disconnected footway networks) and exits non-zero when any are found
+
+### Changed
+
+- The package now targets ROS2 Jazzy or later and Python 3.12+
+- `create_mapdata` no longer requires ROS2 — it falls back to the repo data directory when `ament_index_python` is unavailable
+- Packaging metadata (version, dependencies) is single-sourced in `pyproject.toml`; `requirements.txt` was replaced by the `[dev]` extra
+- CI runs ruff lint/format checks and tests on Python 3.12 and 3.13
+
+### Fixed
+
+- `astar_search` used syntax unavailable on the previously documented minimum Python version
+- Stale version numbers in `setup.py` and the Overpass User-Agent
+
 ## [1.0.0] — 2026-05-29
 
 ### Added
