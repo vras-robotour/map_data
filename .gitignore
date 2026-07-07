@@ -1,11 +1,19 @@
+# Python
 *.pyc
+__pycache__/
+*.egg-info/
+venv/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.python-version
+uv.lock
+
+# Generated data
 *.png
 paths/*
 *.mapdata
-*.DS_Store
+*.annotations.json
 
-.python-version
-uv.lock
-*.json
-venv/*
-*.egg-info/*
+# OS
+.DS_Store

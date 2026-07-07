@@ -20,7 +20,7 @@ class OverpassClient:
         self._endpoint_index = 0
         self.session = requests.Session()
         self.session.headers.update(
-            {"User-Agent": "map_data/2.0 (https://github.com/vras-robotour/map_data)"},
+            {"User-Agent": "map_data/1.0 (https://github.com/vras-robotour/map_data)"},
         )
         self.api = overpy.Overpass()
 

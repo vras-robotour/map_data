@@ -18,8 +18,7 @@ cd map_data
 Install the package in editable mode together with the documentation and tooling dependencies:
 
 ```bash
-uv pip install -e .
-uv pip install ruff mkdocs mkdocs-material "mkdocstrings[python]"
+uv pip install -e ".[dev]"
 ```
 
 !!! warning "Use `uv pip`, not plain `pip`"

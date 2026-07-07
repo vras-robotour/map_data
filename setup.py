@@ -4,36 +4,30 @@ from setuptools import find_packages, setup
 
 package_name = "map_data"
 
+# Version and dependencies are defined in pyproject.toml; this file only
+# carries the ROS/ament-specific metadata (data_files, entry points).
 setup(
     name=package_name,
-    version="0.0.1",
     packages=find_packages(exclude=["tests"]),
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
-        (str(Path("share") / package_name / "launch"), [str(p) for p in Path("launch").glob("*.launch.py")]),
-        (str(Path("share") / package_name / "config"), [str(p) for p in Path("config").glob("*.yaml")]),
-        (str(Path("share") / package_name / "data"), [str(p) for p in Path("data").glob("*.gpx")]),
-        (str(Path("share") / package_name / "data"), [str(p) for p in Path("data").glob("*.mapdata")]),
-        (str(Path("share") / package_name / "data"), [str(p) for p in Path("data").glob("*.annotations.json")]),
-        (str(Path("share") / package_name / "parameters"), [str(p) for p in Path("parameters").glob("*.csv")]),
-    ],
-    install_requires=[
-        "setuptools",
-        "flask",
-        "flask-socketio",
-        "gpxpy",
-        "numpy",
-        "overpy",
-        "shapely",
-        "utm",
-        "tqdm",
-        "requests",
-        "ros2_numpy",
-        "PyYAML",
-        "matplotlib",
-        "scipy",
-        "joblib",
+        (
+            str(Path("share") / package_name / "launch"),
+            [str(p) for p in Path("launch").glob("*.launch.py")],
+        ),
+        (
+            str(Path("share") / package_name / "config"),
+            [str(p) for p in Path("config").glob("*.yaml")],
+        ),
+        (
+            str(Path("share") / package_name / "data"),
+            [str(p) for p in Path("data").glob("*.gpx")],
+        ),
+        (
+            str(Path("share") / package_name / "parameters"),
+            [str(p) for p in Path("parameters").glob("*.csv")],
+        ),
     ],
     package_data={
         "map_data": [
@@ -48,7 +42,6 @@ setup(
     description="ROS2 package for downloading, parsing, and visualizing OSM map data with\
                  integrated A* and RRT* path planners.",
     license="BSD-3-Clause",
-    tests_require=["pytest"],
     entry_points={
         "console_scripts": [
             "osm_cloud = map_data.osm_cloud:main",
