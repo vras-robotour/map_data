@@ -5,7 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "map_data"
 version = "1.1.0"
-requires-python = ">=3.12"
+# requires-python is intentionally NOT declared: colcon's ament_python build
+# parses the setup() dump with ast.literal_eval, which chokes on the
+# SpecifierSet object it produces. The Python 3.12+ floor is enforced by CI
+# and documented in the README.
 dynamic = ["description", "license", "maintainers", "scripts"]
 dependencies = [
     "flask",
