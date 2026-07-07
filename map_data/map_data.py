@@ -542,7 +542,7 @@ class MapData:
         )
         return {
             nid: np.array([e, n, z]).reshape(3, 1)
-            for nid, e, n in zip(node_ids, eastings, northings)
+            for nid, e, n in zip(node_ids, eastings, northings, strict=True)
         }
 
     def get_ways(self) -> dict[str, list[Way]]:

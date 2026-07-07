@@ -19,7 +19,8 @@ BUFFER_WIDTHS = _DEFAULTS.get("buffer_widths", {"road": 7, "footway": 3, "barrie
 
 
 def parse_osm_ways(
-    osm_ways_data: overpy.Result, nodes_cache: dict[int, dict[str, Any]],
+    osm_ways_data: overpy.Result,
+    nodes_cache: dict[int, dict[str, Any]],
 ) -> dict[int, Way]:
     ways = {}
     for way in tqdm(osm_ways_data.ways, desc="Parse ways"):

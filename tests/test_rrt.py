@@ -160,6 +160,7 @@ def test_informed_ellipse_tighter_than_full_space():
     """With improve_after_goal=True and informed=True, the planner should produce
     a path no worse than with informed=False (same seed, more iterations)."""
     import random as _random
+
     seed = 42
     _random.seed(seed)
     rrt_informed = _make_rrt(informed=True, improve_after_goal=True, max_iter=2000)
@@ -188,6 +189,7 @@ def test_adaptive_radius_disabled_finds_path():
 def test_adaptive_radius_shrinks_with_more_nodes():
     rrt = _make_rrt(adaptive_radius=True, max_iter=500)
     import math
+
     # With many nodes the adaptive radius should be smaller than neighbor_radius
     n_large = 300
     r = min(rrt._gamma * math.sqrt(math.log(n_large) / n_large), rrt.neighbor_radius)

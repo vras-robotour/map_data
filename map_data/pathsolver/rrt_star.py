@@ -225,7 +225,9 @@ class RRTStar:
         return False
 
     def _bresenham(
-        self, start: tuple[int, int], goal: tuple[int, int],
+        self,
+        start: tuple[int, int],
+        goal: tuple[int, int],
     ) -> Iterator[tuple[int, int]]:
         """
         Yield integer grid cells along the line from *start* to *goal* (Bresenham).
@@ -275,7 +277,7 @@ class RRTStar:
         the polar parameterisation with ``r = √U``.
         """
         a = self._best_cost / 2.0
-        b = math.sqrt(max(self._best_cost ** 2 - self._c_min ** 2, 0.0)) / 2.0
+        b = math.sqrt(max(self._best_cost**2 - self._c_min**2, 0.0)) / 2.0
         angle = random.uniform(0.0, 2.0 * math.pi)
         r = math.sqrt(random.random())
         x_e = np.array([a * r * math.cos(angle), b * r * math.sin(angle)])
@@ -350,7 +352,7 @@ class RRTStar:
         r = radius if radius is not None else self.neighbor_radius
         n = len(self.nodes)
         new_idx = n - 1  # node just appended by the caller
-        r2 = r ** 2
+        r2 = r**2
 
         if self._kdtree is None:
             sq_dists = ((self._nodes_buf[:n] - new_point) ** 2).sum(axis=1)
@@ -383,9 +385,13 @@ class RRTStar:
             Returns ``(True, inf)`` on collision.
 
         """
-        if self.obstacles_tree and len(
-            self.obstacles_tree.query(LineString([start, end]), predicate="intersects"),
-        ) > 0:
+        if (
+            self.obstacles_tree
+            and len(
+                self.obstacles_tree.query(LineString([start, end]), predicate="intersects"),
+            )
+            > 0
+        ):
             return True, float("inf")
 
         p1_grid = (

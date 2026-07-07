@@ -44,7 +44,6 @@ def launch_setup(context, *args, **kwargs):
             if potential_path.exists():
                 osm_grid_params = str(potential_path)
 
-
     # Define the osm_cloud node
     osm_cloud_node = Node(
         package="map_data",

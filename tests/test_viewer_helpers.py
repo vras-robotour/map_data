@@ -262,8 +262,7 @@ def test_migrate_change_log_legacy_entries_without_ts_dropped():
     migrate_change_log(store)
     # The legacy entry (no "ts") must be gone after re-migration
     assert not any(
-        e.get("type") == "way" and e.get("id") == 5 and "ts" not in e
-        for e in store["change_log"]
+        e.get("type") == "way" and e.get("id") == 5 and "ts" not in e for e in store["change_log"]
     )
 
 

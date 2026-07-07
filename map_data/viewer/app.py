@@ -9,9 +9,9 @@ from flask import Flask
 from flask_socketio import SocketIO
 from werkzeug.routing import IntegerConverter
 
+from ..utils.config import setup_logging
 from .ros_node import ROS_AVAILABLE, TrackerNode
 from .routes import bp
-from ..utils.config import setup_logging
 
 logger = logging.getLogger(__name__)
 socketio = SocketIO(cors_allowed_origins="*")

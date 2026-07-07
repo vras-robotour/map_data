@@ -32,7 +32,9 @@ logger = logging.getLogger(__name__)
 
 
 def ring_to_latlon(
-    coords: list[tuple[float, float]], zone_number: int, zone_letter: str,
+    coords: list[tuple[float, float]],
+    zone_number: int,
+    zone_letter: str,
 ) -> list[list[float]]:
     result = []
     for x, y in coords:
@@ -42,7 +44,9 @@ def ring_to_latlon(
 
 
 def geom_to_geojson(
-    geom: "_LineString | _SPoly | _SMPoly", zone_number: int, zone_letter: str,
+    geom: "_LineString | _SPoly | _SMPoly",
+    zone_number: int,
+    zone_letter: str,
 ) -> dict[str, Any] | None:
     gtype = geom.geom_type
     if gtype == "Polygon":
@@ -61,7 +65,7 @@ def geom_to_geojson(
             polygons.append([exterior, *interiors])
         return {"type": "MultiPolygon", "coordinates": polygons}
     if gtype == "LineString":
-        if not isinstance(geom, _LineString) :
+        if not isinstance(geom, _LineString):
             return None
         return {
             "type": "LineString",
@@ -352,7 +356,8 @@ def migrate_change_log(store: dict[str, Any]) -> None:
 
 
 def get_node_position_overrides(
-    store: dict[str, Any], way_id: int | str,
+    store: dict[str, Any],
+    way_id: int | str,
 ) -> dict[int, dict[str, float]]:
     """
     Return {node_id (int): {lat, lon}} for position overrides on a given way.
@@ -520,7 +525,9 @@ def apply_node_position_overrides(
 
 
 def geojson_geom_to_utm(
-    geometry: dict[str, Any], zone_number: int, zone_letter: str,
+    geometry: dict[str, Any],
+    zone_number: int,
+    zone_letter: str,
 ) -> "BaseGeometry | None":
     """
     GeoJSON geometry (lon/lat) → Shapely geometry (UTM, same zone as mapdata).
@@ -597,7 +604,10 @@ def apply_added_nodes(
             lat = float(ov["lat"] if ov else a["lat"])
             lon = float(ov["lon"] if ov else a["lon"])
             e, n_utm, _, _ = utm.from_latlon(
-                lat, lon, force_zone_number=zone_number, force_zone_letter=zone_letter,
+                lat,
+                lon,
+                force_zone_number=zone_number,
+                force_zone_letter=zone_letter,
             )
             # For closed LineStrings the last coord repeats the first — insert before it.
             _is_closed = len(node_ids) >= 2 and node_ids[0] == node_ids[-1]
