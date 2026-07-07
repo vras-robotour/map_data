@@ -1,10 +1,20 @@
 // ── Map setup ────────────────────────────────────────────────────────────────
 const map = L.map('map', { preferCanvas: true }).setView([50.08, 14.42], 5);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom: 19,
-}).addTo(map);
+const baseLayers = {
+    'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19,
+    }),
+    'Satellite': L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, GIS User Community',
+        maxZoom: 19,
+    }),
+};
+(baseLayers[localStorage.getItem('baseLayer')] || baseLayers['OpenStreetMap']).addTo(map);
+L.control.layers(baseLayers, null, { position: 'bottomleft' }).addTo(map);
+map.on('baselayerchange', e => localStorage.setItem('baseLayer', e.name));
 
 drawnItems.addTo(map);
 
@@ -251,6 +261,7 @@ async function initApp() {
             try {
                 const ann = await createAnnotationApi(currentFile, type, pendingAnnGeom, props);
                 annotations.push(ann);
+                annBaselineGeoms[ann.id] = JSON.parse(JSON.stringify(ann.geometry));
                 addAnnotationToLayer(ann);
                 renderAnnotationList();
                 setStatus('Annotation added', 'text-success');

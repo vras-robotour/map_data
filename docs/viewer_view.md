@@ -35,17 +35,25 @@ The sidebar shows a **Layers** panel with toggles for each feature category:
 First three categories also have an expandable sub-filter to toggle individual types.
 Use the **Search** box at the top of the Layers panel to filter features by OSM ID or name.
 
+A base-layer switcher in the bottom-left corner of the map toggles between the standard
+**OpenStreetMap** tiles and **Satellite** imagery (Esri World Imagery) — useful for
+verifying annotation placement against aerial photos. The choice is remembered across sessions.
+
 ## Properties Panel
 
 Clicking any map feature in **VIEW** mode opens its properties in the **Properties** panel.
-The panel shows the feature's OSM tags, category, and geometry type.
+The panel shows the feature's OSM tags, category, and geometry type. When inspecting
+individual nodes, the ⎘ buttons next to the latitude and longitude copy the value to
+the clipboard.
 In **VIEW** mode you can also open a feature's properties for editing via the context menu.
 
 ## Annotation Panels
 
 Three collapsible panels at the bottom of the sidebar track the state of manual edits:
 
-- **Annotations** — list of all drawn obstacles and paths.
+- **Annotations** — list of all drawn obstacles and paths. The ↺ button reverts an
+  annotation's geometry to the state it had when the file was loaded (geometry drags
+  are saved immediately, so this is the way to recover from an accidental move).
 - **Changes** — features whose properties have been modified since the file was loaded.
 - **Hidden** — features that have been hidden from the map via the context menu.
 

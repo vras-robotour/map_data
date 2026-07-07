@@ -4,6 +4,7 @@ let plannerMode = null; // Will hold the PlannerMode instance
 let currentFile = '';
 let currentMode = 'view';
 let annotations = [];
+let annBaselineGeoms = {}; // annId → geometry snapshot from load/creation time (for revert)
 let pendingBbox = null;
 let nodeLayer = null;   // L.LayerGroup of node circle markers
 let nodeCount = 0;      // actual OSM node count from last fetch
