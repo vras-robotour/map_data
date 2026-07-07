@@ -67,6 +67,15 @@ Annotations: 3 (manual edits)
 
 `map_data_info` is available after installing the package (standalone `pip install -e .` or `colcon build`).
 
+With `--validate`, the tool checks the file for structural issues instead of printing
+statistics: missing metadata fields, ways without geometry, duplicate way IDs, nodes
+missing from the node cache, and disconnected footway networks. It exits non-zero when
+issues are found, so it can be used as a pre-flight check in scripts:
+
+```bash
+map_data_info coords.mapdata --validate
+```
+
 ## Parsing and creating files
 
 `create_mapdata` creates a `.mapdata` file from a `.gpx` or `.yaml` waypoint file, or
