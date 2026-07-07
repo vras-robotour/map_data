@@ -89,4 +89,6 @@ string to disable the corresponding feature and hide its UI row.
 | `speak_error_topic` | `/speak/err` | Error speech messages (`String`) |
 | `path_topic` | `/path` | Planned path for map overlay (`Path`) |
 
-Telemetry is polled at **2 Hz** and pushed to the browser over a WebSocket.
+Telemetry is polled at **2 Hz** by default and pushed to the browser over a WebSocket.
+The rate is configurable via `map_data_viewer --telemetry-rate <Hz>` (e.g. `10` for
+smoother tracking of a fast-moving robot).
