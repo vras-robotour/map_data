@@ -4,8 +4,6 @@ import argparse
 import logging
 from pathlib import Path
 
-from ament_index_python.resources import get_resource
-
 import map_data.map_data as md
 from map_data.utils.config import setup_logging
 
@@ -21,17 +19,17 @@ def process_map_data(file_name: str, *, download: bool) -> None:
     if p.exists():
         full_path = p.resolve()
     else:
-        # Fallback to package share directory
+        # Fallback to the package share directory (ROS2) or the repo data directory
         try:
+            from ament_index_python.resources import get_resource
+
             _, package_path = get_resource("packages", "map_data")
             full_path = Path(package_path) / "share" / "map_data" / "data" / file_name
-        except LookupError as e:
-            logger.exception("File '%s' not found and package 'map_data' not found", file_name)
-            raise SystemExit(1) from e
-
-    if not full_path.exists() and not download:
-        logger.error("File %s not found", full_path)
-        raise SystemExit(1)
+        except (ImportError, LookupError):
+            full_path = (Path(__file__).parent / ".." / "data" / file_name).resolve()
+        if not full_path.exists():
+            logger.error("File '%s' not found", file_name)
+            raise SystemExit(1)
 
     try:
         if download:
