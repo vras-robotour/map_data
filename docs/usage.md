@@ -3,8 +3,8 @@
 This page covers the core CLI tools and ROS2 nodes for parsing, visualizing, and publishing map data.
 
 !!! note "ROS2 requirement"
-    `create_mapdata` and `osm_cloud` require a sourced ROS2 workspace.
-    The `MapData` class, path planning modules, and the interactive viewer work **standalone**.
+    Only `osm_cloud` requires a sourced ROS2 workspace. The `create_mapdata` CLI,
+    the `MapData` class, path planning modules, and the interactive viewer work **standalone**.
 
 ## What gets downloaded
 
@@ -94,6 +94,8 @@ re-parses an existing `.mapdata` with the current tag configuration.
 Download and parse OSM data for a GPX file:
 
 ```bash
+create_mapdata -d -f coords.gpx
+# or, in a sourced ROS2 workspace:
 ros2 run map_data create_mapdata -d -f coords.gpx
 ```
 
@@ -102,7 +104,7 @@ This creates `coords.mapdata` in the package data directory.
 Re-parse an existing `.mapdata` file (e.g. after editing tag CSVs):
 
 ```bash
-ros2 run map_data create_mapdata -f coords.mapdata
+create_mapdata -f coords.mapdata
 ```
 
 ## Publishing a point cloud of footways and intersections

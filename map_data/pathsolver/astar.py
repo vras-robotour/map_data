@@ -1,11 +1,8 @@
 import heapq
 from collections.abc import Callable, Iterable
-from typing import TypeVar
-
-N = TypeVar("N")
 
 
-def astar_search(
+def astar_search[N](
     start_node: N,
     goal_node: N,
     get_neighbors_func: Callable[[N], Iterable[tuple[N, float]]],

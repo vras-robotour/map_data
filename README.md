@@ -29,8 +29,8 @@ Full documentation, including installation guides, CLI usage, and API reference,
 
 ### Prerequisites
 
-- Python 3.10+
-- ROS2 Humble or later (required only for `create_mapdata` and `osm_cloud`)
+- Python 3.12+
+- ROS2 Jazzy or later (required only for the `osm_cloud` node)
 
 ### Installation
 
@@ -46,11 +46,17 @@ pip install -e .
 colcon build --packages-select map_data
 ```
 
+The `osm_cloud` node additionally depends on [`ros2_numpy`](https://github.com/Box-Robotics/ros2_numpy),
+which is not released as a binary package — clone its `jazzy` branch into your colcon
+workspace and build it from source.
+
 ### Basic Usage
 
 Download and parse OSM data for a GPX file:
 
 ```bash
+create_mapdata -d -f coords.gpx
+# or, in a sourced ROS2 workspace:
 ros2 run map_data create_mapdata -d -f coords.gpx
 ```
 
