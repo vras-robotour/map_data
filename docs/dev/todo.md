@@ -294,6 +294,84 @@
 
   const ITEMS = [
     {
+      type: 'bug', sev: 'critical',
+      title: 'osm_cloud crashes when started with a GPX file',
+      desc: '<code>OSMCloud.__init__</code> calls <code>self.map_data.run_all(self.save_mapdata)</code>, but <code>MapData.run_all</code> declares <code>save</code> as keyword-only (<code>def run_all(self, *, save=True)</code>), so the call raises <code>TypeError: run_all() takes 1 positional argument but 2 were given</code>. With <code>respawn=True</code> in the launch file this becomes a crash loop. Fix: <code>run_all(save=self.save_mapdata)</code>.',
+      file: 'map_data/osm_cloud.py'
+    },
+    {
+      type: 'bug', sev: 'important',
+      title: 'Custom highway/surface costs from the viewer UI are silently ignored',
+      desc: '<code>ReplanPath.__init__</code> passes <code>self.HIGHWAY_COSTS</code>/<code>self.SURFACE_COSTS</code> into <code>PathGrid</code> at construction time. The viewer routes (<code>get_cost_grid</code>, <code>create_replan</code>) construct the <code>ReplanPath</code> first and then assign <code>replanner.HIGHWAY_COSTS = custom_costs</code> — this rebinds an instance attribute that the already-built <code>PathGrid</code> never sees, so the defaults are always used. The planner UI exposes and sends these costs, so user edits have no effect. Fix: accept the costs as <code>ReplanPath</code> constructor arguments and pass them through to <code>PathGrid</code>.',
+      file: 'map_data/viewer/routes.py, map_data/pathsolver/replan.py'
+    },
+    {
+      type: 'bug', sev: 'important',
+      title: 'Refreshing OSM data on a loaded .mapdata crashes',
+      desc: '<code>load_mapdata</code> never restores <code>BARRIER_TAGS</code>/<code>OBSTACLE_TAGS</code> (and friends), <code>_obstacle_radius</code>, or <code>_buffer_widths</code>, so <code>MapData.load(...)</code> followed by <code>run_queries()</code> + <code>run_parse()</code> raises <code>AttributeError</code>. Fix: call <code>md._load_tag_configs()</code> and default the two private fields to <code>None</code> in <code>load_mapdata</code>.',
+      file: 'map_data/utils/serialization.py'
+    },
+    {
+      type: 'bug', sev: 'minor',
+      title: 'Stale __version__ in package __init__',
+      desc: '<code>map_data/__init__.py</code> still says <code>1.0.0</code> while <code>pyproject.toml</code>, <code>package.xml</code>, and <code>CITATION.cff</code> say 1.1.0. The 1.1.0 changelog even claims stale version numbers were fixed. Consider single-sourcing it via <code>importlib.metadata.version("map_data")</code> so it cannot drift again.',
+      file: 'map_data/__init__.py'
+    },
+    {
+      type: 'bug', sev: 'minor',
+      title: 'grid_topic launch argument is declared but never used',
+      desc: 'The launch file declares a <code>grid_topic</code> argument (default <code>osm_grid</code>) but never passes it to the node parameters, so it silently does nothing and the node uses the YAML value (<code>grid</code>) instead. Either wire it into the node parameters or drop the argument.',
+      file: 'launch/osm_cloud.launch.py'
+    },
+    {
+      type: 'bug', sev: 'minor',
+      title: 'parameter_callback creates intersection publishers on hardcoded topics',
+      desc: 'When <code>publish_intersections</code> is enabled at runtime via the parameter callback, the publishers are created on hardcoded <code>"intersections"</code>/<code>"intersection_markers"</code> instead of the configured <code>self.intersections_topic</code>/<code>self.intersection_markers_topic</code> used at init time.',
+      file: 'map_data/osm_cloud.py'
+    },
+    {
+      type: 'bug', sev: 'minor',
+      title: 'TrackerNode.num_waypoints is never updated',
+      desc: '<code>num_waypoints</code> is initialized to 0 and never set from any subscription, but the <code>NavigateThroughPoses</code> feedback handler computes <code>current_waypoint = num_waypoints - number_of_poses_remaining</code>, which goes negative for that action type. Update <code>num_waypoints</code> when a path/goal is received, or derive the index differently.',
+      file: 'map_data/viewer/ros_node.py'
+    },
+    {
+      type: 'bug', sev: 'minor',
+      title: 'Way.to_pcd_points ignores its density parameter for linestrings',
+      desc: 'The non-polygon branch hardcodes <code>get_point_line(p1, p2, 0.5)</code>, so the documented "points per metre" knob only affects filled polygons. Note the semantics differ: <code>density</code> is points per metre for the grid fill, while <code>get_point_line</code> takes a step size — the linestring branch should pass <code>1 / density</code>.',
+      file: 'map_data/utils/way.py'
+    },
+    {
+      type: 'bug', sev: 'minor',
+      title: 'Polygon holes are re-blocked when rasterizing obstacles',
+      desc: '<code>PathGrid.fill</code> subtracts path geometries from obstacles so footways crossing a barrier stay traversable, but both the point-grid masking and <code>burn_obstacles</code> rasterize with <code>Path(obstacle.exterior.coords)</code> only — interior holes are ignored. A path that punches a hole <em>through</em> a polygon (rather than splitting it) gets blocked again anyway. Fix: subtract hole masks built from <code>polygon.interiors</code>, or rasterize with Shapely <code>contains</code> on prepared geometries.',
+      file: 'map_data/pathsolver/grid_constructor.py'
+    },
+    {
+      type: 'bug', sev: 'minor',
+      title: 'Inconsistent UTM zone forcing during parsing',
+      desc: '<code>MapData.get_points()</code> forces the instance zone via <code>force_zone_number</code>/<code>force_zone_letter</code>, but <code>parse_osm_ways</code>, <code>parse_osm_nodes</code>, and <code>parse_intersections</code> call <code>utm.from_latlon</code> without forcing. Near a UTM zone boundary, way geometry and node coordinates can land in a different zone than the metadata claims (a warning is logged, but geometry is still inconsistent). Force the zone everywhere for consistency.',
+      file: 'map_data/utils/parsing.py, map_data/map_data.py'
+    },
+    {
+      type: 'bug', sev: 'nice-to-have',
+      title: 'get_cost_grid rejects zero-valued coordinates',
+      desc: 'The parameter check uses <code>if not all([filename, min_lat, min_lon, max_lat, max_lon])</code>, so a legitimate <code>0.0</code> latitude or longitude (equator/prime meridian) aborts with 400. Use explicit <code>is None</code> checks.',
+      file: 'map_data/viewer/routes.py'
+    },
+    {
+      type: 'improvement', sev: 'minor',
+      title: 'parse_gpx_file only reads waypoints, not tracks or routes',
+      desc: '<code>utils/gpx.py</code> only iterates <code>gpx.waypoints</code>, while <code>MapData</code> falls back to tracks and routes. A track-only GPX therefore works for map download but not as replan CLI path input. Reuse the same waypoints → tracks → routes fallback.',
+      file: 'map_data/utils/gpx.py'
+    },
+    {
+      type: 'improvement', sev: 'nice-to-have',
+      title: 'Hardcoded fallback costs drift from planner_defaults.yaml',
+      desc: 'The fallback dicts in <code>ReplanPath</code> (used only when the config file is missing) have <code>sand: 0.7</code> while <code>config/planner_defaults.yaml</code> says <code>sand: 0.4</code>. Sync the values, or drop the duplicated fallback dicts and treat the YAML as the single source of truth.',
+      file: 'map_data/pathsolver/replan.py'
+    },
+    {
       type: 'improvement', sev: 'nice-to-have',
       title: 'Speed up planning hot paths with native extensions',
       desc: 'The main bottlenecks are the Python <code>_bresenham</code> generator and <code>_segment_cost</code> in RRT* (called O(max_iter × neighbors) times), and the <code>heapq</code> loop in <code>grid_astar</code>. Recommended approach: (1) try <code>@numba.njit</code> on these inner loops first — zero build overhead, easy to toggle; (2) replace <code>grid_astar</code> with <code>skimage.graph.route_through_array</code> which is C-backed; (3) Cython or pybind11 only if numba is unacceptable for deployment. Full C/C++ rewrite is not justified given that numpy, cKDTree, and Shapely/GEOS are already native.',
