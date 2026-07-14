@@ -409,6 +409,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
                 subsampled.append(waypoints[-1])
             with self._lock:
                 self.waypoints_gps = subsampled
+                self.num_waypoints = len(msg.poses)
                 self._dirty = True
 
     def _feedback_callback(
