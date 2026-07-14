@@ -87,7 +87,7 @@ class ReplanPath:
             "gravel": 0.2,
             "dirt": 0.3,
             "grass": 0.5,
-            "sand": 0.7,
+            "sand": 0.4,
         },
     )
     DEFAULT_OFF_PATH_COST: float = _DEFAULTS.get("default_off_path_cost", 0.9)

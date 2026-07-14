@@ -553,8 +553,8 @@ if __name__ == "__main__":
     from shapely.geometry import Polygon
 
     # Define start and goal points
-    start = (0.0, 0.0)
-    goal = (10.0, 10.0)
+    start = np.array([0.0, 0.0])
+    goal = np.array([10.0, 10.0])
 
     # Define obstacles as Shapely polygons
     obstacles = [
