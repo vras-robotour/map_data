@@ -1,6 +1,10 @@
 import copy
 import json
 import logging
+import os
+import tempfile
+import threading
+import contextlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -122,22 +126,42 @@ def mapdata_to_geojson(map_data: "MapData") -> dict[str, Any]:
     return {"type": "FeatureCollection", "features": features}
 
 
-# ------------------------------------------------------------------
-# Annotation helpers
-# ------------------------------------------------------------------
+# Per-file lock for thread-safe annotation writes
+_annotation_locks: dict[str, threading.Lock] = {}
+_locks_lock = threading.Lock()
+
+
+def _get_annotation_lock(path: str) -> threading.Lock:
+    with _locks_lock:
+        if path not in _annotation_locks:
+            _annotation_locks[path] = threading.Lock()
+        return _annotation_locks[path]
 
 
 def load_annotations(path: str) -> dict[str, Any]:
     p = Path(path)
     if p.is_file():
-        with p.open() as f:
-            return json.load(f)
+        try:
+            with p.open() as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            logger.warning("Corrupt annotation file %s, returning empty store", path)
     return {"version": 1, "annotations": []}
 
 
 def save_annotations(path: str, data: dict[str, Any]) -> None:
-    with Path(path).open("w") as f:
-        json.dump(data, f, indent=2)
+    lock = _get_annotation_lock(path)
+    with lock:
+        p = Path(path)
+        fd, tmp = tempfile.mkstemp(dir=p.parent, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(data, f, indent=2)
+            os.replace(tmp, str(p))
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
+            raise
 
 
 def get_deleted_way_ids(store: dict[str, Any]) -> set[int | str]:

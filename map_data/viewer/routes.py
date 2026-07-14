@@ -402,7 +402,10 @@ def fetch_area_status(task_id: str) -> Response:
     if task is None:
         abort(404, "Unknown task ID")
     if task["status"] in ("done", "failed"):
-        _fetch_tasks.pop(task_id, None)
+        if "completed_at" not in task:
+            task["completed_at"] = time.time()
+        elif time.time() - task["completed_at"] > 60:
+            _fetch_tasks.pop(task_id, None)
     return jsonify(task)
 
 
@@ -468,6 +471,10 @@ def upload_gpx() -> Response:
             },
         )
     except Exception as e:
+        from werkzeug.exceptions import HTTPException
+
+        if isinstance(e, HTTPException):
+            raise
         logger.exception("Error processing GPX upload")
         abort(500, str(e))
     finally:
@@ -1474,7 +1481,7 @@ def get_cost_grid() -> Response:
     max_lat = request.args.get("max_lat", type=float)
     max_lon = request.args.get("max_lon", type=float)
 
-    if not all([filename, min_lat, min_lon, max_lat, max_lon]):
+    if filename is None or any(v is None for v in (min_lat, min_lon, max_lat, max_lon)):
         abort(400, "Missing required parameters")
     if filename is None:
         abort(400, "Filename cannot be None")
