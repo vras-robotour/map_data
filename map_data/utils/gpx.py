@@ -35,7 +35,18 @@ def parse_gpx_file(gpx_file: str) -> tuple[np.ndarray, int, str] | list:
     try:
         with Path(gpx_file).open() as file:
             gpx = gpxpy.parse(file)
-        for waypoint in gpx.waypoints:
+
+        # Mirror the waypoints -> tracks -> routes fallback from MapData.__init__.
+        if gpx.waypoints:
+            gpx_points = gpx.waypoints
+        elif gpx.tracks:
+            gpx_points = [p for track in gpx.tracks for seg in track.segments for p in seg.points]
+        elif gpx.routes:
+            gpx_points = [p for route in gpx.routes for p in route.points]
+        else:
+            gpx_points = []
+
+        for waypoint in gpx_points:
             point = {
                 "lat": waypoint.latitude,
                 "lon": waypoint.longitude,
@@ -47,11 +58,10 @@ def parse_gpx_file(gpx_file: str) -> tuple[np.ndarray, int, str] | list:
         return []
     if not waypoints:
         logger.warning("No waypoints found in GPX file.")
+        return []
     else:
         logger.info("Parsed %s waypoints from GPX file.", len(waypoints))
-        zone_num, zone_let = utm.from_latlon(gpx.waypoints[0].latitude, gpx.waypoints[0].longitude)[
-            2:
-        ]
+        zone_num, zone_let = utm.from_latlon(gpx_points[0].latitude, gpx_points[0].longitude)[2:]
 
     return np.array(waypoints), zone_num, zone_let
 
@@ -75,6 +85,7 @@ def parse_yaml_file(yaml_file: str) -> tuple[np.ndarray, int, str] | list:
         return []
     if not waypoints:
         logger.warning("No waypoints found in YAML file.")
+        return []
     else:
         logger.info("Parsed %s waypoints from YAML file.", len(waypoints))
         zone_num, zone_let = utm.from_latlon(
