@@ -34,16 +34,8 @@ class PathGrid:
         self.grid_2d_cache: np.ndarray | None = None
 
     def create_empty_grid(self) -> np.ndarray:
-        xs = np.linspace(
-            self.low[0],
-            self.high[0],
-            np.ceil((self.high[0] - self.low[0]) / self.cell_size).astype(int),
-        )
-        ys = np.linspace(
-            self.low[1],
-            self.high[1],
-            np.ceil((self.high[1] - self.low[1]) / self.cell_size).astype(int),
-        )
+        xs = np.arange(self.low[0], self.high[0], self.cell_size)
+        ys = np.arange(self.low[1], self.high[1], self.cell_size)
         # grid is (N, 3) where columns are [x, y, 0]
         return np.pad(np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2), ((0, 0), (0, 1)))
 
@@ -168,7 +160,7 @@ class PathGrid:
     def get_grid_2d(self) -> np.ndarray:
         num_x = int(np.ceil((self.high[0] - self.low[0]) / self.cell_size))
         num_y = int(np.ceil((self.high[1] - self.low[1]) / self.cell_size))
-        grid_2d = np.zeros((num_x, num_y), dtype=np.float32)
+        grid_2d = np.full((num_x, num_y), self.default_off_path_cost, dtype=np.float32)
         x_indices = np.floor((self.grid[:, 0] - self.low[0]) / self.cell_size).astype(int)
         y_indices = np.floor((self.grid[:, 1] - self.low[1]) / self.cell_size).astype(int)
         grid_2d[np.clip(x_indices, 0, num_x - 1), np.clip(y_indices, 0, num_y - 1)] = self.grid[

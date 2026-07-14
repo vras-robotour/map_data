@@ -269,14 +269,17 @@
 
 <div id="todo-content"></div>
 
-<!-- Backlog items live in docs/dev/todo_items.json (machine-readable; edit that
-     file, not this page). It is embedded here at build time via pymdownx.snippets. -->
-<script id="todo-data" type="application/json">
---8<-- "docs/dev/todo_items.json"
-</script>
-
 <script>
 (function () {
+  // Backlog items live in docs/dev/todo_items.json (machine-readable; edit that
+  // file, not this page). It is embedded here at build time via pymdownx.snippets,
+  // directly as a JS literal (not via a separate <script id> data block) because
+  // MkDocs Material's instant-navigation script replay drops attributes -
+  // including id/type - from inline <script> tags, which breaks getElementById
+  // lookups after navigating to this page via the nav sidebar.
+  const ITEMS =
+--8<-- "docs/dev/todo_items.json"
+  ;
   const SEV_ORDER  = ['critical', 'important', 'minor', 'nice-to-have'];
   const TYPE_ORDER = ['bug', 'security', 'improvement', 'testing', 'documentation'];
 
@@ -297,8 +300,6 @@
     'improvement': 'var(--cat-green)', 'testing': 'var(--cat-teal)',
     'documentation': 'var(--cat-mauve)'
   };
-
-  const ITEMS = JSON.parse(document.getElementById('todo-data').textContent);
 
   let groupBy = 'type';
   const activeTypes = new Set(TYPE_ORDER);

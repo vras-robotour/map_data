@@ -402,7 +402,10 @@ def fetch_area_status(task_id: str) -> Response:
     if task is None:
         abort(404, "Unknown task ID")
     if task["status"] in ("done", "failed"):
-        _fetch_tasks.pop(task_id, None)
+        if "completed_at" not in task:
+            task["completed_at"] = time.time()
+        elif time.time() - task["completed_at"] > 60:
+            _fetch_tasks.pop(task_id, None)
     return jsonify(task)
 
 
@@ -468,6 +471,10 @@ def upload_gpx() -> Response:
             },
         )
     except Exception as e:
+        from werkzeug.exceptions import HTTPException
+
+        if isinstance(e, HTTPException):
+            raise
         logger.exception("Error processing GPX upload")
         abort(500, str(e))
     finally:
@@ -1474,7 +1481,7 @@ def get_cost_grid() -> Response:
     max_lat = request.args.get("max_lat", type=float)
     max_lon = request.args.get("max_lon", type=float)
 
-    if not all([filename, min_lat, min_lon, max_lat, max_lon]):
+    if filename is None or any(v is None for v in (min_lat, min_lon, max_lat, max_lon)):
         abort(400, "Missing required parameters")
     if filename is None:
         abort(400, "Filename cannot be None")
@@ -1496,25 +1503,27 @@ def get_cost_grid() -> Response:
     args.cell_size = 1.0  # Use a coarser grid for visualization performance
     args.inflate_obstacles = 0.0
 
-    obstacles = ways_to_shapely(md.barriers_list)
-    replanner = ReplanPath(args, obstacles)
-
     # Get custom highway costs from request if provided
+    highway_costs_dict = None
     highway_costs = request.args.get("highway_costs")
     if highway_costs:
         try:
-            custom_costs = json.loads(highway_costs)
-            replanner.HIGHWAY_COSTS = custom_costs
+            highway_costs_dict = json.loads(highway_costs)
         except json.JSONDecodeError as e:
             logger.warning("Failed to parse custom highway costs: %s", e)
 
+    surface_costs_dict = None
     surface_costs = request.args.get("surface_costs")
     if surface_costs:
         try:
-            custom_surf_costs = json.loads(surface_costs)
-            replanner.SURFACE_COSTS = custom_surf_costs
+            surface_costs_dict = json.loads(surface_costs)
         except json.JSONDecodeError as e:
             logger.warning("Failed to parse custom surface costs: %s", e)
+
+    obstacles = ways_to_shapely(md.barriers_list)
+    replanner = ReplanPath(
+        args, obstacles, highway_costs=highway_costs_dict, surface_costs=surface_costs_dict
+    )
 
     replanner.fill_grid(md, highway_types=["footway", "road"])
 
@@ -1759,18 +1768,13 @@ def create_replan() -> Response:
 
         obstacles = ways_to_shapely(filtered_barriers)
         replanner = ReplanPath(
-            args, obstacles, transfer_id=transfer_id, grid_cost_weight=grid_cost_weight
+            args,
+            obstacles,
+            transfer_id=transfer_id,
+            grid_cost_weight=grid_cost_weight,
+            highway_costs=highway_costs,
+            surface_costs=surface_costs,
         )
-        if highway_costs:
-            try:
-                replanner.HIGHWAY_COSTS = highway_costs
-            except (ValueError, TypeError) as e:
-                logger.warning("Failed to set custom highway costs: %s", e)
-        if surface_costs:
-            try:
-                replanner.SURFACE_COSTS = surface_costs
-            except (ValueError, TypeError) as e:
-                logger.warning("Failed to set custom surface costs: %s", e)
         replanner.fill_grid(md, highway_types=highway_types)
         res = replanner.replan(utm_path, algorithm=sub_algorithm)
 

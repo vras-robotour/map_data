@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.0] — 2026-07-14
+
+### Fixed
+
+- Fixed critical positional argument crash in `osm_cloud.py`'s `run_all`
+- Fixed custom planner costs being silently ignored by the viewer and path planner
+- Fixed application crash when refreshing OSM data over a loaded `.mapdata` file
+- Fixed GPX launch mode being unreachable in `osm_cloud.launch.py`
+- Fixed phantom zero-cost cells appearing off-path due to spacing mismatches
+- Fixed non-atomic annotation saves and missing locks causing corruption
+- Fixed `__version__` single-sourcing (now reads dynamically via `importlib.metadata`)
+- Fixed double-normalization in quadratic neighbor cost logic
+- Fixed viewer routes re-raising HTTP exceptions properly and applying zero-coordinate checks
+
+
 ## [1.1.0] — 2026-07-07
 
 ### Added

@@ -97,11 +97,11 @@ class OSMCloud(Node):
         self.poses: PoseArray | None = None
         self.markers: MarkerArray | None = None
 
-        if self.mapdata_file is not None:
+        if self.mapdata_file:
             self.map_data = md.MapData.load(self.mapdata_file)
-        elif self.gpx_file is not None:
+        elif self.gpx_file:
             self.map_data = md.MapData(self.gpx_file)
-            self.map_data.run_all(self.save_mapdata)
+            self.map_data.run_all(save=self.save_mapdata)
         else:
             self.get_logger().error("No map data or gpx file provided")
             sys.exit(1)
@@ -189,10 +189,10 @@ class OSMCloud(Node):
                 self.publish_intersections = param.value
                 if self.publish_intersections and not hasattr(self, "pub_poses"):
                     qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
-                    self.pub_poses = self.create_publisher(PoseArray, "intersections", qos)
+                    self.pub_poses = self.create_publisher(PoseArray, self.intersections_topic, qos)
                     self.pub_markers = self.create_publisher(
                         MarkerArray,
-                        "intersection_markers",
+                        self.intersection_markers_topic,
                         qos,
                     )
                 rebuild_intersections = True
@@ -279,12 +279,10 @@ class OSMCloud(Node):
             pass
         elif self.neighbor_cost == "quadratic":
             grid[:, 3] = grid[:, 3] ** 2
-        elif self.neighbor_cost == "zero":
-            grid[:, 3] = 0.0
         else:
-            self.get_logger().warn(f"Unknown neighbor cost: {self.neighbor_cost}")
-
-        grid[:, 3] /= self.max_path_dist**2 if self.neighbor_cost == "quadratic" else 1.0
+            if self.neighbor_cost != "zero" and self.neighbor_cost != "linear":
+                self.get_logger().warn(f"Unknown neighbor cost: {self.neighbor_cost}")
+            grid[:, 3] = 0.0
         cloud = create_cloud(grid)
         self.get_logger().info(str(grid.shape))
         cloud.header.frame_id = self.local_frame
@@ -376,16 +374,8 @@ def create_grid(
     """
     low_arr = np.round(low)
     high_arr = np.round(high)
-    xs = np.linspace(
-        int(low_arr[0]),
-        int(high_arr[0]),
-        int(np.ceil((high_arr[0] - low_arr[0]) / cell_size)),
-    )
-    ys = np.linspace(
-        int(low_arr[1]),
-        int(high_arr[1]),
-        int(np.ceil((high_arr[1] - low_arr[1]) / cell_size)),
-    )
+    xs = np.arange(int(low_arr[0]), int(high_arr[0]), cell_size)
+    ys = np.arange(int(low_arr[1]), int(high_arr[1]), cell_size)
     return np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2)
 
 

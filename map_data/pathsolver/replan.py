@@ -99,6 +99,8 @@ class ReplanPath:
         obstacles: list[sh.geometry.base.BaseGeometry] | None = None,
         transfer_id: str | None = None,
         grid_cost_weight: float | None = None,
+        highway_costs: dict[str, float] | None = None,
+        surface_costs: dict[str, float] | None = None,
     ) -> None:
         self.args = args
         self.transfer_id = transfer_id
@@ -108,6 +110,11 @@ class ReplanPath:
             if grid_cost_weight is not None
             else _defaults.get("grid_cost_weight", 5.0)
         )
+
+        if highway_costs is not None:
+            self.HIGHWAY_COSTS = highway_costs
+        if surface_costs is not None:
+            self.SURFACE_COSTS = surface_costs
 
         # Use the decoupled PathGrid component
         self.path_grid = PathGrid(

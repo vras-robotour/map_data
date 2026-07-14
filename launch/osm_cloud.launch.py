@@ -12,9 +12,6 @@ from launch import LaunchDescription
 
 
 def launch_setup(context, *args, **kwargs):
-    mapdata_path = LaunchConfiguration("mapdata_path")
-    mapdata_file = LaunchConfiguration("mapdata_file")
-    gpx_file = LaunchConfiguration("gpx_file")
     config_file = LaunchConfiguration("config_file").perform(context)
     osm_grid_params = LaunchConfiguration("osm_grid_params").perform(context)
     publish_static_tf = LaunchConfiguration("publish_static_tf").perform(context).lower() == "true"
@@ -57,9 +54,10 @@ def launch_setup(context, *args, **kwargs):
             config_file,
             osm_grid_params,
             {
-                "mapdata_file": PathJoinSubstitution([mapdata_path, mapdata_file]),
-                "gpx_file": PathJoinSubstitution([mapdata_path, gpx_file]),
+                "mapdata_file": LaunchConfiguration("mapdata_file"),
+                "gpx_file": LaunchConfiguration("gpx_file"),
                 "auto_utm": publish_static_tf,
+                "grid_topic": LaunchConfiguration("grid_topic"),
             },
         ],
     )
@@ -76,12 +74,12 @@ def generate_launch_description():
     )
     mapdata_file_arg = DeclareLaunchArgument(
         "mapdata_file",
-        default_value="stromovka.mapdata",
+        default_value="",
         description="File with preprocessed OSM map data.",
     )
     gpx_file_arg = DeclareLaunchArgument(
         "gpx_file",
-        default_value="stromovka.gpx",
+        default_value="",
         description="File with gpx coords denoting area to be processed.",
     )
     grid_topic_arg = DeclareLaunchArgument(

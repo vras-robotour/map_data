@@ -118,4 +118,9 @@ def load_mapdata(md_class: type["MapData"], path: str | Path) -> "MapData":
     md.barriers_list = [way_from_dict(w) for w in data["barriers"]]
     md.crossroads_list = [way_from_dict(w) for w in data.get("crossroads", [])]
 
+    # Restore tag configs and private fields needed for run_queries()/run_parse()
+    md._obstacle_radius = None
+    md._buffer_widths = None
+    md._load_tag_configs()
+
     return md
