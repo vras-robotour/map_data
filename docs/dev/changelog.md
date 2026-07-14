@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Fixed `TrackerNode.num_waypoints` never being updated in the ROS node
+- Fixed polygon rasterization re-blocking holes when drawing obstacles
+- Fixed inconsistent UTM zone forcing during map parsing
+- Fixed `combine_ways` crash when OSM relation merging yields disconnected MultiLineString geometries
 - Fixed `Way.to_pcd_points` ignoring the `density` parameter for linestring geometries
 - Fixed `Way.to_pcd_points` cache returning stale results when called with different arguments
 - Fixed `parse_gpx_file` / `parse_yaml_file` returning inconsistent shapes on empty input

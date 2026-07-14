@@ -1,33 +1,5 @@
 [
   {
-    "type": "bug",
-    "sev": "minor",
-    "title": "TrackerNode.num_waypoints is never updated",
-    "desc": "<code>num_waypoints</code> is initialized to 0 and never set from any subscription, but the <code>NavigateThroughPoses</code> feedback handler computes <code>current_waypoint = num_waypoints - number_of_poses_remaining</code>, which goes negative for that action type. Update <code>num_waypoints</code> when a path/goal is received, or derive the index differently.",
-    "file": "map_data/viewer/ros_node.py"
-  },
-  {
-    "type": "bug",
-    "sev": "minor",
-    "title": "Polygon holes are re-blocked when rasterizing obstacles",
-    "desc": "<code>PathGrid.fill</code> subtracts path geometries from obstacles so footways crossing a barrier stay traversable, but both the point-grid masking and <code>burn_obstacles</code> rasterize with <code>Path(obstacle.exterior.coords)</code> only \u2014 interior holes are ignored. A path that punches a hole <em>through</em> a polygon (rather than splitting it) gets blocked again anyway. Fix: subtract hole masks built from <code>polygon.interiors</code>, or rasterize with Shapely <code>contains</code> on prepared geometries.",
-    "file": "map_data/pathsolver/grid_constructor.py"
-  },
-  {
-    "type": "bug",
-    "sev": "minor",
-    "title": "Inconsistent UTM zone forcing during parsing",
-    "desc": "<code>MapData.get_points()</code> forces the instance zone via <code>force_zone_number</code>/<code>force_zone_letter</code>, but <code>parse_osm_ways</code>, <code>parse_osm_nodes</code>, and <code>parse_intersections</code> call <code>utm.from_latlon</code> without forcing. Near a UTM zone boundary, way geometry and node coordinates can land in a different zone than the metadata claims (a warning is logged, but geometry is still inconsistent). Force the zone everywhere for consistency.",
-    "file": "map_data/utils/parsing.py, map_data/map_data.py"
-  },
-  {
-    "type": "bug",
-    "sev": "minor",
-    "title": "combine_ways crashes when linemerge yields a MultiLineString",
-    "desc": "When relation members do not connect end-to-end (gaps, duplicate segments), <code>linemerge(current_lines)</code> returns a <code>MultiLineString</code>, and the subsequent <code>geometry.Polygon(merged_line.coords)</code> raises <code>NotImplementedError</code> mid-parse. Add a geom-type guard with a fallback (e.g. keep the member ways unmerged).",
-    "file": "map_data/utils/parsing.py"
-  },
-  {
     "type": "security",
     "sev": "important",
     "title": "Harden the viewer for network deployment",
