@@ -101,11 +101,17 @@ class PathGrid:
                 if obstacle.geom_type == "Polygon":
                     poly_path = Path(np.array(obstacle.exterior.coords))
                     mask_inside = poly_path.contains_points(path_grid[mask_bbox, :2])
+                    for interior in obstacle.interiors:
+                        hole_path = Path(np.array(interior.coords))
+                        mask_inside &= ~hole_path.contains_points(path_grid[mask_bbox, :2])
                     path_grid[mask_bbox, 3] = np.where(mask_inside, 1.0, path_grid[mask_bbox, 3])
                 elif obstacle.geom_type == "MultiPolygon":
                     for poly in obstacle.geoms:
                         poly_path = Path(np.array(poly.exterior.coords))
                         mask_inside = poly_path.contains_points(path_grid[mask_bbox, :2])
+                        for interior in poly.interiors:
+                            hole_path = Path(np.array(interior.coords))
+                            mask_inside &= ~hole_path.contains_points(path_grid[mask_bbox, :2])
                         path_grid[mask_bbox, 3] = np.where(
                             mask_inside,
                             1.0,
@@ -205,6 +211,13 @@ class PathGrid:
                     .contains_points(points_bbox)
                     .reshape(len(y), len(x))
                 )
+                for interior in obstacle.interiors:
+                    hole_mask = (
+                        Path(np.array(interior.coords))
+                        .contains_points(points_bbox)
+                        .reshape(len(y), len(x))
+                    )
+                    mask &= ~hole_mask
                 grid_2d[iy_min : iy_max + 1, ix_min : ix_max + 1][mask] = np.inf
             elif obstacle.geom_type == "MultiPolygon":
                 for poly in obstacle.geoms:
@@ -213,5 +226,12 @@ class PathGrid:
                         .contains_points(points_bbox)
                         .reshape(len(y), len(x))
                     )
+                    for interior in poly.interiors:
+                        hole_mask = (
+                            Path(np.array(interior.coords))
+                            .contains_points(points_bbox)
+                            .reshape(len(y), len(x))
+                        )
+                        mask &= ~hole_mask
                     grid_2d[iy_min : iy_max + 1, ix_min : ix_max + 1][mask] = np.inf
         return grid_2d
