@@ -151,6 +151,7 @@ def combine_ways(ids: list[int], ways: dict[int, Way]) -> list[int]:
         current_tags = dict(start_way.tags)
         current_lines = [start_way.line]
         used_ways.add(start_way.id)
+        used_ways_this_loop = [start_way.id]
 
         while True:
             last_node_id = current_nodes[-1]
@@ -159,6 +160,7 @@ def combine_ways(ids: list[int], ways: dict[int, Way]) -> list[int]:
                 break
             next_way = possible_next[0]
             used_ways.add(next_way.id)
+            used_ways_this_loop.append(next_way.id)
 
             if next_way.nodes[0] == last_node_id:
                 current_nodes.extend(next_way.nodes[1:])
@@ -181,6 +183,7 @@ def combine_ways(ids: list[int], ways: dict[int, Way]) -> list[int]:
                     break
                 prev_way = possible_prev[0]
                 used_ways.add(prev_way.id)
+                used_ways_this_loop.append(prev_way.id)
 
                 if prev_way.nodes[-1] == first_node_id:
                     current_nodes = list(prev_way.nodes[:-1]) + current_nodes
@@ -193,6 +196,11 @@ def combine_ways(ids: list[int], ways: dict[int, Way]) -> list[int]:
         if len(current_lines) > 1:
             is_area = current_nodes[0] == current_nodes[-1]
             merged_line = linemerge(current_lines)
+
+            if merged_line.geom_type == "MultiLineString":
+                logger.warning("linemerge yielded MultiLineString, keeping member ways unmerged")
+                merged_ids.extend(used_ways_this_loop)
+                continue
 
             new_id = -1
             while new_id in ways:
