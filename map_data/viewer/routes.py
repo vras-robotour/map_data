@@ -1531,18 +1531,12 @@ def get_cost_grid() -> Response:
     # Do not filter out obstacles (cost >= 1.0) so they can be visualized
     visible_grid = grid
 
-    features = []
+    points = []
     for row in visible_grid:
         lat, lon = utm.to_latlon(row[0], row[1], zn, zl)
-        features.append(
-            {
-                "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": [lon, lat]},
-                "properties": {"cost": float(row[3])},
-            },
-        )
+        points.append([lat, lon, float(row[3])])
 
-    return jsonify({"type": "FeatureCollection", "features": features})
+    return jsonify(points)
 
 
 @bp.route("/api/cancel_replan", methods=["POST"])

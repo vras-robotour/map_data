@@ -299,45 +299,49 @@ class PlannerMode {
       
       if (geoLayers.costGrid) map.removeLayer(geoLayers.costGrid);
       
-      geoLayers.costGrid = L.geoJSON(data, {
-        pointToLayer: (feature, latlng) => {
-          const cost = feature.properties.cost;
-          if (cost >= 1.0) {
-            // Hard Obstacle style: black marker
-            return L.circleMarker(latlng, {
-              radius: 4,
-              fillColor: '#000',
-              color: '#000',
-              weight: 1,
-              fillOpacity: 1
-            });
-          }
-          const offPathThreshold = this.defaults.default_off_path_cost || 0.9;
-          const pathCap = this.defaults.path_cost_cap || 0.85;
-
-          if (cost >= offPathThreshold) {
-             // Off-path / All-terrain style: dark gray/brown
-             return L.circleMarker(latlng, {
-                radius: 2,
-                fillColor: '#444',
-                color: '#444',
-                weight: 0,
-                fillOpacity: 0.4
-             });
-          }
-          // Interpolate color from green (0) to red (pathCap)
-          const normalizedCost = cost / pathCap;
-          const r = Math.floor(255 * Math.min(1, normalizedCost));
-          const g = Math.floor(255 * Math.max(0, 1 - normalizedCost));
+      const markers = data.map(pt => {
+        const lat = pt[0];
+        const lon = pt[1];
+        const cost = pt[2];
+        const latlng = [lat, lon];
+        
+        if (cost >= 1.0) {
+          // Hard Obstacle style: black marker
           return L.circleMarker(latlng, {
-            radius: 3,
-            fillColor: `rgb(${r},${g},0)`,
+            radius: 4,
+            fillColor: '#000',
             color: '#000',
-            weight: 0.2,
-            fillOpacity: 0.6
+            weight: 1,
+            fillOpacity: 1
           });
         }
-      }).addTo(map);
+        const offPathThreshold = this.defaults.default_off_path_cost || 0.9;
+        const pathCap = this.defaults.path_cost_cap || 0.85;
+
+        if (cost >= offPathThreshold) {
+           // Off-path / All-terrain style: dark gray/brown
+           return L.circleMarker(latlng, {
+              radius: 2,
+              fillColor: '#444',
+              color: '#444',
+              weight: 0,
+              fillOpacity: 0.4
+           });
+        }
+        // Interpolate color from green (0) to red (pathCap)
+        const normalizedCost = cost / pathCap;
+        const r = Math.floor(255 * Math.min(1, normalizedCost));
+        const g = Math.floor(255 * Math.max(0, 1 - normalizedCost));
+        return L.circleMarker(latlng, {
+          radius: 3,
+          fillColor: `rgb(${r},${g},0)`,
+          color: '#000',
+          weight: 0.2,
+          fillOpacity: 0.6
+        });
+      });
+      
+      geoLayers.costGrid = L.layerGroup(markers).addTo(map);
       
       setStatus('Cost grid loaded', 'text-success');
     } catch (err) {
