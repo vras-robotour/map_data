@@ -12,9 +12,6 @@ from launch import LaunchDescription
 
 
 def launch_setup(context, *args, **kwargs):
-    mapdata_path = LaunchConfiguration("mapdata_path")
-    mapdata_file = LaunchConfiguration("mapdata_file")
-    gpx_file = LaunchConfiguration("gpx_file")
     config_file = LaunchConfiguration("config_file").perform(context)
     osm_grid_params = LaunchConfiguration("osm_grid_params").perform(context)
     publish_static_tf = LaunchConfiguration("publish_static_tf").perform(context).lower() == "true"

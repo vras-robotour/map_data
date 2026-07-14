@@ -189,9 +189,7 @@ class OSMCloud(Node):
                 self.publish_intersections = param.value
                 if self.publish_intersections and not hasattr(self, "pub_poses"):
                     qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
-                    self.pub_poses = self.create_publisher(
-                        PoseArray, self.intersections_topic, qos
-                    )
+                    self.pub_poses = self.create_publisher(PoseArray, self.intersections_topic, qos)
                     self.pub_markers = self.create_publisher(
                         MarkerArray,
                         self.intersection_markers_topic,
