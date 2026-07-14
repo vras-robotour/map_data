@@ -21,12 +21,16 @@ BUFFER_WIDTHS = _DEFAULTS.get("buffer_widths", {"road": 7, "footway": 3, "barrie
 def parse_osm_ways(
     osm_ways_data: overpy.Result,
     nodes_cache: dict[int, dict[str, Any]],
+    force_zone_number: int | None = None,
+    force_zone_letter: str | None = None,
 ) -> dict[int, Way]:
     ways = {}
     for way in tqdm(osm_ways_data.ways, desc="Parse ways"):
         lats = np.array([float(n.lat) for n in way.nodes])
         lons = np.array([float(n.lon) for n in way.nodes])
-        easting, northing, _, _ = utm.from_latlon(lats, lons)
+        easting, northing, _, _ = utm.from_latlon(
+            lats, lons, force_zone_number=force_zone_number, force_zone_letter=force_zone_letter
+        )
         coords = list(zip(easting, northing, strict=True))
 
         for n in way.nodes:
@@ -74,6 +78,8 @@ def parse_osm_nodes(
     obstacle_tags: dict[str, list[str]],
     not_obstacle_tags: dict[str, list[str]],
     obstacle_radius: float | None = None,
+    force_zone_number: int | None = None,
+    force_zone_letter: str | None = None,
 ) -> list[Way]:
     barriers = []
     for node in tqdm(osm_nodes_data.nodes, desc="Parse nodes"):
@@ -100,7 +106,12 @@ def parse_osm_nodes(
         )
 
         if is_obstacle:
-            easting, northing, _, _ = utm.from_latlon(float(node.lat), float(node.lon))
+            easting, northing, _, _ = utm.from_latlon(
+                float(node.lat),
+                float(node.lon),
+                force_zone_number=force_zone_number,
+                force_zone_letter=force_zone_letter,
+            )
             radius = obstacle_radius if obstacle_radius is not None else OBSTACLE_RADIUS
             barriers.append(
                 Way(

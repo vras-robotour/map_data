@@ -378,7 +378,9 @@ class MapData:
             return 1
 
         logger.info("Parsing OSM data.")
-        ways_dict = parse_osm_ways(self.osm_ways_data, self.nodes_cache)
+        ways_dict = parse_osm_ways(
+            self.osm_ways_data, self.nodes_cache, self.zone_number, self.zone_letter
+        )
         parse_osm_rels(self.osm_rels_data, ways_dict)
 
         way_node_ids = {nid for w in ways_dict.values() for nid in w.nodes}
@@ -389,6 +391,8 @@ class MapData:
             self.OBSTACLE_TAGS,
             self.NOT_OBSTACLE_TAGS,
             obstacle_radius=self._obstacle_radius,
+            force_zone_number=self.zone_number,
+            force_zone_letter=self.zone_letter,
         )
 
         self.roads_list, self.footways_list, parsed_barriers = separate_ways(
@@ -431,7 +435,12 @@ class MapData:
                 node_data = self.nodes_cache.get(node_id)
                 if node_data is None:
                     continue
-                e, n, _, _ = utm.from_latlon(node_data["lat"], node_data["lon"])
+                e, n, _, _ = utm.from_latlon(
+                    node_data["lat"],
+                    node_data["lon"],
+                    force_zone_number=self.zone_number,
+                    force_zone_letter=self.zone_letter,
+                )
                 crossroads.append(
                     Way(
                         id=node_id,
