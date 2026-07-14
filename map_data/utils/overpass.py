@@ -6,6 +6,8 @@ import time
 import overpy
 import requests
 
+from map_data import __version__
+
 logger = logging.getLogger(__name__)
 
 OVERPASS_ENDPOINTS = [
@@ -20,7 +22,7 @@ class OverpassClient:
         self._endpoint_index = 0
         self.session = requests.Session()
         self.session.headers.update(
-            {"User-Agent": "map_data/1.1 (https://github.com/vras-robotour/map_data)"},
+            {"User-Agent": f"map_data/{__version__} (research; +https://github.com/vras-robotour/map_data)"},
         )
         self.api = overpy.Overpass()
 
