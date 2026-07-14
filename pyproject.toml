@@ -29,6 +29,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "pytest-cov",
+    "pre-commit",
     "ruff",
     "mkdocs",
     "mkdocs-material",
