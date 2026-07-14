@@ -9,20 +9,6 @@
   {
     "type": "bug",
     "sev": "minor",
-    "title": "Way.to_pcd_points ignores its density parameter for linestrings",
-    "desc": "The non-polygon branch hardcodes <code>get_point_line(p1, p2, 0.5)</code>, so the documented \"points per metre\" knob only affects filled polygons. Note the semantics differ: <code>density</code> is points per metre for the grid fill, while <code>get_point_line</code> takes a step size \u2014 the linestring branch should pass <code>1 / density</code>.",
-    "file": "map_data/utils/way.py"
-  },
-  {
-    "type": "bug",
-    "sev": "minor",
-    "title": "Way.to_pcd_points cache ignores its arguments",
-    "desc": "The first call caches <code>pcd_points</code>; any later call with a different <code>density</code> or <code>filled</code> silently returns the stale cached cloud. Either key the cache on the arguments or drop the caching.",
-    "file": "map_data/utils/way.py"
-  },
-  {
-    "type": "bug",
-    "sev": "minor",
     "title": "Polygon holes are re-blocked when rasterizing obstacles",
     "desc": "<code>PathGrid.fill</code> subtracts path geometries from obstacles so footways crossing a barrier stay traversable, but both the point-grid masking and <code>burn_obstacles</code> rasterize with <code>Path(obstacle.exterior.coords)</code> only \u2014 interior holes are ignored. A path that punches a hole <em>through</em> a polygon (rather than splitting it) gets blocked again anyway. Fix: subtract hole masks built from <code>polygon.interiors</code>, or rasterize with Shapely <code>contains</code> on prepared geometries.",
     "file": "map_data/pathsolver/grid_constructor.py"
@@ -42,32 +28,11 @@
     "file": "map_data/utils/parsing.py"
   },
   {
-    "type": "bug",
-    "sev": "minor",
-    "title": "parse_gpx_file returns an inconsistent shape on empty input",
-    "desc": "On a GPX with no waypoints, <code>parse_gpx_file</code>/<code>parse_yaml_file</code> return <code>(np.array([]), None, None)</code> instead of the documented <code>[]</code>, so the replan CLI proceeds and builds a <code>MapData</code> with <code>zone_number=None</code>, failing far from the cause. Return a consistent empty value and fail fast.",
-    "file": "map_data/utils/gpx.py"
-  },
-  {
-    "type": "bug",
-    "sev": "nice-to-have",
-    "title": "RRTStar __main__ demo is broken",
-    "desc": "The example passes plain tuples for start/goal; <code>self.goal - self.start</code> in <code>__init__</code> raises <code>TypeError</code> on tuples. Convert to <code>np.array</code> in the demo (or in the constructor).",
-    "file": "map_data/pathsolver/rrt_star.py"
-  },
-  {
     "type": "security",
     "sev": "important",
     "title": "Harden the viewer for network deployment",
     "desc": "Defaults are sane (binds 127.0.0.1, path traversal guarded, pickle loading removed), but robot deployments will use <code>--host 0.0.0.0</code>: SocketIO allows <code>cors_allowed_origins=\"*\"</code>, no endpoint has authentication (arbitrary file creation in the data dir, spawning <code>wormhole</code> subprocesses, triggering Overpass fetches), and <code>abort(500, str(e))</code> leaks exception details. Add a deployment-security docs section, tighten error messages, and consider an optional access token.",
     "file": "map_data/viewer/app.py, map_data/viewer/routes.py"
-  },
-  {
-    "type": "improvement",
-    "sev": "minor",
-    "title": "parse_gpx_file only reads waypoints, not tracks or routes",
-    "desc": "<code>utils/gpx.py</code> only iterates <code>gpx.waypoints</code>, while <code>MapData</code> falls back to tracks and routes. A track-only GPX therefore works for map download but not as replan CLI path input. Reuse the same waypoints \u2192 tracks \u2192 routes fallback.",
-    "file": "map_data/utils/gpx.py"
   },
   {
     "type": "improvement",
@@ -96,13 +61,6 @@
     "title": "Add type checking and pre-commit hooks",
     "desc": "The code is fully annotated but no checker runs \u2014 mypy/pyright in CI would have caught the keyword-only <code>run_all</code> crash and the <code>Response</code> return-type inconsistencies. Ruff is configured but there is no pre-commit config to run it locally.",
     "file": "pyproject.toml, .github/workflows/ci.yml"
-  },
-  {
-    "type": "improvement",
-    "sev": "nice-to-have",
-    "title": "Hardcoded fallback costs drift from planner_defaults.yaml",
-    "desc": "The fallback dicts in <code>ReplanPath</code> (used only when the config file is missing) have <code>sand: 0.7</code> while <code>config/planner_defaults.yaml</code> says <code>sand: 0.4</code>. Sync the values, or drop the duplicated fallback dicts and treat the YAML as the single source of truth.",
-    "file": "map_data/pathsolver/replan.py"
   },
   {
     "type": "improvement",
@@ -164,7 +122,7 @@
     "type": "testing",
     "sev": "important",
     "title": "Unit-test osm_cloud's pure functions and node init",
-    "desc": "<code>create_grid</code>, <code>points_near_ref</code>, <code>split_ways_to_points</code>, and <code>transform_points</code> need no ROS and are untested \u2014 a test would have caught the quadratic-normalization bug. Add an rclpy-mocked node-init test to catch signature bugs like the keyword-only <code>run_all</code> crash.",
+    "desc": "`create_grid`, `points_near_ref`, `split_ways_to_points`, and `transform_points` are now tested. Node-init test (requires rclpy mock) is still missing.",
     "file": "map_data/osm_cloud.py, tests/"
   },
   {
@@ -189,25 +147,11 @@
     "file": "launch/osm_cloud.launch.py, tests/"
   },
   {
-    "type": "testing",
-    "sev": "nice-to-have",
-    "title": "Measure coverage in CI",
-    "desc": "140 tests pass but nothing reports what they touch. Add <code>pytest-cov</code> with a CI threshold to make coverage gaps (osm_cloud, grid_astar internals, viewer error paths) visible.",
-    "file": ".github/workflows/ci.yml, pyproject.toml"
-  },
-  {
     "type": "documentation",
     "sev": "minor",
     "title": "README/docs gaps: info CLI, viewer flags, API-key env vars",
     "desc": "The README omits <code>map_data_info</code> (stats + <code>--validate</code>) and the viewer's <code>--data-dir</code>/<code>--host</code>/<code>--port</code> flags; the docs never mention the <code>THUNDERFOREST_API_KEY</code>/<code>SEZNAM_API_KEY</code> environment variables the index page reads for tile layers.",
     "file": "README.md, docs/"
-  },
-  {
-    "type": "documentation",
-    "sev": "nice-to-have",
-    "title": "Changelog has no entries for unreleased work",
-    "desc": "<code>docs/dev/changelog.md</code> stops at 1.1.0; post-release fixes (e.g. the osm_cloud logger fixes) are undocumented. Keep an Unreleased section current as changes land.",
-    "file": "docs/dev/changelog.md"
   },
   {
     "type": "documentation",

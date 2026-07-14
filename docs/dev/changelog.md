@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Fixed `Way.to_pcd_points` ignoring the `density` parameter for linestring geometries
+- Fixed `Way.to_pcd_points` cache returning stale results when called with different arguments
+- Fixed `parse_gpx_file` / `parse_yaml_file` returning inconsistent shapes on empty input
+- Fixed `parse_gpx_file` only reading waypoints — now falls back to tracks and routes
+- Fixed RRT* `__main__` demo crashing due to tuple start/goal (requires `np.array`)
+- Synced hardcoded fallback `sand` surface cost (`0.7` → `0.4`) with `planner_defaults.yaml`
+
+### Added
+
+- Unit tests for `osm_cloud` pure helper functions (`create_grid`, `points_near_ref`, `transform_points`, `split_ways_to_points`)
+- `pytest-cov` coverage reporting in CI
+- `.pre-commit-config.yaml` for local ruff lint/format checks
+
 ## [1.2.0] — 2026-07-14
 
 ### Fixed
