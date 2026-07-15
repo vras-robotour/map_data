@@ -24,6 +24,30 @@ Then open `http://127.0.0.1:5000` in a browser.
     directory. Keep the default `--host 127.0.0.1`; only bind to other interfaces
     (e.g. `--host 0.0.0.0`) on networks where you trust every machine.
 
+### Command-line Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--data-dir <path>` | package `data/` folder | Directory to load `.mapdata`/`.gpx` files from and save new ones to |
+| `--host <address>` | `127.0.0.1` | Address the Flask server binds to |
+| `--port <port>` | `5000` | Port the Flask server binds to |
+| `--telemetry-rate <Hz>` | `2.0` | Tracker telemetry broadcast rate; see [Tracker](viewer_tracker.md) |
+
+### Tile Layer API Keys
+
+The index page reads `THUNDERFOREST_API_KEY` and `SEZNAM_API_KEY` from the environment and makes
+them available to the page for the corresponding optional basemap tile layers. Export the
+relevant variable before launching the viewer to enable it:
+
+```bash
+export THUNDERFOREST_API_KEY=your_key_here
+export SEZNAM_API_KEY=your_key_here
+map_data_viewer
+```
+
+Both are optional — without them the viewer still works, using the built-in OpenStreetMap and
+Satellite base layers (see [Viewer](viewer_view.md#layers-panel)).
+
 ## Loading Map Data
 
 The viewer loads files from its data directory (default: the package `data/` folder,
