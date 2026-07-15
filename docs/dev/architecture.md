@@ -328,11 +328,13 @@ This page describes the internal structure of the `map_data` package. The system
 
 `MapData` (defined in `map_data/map_data.py`) is the central data class. It accepts either a path to a `.gpx` (or `.yaml`) file or a pre-converted UTM coordinate array, queries the Overpass API for all OSM features inside the derived bounding box, and parses the responses into categorised `Way` lists.
 
-**Overpass queries.** Three concurrent HTTP requests are fired in a thread pool:
+**Overpass queries.** Three concurrent HTTP requests are fired in a thread pool. Each is filtered server-side (via Overpass `["key"]` tag-existence filters) to only the tag families the parser actually inspects, instead of downloading every way/node in the bounding box:
 
-- ways query — all OSM ways (roads, footways, barriers, buildings, etc.) plus their constituent nodes
-- relations query — multipolygon relations that reference the above ways
-- nodes query — all standalone point features (obstacle nodes)
+- ways query — ways **and relations** carrying `highway` (roads/footways) or one of the `BARRIER_TAGS` keys (`barrier`, `waterway`, `man_made`, `building`, `amenity`, `sport`, `landuse`, `leisure`, `historic`, `natural`, `tourism`), followed by a down-recursion (`>;`). Including the matching relations and recursing down is what pulls in the **member ways of multipolygon relations** — lakes (`natural=water`), forests (`landuse=forest`), courtyard buildings, etc. — whose member ways are commonly *untagged* (the classifying tag lives on the relation). Without this those obstacles would vanish from the parsed map, a safety hazard for the planner. The recursion also brings in every way's constituent nodes.
+- relations query — relations carrying one of the same tag keys as the ways query. `parse_osm_rels()` uses these to stamp the relation's tags onto its member ways (which the ways query recursed in) and mark them inner/outer.
+- nodes query — standalone nodes carrying one of the `OBSTACLE_TAGS` keys (`barrier`, `waterway`, `man_made`, `building`, `amenity`, `leisure`, `historic`, `natural`, `tourism`, `information`)
+
+The tag key sets are computed once in `MapData._load_tag_configs()` (as `self._way_tag_keys`/`self._node_tag_keys`) directly from the `BARRIER_TAGS`/`OBSTACLE_TAGS` CSV configs plus `highway`, so the Overpass filter stays in sync with what `Way.is_road()`/`is_footway()`/`is_barrier()` and `parse_osm_nodes()` actually consume; see `map_data.map_data._tag_selector`. The same `_way_tag_keys` set is reused for the relation selectors in both the ways and relations queries.
 
 The bounding box is the convex hull of the input waypoints expanded by `grid_margin` metres on all sides (default: 150 m); `grid_margin` is a per-call override accepted by `MapData.__init__`, `parse_osm_nodes`, and `separate_ways`.
 
