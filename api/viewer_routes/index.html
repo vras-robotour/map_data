@@ -960,6 +960,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#get-apiexportgeojsonfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/export/geojson?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1746,6 +1757,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#get-apiexportgeojsonfilename" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/export/geojson?file=&lt;name&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2262,6 +2284,12 @@ Overpass API — may take several seconds for large areas.</p>
 <h3 id="get-apiexportfilename"><code>GET /api/export?file=&lt;name&gt;</code></h3>
 <p>Export a <code>.mapdata</code> file as a human-readable JSON file, with all stored annotations applied.</p>
 <p><strong>Response</strong> — file download, <code>Content-Type: application/json</code>, filename <code>&lt;name&gt;.exported.mapdata</code>.</p>
+<hr />
+<h3 id="get-apiexportgeojsonfilename"><code>GET /api/export/geojson?file=&lt;name&gt;</code></h3>
+<p>Export a <code>.mapdata</code> file as a GeoJSON <code>FeatureCollection</code>, with all stored annotations applied —
+the same merged data as <code>/api/export</code>, but in GeoJSON form for use in QGIS, geojson.io, or other
+GIS tools.</p>
+<p><strong>Response</strong> — file download, <code>Content-Type: application/geo+json</code>, filename <code>&lt;name&gt;.geojson</code>.</p>
 <hr />
 <h2 id="annotations">Annotations</h2>
 <p>All annotation endpoints require <code>?file=&lt;name&gt;</code>.</p>

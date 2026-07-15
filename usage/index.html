@@ -1457,7 +1457,9 @@ the <code>MapData</code> class, path planning modules, and the interactive viewe
 </div>
 <h2 id="what-gets-downloaded">What gets downloaded</h2>
 <p>When <code>create_mapdata</code> (or <code>MapData.run_all()</code>) is called, three concurrent
-<a href="https://overpass-api.de/">Overpass API</a> queries are sent:</p>
+<a href="https://overpass-api.de/">Overpass API</a> queries are sent. Each query is filtered server-side
+(using Overpass <code>["key"]</code> tag-existence filters) to only the tag families the parser inspects,
+so it downloads a fraction of what a plain "everything in the bounding box" query would:</p>
 <table>
 <thead>
 <tr>
@@ -1468,21 +1470,23 @@ the <code>MapData</code> class, path planning modules, and the interactive viewe
 <tbody>
 <tr>
 <td><strong>Ways</strong></td>
-<td>All OSM ways inside the bounding box: roads, footways, paths, buildings, fences, water bodies, and any other area or line feature</td>
+<td>OSM ways <em>and relations</em> inside the bounding box carrying <code>highway</code> (roads, footways, paths) or one of the barrier/area tag keys in <code>parameters/barrier_tags.csv</code> (<code>barrier</code>, <code>waterway</code>, <code>man_made</code>, <code>building</code>, <code>amenity</code>, <code>sport</code>, <code>landuse</code>, <code>leisure</code>, <code>historic</code>, <code>natural</code>, <code>tourism</code>), with a down-recursion that also pulls in every constituent node <strong>and the member ways of matching multipolygon relations</strong> (lakes, forests, courtyard buildings), whose member ways are often untagged</td>
 </tr>
 <tr>
 <td><strong>Relations</strong></td>
-<td>Multipolygon relations that reference the above ways (e.g. building complexes, large parks)</td>
+<td>Relations carrying one of the same tag keys (e.g. lakes, forests, building complexes, large parks); their tags are stamped onto the member ways brought in by the ways query</td>
 </tr>
 <tr>
 <td><strong>Nodes</strong></td>
-<td>Standalone point features used as obstacles (e.g. bollards, barriers, gates)</td>
+<td>Standalone point features carrying one of the obstacle tag keys in <code>parameters/obstacle_tags.csv</code> (<code>barrier</code>, <code>waterway</code>, <code>man_made</code>, <code>building</code>, <code>amenity</code>, <code>leisure</code>, <code>historic</code>, <code>natural</code>, <code>tourism</code>, <code>information</code>)</td>
 </tr>
 </tbody>
 </table>
-<p>The downloaded data is then filtered and classified into <code>roads_list</code>, <code>footways_list</code>, and
-<code>barriers_list</code> according to the tag CSV files in <code>parameters/</code>. Ways whose tags do not match
-any configured category are discarded.</p>
+<p>The downloaded data is then further filtered and classified into <code>roads_list</code>, <code>footways_list</code>, and
+<code>barriers_list</code> according to the specific tag <em>values</em> in the CSV files in <code>parameters/</code>. Ways whose
+tag values do not match any configured category are discarded. The tag <em>keys</em> used for the Overpass
+filters above are derived from those same CSV files (see <code>MapData._load_tag_configs()</code>), so adding a
+new tag family to a CSV automatically widens the download filter too.</p>
 <h3 id="bounding-box-and-margins">Bounding box and margins</h3>
 <p>The query bounding box is the convex hull of the GPX waypoints, expanded outward by
 <code>osm_margin + reserve_margin</code> on all sides. With the defaults (<code>osm_margin = 100 m</code>,

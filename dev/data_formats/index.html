@@ -1778,6 +1778,9 @@
 </table>
 <h3 id="human-readable-export">Human-readable export</h3>
 <p>The viewer's <strong>Export</strong> button writes <code>&lt;stem&gt;.exported.mapdata</code> — a JSON file with the same schema as above but with all viewer annotations (deleted ways, tag overrides, node position overrides, drawn annotations) applied. This file can be used as a clean, annotation-resolved snapshot for downstream tools.</p>
+<p>The <strong>GeoJSON</strong> button next to it writes the same annotation-resolved data as <code>&lt;stem&gt;.geojson</code> — a
+standard GeoJSON <code>FeatureCollection</code> (see <code>mapdata_to_geojson</code> in <code>map_data/viewer/helpers.py</code>) for
+use in QGIS, geojson.io, or other GIS tools.</p>
 <hr />
 <h2 id="annotationsjson-sidecar-format"><code>.annotations.json</code> sidecar format</h2>
 <p>Annotation files are written alongside the <code>.mapdata</code> file as <code>&lt;stem&gt;.annotations.json</code>. They store all edits made in the viewer without modifying the original map data. The viewer merges the sidecar at load time.</p>

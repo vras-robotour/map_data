@@ -1822,12 +1822,13 @@
 <hr />
 <h2 id="mapdata">MapData</h2>
 <p><code>MapData</code> (defined in <code>map_data/map_data.py</code>) is the central data class. It accepts either a path to a <code>.gpx</code> (or <code>.yaml</code>) file or a pre-converted UTM coordinate array, queries the Overpass API for all OSM features inside the derived bounding box, and parses the responses into categorised <code>Way</code> lists.</p>
-<p><strong>Overpass queries.</strong> Three concurrent HTTP requests are fired in a thread pool:</p>
+<p><strong>Overpass queries.</strong> Three concurrent HTTP requests are fired in a thread pool. Each is filtered server-side (via Overpass <code>["key"]</code> tag-existence filters) to only the tag families the parser actually inspects, instead of downloading every way/node in the bounding box:</p>
 <ul>
-<li>ways query — all OSM ways (roads, footways, barriers, buildings, etc.) plus their constituent nodes</li>
-<li>relations query — multipolygon relations that reference the above ways</li>
-<li>nodes query — all standalone point features (obstacle nodes)</li>
+<li>ways query — ways <strong>and relations</strong> carrying <code>highway</code> (roads/footways) or one of the <code>BARRIER_TAGS</code> keys (<code>barrier</code>, <code>waterway</code>, <code>man_made</code>, <code>building</code>, <code>amenity</code>, <code>sport</code>, <code>landuse</code>, <code>leisure</code>, <code>historic</code>, <code>natural</code>, <code>tourism</code>), followed by a down-recursion (<code>&gt;;</code>). Including the matching relations and recursing down is what pulls in the <strong>member ways of multipolygon relations</strong> — lakes (<code>natural=water</code>), forests (<code>landuse=forest</code>), courtyard buildings, etc. — whose member ways are commonly <em>untagged</em> (the classifying tag lives on the relation). Without this those obstacles would vanish from the parsed map, a safety hazard for the planner. The recursion also brings in every way's constituent nodes.</li>
+<li>relations query — relations carrying one of the same tag keys as the ways query. <code>parse_osm_rels()</code> uses these to stamp the relation's tags onto its member ways (which the ways query recursed in) and mark them inner/outer.</li>
+<li>nodes query — standalone nodes carrying one of the <code>OBSTACLE_TAGS</code> keys (<code>barrier</code>, <code>waterway</code>, <code>man_made</code>, <code>building</code>, <code>amenity</code>, <code>leisure</code>, <code>historic</code>, <code>natural</code>, <code>tourism</code>, <code>information</code>)</li>
 </ul>
+<p>The tag key sets are computed once in <code>MapData._load_tag_configs()</code> (as <code>self._way_tag_keys</code>/<code>self._node_tag_keys</code>) directly from the <code>BARRIER_TAGS</code>/<code>OBSTACLE_TAGS</code> CSV configs plus <code>highway</code>, so the Overpass filter stays in sync with what <code>Way.is_road()</code>/<code>is_footway()</code>/<code>is_barrier()</code> and <code>parse_osm_nodes()</code> actually consume; see <code>map_data.map_data._tag_selector</code>. The same <code>_way_tag_keys</code> set is reused for the relation selectors in both the ways and relations queries.</p>
 <p>The bounding box is the convex hull of the input waypoints expanded by <code>grid_margin</code> metres on all sides (default: 150 m); <code>grid_margin</code> is a per-call override accepted by <code>MapData.__init__</code>, <code>parse_osm_nodes</code>, and <code>separate_ways</code>.</p>
 <p><strong>Core attributes after parsing:</strong></p>
 <table>
@@ -1961,7 +1962,7 @@
 <ul>
 <li>Serves GeoJSON representations of the <code>MapData</code> contents and handles annotation CRUD</li>
 <li><code>/api/fetch_area</code> runs Overpass queries in a background thread and returns a task ID immediately; the client polls <code>/api/fetch_area/&lt;task_id&gt;</code> for completion, preventing UI hangs on long fetches</li>
-<li><code>/export</code> writes a human-readable JSON snapshot of the annotated map</li>
+<li><code>/export</code> writes a human-readable JSON snapshot of the annotated map; <code>/export/geojson</code> writes the same merged data as a GeoJSON <code>FeatureCollection</code></li>
 <li><code>cache.py</code> manages the OSM response cache sidecar</li>
 </ul>
 <p><strong>Front-end modes</strong> (Leaflet + Bootstrap, <code>static/js/</code>):</p>
@@ -2027,7 +2028,7 @@
 <li><strong>Create <code>.mapdata</code></strong> — run <code>create_mapdata</code> with a GPX waypoint file. The node queries Overpass, parses the OSM data, and writes <code>&lt;name&gt;.mapdata</code> to disk. Or download and parse data inside the viewer.</li>
 <li><strong>Visualize data</strong> — run the viewer and load parsed data in the browser. If the data were parsed through the viewer they will be shown automatically.</li>
 <li><strong>Annotate</strong> — use the viewer drawing tools to mark obstacles, draw alternative path segments, delete or hide erroneous ways, adjust node positions, and override OSM tags. Changes are saved automatically to <code>&lt;name&gt;.annotations.json</code>.</li>
-<li><strong>Export</strong> — click the Export button to produce <code>&lt;name&gt;.exported.mapdata</code>, a human-readable JSON snapshot of the annotated map suitable for downstream processing.</li>
+<li><strong>Export</strong> — click the Export button to produce <code>&lt;name&gt;.exported.mapdata</code>, a human-readable JSON snapshot of the annotated map suitable for downstream processing. Click the GeoJSON button to produce <code>&lt;name&gt;.geojson</code>, the same data for use in QGIS/geojson.io.</li>
 <li><strong>Plan path</strong> — instantiate <code>GraphPlanner</code> or <code>ReplanPath</code> with the loaded <code>MapData</code> object and call <code>plan()</code> with the desired waypoints.</li>
 </ol>
 <hr />

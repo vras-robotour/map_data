@@ -1188,6 +1188,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#type-checking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Type checking
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#submitting-changes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1391,6 +1402,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#type-checking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Type checking
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#submitting-changes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1469,11 +1491,17 @@
 <p class="admonition-title">Editor integration</p>
 <p>If you use Neovim with LazyVim, enable the <code>lazyvim.plugins.extras.lang.python</code> extra and add a <code>conform.nvim</code> plugin spec with <code>ruff_format</code> to get format-on-save automatically.</p>
 </div>
+<h2 id="type-checking">Type checking</h2>
+<p>The project uses <a href="https://mypy-lang.org/">mypy</a> for static type checking. Configuration lives in <code>pyproject.toml</code> under <code>[tool.mypy]</code>.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mypy<span class="w"> </span>map_data/
+</span></code></pre></div>
+<p>Third-party libraries without complete type stubs (numpy, shapely, overpy, flask_socketio, rclpy, etc.) are covered by <code>ignore_missing_imports</code>. A small number of remaining false positives — mostly from numpy/shapely returning loosely-typed values, or from patterns mypy can't narrow (e.g. Flask's <code>nonlocal</code>-captured variables) — are silenced with targeted <code># type: ignore[&lt;code&gt;]</code> comments that include a short reason. New code should be fully typed rather than relying on ignores.</p>
 <h2 id="submitting-changes">Submitting changes</h2>
 <ol>
 <li>Create a feature branch from <code>master</code>.</li>
 <li>Make your changes and add or update tests where relevant.</li>
 <li>Run <code>pytest tests/</code> and ensure all tests pass.</li>
+<li>Run <code>ruff check . &amp;&amp; ruff format --check .</code> and <code>mypy map_data/</code> and ensure both are clean.</li>
 <li>Open a pull request against <code>master</code> with a clear description of what changed and why.</li>
 </ol>
 
