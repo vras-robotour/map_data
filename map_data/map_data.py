@@ -35,23 +35,6 @@ _DEFAULTS = load_config("planner_defaults.yaml")
 GRID_MARGIN: float = _DEFAULTS.get("grid_margin", 150)
 BBOX_LEN = 4
 
-# `highway` drives Way.is_road()/is_footway() (see map_data/utils/way.py) but,
-# unlike the barrier/obstacle families, has no entry of its own in any of the
-# parameters/*.csv tag configs, so it is added explicitly to the way filter.
-_ROAD_TAG_KEY = "highway"
-
-
-def _tag_selector(element: str, tag_keys: frozenset[str], bbox: str) -> str:
-    """
-    Build an Overpass QL union of tag-existence filters for one element type.
-
-    E.g. ``_tag_selector("way", frozenset({"highway", "barrier"}), bbox)``
-    returns ``way["barrier"](bbox); way["highway"](bbox);`` (sorted for
-    deterministic output), matching any way that carries at least one of the
-    given tag keys, regardless of its value.
-    """
-    return "".join(f'{element}["{key}"]({bbox});' for key in sorted(tag_keys))
-
 
 class CoordsData:
     """Bounding box and coordinate metadata for map data."""
@@ -260,19 +243,6 @@ class MapData:
             params_path / "not_obstacle_tags.csv",
         )
 
-        # Overpass server-side tag filters used by run_queries() to avoid
-        # downloading every way/node in the bounding box. Derived directly
-        # from the tag configs above (plus `highway`) so the filter always
-        # matches what the parser actually consumes:
-        #   - ways:  Way.is_road()/is_footway() -> `highway`
-        #            Way.is_barrier()            -> BARRIER_TAGS keys
-        #   - nodes: parse_osm_nodes()            -> OBSTACLE_TAGS keys
-        # NOT_*_TAGS/ANTI_BARRIER_TAGS only ever narrow an already-matched
-        # element (they never add a new tag family), so they don't need to
-        # be reflected in the filter.
-        self._way_tag_keys: frozenset[str] = frozenset({_ROAD_TAG_KEY, *self.BARRIER_TAGS})
-        self._node_tag_keys: frozenset[str] = frozenset(self.OBSTACLE_TAGS)
-
     @staticmethod
     def _csv_to_dict(path: str | Path) -> dict[str, list[str]]:
         arr = np.genfromtxt(path, dtype=str, delimiter=",")
@@ -347,17 +317,6 @@ class MapData:
         Call :meth:`run_parse` afterwards to convert the responses into
         :class:`~map_data.utils.way.Way` objects.
 
-        Each query is filtered server-side to only the tag families the
-        parser actually inspects (see :attr:`_way_tag_keys` /
-        :attr:`_node_tag_keys`, derived from ``highway`` plus the
-        ``BARRIER_TAGS``/``OBSTACLE_TAGS`` configs loaded in
-        :meth:`_load_tag_configs`), instead of downloading every way and
-        node in the bounding box. This substantially shrinks both the
-        download size and the subsequent parse time. Matching relations are
-        included and recursed down (``>;``) so that the (often untagged)
-        member ways of multipolygon relations are still fetched and
-        classified.
-
         Parameters
         ----------
         use_cache : bool
@@ -375,24 +334,10 @@ class MapData:
                 return
 
         bbox = f"{self.min_lat},{self.min_long},{self.max_lat},{self.max_long}"
-        way_selector = _tag_selector("way", self._way_tag_keys, bbox)
-        # Multipolygon relations (lakes, forests, courtyard buildings, ...)
-        # commonly carry their classifying tag on the *relation*, leaving the
-        # member ways untagged. Selecting matching relations here and recursing
-        # down (`>;`) pulls those untagged member ways (and their nodes) into
-        # the ways result, so parse_osm_ways() records them in the `ways` dict
-        # and parse_osm_rels() can stamp the relation's tags onto them. Reuse
-        # `_way_tag_keys` for relations; extra rel[...] filters that never match
-        # are harmless. This is still strictly less data than `way(bbox); >;`.
-        rel_selector = _tag_selector("rel", self._way_tag_keys, bbox)
-        node_selector = _tag_selector("node", self._node_tag_keys, bbox)
         queries = {
-            "ways": f"[out:json]; ({way_selector}{rel_selector}); >; out;",
-            # Fetch the matching relations themselves for their tags/membership;
-            # parse_osm_rels() then stamps those tags onto the member ways that
-            # the "ways" query recursed in above.
-            "rels": f"[out:json]; ({rel_selector}); out;",
-            "nodes": f"[out:json]; ({node_selector}); out;",
+            "ways": f"[out:json]; (way({bbox}); >; ); out;",
+            "rels": f"[out:json]; (way({bbox}); <; ); out;",
+            "nodes": f"[out:json]; (node({bbox}); ); out;",
         }
 
         client = OverpassClient()

@@ -9,21 +9,19 @@ This page covers the core CLI tools and ROS2 nodes for parsing, visualizing, and
 ## What gets downloaded
 
 When `create_mapdata` (or `MapData.run_all()`) is called, three concurrent
-[Overpass API](https://overpass-api.de/) queries are sent. Each query is filtered server-side
-(using Overpass `["key"]` tag-existence filters) to only the tag families the parser inspects,
-so it downloads a fraction of what a plain "everything in the bounding box" query would:
+[Overpass API](https://overpass-api.de/) queries are sent, covering the bounding box of the
+GPX waypoints:
 
 | Query | What it fetches |
 |-------|----------------|
-| **Ways** | OSM ways *and relations* inside the bounding box carrying `highway` (roads, footways, paths) or one of the barrier/area tag keys in `parameters/barrier_tags.csv` (`barrier`, `waterway`, `man_made`, `building`, `amenity`, `sport`, `landuse`, `leisure`, `historic`, `natural`, `tourism`), with a down-recursion that also pulls in every constituent node **and the member ways of matching multipolygon relations** (lakes, forests, courtyard buildings), whose member ways are often untagged |
-| **Relations** | Relations carrying one of the same tag keys (e.g. lakes, forests, building complexes, large parks); their tags are stamped onto the member ways brought in by the ways query |
-| **Nodes** | Standalone point features carrying one of the obstacle tag keys in `parameters/obstacle_tags.csv` (`barrier`, `waterway`, `man_made`, `building`, `amenity`, `leisure`, `historic`, `natural`, `tourism`, `information`) |
+| **Ways** | Every OSM way inside the bounding box, plus every constituent node |
+| **Relations** | Every relation that references at least one of those ways |
+| **Nodes** | Every standalone OSM node inside the bounding box |
 
-The downloaded data is then further filtered and classified into `roads_list`, `footways_list`, and
-`barriers_list` according to the specific tag *values* in the CSV files in `parameters/`. Ways whose
-tag values do not match any configured category are discarded. The tag *keys* used for the Overpass
-filters above are derived from those same CSV files (see `MapData._load_tag_configs()`), so adding a
-new tag family to a CSV automatically widens the download filter too.
+The downloaded data is then filtered and classified into `roads_list`, `footways_list`, and
+`barriers_list` according to the tag values in the CSV files in `parameters/`. Ways and nodes
+whose tags do not match any configured category are discarded during parsing, not during
+download.
 
 ### Bounding box and margins
 
