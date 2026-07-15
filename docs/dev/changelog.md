@@ -14,12 +14,28 @@
 - Fixed `parse_gpx_file` only reading waypoints — now falls back to tracks and routes
 - Fixed RRT* `__main__` demo crashing due to tuple start/goal (requires `np.array`)
 - Synced hardcoded fallback `sand` surface cost (`0.7` → `0.4`) with `planner_defaults.yaml`
+- Wired up the dead `mapdata_path` launch argument in `osm_cloud.launch.py` (bare
+  `mapdata_file`/`gpx_file` names now resolve against the data directory)
+
+### Changed
+
+- Overpass `run_queries` now filters server-side by the tag families the parser
+  inspects instead of downloading every way/node in the bounding box; matching
+  multipolygon relations and their member ways are recursed in so those obstacles
+  are still classified
+- Removed the no-op `joblib` threading parallelism from `ReplanPath.replan` (the
+  A*/RRT* segment work is GIL-bound); segments run sequentially and the grid cache
+  is warmed once up front, removing a redundant per-segment cache-build race
 
 ### Added
 
 - Unit tests for `osm_cloud` pure helper functions (`create_grid`, `points_near_ref`, `transform_points`, `split_ways_to_points`)
 - `pytest-cov` coverage reporting in CI
 - `.pre-commit-config.yaml` for local ruff lint/format checks
+- Documented the `map_data_info` CLI (including `--validate`), the viewer's `--data-dir`/`--host`/`--port` flags, and the `THUNDERFOREST_API_KEY`/`SEZNAM_API_KEY` environment variables in the README and viewer docs
+- Unit test for the `osm_cloud` ROS node initialization (parameter wiring, publishers, timer)
+- Tests for `parse_osm_rels` multipolygon member-way tagging, `combine_ways` disconnected members, `Way.to_pcd_points` cache invalidation, empty-GPX return shape, the off-path zero-cost regression, and launch-argument consumption
+- NumPy-style docstrings for `pathsolver/grid_constructor.py` and `viewer/helpers.py`
 
 ## [1.2.0] — 2026-07-14
 

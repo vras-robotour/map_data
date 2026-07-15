@@ -10,49 +10,28 @@
     "type": "improvement",
     "sev": "minor",
     "title": "Split routes.py and deduplicate the way-resolution pipeline",
-    "desc": "<code>routes.py</code> is ~1,800 lines mixing annotations, way editing, planning, and wormhole sharing. The way lookup + edit-application pipeline (deletions \u2192 added nodes \u2192 position overrides \u2192 split segments, plus synthetic-node cache construction) is triplicated nearly verbatim in <code>get_way_nodes</code>, <code>get_way</code>, and <code>_get_way_segments_geojson</code>. Extract a shared <code>_resolve_way(filename, way_id, store)</code> helper and split the blueprint into modules.",
+    "desc": "<code>routes.py</code> is ~1,800 lines mixing annotations, way editing, planning, and wormhole sharing. The way lookup + edit-application pipeline (deletions → added nodes → position overrides → split segments, plus synthetic-node cache construction) is triplicated nearly verbatim in <code>get_way_nodes</code>, <code>get_way</code>, and <code>_get_way_segments_geojson</code>. Extract a shared <code>_resolve_way(filename, way_id, store)</code> helper and split the blueprint into modules.",
     "file": "map_data/viewer/routes.py"
-  },
-  {
-    "type": "improvement",
-    "sev": "minor",
-    "title": "Shrink the get_cost_grid response",
-    "desc": "The endpoint returns one GeoJSON <code>Feature</code> per grid point \u2014 hundreds of thousands of features for a modest bbox at 1 m resolution. A flat <code>[[lat, lon, cost], ...]</code> array (or a rendered PNG overlay + bounds) would cut the payload roughly 10\u00d7.",
-    "file": "map_data/viewer/routes.py"
-  },
-  {
-    "type": "improvement",
-    "sev": "minor",
-    "title": "Filter Overpass queries by tag families",
-    "desc": "<code>run_queries</code> downloads every way and node in the bbox (<code>way(bbox)</code>, <code>node(bbox)</code>). Filtering server-side by the tag families the parser actually uses (<code>highway</code>, <code>barrier</code>, <code>building</code>, <code>natural</code>, <code>landuse</code>, \u2026) would shrink downloads and parse time substantially.",
-    "file": "map_data/map_data.py"
   },
   {
     "type": "improvement",
     "sev": "minor",
     "title": "Add type checking and pre-commit hooks",
-    "desc": "The code is fully annotated but no checker runs \u2014 mypy/pyright in CI would have caught the keyword-only <code>run_all</code> crash and the <code>Response</code> return-type inconsistencies. Ruff is configured but there is no pre-commit config to run it locally.",
+    "desc": "The code is fully annotated but no checker runs — mypy/pyright in CI would have caught the keyword-only <code>run_all</code> crash and the <code>Response</code> return-type inconsistencies. Ruff is configured but there is no pre-commit config to run it locally.",
     "file": "pyproject.toml, .github/workflows/ci.yml"
   },
   {
     "type": "improvement",
     "sev": "nice-to-have",
     "title": "Speed up planning hot paths with native extensions",
-    "desc": "The main bottlenecks are the Python <code>_bresenham</code> generator and <code>_segment_cost</code> in RRT* (called O(max_iter \u00d7 neighbors) times), and the <code>heapq</code> loop in <code>grid_astar</code>. Recommended approach: (1) try <code>@numba.njit</code> on these inner loops first \u2014 zero build overhead, easy to toggle; (2) replace <code>grid_astar</code> with <code>skimage.graph.route_through_array</code> which is C-backed; (3) Cython or pybind11 only if numba is unacceptable for deployment. Full C/C++ rewrite is not justified given that numpy, cKDTree, and Shapely/GEOS are already native.",
+    "desc": "The main bottlenecks are the Python <code>_bresenham</code> generator and <code>_segment_cost</code> in RRT* (called O(max_iter × neighbors) times), and the <code>heapq</code> loop in <code>grid_astar</code>. Recommended approach: (1) try <code>@numba.njit</code> on these inner loops first — zero build overhead, easy to toggle; (2) replace <code>grid_astar</code> with <code>skimage.graph.route_through_array</code> which is C-backed; (3) Cython or pybind11 only if numba is unacceptable for deployment. Full C/C++ rewrite is not justified given that numpy, cKDTree, and Shapely/GEOS are already native.",
     "file": "map_data/pathsolver/rrt_star.py, map_data/pathsolver/grid_astar.py"
   },
   {
     "type": "improvement",
     "sev": "nice-to-have",
-    "title": "Remove no-op threading parallelism in replan",
-    "desc": "<code>ReplanPath.replan</code> uses <code>Parallel(n_jobs=-1, backend=\"threading\")</code> over pure-Python A* \u2014 GIL-bound, so near-zero speedup \u2014 and threads can race to build <code>grid_2d_cache</code> (redundant work, benign result). Either switch to a process backend or drop the parallelism; the native-extension item is the better lever.",
-    "file": "map_data/pathsolver/replan.py"
-  },
-  {
-    "type": "improvement",
-    "sev": "nice-to-have",
     "title": "Unify shallow vs deep copy of the cached MapData",
-    "desc": "<code>get_mapdata</code> shallow-copies the cached <code>MapData</code> (<code>copy.copy</code>) while <code>get_merged_mapdata</code> deep-copies. Correctness currently relies on every helper carefully <code>copy.copy</code>-ing ways before mutating them \u2014 a fragile invariant. Either document it prominently or make both paths consistent.",
+    "desc": "<code>get_mapdata</code> shallow-copies the cached <code>MapData</code> (<code>copy.copy</code>) while <code>get_merged_mapdata</code> deep-copies. Correctness currently relies on every helper carefully <code>copy.copy</code>-ing ways before mutating them — a fragile invariant. Either document it prominently or make both paths consistent.",
     "file": "map_data/viewer/routes.py, map_data/viewer/cache.py"
   },
   {
@@ -73,7 +52,7 @@
     "type": "improvement",
     "sev": "nice-to-have",
     "title": "Progress reporting for fetch_area via SocketIO",
-    "desc": "The fetch task is polled over REST while a SocketIO channel already exists for telemetry \u2014 pushing progress (query, parse, save stages) would remove the polling and its 404-on-second-poll footgun.",
+    "desc": "The fetch task is polled over REST while a SocketIO channel already exists for telemetry — pushing progress (query, parse, save stages) would remove the polling and its 404-on-second-poll footgun.",
     "file": "map_data/viewer/routes.py, map_data/viewer/app.py"
   },
   {
@@ -91,45 +70,10 @@
     "file": "map_data/viewer/ros_node.py, map_data/viewer/app.py"
   },
   {
-    "type": "testing",
-    "sev": "important",
-    "title": "Unit-test osm_cloud's pure functions and node init",
-    "desc": "`create_grid`, `points_near_ref`, `split_ways_to_points`, and `transform_points` are now tested. Node-init test (requires rclpy mock) is still missing.",
-    "file": "map_data/osm_cloud.py, tests/"
-  },
-  {
-    "type": "testing",
-    "sev": "minor",
-    "title": "Regression test: no zero-cost cells off-path in a filled grid",
-    "desc": "A test asserting that no cell in a filled <code>PathGrid</code> retains cost 0.0 away from any way would catch the linspace/floor discretization mismatch and future regressions of it.",
-    "file": "tests/, map_data/pathsolver/grid_constructor.py"
-  },
-  {
-    "type": "testing",
-    "sev": "minor",
-    "title": "Edge-case tests for parsing and GPX helpers",
-    "desc": "Missing coverage: <code>combine_ways</code> with disconnected relation members (MultiLineString path), <code>to_pcd_points</code> cache invalidation across argument changes, and the empty-GPX return shape of <code>parse_gpx_file</code>.",
-    "file": "tests/"
-  },
-  {
-    "type": "testing",
-    "sev": "minor",
-    "title": "Launch file smoke test",
-    "desc": "No test exercises <code>osm_cloud.launch.py</code>. A <code>launch_testing</code> smoke test \u2014 or at minimum an assertion that every declared launch argument is consumed \u2014 would catch dead arguments like <code>grid_topic</code> and the unreachable GPX mode.",
-    "file": "launch/osm_cloud.launch.py, tests/"
-  },
-  {
-    "type": "documentation",
-    "sev": "minor",
-    "title": "README/docs gaps: info CLI, viewer flags, API-key env vars",
-    "desc": "The README omits <code>map_data_info</code> (stats + <code>--validate</code>) and the viewer's <code>--data-dir</code>/<code>--host</code>/<code>--port</code> flags; the docs never mention the <code>THUNDERFOREST_API_KEY</code>/<code>SEZNAM_API_KEY</code> environment variables the index page reads for tile layers.",
-    "file": "README.md, docs/"
-  },
-  {
     "type": "documentation",
     "sev": "nice-to-have",
     "title": "Docstrings for grid_constructor, viewer helpers and routes",
-    "desc": "NumPy-style docstrings are consistently good in <code>map_data.py</code> and <code>rrt_star.py</code> but absent in <code>grid_constructor.py</code>, <code>viewer/helpers.py</code>, and most of <code>viewer/routes.py</code> \u2014 precisely the modules with the subtlest behaviour (grid indexing, way-edit pipeline).",
+    "desc": "NumPy-style docstrings are consistently good in <code>map_data.py</code> and <code>rrt_star.py</code> but absent in <code>grid_constructor.py</code>, <code>viewer/helpers.py</code>, and most of <code>viewer/routes.py</code> — precisely the modules with the subtlest behaviour (grid indexing, way-edit pipeline).",
     "file": "map_data/pathsolver/grid_constructor.py, map_data/viewer/helpers.py, map_data/viewer/routes.py"
   }
 ]
