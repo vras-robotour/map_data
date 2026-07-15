@@ -143,6 +143,11 @@ async function initApp() {
             window.location = `/api/export?file=${encodeURIComponent(currentFile)}`;
     });
 
+    document.getElementById('export-geojson-btn')?.addEventListener('click', () => {
+        if (currentFile)
+            window.location = `/api/export/geojson?file=${encodeURIComponent(currentFile)}`;
+    });
+
     document.getElementById('gpx-create-btn')?.addEventListener('click', () => {
         document.getElementById('gpx-create-input').click();
     });

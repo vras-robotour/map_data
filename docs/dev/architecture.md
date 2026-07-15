@@ -419,7 +419,7 @@ The viewer (`map_data/viewer/`) is a single-page web application with three swit
 
 - Serves GeoJSON representations of the `MapData` contents and handles annotation CRUD
 - `/api/fetch_area` runs Overpass queries in a background thread and returns a task ID immediately; the client polls `/api/fetch_area/<task_id>` for completion, preventing UI hangs on long fetches
-- `/export` writes a human-readable JSON snapshot of the annotated map
+- `/export` writes a human-readable JSON snapshot of the annotated map; `/export/geojson` writes the same merged data as a GeoJSON `FeatureCollection`
 - `cache.py` manages the OSM response cache sidecar
 
 **Front-end modes** (Leaflet + Bootstrap, `static/js/`):
@@ -451,7 +451,7 @@ A typical session follows this sequence:
 1. **Create `.mapdata`** — run `create_mapdata` with a GPX waypoint file. The node queries Overpass, parses the OSM data, and writes `<name>.mapdata` to disk. Or download and parse data inside the viewer.
 2. **Visualize data** — run the viewer and load parsed data in the browser. If the data were parsed through the viewer they will be shown automatically.
 3. **Annotate** — use the viewer drawing tools to mark obstacles, draw alternative path segments, delete or hide erroneous ways, adjust node positions, and override OSM tags. Changes are saved automatically to `<name>.annotations.json`.
-4. **Export** — click the Export button to produce `<name>.exported.mapdata`, a human-readable JSON snapshot of the annotated map suitable for downstream processing.
+4. **Export** — click the Export button to produce `<name>.exported.mapdata`, a human-readable JSON snapshot of the annotated map suitable for downstream processing. Click the GeoJSON button to produce `<name>.geojson`, the same data for use in QGIS/geojson.io.
 5. **Plan path** — instantiate `GraphPlanner` or `ReplanPath` with the loaded `MapData` object and call `plan()` with the desired waypoints.
 
 ---

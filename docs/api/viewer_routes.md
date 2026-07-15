@@ -107,6 +107,16 @@ Export a `.mapdata` file as a human-readable JSON file, with all stored annotati
 
 ---
 
+### `GET /api/export/geojson?file=<name>`
+
+Export a `.mapdata` file as a GeoJSON `FeatureCollection`, with all stored annotations applied —
+the same merged data as `/api/export`, but in GeoJSON form for use in QGIS, geojson.io, or other
+GIS tools.
+
+**Response** — file download, `Content-Type: application/geo+json`, filename `<name>.geojson`.
+
+---
+
 ## Annotations
 
 All annotation endpoints require `?file=<name>`.

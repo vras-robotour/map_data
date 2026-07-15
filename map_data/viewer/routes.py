@@ -2352,6 +2352,56 @@ def export_mapdata() -> Response:
     )
 
 
+@bp.route("/api/export/geojson")
+def export_geojson() -> Response:
+    """
+    Download a mapdata file, with all recorded edits baked in, as GeoJSON.
+
+    Unlike :func:`export_mapdata` (which dumps the native ``.mapdata``
+    schema), this converts the fully-merged ``MapData`` to a GeoJSON
+    ``FeatureCollection`` via
+    :func:`~map_data.viewer.helpers.mapdata_to_geojson`, for use in GIS
+    tools such as QGIS or geojson.io.
+
+    Side Effects
+    ------------
+    None (does not write to the data directory; the merged data is
+    streamed directly to the client).
+
+    Returns
+    -------
+    Response
+        The GeoJSON ``FeatureCollection`` (see
+        :func:`~map_data.viewer.helpers.mapdata_to_geojson`) as a
+        downloadable attachment named ``<stem>.geojson``, with
+        ``Content-Type: application/geo+json``.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if ``file`` is missing. 404 if the file doesn't exist.
+
+    """
+    filename = request.args.get("file")
+    if not filename:
+        abort(400, "Missing 'file' query parameter")
+
+    md, _ = get_merged_mapdata(filename)
+    if md is None:
+        abort(404, f"File not found: {filename}")
+
+    buf = io.BytesIO()
+    buf.write(json.dumps(mapdata_to_geojson(md)).encode("utf-8"))
+    buf.seek(0)
+    base = Path(filename).stem
+    return send_file(
+        buf,
+        as_attachment=True,
+        download_name=f"{base}.geojson",
+        mimetype="application/geo+json",
+    )
+
+
 @bp.route("/api/cost_grid")
 def get_cost_grid() -> Response:
     """

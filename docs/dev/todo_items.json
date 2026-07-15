@@ -58,13 +58,6 @@
   {
     "type": "improvement",
     "sev": "nice-to-have",
-    "title": "GeoJSON export alongside .mapdata",
-    "desc": "The viewer already converts merged map data to GeoJSON internally; exposing it as an export format would make the data usable in QGIS/geojson.io without custom tooling.",
-    "file": "map_data/viewer/routes.py"
-  },
-  {
-    "type": "improvement",
-    "sev": "nice-to-have",
     "title": "Multi-robot support in the tracker",
     "desc": "The <code>robot_id</code> parameter suggests this is anticipated; supporting several TrackerNode namespaces and tagging telemetry per robot would allow one viewer to monitor a fleet.",
     "file": "map_data/viewer/ros_node.py, map_data/viewer/app.py"

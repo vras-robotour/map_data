@@ -61,6 +61,9 @@ Use the **Export** button in the toolbar to save all annotations and changes bac
 Deleted features will be removed from the file, while edits and annotations are added to it, hidden
 features are preserved.
 
+Use the **GeoJSON** button next to it to download the same annotation-resolved map as a `.geojson`
+file, for opening in QGIS, geojson.io, or other GIS tools.
+
 ---
 
 ## Programmatic annotations

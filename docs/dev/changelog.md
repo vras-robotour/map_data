@@ -29,6 +29,7 @@
 
 ### Added
 
+- Interactive viewer: `GET /api/export/geojson` endpoint and toolbar button to download the merged (annotation-resolved) map as a `.geojson` file, for use in QGIS/geojson.io
 - Unit tests for `osm_cloud` pure helper functions (`create_grid`, `points_near_ref`, `transform_points`, `split_ways_to_points`)
 - `pytest-cov` coverage reporting in CI
 - `.pre-commit-config.yaml` for local ruff lint/format checks
