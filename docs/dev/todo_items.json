@@ -1,24 +1,10 @@
 [
   {
-    "type": "security",
-    "sev": "important",
-    "title": "Harden the viewer for network deployment",
-    "desc": "Defaults are sane (binds 127.0.0.1, path traversal guarded, pickle loading removed), but robot deployments will use <code>--host 0.0.0.0</code>: SocketIO allows <code>cors_allowed_origins=\"*\"</code>, no endpoint has authentication (arbitrary file creation in the data dir, spawning <code>wormhole</code> subprocesses, triggering Overpass fetches), and <code>abort(500, str(e))</code> leaks exception details. Add a deployment-security docs section, tighten error messages, and consider an optional access token.",
-    "file": "map_data/viewer/app.py, map_data/viewer/routes.py"
-  },
-  {
     "type": "improvement",
-    "sev": "minor",
-    "title": "Split routes.py and deduplicate the way-resolution pipeline",
-    "desc": "<code>routes.py</code> is ~1,800 lines mixing annotations, way editing, planning, and wormhole sharing. The way lookup + edit-application pipeline (deletions → added nodes → position overrides → split segments, plus synthetic-node cache construction) is triplicated nearly verbatim in <code>get_way_nodes</code>, <code>get_way</code>, and <code>_get_way_segments_geojson</code>. Extract a shared <code>_resolve_way(filename, way_id, store)</code> helper and split the blueprint into modules.",
+    "sev": "nice-to-have",
+    "title": "Split routes.py into focused modules",
+    "desc": "The triplicated way-resolution pipeline has been consolidated into a shared <code>_resolve_way</code> helper, but <code>routes.py</code> is still ~1,900 lines mixing annotations, way editing, planning, and wormhole sharing in one blueprint. Splitting it into per-concern modules (annotations, way edits, planning, sharing) would improve navigability.",
     "file": "map_data/viewer/routes.py"
-  },
-  {
-    "type": "improvement",
-    "sev": "minor",
-    "title": "Add type checking and pre-commit hooks",
-    "desc": "The code is fully annotated but no checker runs — mypy/pyright in CI would have caught the keyword-only <code>run_all</code> crash and the <code>Response</code> return-type inconsistencies. Ruff is configured but there is no pre-commit config to run it locally.",
-    "file": "pyproject.toml, .github/workflows/ci.yml"
   },
   {
     "type": "improvement",
@@ -26,13 +12,6 @@
     "title": "Speed up planning hot paths with native extensions",
     "desc": "The main bottlenecks are the Python <code>_bresenham</code> generator and <code>_segment_cost</code> in RRT* (called O(max_iter × neighbors) times), and the <code>heapq</code> loop in <code>grid_astar</code>. Recommended approach: (1) try <code>@numba.njit</code> on these inner loops first — zero build overhead, easy to toggle; (2) replace <code>grid_astar</code> with <code>skimage.graph.route_through_array</code> which is C-backed; (3) Cython or pybind11 only if numba is unacceptable for deployment. Full C/C++ rewrite is not justified given that numpy, cKDTree, and Shapely/GEOS are already native.",
     "file": "map_data/pathsolver/rrt_star.py, map_data/pathsolver/grid_astar.py"
-  },
-  {
-    "type": "improvement",
-    "sev": "nice-to-have",
-    "title": "Unify shallow vs deep copy of the cached MapData",
-    "desc": "<code>get_mapdata</code> shallow-copies the cached <code>MapData</code> (<code>copy.copy</code>) while <code>get_merged_mapdata</code> deep-copies. Correctness currently relies on every helper carefully <code>copy.copy</code>-ing ways before mutating them — a fragile invariant. Either document it prominently or make both paths consistent.",
-    "file": "map_data/viewer/routes.py, map_data/viewer/cache.py"
   },
   {
     "type": "improvement",
@@ -61,12 +40,5 @@
     "title": "Multi-robot support in the tracker",
     "desc": "The <code>robot_id</code> parameter suggests this is anticipated; supporting several TrackerNode namespaces and tagging telemetry per robot would allow one viewer to monitor a fleet.",
     "file": "map_data/viewer/ros_node.py, map_data/viewer/app.py"
-  },
-  {
-    "type": "documentation",
-    "sev": "nice-to-have",
-    "title": "Docstrings for grid_constructor, viewer helpers and routes",
-    "desc": "NumPy-style docstrings are consistently good in <code>map_data.py</code> and <code>rrt_star.py</code> but absent in <code>grid_constructor.py</code>, <code>viewer/helpers.py</code>, and most of <code>viewer/routes.py</code> — precisely the modules with the subtlest behaviour (grid indexing, way-edit pipeline).",
-    "file": "map_data/pathsolver/grid_constructor.py, map_data/viewer/helpers.py, map_data/viewer/routes.py"
   }
 ]

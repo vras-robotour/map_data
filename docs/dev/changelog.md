@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Security
+
+- Viewer no longer leaks exception detail in HTTP 500 responses (the `upload_gpx`
+  and `create_wormhole` handlers now return a generic message and log the real
+  error server-side)
+- SocketIO CORS now defaults to same-origin instead of a hardcoded `*`;
+  `MAP_DATA_CORS_ORIGINS` opts into a specific origin list
+- Optional access-token gate via `MAP_DATA_ACCESS_TOKEN` (off by default) for
+  network deployments; documented the `--host 0.0.0.0` attack surface in the
+  viewer docs
+
 ### Fixed
 
 - Fixed `TrackerNode.num_waypoints` never being updated in the ROS node
@@ -27,6 +38,9 @@
   A*/RRT* segment work is GIL-bound); segments run sequentially and the grid cache
   is warmed once up front, removing a redundant per-segment cache-build race
 - Removed the now-unused `joblib` runtime dependency from `pyproject.toml`
+- Deduplicated the triplicated way-resolution pipeline in `viewer/routes.py` into a
+  shared `_resolve_way` helper, and documented the `MapData` shallow-vs-deep copy
+  invariant
 
 ### Added
 
@@ -40,7 +54,7 @@
 - Documented the `map_data_info` CLI (including `--validate`), the viewer's `--data-dir`/`--host`/`--port` flags, and the `THUNDERFOREST_API_KEY`/`SEZNAM_API_KEY` environment variables in the README and viewer docs
 - Unit test for the `osm_cloud` ROS node initialization (parameter wiring, publishers, timer)
 - Tests for `parse_osm_rels` multipolygon member-way tagging, `combine_ways` disconnected members, `Way.to_pcd_points` cache invalidation, empty-GPX return shape, the off-path zero-cost regression, and launch-argument consumption
-- NumPy-style docstrings for `pathsolver/grid_constructor.py` and `viewer/helpers.py`
+- NumPy-style docstrings for `pathsolver/grid_constructor.py`, `viewer/helpers.py`, and the `viewer/routes.py` handlers
 
 ## [1.2.0] — 2026-07-14
 
