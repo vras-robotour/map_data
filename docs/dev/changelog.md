@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-07-15
+
 ### Security
 
 - Viewer no longer leaks exception detail in HTTP 500 responses (the `upload_gpx`
