@@ -82,7 +82,8 @@ class GraphPlanner:
         tree = STRtree(edge_segments) if edge_segments else None
 
         # Group splits by way and segment
-        splits = {}  # (way_id, segment_index) -> [(proj_dist, proj_node_id, node_id, dist_to_edge)]
+        # (way_id, segment_index) -> [(proj_dist, proj_node_id, node_id, dist_to_edge)]
+        splits: dict[tuple[int, int], list[tuple[float, int, int, float]]] = {}
         new_internal_id = -2000000
 
         if tree:
@@ -152,7 +153,7 @@ class GraphPlanner:
                 n1, n2 = way.nodes[i], way.nodes[i + 1]
                 p1 = self.nodes[n1].ravel()[:2]
                 p2 = self.nodes[n2].ravel()[:2]
-                dist = np.linalg.norm(p1 - p2)
+                dist = float(np.linalg.norm(p1 - p2))
 
                 self._add_edge(n1, n2, dist)
                 final_edge_segments.append(LineString([p1, p2]))
@@ -245,8 +246,12 @@ class GraphPlanner:
 
     def _get_node_pos(self, node_id: int | str, extra_nodes_data: dict | None = None) -> np.ndarray:
         if isinstance(node_id, str) and node_id.startswith("temp_"):
-            return extra_nodes_data["positions"][node_id]
-        return self.nodes[node_id].ravel()[:2]
+            # extra_nodes_data is only None by default for callers that never pass
+            # "temp_"-prefixed IDs; the one real caller (plan()) always supplies it.
+            return extra_nodes_data["positions"][node_id]  # type: ignore[index]
+        # node_id is only ever a non-"temp_" str in theory; in practice every str
+        # id used against self.nodes (int-keyed) is "temp_"-prefixed and handled above.
+        return self.nodes[node_id].ravel()[:2]  # type: ignore[index]
 
     def plan(self, path_utm: np.ndarray) -> np.ndarray | None:
         """
@@ -307,8 +312,10 @@ class GraphPlanner:
             # Special case: start and goal on the same edge
             if (n_s1 == n_g1 and n_s2 == n_g2) or (n_s1 == n_g2 and n_s2 == n_g1):
                 dist_sg = np.linalg.norm(p_proj_s - p_proj_g)
-                extra[id_s].append((id_g, dist_sg))
-                extra[id_g].append((id_s, dist_sg))
+                # extra's value type is a union of adjacency-list and positions-dict
+                # entries; mypy can't tell these two keys hold lists.
+                extra[id_s].append((id_g, dist_sg))  # type: ignore[attr-defined]
+                extra[id_g].append((id_s, dist_sg))  # type: ignore[attr-defined]
 
             # Route between temporary nodes (projections)
             segment = self.a_star(id_s, id_g, extra)

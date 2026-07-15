@@ -1,8 +1,19 @@
 import json
 
+import numpy as np
 import overpy
+from shapely.geometry import LineString, Polygon
 
-from map_data.utils.parsing import BUFFER_WIDTHS, parse_osm_nodes, parse_osm_ways, separate_ways
+from map_data.utils.gpx import parse_gpx_file
+from map_data.utils.parsing import (
+    BUFFER_WIDTHS,
+    combine_ways,
+    parse_osm_nodes,
+    parse_osm_rels,
+    parse_osm_ways,
+    separate_ways,
+)
+from map_data.utils.way import Way
 
 _LAT, _LON = 50.0, 14.0
 
@@ -207,3 +218,142 @@ def test_parse_osm_nodes_populates_cache():
     parse_osm_nodes(data, nodes_cache, set(), {}, {})
     assert 10 in nodes_cache
     assert 11 in nodes_cache
+
+
+# ── combine_ways: disconnected MultiLineString ──────────────────────────────
+
+
+def test_combine_ways_disconnected_members_kept_unmerged():
+    """
+    Ways that share an endpoint *node id* but whose geometries don't
+    actually touch (e.g. bad/duplicated OSM node coordinates) make
+    shapely.ops.linemerge return a MultiLineString instead of a single
+    LineString. combine_ways must not crash on that — it should fall back
+    to leaving the member ways unmerged rather than building a Way whose
+    `.line` is a MultiLineString.
+    """
+    # Node id 11 is shared, but the line geometries have a gap between them
+    # so linemerge cannot join them into one continuous LineString.
+    w1 = Way(id=1, nodes=[10, 11], line=LineString([(0, 0), (1, 1)]))
+    w2 = Way(id=2, nodes=[11, 12], line=LineString([(5, 5), (6, 6)]))
+
+    ways = {1: w1, 2: w2}
+    merged_ids = combine_ways([1, 2], ways)
+
+    # Both original ways are kept as-is rather than replaced by a merged one.
+    assert sorted(merged_ids) == [1, 2]
+    assert ways[1].line.geom_type == "LineString"
+    assert ways[2].line.geom_type == "LineString"
+    for wid in merged_ids:
+        assert ways[wid].line.geom_type != "MultiLineString"
+
+
+# ── parse_osm_rels: multipolygon with untagged member ways ──────────────────
+
+
+# A multipolygon relation (id 200, natural=water) whose single outer member way
+# (id 104) is a closed area carrying NO tags of its own — the classifying tag
+# lives only on the relation. This is the common OSM pattern for lakes/forests
+# and is exactly what the tag-filtered Overpass ways query must still deliver
+# via relation recursion.
+_MULTIPOLYGON_JSON = json.dumps(
+    {
+        "version": 0.6,
+        "elements": [
+            {"type": "node", "id": 20, "lat": _LAT, "lon": _LON},
+            {"type": "node", "id": 21, "lat": _LAT + 0.001, "lon": _LON},
+            {"type": "node", "id": 22, "lat": _LAT + 0.001, "lon": _LON + 0.001},
+            {"type": "way", "id": 104, "nodes": [20, 21, 22, 20]},  # no tags
+            {
+                "type": "relation",
+                "id": 200,
+                "members": [{"type": "way", "ref": 104, "role": "outer"}],
+                "tags": {"type": "multipolygon", "natural": "water"},
+            },
+        ],
+    },
+)
+
+
+def test_parse_osm_rels_stamps_tags_onto_untagged_member_ways():
+    ways = _ways_from_json(_MULTIPOLYGON_JSON)
+    # Before relation parsing the member way carries no classifying tag.
+    assert ways[104].tags == {}
+
+    rels_data = _api().parse_json(_MULTIPOLYGON_JSON)
+    parse_osm_rels(rels_data, ways)
+
+    # The relation's natural=water tag is stamped onto the (formerly untagged)
+    # outer member way, and it is marked as an outer ring.
+    assert ways[104].tags.get("natural") == "water"
+    assert ways[104].in_out == "outer"
+
+
+def test_parse_osm_rels_untagged_member_classified_as_barrier():
+    ways = _ways_from_json(_MULTIPOLYGON_JSON)
+    rels_data = _api().parse_json(_MULTIPOLYGON_JSON)
+    parse_osm_rels(rels_data, ways)
+
+    # natural=water is a barrier family; with tags now present the member way
+    # must be classified as an (untraversable) barrier rather than vanishing.
+    _, _, barriers = separate_ways(ways, {"natural": ["water"]}, {}, {})
+    assert any(w.id == 104 for w in barriers)
+
+
+# ── Way.to_pcd_points: cache invalidation ───────────────────────────────────
+
+
+def test_to_pcd_points_cache_invalidated_on_density_change():
+    way = Way(line=LineString([(0.0, 0.0), (10.0, 0.0)]))
+
+    sparse = way.to_pcd_points(density=1.0, filled=False)
+    dense = way.to_pcd_points(density=2.0, filled=False)
+
+    # A stale cache would silently return the density=1.0 result again.
+    assert len(dense) > len(sparse)
+
+    # Calling with the original args again must not return the stale
+    # (density=2.0) result either.
+    sparse_again = way.to_pcd_points(density=1.0, filled=False)
+    np.testing.assert_array_equal(sparse_again, sparse)
+
+
+def test_to_pcd_points_cache_invalidated_on_filled_change():
+    poly = Polygon([(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
+    way = Way(line=poly, is_area=True)
+
+    boundary_only = way.to_pcd_points(density=1.0, filled=False)
+    filled_interior = way.to_pcd_points(density=1.0, filled=True)
+
+    # A stale cache keyed only on density (ignoring `filled`) would return
+    # the same array for both calls. `filled=True` only samples the
+    # interior (no boundary points), so the two point sets are disjoint.
+    assert len(filled_interior) != len(boundary_only)
+    boundary_set = {tuple(p) for p in boundary_only}
+    filled_set = {tuple(p) for p in filled_interior}
+    assert boundary_set.isdisjoint(filled_set)
+
+    boundary_again = way.to_pcd_points(density=1.0, filled=False)
+    np.testing.assert_array_equal(boundary_again, boundary_only)
+
+
+# ── parse_gpx_file: empty GPX ────────────────────────────────────────────────
+
+
+def test_parse_gpx_file_empty_returns_empty_list(tmp_path):
+    """
+    A structurally valid GPX file with no waypoints, tracks, or routes
+    must return the "no data" sentinel (`[]`), not a 3-tuple with empty
+    contents — callers (e.g. parse_path) branch on the return type.
+    """
+    gpx_content = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"></gpx>\n'
+    )
+    gpx_path = tmp_path / "empty.gpx"
+    gpx_path.write_text(gpx_content)
+
+    result = parse_gpx_file(str(gpx_path))
+
+    assert result == []
+    assert not isinstance(result, tuple)

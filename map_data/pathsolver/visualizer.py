@@ -23,12 +23,12 @@ def visualize_replan(
         grid_2d,
         cmap="Greys",
         origin="lower",
-        extent=[
+        extent=(
             low[0],
             high[0],
             low[1],
             high[1],
-        ],
+        ),
     )
 
     # Plot obstacles

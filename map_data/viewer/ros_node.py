@@ -36,13 +36,12 @@ RECOVERY_TIMEOUT = 5.0
 TELEOP_TIMEOUT = 2.0
 
 
-class TrackerNode(Node if ROS_AVAILABLE else object):
+class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dynamic base class depending on optional rclpy availability; not statically resolvable
     def __init__(self) -> None:
         if not ROS_AVAILABLE:
             return
         super().__init__("map_data_tracker")
 
-        self.declare_parameter("robot_id", "robot")
         self.declare_parameter("path_topic", "/path")
 
         # New topic parameters
@@ -75,8 +74,6 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
             "follow_waypoints_feedback_topic",
             "/follow_waypoints/_action/feedback",
         )
-
-        self.robot_id = self.get_parameter("robot_id").value
 
         # Track which features are enabled (topic name is not empty)
         self.enabled_features: dict[str, bool] = {}
@@ -315,7 +312,6 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
                 return None
             self._dirty = False
             return {
-                "robot_id": self.robot_id,
                 "enabled_features": self.enabled_features,
                 "position": {
                     "gps": dict(self.pose_gps) if self.pose_gps else {},
@@ -331,7 +327,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
     def _convert_path_latlon(
         self,
         msg: Path | NavigateThroughPoses.Goal | FollowWaypoints.Goal | FollowGPSWaypoints.Goal,
-    ) -> list[dict[str, float]]:
+    ) -> list[dict[str, float]] | None:
         waypoints_gps: list[dict[str, float]] = []
         if ROS_AVAILABLE and isinstance(msg, FollowGPSWaypoints.Goal):
             waypoints_gps.extend(
@@ -409,6 +405,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
                 subsampled.append(waypoints[-1])
             with self._lock:
                 self.waypoints_gps = subsampled
+                self.num_waypoints = len(msg.poses)
                 self._dirty = True
 
     def _feedback_callback(

@@ -59,6 +59,10 @@ Never open `.mapdata` files with `pickle.load` directly — use `MapData.load()`
 
 The viewer's **Export** button writes `<stem>.exported.mapdata` — a JSON file with the same schema as above but with all viewer annotations (deleted ways, tag overrides, node position overrides, drawn annotations) applied. This file can be used as a clean, annotation-resolved snapshot for downstream tools.
 
+The **GeoJSON** button next to it writes the same annotation-resolved data as `<stem>.geojson` — a
+standard GeoJSON `FeatureCollection` (see `mapdata_to_geojson` in `map_data/viewer/helpers.py`) for
+use in QGIS, geojson.io, or other GIS tools.
+
 ---
 
 ## `.annotations.json` sidecar format

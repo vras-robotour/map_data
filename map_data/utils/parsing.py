@@ -21,12 +21,16 @@ BUFFER_WIDTHS = _DEFAULTS.get("buffer_widths", {"road": 7, "footway": 3, "barrie
 def parse_osm_ways(
     osm_ways_data: overpy.Result,
     nodes_cache: dict[int, dict[str, Any]],
+    force_zone_number: int | None = None,
+    force_zone_letter: str | None = None,
 ) -> dict[int, Way]:
     ways = {}
     for way in tqdm(osm_ways_data.ways, desc="Parse ways"):
         lats = np.array([float(n.lat) for n in way.nodes])
         lons = np.array([float(n.lon) for n in way.nodes])
-        easting, northing, _, _ = utm.from_latlon(lats, lons)
+        easting, northing, _, _ = utm.from_latlon(
+            lats, lons, force_zone_number=force_zone_number, force_zone_letter=force_zone_letter
+        )
         coords = list(zip(easting, northing, strict=True))
 
         for n in way.nodes:
@@ -50,7 +54,8 @@ def parse_osm_ways(
 
 def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
     for rel in tqdm(osm_rels_data.relations, desc="Parse rels"):
-        outer_ids, inner_ids = [], []
+        outer_ids: list[int] = []
+        inner_ids: list[int] = []
 
         for member in rel.members:
             if member._type_value == "way" and int(member.ref) in ways:  # noqa: SLF001
@@ -74,6 +79,8 @@ def parse_osm_nodes(
     obstacle_tags: dict[str, list[str]],
     not_obstacle_tags: dict[str, list[str]],
     obstacle_radius: float | None = None,
+    force_zone_number: int | None = None,
+    force_zone_letter: str | None = None,
 ) -> list[Way]:
     barriers = []
     for node in tqdm(osm_nodes_data.nodes, desc="Parse nodes"):
@@ -100,7 +107,12 @@ def parse_osm_nodes(
         )
 
         if is_obstacle:
-            easting, northing, _, _ = utm.from_latlon(float(node.lat), float(node.lon))
+            easting, northing, _, _ = utm.from_latlon(
+                float(node.lat),
+                float(node.lon),
+                force_zone_number=force_zone_number,
+                force_zone_letter=force_zone_letter,
+            )
             radius = obstacle_radius if obstacle_radius is not None else OBSTACLE_RADIUS
             barriers.append(
                 Way(
@@ -123,7 +135,7 @@ def combine_ways(ids: list[int], ways: dict[int, Way]) -> list[int]:
     if not ways_to_merge:
         return ids
 
-    endpoint_map = {}
+    endpoint_map: dict[int, list[Way]] = {}
     for way in ways_to_merge:
         # way.nodes is a list of IDs now
         endpoint_map.setdefault(way.nodes[0], []).append(way)
@@ -140,6 +152,7 @@ def combine_ways(ids: list[int], ways: dict[int, Way]) -> list[int]:
         current_tags = dict(start_way.tags)
         current_lines = [start_way.line]
         used_ways.add(start_way.id)
+        used_ways_this_loop = [start_way.id]
 
         while True:
             last_node_id = current_nodes[-1]
@@ -148,6 +161,7 @@ def combine_ways(ids: list[int], ways: dict[int, Way]) -> list[int]:
                 break
             next_way = possible_next[0]
             used_ways.add(next_way.id)
+            used_ways_this_loop.append(next_way.id)
 
             if next_way.nodes[0] == last_node_id:
                 current_nodes.extend(next_way.nodes[1:])
@@ -170,6 +184,7 @@ def combine_ways(ids: list[int], ways: dict[int, Way]) -> list[int]:
                     break
                 prev_way = possible_prev[0]
                 used_ways.add(prev_way.id)
+                used_ways_this_loop.append(prev_way.id)
 
                 if prev_way.nodes[-1] == first_node_id:
                     current_nodes = list(prev_way.nodes[:-1]) + current_nodes
@@ -182,6 +197,11 @@ def combine_ways(ids: list[int], ways: dict[int, Way]) -> list[int]:
         if len(current_lines) > 1:
             is_area = current_nodes[0] == current_nodes[-1]
             merged_line = linemerge(current_lines)
+
+            if merged_line.geom_type == "MultiLineString":
+                logger.warning("linemerge yielded MultiLineString, keeping member ways unmerged")
+                merged_ids.extend(used_ways_this_loop)
+                continue
 
             new_id = -1
             while new_id in ways:
@@ -227,6 +247,8 @@ def separate_ways(
 
 def buffer_line(way: Way, width: float) -> Way:
     line = way.line
+    if line is None:
+        raise ValueError(f"buffer_line: way {way.id} has no geometry to buffer")
     # Closed roads/footways (e.g. roundabouts) are parsed as Polygon because first==last
     # node. Buffering a Polygon fills its interior; convert to LineString first so the
     # buffer produces an annular ring around the path instead.

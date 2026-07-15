@@ -1,5 +1,70 @@
 # Changelog
 
+## [Unreleased]
+
+## [1.2.1] — 2026-07-15
+
+### Security
+
+- Viewer no longer leaks exception detail in HTTP 500 responses (the `upload_gpx`
+  and `create_wormhole` handlers now return a generic message and log the real
+  error server-side)
+- SocketIO CORS now defaults to same-origin instead of a hardcoded `*`;
+  `MAP_DATA_CORS_ORIGINS` opts into a specific origin list
+- Optional access-token gate via `MAP_DATA_ACCESS_TOKEN` (off by default) for
+  network deployments; documented the `--host 0.0.0.0` attack surface in the
+  viewer docs
+
+### Fixed
+
+- Guarded three latent `None`-dereference paths surfaced by mypy: `buffer_line`
+  raises a clear error for a way with no geometry; `osm_cloud` raises a clear error
+  if the UTM-to-local transform is still unresolved at startup (rclpy shutdown race)
+  instead of crashing later; `upload_gpx` rejects a file part with no filename
+  (HTTP 400) instead of raising `TypeError`
+- Fixed `TrackerNode.num_waypoints` never being updated in the ROS node
+- Fixed polygon rasterization re-blocking holes when drawing obstacles
+- Fixed inconsistent UTM zone forcing during map parsing
+- Fixed `combine_ways` crash when OSM relation merging yields disconnected MultiLineString geometries
+- Fixed `Way.to_pcd_points` ignoring the `density` parameter for linestring geometries
+- Fixed `Way.to_pcd_points` cache returning stale results when called with different arguments
+- Fixed `parse_gpx_file` / `parse_yaml_file` returning inconsistent shapes on empty input
+- Fixed `parse_gpx_file` only reading waypoints — now falls back to tracks and routes
+- Fixed RRT* `__main__` demo crashing due to tuple start/goal (requires `np.array`)
+- Synced hardcoded fallback `sand` surface cost (`0.7` → `0.4`) with `planner_defaults.yaml`
+- Wired up the dead `mapdata_path` launch argument in `osm_cloud.launch.py` (bare
+  `mapdata_file`/`gpx_file` names now resolve against the data directory)
+
+### Changed
+
+- Overpass `run_queries` now filters server-side by the tag families the parser
+  inspects instead of downloading every way/node in the bounding box; matching
+  multipolygon relations and their member ways are recursed in so those obstacles
+  are still classified
+- Removed the no-op `joblib` threading parallelism from `ReplanPath.replan` (the
+  A*/RRT* segment work is GIL-bound); segments run sequentially and the grid cache
+  is warmed once up front, removing a redundant per-segment cache-build race
+- Removed the now-unused `joblib` runtime dependency from `pyproject.toml`
+- Deduplicated the triplicated way-resolution pipeline in `viewer/routes.py` into a
+  shared `_resolve_way` helper, and documented the `MapData` shallow-vs-deep copy
+  invariant
+- Removed the unused multi-robot `robot_id` scaffolding from the tracker (parameter,
+  telemetry field, and `helhest.yaml` entry) — the viewer targets a single robot
+
+### Added
+
+- Static type checking with `mypy` (`[tool.mypy]` in `pyproject.toml`), enforced
+  in CI (`typecheck` job) and as a pre-commit hook, to catch bugs like
+  keyword-only-argument mismatches and inconsistent Flask route return types
+- Interactive viewer: `GET /api/export/geojson` endpoint and toolbar button to download the merged (annotation-resolved) map as a `.geojson` file, for use in QGIS/geojson.io
+- Unit tests for `osm_cloud` pure helper functions (`create_grid`, `points_near_ref`, `transform_points`, `split_ways_to_points`)
+- `pytest-cov` coverage reporting in CI
+- `.pre-commit-config.yaml` for local ruff lint/format checks
+- Documented the `map_data_info` CLI (including `--validate`), the viewer's `--data-dir`/`--host`/`--port` flags, and the `THUNDERFOREST_API_KEY`/`SEZNAM_API_KEY` environment variables in the README and viewer docs
+- Unit test for the `osm_cloud` ROS node initialization (parameter wiring, publishers, timer)
+- Tests for `parse_osm_rels` multipolygon member-way tagging, `combine_ways` disconnected members, `Way.to_pcd_points` cache invalidation, empty-GPX return shape, the off-path zero-cost regression, and launch-argument consumption
+- NumPy-style docstrings for `pathsolver/grid_constructor.py`, `viewer/helpers.py`, and the `viewer/routes.py` handlers
+
 ## [1.2.0] — 2026-07-14
 
 ### Fixed

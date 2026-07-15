@@ -1,3 +1,16 @@
+"""
+Support functions for the interactive way-editing viewer.
+
+This module has two halves. The first converts between :class:`MapData`
+UTM geometry and lon/lat GeoJSON for the web viewer, and persists user
+annotations (deletions, splits, tag overrides, node moves/additions) to a
+JSON store. The second half is the "way-edit pipeline": functions that
+take a stored edit (a set of deleted/moved/added/split node IDs) and
+rebuild a :class:`~map_data.utils.way.Way`'s ``nodes`` list and Shapely
+``line`` geometry to reflect it, handling both plain ``LineString`` ways
+and ways stored as a buffered ``Polygon`` (paths/roads drawn with width).
+"""
+
 import contextlib
 import copy
 import json
@@ -40,6 +53,25 @@ def ring_to_latlon(
     zone_number: int,
     zone_letter: str,
 ) -> list[list[float]]:
+    """
+    Convert a ring/line of UTM coordinates to GeoJSON-ordered lon/lat pairs.
+
+    Parameters
+    ----------
+    coords : list of (float, float)
+        Sequence of ``(easting, northing)`` UTM coordinates.
+    zone_number : int
+        UTM zone number shared by all coordinates.
+    zone_letter : str
+        UTM zone letter shared by all coordinates.
+
+    Returns
+    -------
+    list of [float, float]
+        One ``[lon, lat]`` pair per input coordinate, in GeoJSON axis order
+        (longitude first).
+
+    """
     result = []
     for x, y in coords:
         lat, lon = utm.to_latlon(x, y, zone_number, zone_letter)
@@ -52,6 +84,32 @@ def geom_to_geojson(
     zone_number: int,
     zone_letter: str,
 ) -> dict[str, Any] | None:
+    """
+    Convert a single Shapely UTM geometry to a GeoJSON geometry dict.
+
+    Handles ``Polygon`` (including interior holes), ``MultiPolygon``, and
+    ``LineString`` geometries; all other geometry types return ``None``.
+    ``None`` is also returned if *geom*'s declared ``geom_type`` does not
+    match its actual Python class (e.g. a proxy/mixed object), since the
+    coordinate extraction below is type-specific.
+
+    Parameters
+    ----------
+    geom : LineString, Polygon, or MultiPolygon
+        Shapely geometry in UTM coordinates.
+    zone_number : int
+        UTM zone number of *geom*.
+    zone_letter : str
+        UTM zone letter of *geom*.
+
+    Returns
+    -------
+    dict or None
+        GeoJSON geometry object (``{"type": ..., "coordinates": ...}``)
+        with coordinates converted to lon/lat via :func:`ring_to_latlon`,
+        or ``None`` if the geometry type is unsupported.
+
+    """
     gtype = geom.geom_type
     if gtype == "Polygon":
         if not isinstance(geom, _SPoly):
@@ -79,6 +137,37 @@ def geom_to_geojson(
 
 
 def mapdata_to_geojson(map_data: "MapData") -> dict[str, Any]:
+    """
+    Convert a :class:`MapData` instance into a single GeoJSON FeatureCollection.
+
+    Emits one Feature per way in ``roads_list``, ``footways_list``,
+    ``barriers_list``, and (if present) ``crossroads_list``, tagged with a
+    ``"category"`` property (``"road"``, ``"footway"``, ``"barrier"``, or
+    ``"crossroad"``), plus one Point Feature per waypoint (category
+    ``"waypoint"``). Ways whose geometry fails to convert (e.g. an
+    unsupported type, per :func:`geom_to_geojson`) are logged and skipped
+    rather than raising.
+
+    Each way Feature's ``properties`` include:
+
+    - ``is_node`` : ``True`` only for barrier features that have no
+      constituent OSM nodes (i.e. features synthesized from a single
+      obstacle node rather than parsed from a way).
+    - ``in_out`` : the way's :attr:`~map_data.utils.way.Way.in_out`
+      direction hint, as set during parsing.
+
+    Parameters
+    ----------
+    map_data : MapData
+        Source of ways, waypoints, and the UTM zone used to project
+        everything back to lon/lat.
+
+    Returns
+    -------
+    dict
+        A GeoJSON ``{"type": "FeatureCollection", "features": [...]}`` dict.
+
+    """
     features = []
     zn, zl = map_data.zone_number, map_data.zone_letter
 
@@ -132,6 +221,26 @@ _locks_lock = threading.Lock()
 
 
 def _get_annotation_lock(path: str) -> threading.Lock:
+    """
+    Return the process-wide lock guarding writes to a given annotation file.
+
+    Locks are created lazily and keyed by *path* (as given, not resolved),
+    so callers should pass a consistent path string for the same file to
+    actually serialize on the same lock. Locks are never removed, so the
+    ``_annotation_locks`` dict grows by one entry per distinct path for the
+    life of the process.
+
+    Parameters
+    ----------
+    path : str
+        Path to the annotation JSON file, used as the lock dict key.
+
+    Returns
+    -------
+    threading.Lock
+        The lock instance associated with *path*.
+
+    """
     with _locks_lock:
         if path not in _annotation_locks:
             _annotation_locks[path] = threading.Lock()
@@ -139,6 +248,25 @@ def _get_annotation_lock(path: str) -> threading.Lock:
 
 
 def load_annotations(path: str) -> dict[str, Any]:
+    """
+    Load the annotation store from *path*, or return a fresh empty store.
+
+    An empty/default store (``{"version": 1, "annotations": []}``) is
+    returned both when *path* does not exist and when it exists but
+    contains invalid JSON (in the latter case a warning is logged; the
+    corrupt file itself is left untouched on disk).
+
+    Parameters
+    ----------
+    path : str
+        Path to the annotation JSON file.
+
+    Returns
+    -------
+    dict
+        The parsed annotation store, or a fresh default store.
+
+    """
     p = Path(path)
     if p.is_file():
         try:
@@ -150,6 +278,23 @@ def load_annotations(path: str) -> dict[str, Any]:
 
 
 def save_annotations(path: str, data: dict[str, Any]) -> None:
+    """
+    Atomically write the annotation store to *path*.
+
+    Serializes *data* as indented JSON to a temp file in the same
+    directory, then ``os.replace``s it over *path* — so readers never see a
+    partially written file. Writes are serialized per-path via
+    :func:`_get_annotation_lock` to guard against concurrent writers in the
+    same process; the temp file is cleaned up if writing fails.
+
+    Parameters
+    ----------
+    path : str
+        Destination path for the annotation JSON file.
+    data : dict
+        Annotation store to serialize.
+
+    """
     lock = _get_annotation_lock(path)
     with lock:
         p = Path(path)
@@ -166,7 +311,24 @@ def save_annotations(path: str, data: dict[str, Any]) -> None:
 
 def get_deleted_way_ids(store: dict[str, Any]) -> set[int | str]:
     """
-    Return set of deleted way IDs, handling both old (int list) and new (dict list) formats.
+    Return the set of way IDs deleted in *store*.
+
+    Supports both the legacy ``store["deleted_ways"]`` format (a flat list
+    of raw IDs) and the current format (a list of dicts with an ``"id"``
+    key, which additionally carries metadata like a timestamp). Way IDs may
+    be ``int`` (original OSM ways) or ``str`` (virtual IDs of the form
+    ``"<original_id>:<segment_index>"`` produced by :func:`split_way`).
+
+    Parameters
+    ----------
+    store : dict
+        Annotation store, as returned by :func:`load_annotations`.
+
+    Returns
+    -------
+    set of int or str
+        IDs of all deleted ways.
+
     """
     dw = store.get("deleted_ways", [])
     return {(d["id"] if isinstance(d, dict) else d) for d in dw}
@@ -174,7 +336,24 @@ def get_deleted_way_ids(store: dict[str, Any]) -> set[int | str]:
 
 def get_deleted_node_ids(store: dict[str, Any], way_id: int | str) -> set[int]:
     """
-    Return set of deleted node IDs for a given way_id, handling both storage formats.
+    Return the set of deleted node IDs belonging to a given way.
+
+    Supports both the legacy ``store["deleted_nodes"]`` format (a dict
+    mapping ``str(way_id)`` to a list of node IDs) and the current format
+    (a flat list of ``{"way_id": ..., "node_id": ...}`` dicts).
+
+    Parameters
+    ----------
+    store : dict
+        Annotation store, as returned by :func:`load_annotations`.
+    way_id : int or str
+        ID of the way to look up deleted nodes for.
+
+    Returns
+    -------
+    set of int
+        OSM node IDs deleted from *way_id*.
+
     """
     dn = store.get("deleted_nodes", [])
     if isinstance(dn, dict):
@@ -184,7 +363,25 @@ def get_deleted_node_ids(store: dict[str, Any], way_id: int | str) -> set[int]:
 
 def get_split_node_ids(store: dict[str, Any], way_id: int | str) -> list[int]:
     """
-    Return list of node IDs where the given way should be split.
+    Return the node IDs at which a given way should be split.
+
+    Looked up in ``store["split_ways"]`` under the string key
+    ``str(way_id)``. Intended to be passed straight to :func:`split_way`
+    along with the way object.
+
+    Parameters
+    ----------
+    store : dict
+        Annotation store, as returned by :func:`load_annotations`.
+    way_id : int or str
+        ID of the way to look up split points for.
+
+    Returns
+    -------
+    list of int
+        Node IDs (as ints, coerced for comparison against OSM node IDs) at
+        which *way_id* should be split. Empty if no splits are recorded.
+
     """
     splits = store.get("split_ways") or {}
     way_splits = splits.get(str(way_id), [])
@@ -200,7 +397,54 @@ def split_way(
     nodes_cache: dict[int, dict[str, Any]] | None = None,
 ) -> list["Way"]:
     """
-    Split a way at specified node IDs into a list of new Way objects.
+    Split a way into segments at the given interior node IDs.
+
+    Only interior nodes are honoured as split points — a split ID matching
+    the first or last node of *way* is ignored, since it would produce a
+    zero-length segment. Returns the original *way* unchanged (as a
+    single-element list) for a number of cases where splitting is not
+    applicable or not possible: no *split_nids* given, no geometry, no
+    nodes, a closed way (first and last node IDs equal — splitting a loop
+    is not supported), or fewer than two resulting segments.
+
+    For ways whose geometry is a buffered ``Polygon`` (paths/roads with a
+    drawn width rather than a bare centerline), the buffer radius is
+    reconstructed from the isoperimetric relation between the polygon's
+    perimeter and area (``r = (p - sqrt(p^2 - 4*pi*a)) / (2*pi)``, falling
+    back to ``a / p`` if the discriminant is negative), and each output
+    segment's geometry is re-buffered from its centerline by that same
+    radius. For a plain ``LineString`` way, node coordinates are taken
+    directly from the geometry; otherwise (buffered case, or missing
+    node-level coordinates) the centerline is reconstructed from node
+    lat/lon — first from ``way.nodes`` objects' own ``lat``/``lon``
+    attributes if present, else from *nodes_cache* — which requires
+    *zone_number* and *zone_letter* to reproject back to UTM.
+
+    Parameters
+    ----------
+    way : Way
+        Way to split. Must have a non-``None`` ``line`` and a non-closed
+        ``nodes`` list to be split at all.
+    split_nids : list of int
+        Interior node IDs at which to cut the way.
+    zone_number : int, optional
+        UTM zone number, required to reconstruct centerline coordinates
+        from node lat/lon when the geometry itself doesn't carry per-node
+        coordinates (buffered-polygon ways).
+    zone_letter : str, optional
+        UTM zone letter, paired with *zone_number*.
+    nodes_cache : dict, optional
+        Fallback ``{node_id: {"lat": ..., "lon": ...}}`` lookup used when a
+        node object in ``way.nodes`` doesn't carry its own coordinates.
+
+    Returns
+    -------
+    list of Way
+        Two or more segments, each a shallow copy of *way* with its own
+        ``nodes`` slice and recomputed ``line``, and with ``id`` rewritten
+        to ``f"{way.id}:{index}"`` (a virtual ID); or ``[way]`` unchanged if
+        splitting did not apply or did not produce multiple segments.
+
     """
     if not split_nids:
         return [way]
@@ -354,7 +598,7 @@ def migrate_change_log(store: dict[str, Any]) -> None:
             untracked_moves.append({"type": "move", "id": wid, "category": "unknown", "label": ""})
 
     tracked_splits = {(e.get("way_id"), e.get("node_id")) for e in cl if e.get("type") == "split"}
-    untracked_splits = []
+    untracked_splits: list[dict[str, Any]] = []
     for wid_str, nids in store.get("split_ways", {}).items():
         wid = int(wid_str)
         untracked_splits.extend(
@@ -384,7 +628,27 @@ def get_node_position_overrides(
     way_id: int | str,
 ) -> dict[int, dict[str, float]]:
     """
-    Return {node_id (int): {lat, lon}} for position overrides on a given way.
+    Return the node position overrides recorded for a given way.
+
+    *way_id* is normalized to its original OSM way ID by stripping any
+    ``":<segment_index>"`` suffix, so overrides recorded before a way was
+    split (under the original ID) are still found via any of its split
+    segment IDs.
+
+    Parameters
+    ----------
+    store : dict
+        Annotation store, as returned by :func:`load_annotations`.
+    way_id : int or str
+        ID of the way (original or a ``"<original_id>:<index>"`` split
+        segment ID) to look up overrides for.
+
+    Returns
+    -------
+    dict of {int: dict}
+        Maps node ID to ``{"lat": float, "lon": float}``. Empty if no
+        overrides are recorded for the way.
+
     """
     original_way_id_str = str(way_id).split(":")[0]
     return {
@@ -400,17 +664,75 @@ def apply_node_position_overrides(
     zone_letter: str,
     nodes_cache: dict[int, dict[str, Any]] | None = None,
     category: str | None = None,
-) -> "Way":
+) -> "Way | None":
     """
-    Return a copy of way with geometry updated from node position overrides.
+    Return a copy of *way* with node positions moved per *overrides*.
 
-    overrides: {node_id (int): {"lat": float, "lon": float}}
-    For non-overridden nodes, nodes_cache is consulted before falling back to
-    geometry coordinates (geometry coords are unreliable for buffered polygons).
+    For each node, the new lat/lon is resolved in priority order: an entry
+    in *overrides*, else *nodes_cache*, else (last resort) the node's
+    coordinate as currently stored in ``way.line`` — geometry coordinates
+    are the least trustworthy source because for a buffered ``Polygon``
+    way the exterior ring is the buffer outline, not the original
+    centerline. A way with no OSM nodes at all (e.g. a synthetic barrier
+    point) is instead translated as a rigid body: its geometry is shifted
+    so its centroid moves to the first override's position.
+
+    Geometry reconstruction depends on ``way.line``'s type:
+
+    - ``LineString`` : rebuilt directly from the new coordinates.
+    - ``Polygon`` : interpreted as a buffered centerline (unless *category*
+      is ``"barrier"`` and the way is closed, or the way has an
+      ``area=yes`` tag, in which case it is a genuine flat area and is
+      rebuilt as a ``Polygon`` from the node ring directly). Otherwise the
+      buffer radius is recovered from the polygon's perimeter/area via the
+      isoperimetric relation (clamped to a minimum of ``0.01``) and the new
+      centerline is re-buffered by that radius. If re-buffering fails and
+      there are enough points, falls back to a flat ``Polygon``; genuinely
+      unreconstructable geometry causes the function to return ``None``
+      (breaking the ``-> "Way"`` type hint — callers should guard for it).
+
+    Closure (first node ID equals last node ID, or — for a ``LineString``
+    with no node IDs — ``geom.is_closed``) is preserved by appending the
+    first coordinate to the end of the new coordinate list before
+    dispatching on geometry type; this must happen for closed barriers too,
+    since buffering an open polyline instead of a closed ring produces a
+    rounded capsule shape rather than a proper ring buffer.
+
+    Parameters
+    ----------
+    way : Way
+        Way whose geometry should be updated. Returned unchanged if
+        *overrides* is falsy, if fewer than two usable coordinates can be
+        resolved, or if reconstruction is not possible for the geometry
+        type.
+    overrides : dict of {int: dict}
+        ``{node_id: {"lat": float, "lon": float}}`` new positions to apply.
+    zone_number : int
+        UTM zone number to project overridden/cached lat/lon back into.
+    zone_letter : str
+        UTM zone letter, paired with *zone_number*.
+    nodes_cache : dict, optional
+        Fallback ``{node_id: {"lat": ..., "lon": ...}}`` lookup for nodes
+        not present in *overrides*.
+    category : str, optional
+        Way category (e.g. ``"barrier"``); only ``"barrier"`` changes
+        behaviour, selecting flat-polygon reconstruction for closed areas
+        instead of ring re-buffering.
+
+    Returns
+    -------
+    Way or None
+        A shallow copy of *way* with ``line`` replaced by the updated
+        geometry, or the original *way* if no update was applicable, or
+        ``None`` if the geometry could not be reconstructed (see above;
+        callers should guard for this, e.g. ``result or way``).
+
     """
     if not overrides:
         return way
-    geom = way.line
+    # way.line is typed Optional at the Way level, but every Way reaching this
+    # function already has a concrete geometry from OSM parsing / prior edits.
+    geom: BaseGeometry = way.line  # type: ignore[assignment]
     node_ids = [getattr(n, "id", n) for n in way.nodes]
     if not node_ids:
         # No OSM nodes (e.g. individual barrier node): translate geometry by centroid shift.
@@ -554,7 +876,32 @@ def geojson_geom_to_utm(
     zone_letter: str,
 ) -> "BaseGeometry | None":
     """
-    GeoJSON geometry (lon/lat) → Shapely geometry (UTM, same zone as mapdata).
+    Convert a GeoJSON geometry dict (lon/lat) to a Shapely geometry (UTM).
+
+    Inverse of :func:`geom_to_geojson`. Supports ``LineString``,
+    ``Polygon`` (exterior ring plus any interior/hole rings), and
+    ``MultiPolygon``; any other ``"type"`` returns ``None``. Every
+    coordinate is projected independently via `utm.from_latlon` with the
+    zone forced to *zone_number*/*zone_letter*, so the result lands in the
+    same UTM zone as the rest of the map data regardless of where the
+    point would naturally fall.
+
+    Parameters
+    ----------
+    geometry : dict
+        GeoJSON geometry object, e.g. ``{"type": "Polygon", "coordinates": [...]}``
+        with coordinates in ``[lon, lat]`` order.
+    zone_number : int
+        UTM zone number to force all coordinates into.
+    zone_letter : str
+        UTM zone letter to force all coordinates into.
+
+    Returns
+    -------
+    BaseGeometry or None
+        The corresponding ``LineString``, ``Polygon``, or ``MultiPolygon``
+        in UTM coordinates, or ``None`` for an unsupported geometry type.
+
     """
 
     def pt(c: list[float] | tuple[float, float]) -> tuple[float, float]:
@@ -587,7 +934,51 @@ def apply_added_nodes(
     zone_number: int,
     zone_letter: str,
 ) -> "Way":
-    """Return a copy of way with synthetic added nodes inserted into nodes list and geometry."""
+    """
+    Return a copy of *way* with user-added synthetic nodes spliced in.
+
+    Reads ``store["added_nodes"]`` entries matching this way's original ID
+    (the ``":<index>"`` split suffix, if any, is stripped for the lookup),
+    each of the form ``{"id": synth_id, "after_node_id": ..., "lat": ...,
+    "lon": ...}``, and inserts ``synth_id`` into ``way.nodes`` immediately
+    after ``after_node_id``. An entry whose ``after_node_id`` is not found
+    in the current node list (e.g. because that node was itself deleted)
+    is silently skipped. Position for the new node comes from a matching
+    ``node_position_overrides`` entry if present, else the ``lat``/``lon``
+    recorded on the ``added_nodes`` entry itself.
+
+    Only ``LineString`` and ``Polygon`` geometries are handled; any other
+    geometry type is returned unchanged. For a ``Polygon`` way, the ring
+    stored is the *buffer outline*, not the centerline, so inserting a
+    centerline coordinate there would create a spike — geometry is left
+    untouched and only ``way.nodes`` is updated, meaning the visual
+    line/buffer will not reflect the new node until the way is otherwise
+    rebuilt from its node list. For a closed ``LineString`` (last
+    coordinate repeats the first), an insertion at the very end is placed
+    just before that repeated closing coordinate rather than after it.
+
+    Parameters
+    ----------
+    way : Way
+        Way to augment. Returned unchanged if there are no matching
+        ``added_nodes`` entries, if its geometry is not a ``LineString`` or
+        ``Polygon``, or if every entry's ``after_node_id`` failed to
+        resolve.
+    store : dict
+        Annotation store, as returned by :func:`load_annotations`.
+    zone_number : int
+        UTM zone number to project added-node lat/lon into.
+    zone_letter : str
+        UTM zone letter, paired with *zone_number*.
+
+    Returns
+    -------
+    Way
+        A shallow copy of *way* with updated ``nodes`` (and, for
+        ``LineString`` geometry, an updated ``line``), or the original
+        *way* if no node was actually inserted.
+
+    """
     original_id = int(str(way.id).split(":")[0])
     added_for_way = [a for a in store.get("added_nodes", []) if a.get("way_id") == original_id]
     if not added_for_way:
@@ -599,7 +990,9 @@ def apply_added_nodes(
     w.nodes = [getattr(n, "id", n) for n in way.nodes]
     node_ids: list = w.nodes  # mutable reference
 
-    geom = way.line
+    # way.line is typed Optional at the Way level, but every Way reaching this
+    # function already has a concrete geometry from OSM parsing / prior edits.
+    geom: BaseGeometry = way.line  # type: ignore[assignment]
     is_linestring = geom.geom_type == "LineString"
     is_polygon = geom.geom_type == "Polygon"
     if not is_linestring and not is_polygon:
@@ -663,7 +1056,68 @@ def rebuild_way_without_nodes(
     category: str | None = None,
 ) -> "Way | None":
     """
-    Return a shallow copy of way with del_nids removed, or None if geometry becomes invalid.
+    Return a copy of *way* with the given node IDs removed from it.
+
+    Filters ``way.nodes`` to drop *del_nids*, then rebuilds ``line`` to
+    match. Deletion never merely drops points from the existing geometry
+    without also considering closure/buffering, since either could corrupt
+    the shape; this largely mirrors the geometry-type handling in
+    :func:`apply_node_position_overrides`, keyed off whether *zone_number*
+    is given rather than off explicit overrides:
+
+    - ``LineString`` : coordinates are filtered by node index directly
+      (``zone_number`` is not needed). Closure (first node ID equals last,
+      or ``geom.is_closed`` as a fallback) is preserved by re-appending the
+      first coordinate if dropping nodes broke it.
+    - ``Polygon`` *with* *zone_number* given : treated as a buffered
+      centerline (or, for a closed ``category="barrier"`` way or an
+      ``area=yes`` tagged way, a flat area) and reconstructed the same way
+      as in :func:`apply_node_position_overrides` — remaining node
+      positions are read from each node object's own ``lat``/``lon`` or
+      else *nodes_cache*, the loop is re-closed if needed, and (for the
+      re-buffer case) a new buffer radius is derived from the *original*
+      geometry's perimeter/area via the isoperimetric relation. If
+      re-buffering raises, falls back to the bare (unbuffered) centerline
+      rather than failing outright.
+    - ``Polygon`` *without* *zone_number* : falls back to filtering the
+      polygon's own exterior-ring coordinates by index (no node-level
+      lat/lon available), re-closing the ring if needed. Requires at least
+      3 remaining coordinates.
+
+    Any other geometry type, or a case where filtering leaves fewer than 2
+    (LineString) / 3 (Polygon fallback) / 4 (reconstructed ring) usable
+    coordinates, causes ``None`` to be returned instead of a Way — this
+    signals to callers that the way became degenerate and should be
+    dropped entirely, not just left unmodified.
+
+    Parameters
+    ----------
+    way : Way
+        Way to filter. If fewer than 2 nodes remain after removing
+        *del_nids*, ``None`` is returned immediately.
+    del_nids : set or list of int
+        Node IDs to remove from *way*.
+    zone_number : int, optional
+        UTM zone number; if given, node positions for ``Polygon``
+        reconstruction are resolved from node/``nodes_cache`` lat/lon
+        instead of the (buffer-outline) geometry coordinates.
+    zone_letter : str, optional
+        UTM zone letter, paired with *zone_number*.
+    nodes_cache : dict, optional
+        Fallback ``{node_id: {"lat": ..., "lon": ...}}`` lookup used when a
+        node object doesn't carry its own coordinates.
+    category : str, optional
+        Way category; only ``"barrier"`` changes behaviour, selecting
+        flat-polygon reconstruction for closed areas instead of ring
+        re-buffering.
+
+    Returns
+    -------
+    Way or None
+        A shallow copy of *way* with ``nodes`` and ``line`` updated, or
+        ``None`` if the deletion left the way with unusable/degenerate
+        geometry.
+
     """
     node_ids = [getattr(n, "id", n) for n in way.nodes]
     keep = [i for i, nid in enumerate(node_ids) if nid not in del_nids]
@@ -671,7 +1125,9 @@ def rebuild_way_without_nodes(
         return None
     w = copy.copy(way)
     w.nodes = [way.nodes[i] for i in keep]
-    geom = way.line
+    # way.line is typed Optional at the Way level, but every Way reaching this
+    # function already has a concrete geometry from OSM parsing / prior edits.
+    geom: BaseGeometry = way.line  # type: ignore[assignment]
 
     if geom.geom_type == "LineString":
         coords = list(geom.coords)

@@ -9,7 +9,6 @@ from typing import Any
 
 import numpy as np
 import shapely as sh
-from joblib import Parallel, delayed
 from shapely.geometry import LineString
 
 from map_data.map_data import MapData
@@ -87,7 +86,7 @@ class ReplanPath:
             "gravel": 0.2,
             "dirt": 0.3,
             "grass": 0.5,
-            "sand": 0.7,
+            "sand": 0.4,
         },
     )
     DEFAULT_OFF_PATH_COST: float = _DEFAULTS.get("default_off_path_cost", 0.9)
@@ -167,9 +166,9 @@ class ReplanPath:
             i: int,
             path: np.ndarray,
             _args: argparse.Namespace,
-        ) -> tuple[list[np.ndarray] | None, int]:
+        ) -> list[np.ndarray] | None:
             if _is_cancelled(self.transfer_id):
-                return None, i
+                return None
 
             start = path[i]
             goal = path[i + 1]
@@ -182,22 +181,25 @@ class ReplanPath:
                     way = self._astar(start[:2], goal[:2])
 
                 if way is None:
-                    return None, i
+                    return None
                 segment_path.extend(way[1:-1])
-            return segment_path, i
+            return segment_path
+
+        # This is pure-Python, GIL-bound work, so it runs sequentially. Warm the
+        # grid cache once up front to avoid every segment lazily (and redundantly)
+        # rebuilding it in _astar/_rrt_star.
+        if self.path_grid.grid_2d_cache is None:
+            grid_2d = self.path_grid.get_grid_2d()
+            self.path_grid.grid_2d_cache = self.path_grid.burn_obstacles(grid_2d, self.obstacles)
 
         new_path: list[np.ndarray] = []
-        results = Parallel(n_jobs=-1, backend="threading")(
-            delayed(process_segment)(i, path, self.args) for i in range(len(path) - 1)
-        )
+        for i in range(len(path) - 1):
+            segment_path = process_segment(i, path, self.args)
 
-        if _is_cancelled(self.transfer_id):
-            _discard_cancelled(self.transfer_id)
-            return None
+            if _is_cancelled(self.transfer_id):
+                _discard_cancelled(self.transfer_id)
+                return None
 
-        # Sort results by index to maintain path order
-        results.sort(key=lambda x: x[1])
-        for segment_path, _ in results:
             if segment_path is None:
                 logger.warning("%s failed to find a path.", algorithm)
                 return None
@@ -353,7 +355,9 @@ if __name__ == "__main__":
     path_data = parse_path(str(path_file))
 
     if args.file is None:
-        map_data = MapData(path_data, coords_type="array")
+        # parse_path() returns [] on failure; MapData(..., coords_type="array")
+        # will raise on the malformed input, which is desired CLI-script behavior.
+        map_data = MapData(path_data, coords_type="array")  # type: ignore[arg-type]
         map_data.run_queries()
         ret = map_data.run_parse()
         if ret:

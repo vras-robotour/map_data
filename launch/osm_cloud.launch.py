@@ -11,10 +11,35 @@ from launch_ros.substitutions import FindPackageShare
 from launch import LaunchDescription
 
 
+def _resolve_data_file(name: str, mapdata_path: str) -> str:
+    """Resolve a map-data filename against ``mapdata_path``.
+
+    Empty values and absolute paths are returned unchanged; a bare filename is
+    joined onto ``mapdata_path`` (the data directory) when the resulting file
+    exists, otherwise it is passed through untouched so downstream error
+    handling can report the missing file.
+    """
+    if not name:
+        return name
+    candidate = Path(name)
+    if candidate.is_absolute():
+        return name
+    joined = Path(mapdata_path) / name
+    return str(joined) if joined.exists() else name
+
+
 def launch_setup(context, *args, **kwargs):
     config_file = LaunchConfiguration("config_file").perform(context)
     osm_grid_params = LaunchConfiguration("osm_grid_params").perform(context)
     publish_static_tf = LaunchConfiguration("publish_static_tf").perform(context).lower() == "true"
+
+    # Resolve mapdata_file / gpx_file against the mapdata_path data directory
+    # when they are given as bare filenames.
+    mapdata_path = LaunchConfiguration("mapdata_path").perform(context)
+    mapdata_file = _resolve_data_file(
+        LaunchConfiguration("mapdata_file").perform(context), mapdata_path
+    )
+    gpx_file = _resolve_data_file(LaunchConfiguration("gpx_file").perform(context), mapdata_path)
 
     # Resolve config_file if it's just a filename
     config_path = Path(config_file)
@@ -54,8 +79,8 @@ def launch_setup(context, *args, **kwargs):
             config_file,
             osm_grid_params,
             {
-                "mapdata_file": LaunchConfiguration("mapdata_file"),
-                "gpx_file": LaunchConfiguration("gpx_file"),
+                "mapdata_file": mapdata_file,
+                "gpx_file": gpx_file,
                 "auto_utm": publish_static_tf,
                 "grid_topic": LaunchConfiguration("grid_topic"),
             },

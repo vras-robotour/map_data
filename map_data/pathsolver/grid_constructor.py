@@ -1,3 +1,12 @@
+"""
+Discretized cost grid construction for grid-based path planning.
+
+This module builds a regular 2D grid of traversal costs over a bounding
+box, combining a default off-path cost, per-way costs derived from
+``highway``/``surface`` OSM tags with a smooth distance-based falloff, and
+hard obstacle burning (infinite cost) for barrier geometries.
+"""
+
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -5,6 +14,8 @@ import shapely as sh
 from matplotlib.path import Path
 from scipy.spatial import cKDTree
 
+# Segments shorter than this (in the same units as grid coordinates, i.e.
+# metres) are treated as coincident points rather than subdivided further.
 TOLERANCE = 1e-3
 
 if TYPE_CHECKING:
@@ -12,6 +23,49 @@ if TYPE_CHECKING:
 
 
 class PathGrid:
+    """
+    Regular grid of traversal costs over a rectangular world-coordinate area.
+
+    The grid is a raster of square cells of side ``cell_size`` covering
+    ``[low, high)``. Costs start at ``default_off_path_cost`` everywhere and
+    are lowered near footway/road centerlines (weighted by ``highway_costs``
+    and ``surface_costs``) and raised to infinity inside obstacle geometries.
+
+    Attributes
+    ----------
+    low : np.ndarray
+        ``(2,)`` array, the ``(x, y)`` world coordinate of the grid's lower
+        corner.
+    high : np.ndarray
+        ``(2,)`` array, the ``(x, y)`` world coordinate of the grid's upper
+        corner (exclusive — see :meth:`create_empty_grid`).
+    cell_size : float
+        Side length of a grid cell, in the same units as *low*/*high*
+        (metres for UTM coordinates).
+    highway_costs : dict of {str: float}
+        Maps an OSM ``highway`` tag value (e.g. ``"footway"``, ``"path"``)
+        to a base traversal cost. Unknown tags default to ``0.5`` (see
+        :meth:`fill`).
+    surface_costs : dict of {str: float}
+        Maps an OSM ``surface`` tag value to an additive cost penalty.
+        Unknown tags default to ``0.0``.
+    default_off_path_cost : float
+        Cost assigned to cells that are not within ``max_path_dist`` of any
+        way, and the cost that a cell falls back towards at that distance.
+    path_cost_cap : float
+        Upper bound applied to a way's combined ``highway`` + ``surface``
+        cost before distance falloff is applied.
+    grid : np.ndarray
+        Flat point representation of the grid. ``(N, 3)`` columns
+        ``[x, y, 0]`` immediately after construction (see
+        :meth:`create_empty_grid`); replaced by an ``(N, 4)`` array with
+        columns ``[x, y, 0, cost]`` after :meth:`fill` is called.
+    grid_2d_cache : np.ndarray or None
+        Most recent rasterized, obstacle-burned cost grid returned by
+        :meth:`fill`, or ``None`` before ``fill`` has been called.
+
+    """
+
     def __init__(
         self,
         low: tuple[float, float],
@@ -22,6 +76,28 @@ class PathGrid:
         default_off_path_cost: float = 0.9,
         path_cost_cap: float = 0.85,
     ) -> None:
+        """
+        Initialize an empty cost grid over a rectangular world-coordinate area.
+
+        Parameters
+        ----------
+        low : tuple of float
+            ``(x, y)`` world coordinate of the grid's lower corner.
+        high : tuple of float
+            ``(x, y)`` world coordinate of the grid's upper corner.
+        cell_size : float
+            Side length of a grid cell (same units as *low*/*high*).
+        highway_costs : dict of {str: float}
+            Base traversal cost per OSM ``highway`` tag value.
+        surface_costs : dict of {str: float}
+            Additive cost penalty per OSM ``surface`` tag value.
+        default_off_path_cost : float
+            Cost for cells far from any way (default ``0.9``).
+        path_cost_cap : float
+            Maximum combined ``highway`` + ``surface`` cost for a way,
+            before distance-based falloff (default ``0.85``).
+
+        """
         self.low = np.array(low)
         self.high = np.array(high)
         self.cell_size = cell_size
@@ -34,6 +110,24 @@ class PathGrid:
         self.grid_2d_cache: np.ndarray | None = None
 
     def create_empty_grid(self) -> np.ndarray:
+        """
+        Build the flat point representation of the grid, with no costs yet.
+
+        Cell centers are generated with ``np.arange(low, high, cell_size)``
+        along each axis, so the grid covers ``[low, high)`` — the *high*
+        corner itself is excluded, and (as with any float ``arange``) the
+        exact point count can be off by one cell near the upper edge due to
+        floating-point rounding. Points are laid out row-major with *x*
+        varying fastest (`numpy.meshgrid` default ``"xy"`` indexing).
+
+        Returns
+        -------
+        np.ndarray
+            ``(N, 3)`` array with columns ``[x, y, 0]``; the third column is
+            an unused placeholder (later replaced by a cost column in
+            :meth:`fill`).
+
+        """
         xs = np.arange(self.low[0], self.high[0], self.cell_size)
         ys = np.arange(self.low[1], self.high[1], self.cell_size)
         # grid is (N, 3) where columns are [x, y, 0]
@@ -46,6 +140,70 @@ class PathGrid:
         highway_types: list[str] | None = None,
         max_path_dist: float = 2.0,
     ) -> np.ndarray:
+        """
+        Populate the grid with path and obstacle costs and rasterize it.
+
+        This is the core cost-assignment routine. It proceeds in several
+        layered passes, each of which can only *lower or override* the
+        result of the previous one for a given cell — later passes win:
+
+        1. Every grid cell starts at ``default_off_path_cost``.
+        2. Obstacle geometries have any path/road geometry subtracted out
+           of them first (so a barrier polygon that happens to overlap a
+           footway does not block the footway itself), then the flat point
+           grid (:attr:`grid`) has cells whose centers fall inside a
+           (post-subtraction) obstacle set to cost ``1.0``.
+        3. Ways in *highway_types* are sampled into a dense point cloud
+           (roughly one point per :attr:`cell_size` of length, via linear
+           interpolation), each point tagged with its way's cost
+           (``min(path_cost_cap, highway_cost + surface_cost)``). Every
+           grid cell within *max_path_dist* of its nearest sampled path
+           point gets a cost that blends quadratically from the way cost
+           (at distance 0) up to ``default_off_path_cost`` (at
+           ``max_path_dist``), via
+           ``way_cost + (default_off_path_cost - way_cost) * (dist / max_path_dist) ** 2``.
+           This is combined with the previous value using ``min``, so a
+           cell that is both near a path *and* inside an obstacle's
+           bounding region ends up with the (lower) path cost in
+           :attr:`grid` — hard blocking is only guaranteed by step 4 below.
+        4. The flat grid is rasterized into a 2D array (:meth:`get_grid_2d`)
+           and obstacles are burned into it as hard ``np.inf`` costs
+           (:meth:`burn_obstacles`), independently of step 2/3. This is
+           what actually prevents a planner from crossing an obstacle; the
+           result is cached in :attr:`grid_2d_cache` and returned.
+
+        Only ways whose geometry intersects the grid bounding box buffered
+        by *max_path_dist* are considered, so paths just outside the grid
+        can still influence the cost of edge cells.
+
+        Parameters
+        ----------
+        map_data : MapData
+            Source of way geometries (:attr:`~map_data.map_data.MapData.footways_list`,
+            :attr:`~map_data.map_data.MapData.roads_list`) and node
+            coordinates (via :meth:`~map_data.map_data.MapData.get_points`).
+        obstacles : list of shapely geometry
+            Hard-obstacle polygons (e.g. barriers/buildings) in the same
+            world coordinates as the grid. ``Polygon``/``MultiPolygon``
+            geometries are honoured (including interior holes); other
+            geometry types are silently ignored by the obstacle-marking
+            steps.
+        highway_types : list of str, optional
+            Which way categories to draw path costs from: any of
+            ``"footway"``, ``"road"``. Defaults to ``["footway"]``.
+        max_path_dist : float
+            Radius of influence of a path centerline, in world units
+            (default ``2.0``). Cells farther than this from every sampled
+            path point keep the (obstacle-adjusted) off-path cost.
+
+        Returns
+        -------
+        np.ndarray
+            The rasterized cost grid, shape ``(num_y, num_x)``, with
+            obstacle cells set to ``np.inf``. Also stored in
+            :attr:`grid_2d_cache`.
+
+        """
         if highway_types is None:
             highway_types = ["footway"]
 
@@ -101,11 +259,17 @@ class PathGrid:
                 if obstacle.geom_type == "Polygon":
                     poly_path = Path(np.array(obstacle.exterior.coords))
                     mask_inside = poly_path.contains_points(path_grid[mask_bbox, :2])
+                    for interior in obstacle.interiors:
+                        hole_path = Path(np.array(interior.coords))
+                        mask_inside &= ~hole_path.contains_points(path_grid[mask_bbox, :2])
                     path_grid[mask_bbox, 3] = np.where(mask_inside, 1.0, path_grid[mask_bbox, 3])
                 elif obstacle.geom_type == "MultiPolygon":
                     for poly in obstacle.geoms:
                         poly_path = Path(np.array(poly.exterior.coords))
                         mask_inside = poly_path.contains_points(path_grid[mask_bbox, :2])
+                        for interior in poly.interiors:
+                            hole_path = Path(np.array(interior.coords))
+                            mask_inside &= ~hole_path.contains_points(path_grid[mask_bbox, :2])
                         path_grid[mask_bbox, 3] = np.where(
                             mask_inside,
                             1.0,
@@ -158,6 +322,28 @@ class PathGrid:
         return self.grid_2d_cache
 
     def get_grid_2d(self) -> np.ndarray:
+        """
+        Rasterize the flat point grid (:attr:`grid`) into a 2D cost array.
+
+        Each point's cell index is recovered with
+        ``floor((coord - low) / cell_size)`` — the inverse of the
+        construction in :meth:`create_empty_grid` — and clipped into range
+        to absorb any floating-point spill at the upper edge. Note this
+        reads column index 3 (cost) of :attr:`grid`, so it must be called
+        after :meth:`fill` has replaced the initial ``(N, 3)`` grid with the
+        ``(N, 4)`` cost-augmented one; calling it beforehand raises an
+        ``IndexError``. Obstacle burning is *not* applied here — see
+        :meth:`burn_obstacles`.
+
+        Returns
+        -------
+        np.ndarray
+            ``(num_y, num_x)`` array of costs, where ``num_x``/``num_y`` are
+            ``ceil((high - low) / cell_size)`` along each axis. The array is
+            transposed so the first axis indexes *y* and the second *x*
+            (row-major raster convention), matching :meth:`burn_obstacles`.
+
+        """
         num_x = int(np.ceil((self.high[0] - self.low[0]) / self.cell_size))
         num_y = int(np.ceil((self.high[1] - self.low[1]) / self.cell_size))
         grid_2d = np.full((num_x, num_y), self.default_off_path_cost, dtype=np.float32)
@@ -174,6 +360,34 @@ class PathGrid:
         grid_2d: np.ndarray,
         obstacles: list[sh.geometry.base.BaseGeometry],
     ) -> np.ndarray:
+        """
+        Set cells covered by obstacle geometries to ``np.inf`` in place.
+
+        For each obstacle, only the sub-rectangle of cell indices overlapping
+        its bounding box is tested (via `matplotlib.path.Path.contains_points`
+        against a mesh of that sub-region's cell centers), so cost is roughly
+        linear in obstacle count rather than total grid size. ``Polygon``
+        interior rings are treated as holes (points inside a hole are not
+        burned). Geometry types other than ``Polygon``/``MultiPolygon`` are
+        silently skipped. Overlapping obstacles simply compound — a cell is
+        ``inf`` if it falls inside *any* obstacle.
+
+        Parameters
+        ----------
+        grid_2d : np.ndarray
+            ``(num_y, num_x)`` cost grid, as returned by :meth:`get_grid_2d`.
+            **Mutated in place** — this is not a copy-on-write operation.
+        obstacles : list of shapely geometry
+            Obstacle polygons in the same world coordinates as the grid.
+
+        Returns
+        -------
+        np.ndarray
+            The same array passed in *grid_2d* (returned for convenience),
+            with obstacle-covered cells set to ``np.inf``. Unchanged (and
+            returned as-is) if *obstacles* is empty.
+
+        """
         if not obstacles:
             return grid_2d
         ny, nx = grid_2d.shape
@@ -205,6 +419,13 @@ class PathGrid:
                     .contains_points(points_bbox)
                     .reshape(len(y), len(x))
                 )
+                for interior in obstacle.interiors:
+                    hole_mask = (
+                        Path(np.array(interior.coords))
+                        .contains_points(points_bbox)
+                        .reshape(len(y), len(x))
+                    )
+                    mask &= ~hole_mask
                 grid_2d[iy_min : iy_max + 1, ix_min : ix_max + 1][mask] = np.inf
             elif obstacle.geom_type == "MultiPolygon":
                 for poly in obstacle.geoms:
@@ -213,5 +434,12 @@ class PathGrid:
                         .contains_points(points_bbox)
                         .reshape(len(y), len(x))
                     )
+                    for interior in poly.interiors:
+                        hole_mask = (
+                            Path(np.array(interior.coords))
+                            .contains_points(points_bbox)
+                            .reshape(len(y), len(x))
+                        )
+                        mask &= ~hole_mask
                     grid_2d[iy_min : iy_max + 1, ix_min : ix_max + 1][mask] = np.inf
         return grid_2d
