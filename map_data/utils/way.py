@@ -61,6 +61,7 @@ class Way:
     line: BaseGeometry | None = None
     in_out: str = ""
     pcd_points: np.ndarray | None = field(default=None, repr=False)
+    _pcd_cache_key: tuple | None = field(default=None, repr=False)
 
     def is_road(self) -> bool:
         """
@@ -135,7 +136,8 @@ class Way:
             or an empty ``(0, 2)`` array if the way has no geometry.
 
         """
-        if self.pcd_points is not None:
+        cache_key = (density, filled)
+        if self._pcd_cache_key == cache_key and self.pcd_points is not None:
             return self.pcd_points
 
         if not self.line:
@@ -160,18 +162,21 @@ class Way:
                 self.pcd_points = np.empty((0, 2))
             else:
                 self.pcd_points = np.array([(p.x, p.y) for p in pts])
+            self._pcd_cache_key = cache_key
         else:
             # For LineString or unfilled Polygon
             geom = self.line
             coords = list(geom.exterior.coords if hasattr(geom, "exterior") else geom.coords)
 
             pcd_points = np.empty((0, 2))
+            step = 1.0 / density
             for i in range(len(coords) - 1):
                 p1 = Point(coords[i])
                 p2 = Point(coords[i + 1])
-                _, line, _ = get_point_line(p1, p2, 0.5)
+                _, line, _ = get_point_line(p1, p2, step)
                 pcd_points = np.concatenate([pcd_points, line])
             self.pcd_points = pcd_points
+            self._pcd_cache_key = cache_key
 
         return self.pcd_points
 

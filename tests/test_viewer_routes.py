@@ -89,6 +89,31 @@ def test_get_mapdata_success(app_client_with_file):
     assert "features" in data
 
 
+def test_export_geojson_missing_param(app_client):
+    client, _ = app_client
+    resp = client.get("/api/export/geojson")
+    assert resp.status_code == 400
+
+
+def test_export_geojson_not_found(app_client):
+    client, _ = app_client
+    resp = client.get("/api/export/geojson?file=missing.mapdata")
+    assert resp.status_code == 404
+
+
+def test_export_geojson_success(app_client_with_file):
+    client, _, filename = app_client_with_file
+    resp = client.get(f"/api/export/geojson?file={filename}")
+    assert resp.status_code == 200
+    assert resp.headers["Content-Type"].startswith("application/geo+json")
+    disposition = resp.headers["Content-Disposition"]
+    assert "attachment" in disposition
+    assert "test.geojson" in disposition
+    data = json.loads(resp.get_data(as_text=True))
+    assert data["type"] == "FeatureCollection"
+    assert "features" in data
+
+
 def test_get_annotations_empty(app_client_with_file):
     client, _, filename = app_client_with_file
     resp = client.get(f"/api/annotations?file={filename}")

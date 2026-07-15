@@ -429,6 +429,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
 
         currentFile = filename;
         document.getElementById('export-btn').disabled = false;
+        document.getElementById('export-geojson-btn').disabled = false;
         setStatus(`Loaded: ${filename}`, 'text-success');
     } catch (err) {
         setStatus(`Error: ${err.message}`, 'text-danger');
@@ -474,6 +475,7 @@ function clearMapData() {
   // Reset UI elements
   document.getElementById('file-select').value = "";
   document.getElementById('export-btn').disabled = true;
+  document.getElementById('export-geojson-btn').disabled = true;
   document.getElementById('feature-search').value = "";
   
   renderAnnotationList();

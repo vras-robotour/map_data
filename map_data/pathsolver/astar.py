@@ -31,10 +31,10 @@ def astar_search[N](
     count = 0
     # Priority queue stores (f_score, count, current_node)
     # f_score = cost + heuristic  # noqa: ERA001
-    q = [(0, count, start_node)]
+    q: list[tuple[float, int, N]] = [(0, count, start_node)]
 
     # visited maps node -> (cost, parent)
-    visited = {start_node: (0, None)}
+    visited: dict[N, tuple[float, N | None]] = {start_node: (0, None)}
     closed = set()
 
     while q:
@@ -47,7 +47,7 @@ def astar_search[N](
         if u == goal_node:
             # Path found, reconstruct
             path = []
-            curr = u
+            curr: N | None = u
             while curr is not None:
                 path.append(curr)
                 curr = visited[curr][1]

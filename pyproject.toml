@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "map_data"
-version = "1.2.0"
+version = "1.2.1"
 # requires-python is intentionally NOT declared: colcon's ament_python build
 # parses the setup() dump with ast.literal_eval, which chokes on the
 # SpecifierSet object it produces. The Python 3.12+ floor is enforced by CI
@@ -23,13 +23,15 @@ dependencies = [
     "PyYAML",
     "matplotlib",
     "scipy",
-    "joblib",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "pytest-cov",
+    "pre-commit",
     "ruff",
+    "mypy",
     "mkdocs",
     "mkdocs-material",
     "mkdocstrings[python]",
@@ -60,3 +62,9 @@ known-first-party = ["map_data"]
 quote-style = "double"
 indent-style = "space"
 docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.12"
+files = ["map_data"]
+# numpy/shapely/overpy/flask_socketio/rclpy/etc. lack complete type stubs.
+ignore_missing_imports = true

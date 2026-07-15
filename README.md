@@ -60,11 +60,23 @@ create_mapdata -d -f coords.gpx
 ros2 run map_data create_mapdata -d -f coords.gpx
 ```
 
+Inspect a `.mapdata` file (stats, or `--validate` for a structural integrity check):
+
+```bash
+map_data_info coords.mapdata
+map_data_info coords.mapdata --validate
+```
+
 Launch the interactive viewer:
 
 ```bash
 map_data_viewer
+# or with an explicit data directory, host, and port:
+map_data_viewer --data-dir /path/to/data --host 0.0.0.0 --port 8080
 ```
+
+Set `THUNDERFOREST_API_KEY` and/or `SEZNAM_API_KEY` in the environment before launching to make
+those keys available to the viewer for the corresponding optional basemap tile layers.
 
 ## License
 

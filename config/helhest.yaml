@@ -1,6 +1,5 @@
 map_data_tracker:
   ros__parameters:
-    robot_id: "robot"
     path_topic: "/path"
     gps_fix_topic: "/gps/fix"
     gps_filtered_topic: "/gps/filtered"
