@@ -476,7 +476,7 @@ def upload_gpx() -> Response:
         if isinstance(e, HTTPException):
             raise
         logger.exception("Error processing GPX upload")
-        abort(500, str(e))
+        abort(500, "Internal server error")
     finally:
         if gpx_tmp_path.exists():
             gpx_tmp_path.unlink()
@@ -1688,9 +1688,9 @@ def create_wormhole() -> Response:
         return jsonify(
             {"success": False, "message": "Failed to capture wormhole code in time"},
         ), 500
-    except Exception as e:
+    except Exception:
         logger.exception("Error creating wormhole")
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": "Internal server error"}), 500
 
 
 @bp.route("/api/cancel_wormhole", methods=["POST"])
