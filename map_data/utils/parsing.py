@@ -247,14 +247,14 @@ def separate_ways(
 
 def buffer_line(way: Way, width: float) -> Way:
     line = way.line
+    if line is None:
+        raise ValueError(f"buffer_line: way {way.id} has no geometry to buffer")
     # Closed roads/footways (e.g. roundabouts) are parsed as Polygon because first==last
     # node. Buffering a Polygon fills its interior; convert to LineString first so the
     # buffer produces an annular ring around the path instead.
     if isinstance(line, geometry.Polygon) and way.tags.get("area") != "yes":
         line = geometry.LineString(line.exterior.coords)
-    # TODO: possible None deref -- way.line is typed as BaseGeometry | None; no current
-    # caller passes a way with line=None, but buffer_line() itself doesn't guard it.
-    way.line = line.buffer(width / 2)  # type: ignore[union-attr]
+    way.line = line.buffer(width / 2)
     way.is_area = True
     return way
 

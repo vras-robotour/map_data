@@ -33,12 +33,5 @@
     "title": "Progress reporting for fetch_area via SocketIO",
     "desc": "The fetch task is polled over REST while a SocketIO channel already exists for telemetry — pushing progress (query, parse, save stages) would remove the polling and its 404-on-second-poll footgun.",
     "file": "map_data/viewer/routes.py, map_data/viewer/app.py"
-  },
-  {
-    "type": "improvement",
-    "sev": "nice-to-have",
-    "title": "Multi-robot support in the tracker",
-    "desc": "The <code>robot_id</code> parameter suggests this is anticipated; supporting several TrackerNode namespaces and tagging telemetry per robot would allow one viewer to monitor a fleet.",
-    "file": "map_data/viewer/ros_node.py, map_data/viewer/app.py"
   }
 ]

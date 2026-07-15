@@ -42,7 +42,6 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             return
         super().__init__("map_data_tracker")
 
-        self.declare_parameter("robot_id", "robot")
         self.declare_parameter("path_topic", "/path")
 
         # New topic parameters
@@ -75,8 +74,6 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             "follow_waypoints_feedback_topic",
             "/follow_waypoints/_action/feedback",
         )
-
-        self.robot_id = self.get_parameter("robot_id").value
 
         # Track which features are enabled (topic name is not empty)
         self.enabled_features: dict[str, bool] = {}
@@ -315,7 +312,6 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
                 return None
             self._dirty = False
             return {
-                "robot_id": self.robot_id,
                 "enabled_features": self.enabled_features,
                 "position": {
                     "gps": dict(self.pose_gps) if self.pose_gps else {},

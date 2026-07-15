@@ -15,6 +15,11 @@
 
 ### Fixed
 
+- Guarded three latent `None`-dereference paths surfaced by mypy: `buffer_line`
+  raises a clear error for a way with no geometry; `osm_cloud` raises a clear error
+  if the UTM-to-local transform is still unresolved at startup (rclpy shutdown race)
+  instead of crashing later; `upload_gpx` rejects a file part with no filename
+  (HTTP 400) instead of raising `TypeError`
 - Fixed `TrackerNode.num_waypoints` never being updated in the ROS node
 - Fixed polygon rasterization re-blocking holes when drawing obstacles
 - Fixed inconsistent UTM zone forcing during map parsing
@@ -41,6 +46,8 @@
 - Deduplicated the triplicated way-resolution pipeline in `viewer/routes.py` into a
   shared `_resolve_way` helper, and documented the `MapData` shallow-vs-deep copy
   invariant
+- Removed the unused multi-robot `robot_id` scaffolding from the tracker (parameter,
+  telemetry field, and `helhest.yaml` entry) — the viewer targets a single robot
 
 ### Added
 

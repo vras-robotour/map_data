@@ -966,15 +966,12 @@ def upload_gpx() -> Response:
     if "file" not in request.files:
         abort(400, "No file part")
     file = request.files["file"]
-    if file.filename == "":
+    if not file.filename:
         abort(400, "No selected file")
 
     name = request.form.get("name")
     if not name:
-        # TODO: possible None deref -- file.filename is str | None; only "" is
-        # checked above (line 969), so a part with no filename attribute at all
-        # (filename=None) would reach Path(None) and raise TypeError.
-        name = Path(file.filename).stem  # type: ignore[arg-type]
+        name = Path(file.filename).stem
 
     name = re.sub(r"[^a-zA-Z0-9_\-]", "_", name.strip())
     if not name:

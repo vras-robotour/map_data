@@ -144,28 +144,24 @@ class OSMCloud(Node):
                     [self.map_data.max_x, self.map_data.max_y, 0.0],
                 ],
             )
-            bounds_local = []
-            for p in bounds_utm:
-                p_vec = p.reshape(3, 1)
-                # TODO: possible None deref -- utm_to_local is None until get_utm_to_local()
-                # succeeds; that method only returns once it has set it (or loops forever
-                # while rclpy.ok()), but a shutdown mid-loop could leave it None here.
+            # utm_to_local is None only if get_utm_to_local() was interrupted by
+            # rclpy shutdown mid-startup; skip the auto-calc (get_cloud() below
+            # raises a clear error in that case).
+            if self.utm_to_local is None:
+                self.get_logger().error(
+                    "UTM-to-local transform unavailable; skipping grid-bounds auto-calc"
+                )
+            else:
                 m = self.utm_to_local
-                p_loc = np.dot(m[:3, :3], p_vec) + m[:3, 3:]  # type: ignore[index]
-                bounds_local.append(p_loc.flatten())
-
-            bounds_local = np.array(bounds_local)  # type: ignore[assignment] # numpy/list interplay
-            self.grid_min = [
-                np.min(bounds_local[:, 0]),  # type: ignore[call-overload] # numpy/list interplay
-                np.min(bounds_local[:, 1]),  # type: ignore[call-overload]
-            ]
-            self.grid_max = [
-                np.max(bounds_local[:, 0]),  # type: ignore[call-overload]
-                np.max(bounds_local[:, 1]),  # type: ignore[call-overload]
-            ]
-            self.get_logger().info(
-                f"Calculated grid bounds: min={self.grid_min}, max={self.grid_max}"
-            )
+                bounds_local = [
+                    (np.dot(m[:3, :3], p.reshape(3, 1)) + m[:3, 3:]).flatten() for p in bounds_utm
+                ]
+                bounds_arr = np.array(bounds_local)
+                self.grid_min = [np.min(bounds_arr[:, 0]), np.min(bounds_arr[:, 1])]
+                self.grid_max = [np.max(bounds_arr[:, 0]), np.max(bounds_arr[:, 1])]
+                self.get_logger().info(
+                    f"Calculated grid bounds: min={self.grid_min}, max={self.grid_max}"
+                )
 
         self.grid_cloud: PointCloud2 = self.get_cloud()
         if self.publish_intersections:
@@ -274,12 +270,13 @@ class OSMCloud(Node):
             Created point cloud.
 
         """
-        # TODO: possible None deref -- utm_to_local, see note in __init__.
-        points = transform_points(
-            self.map_data.get_points(),
-            self.utm_to_local,  # type: ignore[arg-type]
-            0.0,
-        )
+        if self.utm_to_local is None:
+            raise RuntimeError(
+                "UTM-to-local transform unavailable; the node was shutting down "
+                "before it could be resolved."
+            )
+        transform = self.utm_to_local
+        points = transform_points(self.map_data.get_points(), transform, 0.0)
         grid = np.pad(
             create_grid(tuple(self.grid_min), tuple(self.grid_max), self.grid_res),
             ((0, 0), (0, 1)),
@@ -319,12 +316,12 @@ class OSMCloud(Node):
             centroid = way.line.centroid  # type: ignore[union-attr]
             points_to_transform[way.id] = np.array([centroid.x, centroid.y, 0.0]).reshape(3, 1)
 
-        # TODO: possible None deref -- utm_to_local, see note in __init__.
-        transformed_points = transform_points(
-            points_to_transform,
-            self.utm_to_local,  # type: ignore[arg-type]
-            0.0,
-        )
+        if self.utm_to_local is None:
+            raise RuntimeError(
+                "UTM-to-local transform unavailable; the node was shutting down "
+                "before it could be resolved."
+            )
+        transformed_points = transform_points(points_to_transform, self.utm_to_local, 0.0)
 
         pose_array = PoseArray()
         pose_array.header.frame_id = self.local_frame
