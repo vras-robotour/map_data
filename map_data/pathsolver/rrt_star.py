@@ -130,7 +130,7 @@ class RRTStar:
         self.step_size = step_size
         self.neighbor_radius = neighbor_radius
         self.nodes = [self.start]
-        self.parent = {0: None}
+        self.parent: dict[int, int | None] = {0: None}
         self.cost = {0: 0.0}
 
         self._nodes_buf = np.empty((max_iter + 2, 2), dtype=np.float64)
@@ -417,7 +417,7 @@ class RRTStar:
         avg_c = total_grid_cost / count if count > 0 else 0.0
         # Cost = dist * (1 + avg_grid_cost * penalty)  # noqa: ERA001
         # We use grid_cost_weight to match A* logic
-        return False, np.linalg.norm(end - start) * (1.0 + avg_c * self.grid_cost_weight)
+        return False, float(np.linalg.norm(end - start) * (1.0 + avg_c * self.grid_cost_weight))
 
     def find_path(self) -> np.ndarray | None:
         """
@@ -519,7 +519,7 @@ class RRTStar:
         Walk the parent chain from *goal_idx* back to the root and return the path.
         """
         path = []
-        curr = goal_idx
+        curr: int | None = goal_idx
         while curr is not None:
             path.append(self.nodes[curr])
             curr = self.parent[curr]

@@ -598,7 +598,7 @@ def migrate_change_log(store: dict[str, Any]) -> None:
             untracked_moves.append({"type": "move", "id": wid, "category": "unknown", "label": ""})
 
     tracked_splits = {(e.get("way_id"), e.get("node_id")) for e in cl if e.get("type") == "split"}
-    untracked_splits = []
+    untracked_splits: list[dict[str, Any]] = []
     for wid_str, nids in store.get("split_ways", {}).items():
         wid = int(wid_str)
         untracked_splits.extend(
@@ -664,7 +664,7 @@ def apply_node_position_overrides(
     zone_letter: str,
     nodes_cache: dict[int, dict[str, Any]] | None = None,
     category: str | None = None,
-) -> "Way":
+) -> "Way | None":
     """
     Return a copy of *way* with node positions moved per *overrides*.
 
@@ -721,14 +721,18 @@ def apply_node_position_overrides(
 
     Returns
     -------
-    Way
+    Way or None
         A shallow copy of *way* with ``line`` replaced by the updated
-        geometry, or the original *way* if no update was applicable.
+        geometry, or the original *way* if no update was applicable, or
+        ``None`` if the geometry could not be reconstructed (see above;
+        callers should guard for this, e.g. ``result or way``).
 
     """
     if not overrides:
         return way
-    geom = way.line
+    # way.line is typed Optional at the Way level, but every Way reaching this
+    # function already has a concrete geometry from OSM parsing / prior edits.
+    geom: BaseGeometry = way.line  # type: ignore[assignment]
     node_ids = [getattr(n, "id", n) for n in way.nodes]
     if not node_ids:
         # No OSM nodes (e.g. individual barrier node): translate geometry by centroid shift.
@@ -986,7 +990,9 @@ def apply_added_nodes(
     w.nodes = [getattr(n, "id", n) for n in way.nodes]
     node_ids: list = w.nodes  # mutable reference
 
-    geom = way.line
+    # way.line is typed Optional at the Way level, but every Way reaching this
+    # function already has a concrete geometry from OSM parsing / prior edits.
+    geom: BaseGeometry = way.line  # type: ignore[assignment]
     is_linestring = geom.geom_type == "LineString"
     is_polygon = geom.geom_type == "Polygon"
     if not is_linestring and not is_polygon:
@@ -1119,7 +1125,9 @@ def rebuild_way_without_nodes(
         return None
     w = copy.copy(way)
     w.nodes = [way.nodes[i] for i in keep]
-    geom = way.line
+    # way.line is typed Optional at the Way level, but every Way reaching this
+    # function already has a concrete geometry from OSM parsing / prior edits.
+    geom: BaseGeometry = way.line  # type: ignore[assignment]
 
     if geom.geom_type == "LineString":
         coords = list(geom.coords)

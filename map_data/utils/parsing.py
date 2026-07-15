@@ -54,7 +54,8 @@ def parse_osm_ways(
 
 def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
     for rel in tqdm(osm_rels_data.relations, desc="Parse rels"):
-        outer_ids, inner_ids = [], []
+        outer_ids: list[int] = []
+        inner_ids: list[int] = []
 
         for member in rel.members:
             if member._type_value == "way" and int(member.ref) in ways:  # noqa: SLF001
@@ -134,7 +135,7 @@ def combine_ways(ids: list[int], ways: dict[int, Way]) -> list[int]:
     if not ways_to_merge:
         return ids
 
-    endpoint_map = {}
+    endpoint_map: dict[int, list[Way]] = {}
     for way in ways_to_merge:
         # way.nodes is a list of IDs now
         endpoint_map.setdefault(way.nodes[0], []).append(way)
@@ -251,7 +252,9 @@ def buffer_line(way: Way, width: float) -> Way:
     # buffer produces an annular ring around the path instead.
     if isinstance(line, geometry.Polygon) and way.tags.get("area") != "yes":
         line = geometry.LineString(line.exterior.coords)
-    way.line = line.buffer(width / 2)
+    # TODO: possible None deref -- way.line is typed as BaseGeometry | None; no current
+    # caller passes a way with line=None, but buffer_line() itself doesn't guard it.
+    way.line = line.buffer(width / 2)  # type: ignore[union-attr]
     way.is_area = True
     return way
 

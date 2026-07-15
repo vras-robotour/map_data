@@ -135,9 +135,11 @@ class MapData:
 
         """
         if coords_type == "file":
-            with Path(coords).open() as f:
+            # coords_type == "file" guarantees coords is a str here, but coords_type
+            # isn't a Literal type so mypy can't correlate the two params.
+            with Path(coords).open() as f:  # type: ignore[arg-type]
                 gpx_object = gpxparse(f)
-            self.coords_file: str | None = coords
+            self.coords_file: str | None = coords  # type: ignore[assignment] # see arg-type note above
 
             points = []
             if gpx_object.waypoints:
@@ -157,8 +159,10 @@ class MapData:
             latlon = np.array(points)
             self.waypoints, self.zone_number, self.zone_letter = self._latlon_to_utm(latlon)
         elif coords_type == "array":
+            # coords_type == "array" guarantees coords is the (ndarray, int, str)
+            # tuple here, but mypy can't correlate the two params (see above).
             self.waypoints = np.array(coords[0])
-            self.zone_number = coords[1]
+            self.zone_number = coords[1]  # type: ignore[assignment]
             self.zone_letter = coords[2]
             self.coords_file = None
         else:
@@ -411,7 +415,9 @@ class MapData:
         self.osm_nodes_data = client.api.parse_json(nodes_raw)
 
         logger.info("All OSM queries finished.")
-        self._save_osm_cache(ways_raw, rels_raw, nodes_raw)
+        # Already guarded by the `any(r is None ...)` check above; mypy can't
+        # narrow all three tuple members through an `any()` over a generator.
+        self._save_osm_cache(ways_raw, rels_raw, nodes_raw)  # type: ignore[arg-type]
 
     def run_parse(self) -> int:
         """

@@ -36,7 +36,7 @@ RECOVERY_TIMEOUT = 5.0
 TELEOP_TIMEOUT = 2.0
 
 
-class TrackerNode(Node if ROS_AVAILABLE else object):
+class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dynamic base class depending on optional rclpy availability; not statically resolvable
     def __init__(self) -> None:
         if not ROS_AVAILABLE:
             return
@@ -331,7 +331,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):
     def _convert_path_latlon(
         self,
         msg: Path | NavigateThroughPoses.Goal | FollowWaypoints.Goal | FollowGPSWaypoints.Goal,
-    ) -> list[dict[str, float]]:
+    ) -> list[dict[str, float]] | None:
         waypoints_gps: list[dict[str, float]] = []
         if ROS_AVAILABLE and isinstance(msg, FollowGPSWaypoints.Goal):
             waypoints_gps.extend(

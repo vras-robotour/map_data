@@ -355,7 +355,9 @@ if __name__ == "__main__":
     path_data = parse_path(str(path_file))
 
     if args.file is None:
-        map_data = MapData(path_data, coords_type="array")
+        # parse_path() returns [] on failure; MapData(..., coords_type="array")
+        # will raise on the malformed input, which is desired CLI-script behavior.
+        map_data = MapData(path_data, coords_type="array")  # type: ignore[arg-type]
         map_data.run_queries()
         ret = map_data.run_parse()
         if ret:

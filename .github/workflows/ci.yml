@@ -26,6 +26,28 @@ jobs:
       - name: Check formatting
         run: ruff format --check .
 
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        # mypy needs the actual runtime deps installed (not just --ignore-missing-imports)
+        # so it can narrow e.g. Flask's abort() as NoReturn instead of falling back to Any.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Type check
+        run: mypy map_data/
+
   test:
     runs-on: ubuntu-latest
     strategy:

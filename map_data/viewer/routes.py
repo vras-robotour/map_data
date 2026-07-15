@@ -82,6 +82,7 @@ from flask import (
     request,
     send_file,
 )
+from flask.typing import ResponseReturnValue
 from shapely import geometry
 
 from map_data.map_data import MapData
@@ -214,14 +215,19 @@ def _apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                                 zl,
                                 nodes_cache,
                                 category=cat,
-                            )
+                            )  # type: ignore[assignment] # narrowed by the `is None` check below
                             if seg is None:
                                 continue
                         new_lst.append(seg)
                 else:
                     new_lst.append(w)
             setattr(md, lst_name, new_lst)
-        md.crossroads_list = md.parse_intersections({str(w.id): w for w in md.footways_list})
+        # parse_intersections() only reads .values(); the str() keys here (needed
+        # because virtual split-way ids are strings) don't match its dict[int, Way]
+        # signature, but that mismatch is harmless.
+        md.crossroads_list = md.parse_intersections(
+            {str(w.id): w for w in md.footways_list},  # type: ignore[misc]
+        )
 
     node_pos_store = store.get("node_position_overrides", {})
     if node_pos_store:
@@ -377,9 +383,11 @@ def _resolve_way(
             nonlocal way
             pos_overrides = get_node_position_overrides(store, search_id)
             if pos_overrides:
+                # `way is not None` is already guaranteed by the enclosing `if way is
+                # not None:` above; mypy can't narrow a `nonlocal` var across closures.
                 way = (
                     apply_node_position_overrides(
-                        way,
+                        way,  # type: ignore[arg-type]
                         pos_overrides,
                         zn,
                         zl,
@@ -392,7 +400,7 @@ def _resolve_way(
         def _apply_added() -> None:
             """Apply recorded user-added synthetic nodes to the enclosing ``way``."""
             nonlocal way
-            way = apply_added_nodes(way, store, zn, zl)
+            way = apply_added_nodes(way, store, zn, zl)  # type: ignore[arg-type] # see note above
 
         if added_nodes_before_overrides:
             _apply_added()
@@ -518,7 +526,7 @@ def list_files() -> Response:
         directory doesn't exist yet.
 
     """
-    result = {"mapdata": [], "gpx": []}
+    result: dict[str, list[str]] = {"mapdata": [], "gpx": []}
     try:
         for p in sorted(_get_data_dir().iterdir()):
             if p.suffix == ".mapdata":
@@ -604,11 +612,11 @@ def get_annotations() -> Response:
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
-    return jsonify(load_annotations(_annotation_path(filename)))
+    return jsonify(load_annotations(str(_annotation_path(filename))))
 
 
 @bp.route("/api/annotations", methods=["POST"])
-def add_annotation() -> Response:
+def add_annotation() -> ResponseReturnValue:
     """
     Add a freehand annotation (a user-drawn obstacle or path) to a mapdata file.
 
@@ -686,7 +694,7 @@ def update_annotation(ann_id: str) -> Response:
 
 
 @bp.route("/api/annotations/<ann_id>", methods=["DELETE"])
-def delete_annotation(ann_id: str) -> Response:
+def delete_annotation(ann_id: str) -> ResponseReturnValue:
     """
     Delete a freehand annotation from a mapdata file's annotation store.
 
@@ -768,7 +776,7 @@ def _run_fetch_task(
     """
     try:
         md = MapData(
-            [waypoints, zone_number, zone_letter],
+            (waypoints, zone_number, zone_letter),
             coords_type="array",
             grid_margin=grid_margin,
             obstacle_radius=obstacle_radius,
@@ -784,7 +792,7 @@ def _run_fetch_task(
         if md.run_parse() != 0:
             _fetch_tasks[task_id] = {"status": "failed", "error": "Parsing failed"}
             return
-        md.save(out_path)
+        md.save(str(out_path))
         _fetch_tasks[task_id] = {
             "status": "done",
             "result": {
@@ -963,7 +971,10 @@ def upload_gpx() -> Response:
 
     name = request.form.get("name")
     if not name:
-        name = Path(file.filename).stem
+        # TODO: possible None deref -- file.filename is str | None; only "" is
+        # checked above (line 969), so a part with no filename attribute at all
+        # (filename=None) would reach Path(None) and raise TypeError.
+        name = Path(file.filename).stem  # type: ignore[arg-type]
 
     name = re.sub(r"[^a-zA-Z0-9_\-]", "_", name.strip())
     if not name:
@@ -1295,7 +1306,7 @@ def get_way(way_id: str) -> Response:
     if geom is None:
         abort(500, "Could not convert geometry")
 
-    feature = {
+    feature: dict[str, Any] = {
         "type": "Feature",
         "geometry": geom,
         "properties": {
@@ -1556,7 +1567,7 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
                 zl,
                 effective_nc,
                 category=category,
-            )
+            )  # type: ignore[assignment] # narrowed by the `is None` check below
             if seg is None:
                 continue
 
@@ -1624,7 +1635,9 @@ def split_way_endpoint() -> Response:
 
     try:
         way_id_val = str(way_id)
-        node_id_int = int(node_id)
+        # node_id may be None (missing from body); int(None) raises TypeError,
+        # which is caught below -- not a genuine unguarded None deref.
+        node_id_int = int(node_id)  # type: ignore[arg-type]
     except (ValueError, TypeError):
         abort(400, "Invalid way_id or node_id")
 
@@ -2255,13 +2268,19 @@ def get_merged_mapdata(filename: str) -> tuple[MapData | None, dict[str, Any] | 
                 ov = tag_overrides.get(original_id)
                 if ov:
                     w.tags = {**(w.tags or {}), **ov}
-        new_roads, new_footways = [], []
+        new_roads: list[Way] = []
+        new_footways: list[Way] = []
         for w in md.roads_list:
             (new_footways if w.is_footway() else new_roads).append(w)
         for w in md.footways_list:
             (new_roads if w.is_road() else new_footways).append(w)
         md.roads_list, md.footways_list = new_roads, new_footways
-        md.crossroads_list = md.parse_intersections({str(w.id): w for w in md.footways_list})
+        # parse_intersections() only reads .values(); the str() keys here (needed
+        # because virtual split-way ids are strings) don't match its dict[int, Way]
+        # signature, but that mismatch is harmless.
+        md.crossroads_list = md.parse_intersections(
+            {str(w.id): w for w in md.footways_list},  # type: ignore[misc]
+        )
 
     ann_id = -1
     node_id = -1
@@ -2761,7 +2780,7 @@ wormhole_manager = WormholeManager()
 
 
 @bp.route("/api/create_wormhole", methods=["POST"])
-def create_wormhole() -> Response:
+def create_wormhole() -> ResponseReturnValue:
     """
     Start sending a GPX path to a companion app via ``magic-wormhole``.
 
@@ -2905,11 +2924,11 @@ def create_replan() -> Response:
         abort(404, f"File {filename} not found")
 
     zn, zl = md.zone_number, md.zone_letter
-    utm_path = []
+    utm_path_list: list[list[float]] = []
     for p in path_data:
         e, n, _, _ = utm.from_latlon(float(p[0]), float(p[1]), zn, zl)
-        utm_path.append([e, n])
-    utm_path = np.array(utm_path, dtype=np.float64)
+        utm_path_list.append([e, n])
+    utm_path: np.ndarray = np.array(utm_path_list, dtype=np.float64)
 
     # Calculate planning bounding box to limit grid size
     margin = 50.0  # meters

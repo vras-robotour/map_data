@@ -68,9 +68,20 @@ Key style rules enforced:
 !!! tip "Editor integration"
     If you use Neovim with LazyVim, enable the `lazyvim.plugins.extras.lang.python` extra and add a `conform.nvim` plugin spec with `ruff_format` to get format-on-save automatically.
 
+## Type checking
+
+The project uses [mypy](https://mypy-lang.org/) for static type checking. Configuration lives in `pyproject.toml` under `[tool.mypy]`.
+
+```bash
+mypy map_data/
+```
+
+Third-party libraries without complete type stubs (numpy, shapely, overpy, flask_socketio, rclpy, etc.) are covered by `ignore_missing_imports`. A small number of remaining false positives — mostly from numpy/shapely returning loosely-typed values, or from patterns mypy can't narrow (e.g. Flask's `nonlocal`-captured variables) — are silenced with targeted `# type: ignore[<code>]` comments that include a short reason. New code should be fully typed rather than relying on ignores.
+
 ## Submitting changes
 
 1. Create a feature branch from `master`.
 2. Make your changes and add or update tests where relevant.
 3. Run `pytest tests/` and ensure all tests pass.
-4. Open a pull request against `master` with a clear description of what changed and why.
+4. Run `ruff check . && ruff format --check .` and `mypy map_data/` and ensure both are clean.
+5. Open a pull request against `master` with a clear description of what changed and why.

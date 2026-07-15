@@ -26,9 +26,13 @@
 - Removed the no-op `joblib` threading parallelism from `ReplanPath.replan` (the
   A*/RRT* segment work is GIL-bound); segments run sequentially and the grid cache
   is warmed once up front, removing a redundant per-segment cache-build race
+- Removed the now-unused `joblib` runtime dependency from `pyproject.toml`
 
 ### Added
 
+- Static type checking with `mypy` (`[tool.mypy]` in `pyproject.toml`), enforced
+  in CI (`typecheck` job) and as a pre-commit hook, to catch bugs like
+  keyword-only-argument mismatches and inconsistent Flask route return types
 - Interactive viewer: `GET /api/export/geojson` endpoint and toolbar button to download the merged (annotation-resolved) map as a `.geojson` file, for use in QGIS/geojson.io
 - Unit tests for `osm_cloud` pure helper functions (`create_grid`, `points_near_ref`, `transform_points`, `split_ways_to_points`)
 - `pytest-cov` coverage reporting in CI

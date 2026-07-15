@@ -23,7 +23,6 @@ dependencies = [
     "PyYAML",
     "matplotlib",
     "scipy",
-    "joblib",
 ]
 
 [project.optional-dependencies]
@@ -32,6 +31,7 @@ dev = [
     "pytest-cov",
     "pre-commit",
     "ruff",
+    "mypy",
     "mkdocs",
     "mkdocs-material",
     "mkdocstrings[python]",
@@ -62,3 +62,9 @@ known-first-party = ["map_data"]
 quote-style = "double"
 indent-style = "space"
 docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.12"
+files = ["map_data"]
+# numpy/shapely/overpy/flask_socketio/rclpy/etc. lack complete type stubs.
+ignore_missing_imports = true

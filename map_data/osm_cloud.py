@@ -147,12 +147,22 @@ class OSMCloud(Node):
             bounds_local = []
             for p in bounds_utm:
                 p_vec = p.reshape(3, 1)
-                p_loc = np.dot(self.utm_to_local[:3, :3], p_vec) + self.utm_to_local[:3, 3:]
+                # TODO: possible None deref -- utm_to_local is None until get_utm_to_local()
+                # succeeds; that method only returns once it has set it (or loops forever
+                # while rclpy.ok()), but a shutdown mid-loop could leave it None here.
+                m = self.utm_to_local
+                p_loc = np.dot(m[:3, :3], p_vec) + m[:3, 3:]  # type: ignore[index]
                 bounds_local.append(p_loc.flatten())
 
-            bounds_local = np.array(bounds_local)
-            self.grid_min = [np.min(bounds_local[:, 0]), np.min(bounds_local[:, 1])]
-            self.grid_max = [np.max(bounds_local[:, 0]), np.max(bounds_local[:, 1])]
+            bounds_local = np.array(bounds_local)  # type: ignore[assignment] # numpy/list interplay
+            self.grid_min = [
+                np.min(bounds_local[:, 0]),  # type: ignore[call-overload] # numpy/list interplay
+                np.min(bounds_local[:, 1]),  # type: ignore[call-overload]
+            ]
+            self.grid_max = [
+                np.max(bounds_local[:, 0]),  # type: ignore[call-overload]
+                np.max(bounds_local[:, 1]),  # type: ignore[call-overload]
+            ]
             self.get_logger().info(
                 f"Calculated grid bounds: min={self.grid_min}, max={self.grid_max}"
             )
@@ -264,7 +274,12 @@ class OSMCloud(Node):
             Created point cloud.
 
         """
-        points = transform_points(self.map_data.get_points(), self.utm_to_local, 0.0)
+        # TODO: possible None deref -- utm_to_local, see note in __init__.
+        points = transform_points(
+            self.map_data.get_points(),
+            self.utm_to_local,  # type: ignore[arg-type]
+            0.0,
+        )
         grid = np.pad(
             create_grid(tuple(self.grid_min), tuple(self.grid_max), self.grid_res),
             ((0, 0), (0, 1)),
@@ -299,11 +314,17 @@ class OSMCloud(Node):
 
         points_to_transform = {}
         for way in crossroads:
-            # way.line is a buffered Point (Polygon)
-            centroid = way.line.centroid
+            # way.line is a buffered Point (Polygon); crossroad Ways are always built
+            # with a concrete line in MapData.parse_intersections, never None.
+            centroid = way.line.centroid  # type: ignore[union-attr]
             points_to_transform[way.id] = np.array([centroid.x, centroid.y, 0.0]).reshape(3, 1)
 
-        transformed_points = transform_points(points_to_transform, self.utm_to_local, 0.0)
+        # TODO: possible None deref -- utm_to_local, see note in __init__.
+        transformed_points = transform_points(
+            points_to_transform,
+            self.utm_to_local,  # type: ignore[arg-type]
+            0.0,
+        )
 
         pose_array = PoseArray()
         pose_array.header.frame_id = self.local_frame

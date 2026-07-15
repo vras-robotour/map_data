@@ -1,5 +1,7 @@
 import logging
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 import gpxpy
 import numpy as np
@@ -37,6 +39,10 @@ def parse_gpx_file(gpx_file: str) -> tuple[np.ndarray, int, str] | list:
             gpx = gpxpy.parse(file)
 
         # Mirror the waypoints -> tracks -> routes fallback from MapData.__init__.
+        # Typed as list[Any]: waypoints/tracks/routes yield different gpxpy point
+        # classes (GPXWaypoint/GPXTrackPoint/GPXRoutePoint) that are only ever
+        # duck-typed below via .latitude/.longitude/.elevation.
+        gpx_points: list[Any]
         if gpx.waypoints:
             gpx_points = gpx.waypoints
         elif gpx.tracks:
@@ -112,7 +118,7 @@ def utm_path_to_latlon(path: np.ndarray, zone_num: int, zone_let: str) -> list[d
 
 
 def create_gpx_content(
-    waypoints_data: list[dict[str, str | float]],
+    waypoints_data: Sequence[Mapping[str, str | float]],
     creator_name: str = "MapData Planner",
 ) -> str:
     """

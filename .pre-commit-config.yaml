@@ -5,3 +5,29 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.3.0
+    hooks:
+      - id: mypy
+        # Config (target version, ignore_missing_imports) lives in pyproject.toml.
+        # additional_dependencies mirrors [project.dependencies]: without Flask
+        # installed in the hook's isolated env, `abort()` resolves to Any instead
+        # of NoReturn, which breaks the `if x is None: abort(...)` narrowing used
+        # throughout viewer/routes.py and produces dozens of false union-attr /
+        # arg-type errors. rclpy/overpy/flask_socketio still fall back to
+        # ignore_missing_imports (no wheels available off-ROS / no stubs).
+        additional_dependencies:
+          - flask
+          - gpxpy
+          - numpy
+          - shapely
+          - utm
+          - tqdm
+          - requests
+          - PyYAML
+          - matplotlib
+          - scipy
+        args: [--config-file=pyproject.toml]
+        pass_filenames: false
+        files: ^map_data/
