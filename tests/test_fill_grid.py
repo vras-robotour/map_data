@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import shapely.geometry as geom
 import utm
 from shapely.geometry import LineString
@@ -127,3 +128,54 @@ def test_fill_grid_produces_2d_cache():
     rp.fill_grid(md)
     assert rp.path_grid.grid_2d_cache is not None
     assert rp.path_grid.grid_2d_cache.ndim == 2
+
+
+# ── regression: no stray zero-cost cells off any way ────────────────────────
+#
+# create_empty_grid (np.arange) and get_grid_2d (np.ceil-based dims + floor
+# indexing) must agree on how many cells the grid has and where each point
+# lands, otherwise some grid_2d cells never get written to. PathGrid.get_grid_2d
+# initializes with default_off_path_cost precisely so a mismatch like that
+# would silently leave cost 0.0 (from stale/never-hit entries) instead of the
+# off-path cost — which a planner would read as "free to drive through",
+# including deep inside solid obstacles or far off any path. This test walks
+# every cell explicitly (rather than sampling one or two coordinates like the
+# tests above) so a discretization regression anywhere in the grid gets caught.
+
+
+def test_fill_grid_no_zero_cost_cells_off_path():
+    md = _make_md_with_footway()
+    args = _make_args((_E0, _N0), (_E0 + 20, _N0 + 20))
+    rp = ReplanPath(args, [])
+    max_path_dist = 2.0
+    rp.fill_grid(md, max_path_dist=max_path_dist)
+
+    grid_2d = rp.path_grid.grid_2d_cache
+    low = rp.path_grid.low
+    cell_size = rp.path_grid.cell_size
+    footway_line = md.footways_list[0].line
+
+    num_y, num_x = grid_2d.shape
+    # PathGrid.fill samples the way every `cell_size`, so a point on the line
+    # can be up to ~cell_size away from the nearest sampled path point that
+    # was actually fed into the cKDTree query. Pad the "definitely off-path"
+    # threshold so we never mistake a near-path cell for an off-path one.
+    off_path_threshold = max_path_dist + cell_size
+
+    off_path_cells = 0
+    for iy in range(num_y):
+        for ix in range(num_x):
+            x = low[0] + ix * cell_size
+            y = low[1] + iy * cell_size
+            dist_to_way = footway_line.distance(geom.Point(x, y))
+            if dist_to_way > off_path_threshold:
+                off_path_cells += 1
+                cost = grid_2d[iy, ix]
+                assert not np.isclose(cost, 0.0), (
+                    f"cell ({ix},{iy}) at ({x},{y}), {dist_to_way:.2f}m from the "
+                    f"footway, has stray zero cost"
+                )
+                assert cost == pytest.approx(rp.DEFAULT_OFF_PATH_COST)
+
+    # Sanity check that the test actually exercised off-path cells.
+    assert off_path_cells > 0
