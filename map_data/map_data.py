@@ -345,10 +345,7 @@ class MapData:
         # error) rather than by the client giving up mid-response.
         ql_timeout = REQUEST_TIMEOUT - 10
         query = (
-            f"[out:json][timeout:{ql_timeout}];"
-            f"way({bbox})->.w;"
-            f"(.w; .w >; .w <; node({bbox}););"
-            f"out;"
+            f"[out:json][timeout:{ql_timeout}];way({bbox})->.w;(.w; .w >; .w <; node({bbox}););out;"
         )
 
         def _on_attempt(endpoint: str, attempt: int, retries: int) -> None:
