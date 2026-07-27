@@ -13,7 +13,14 @@ logger = logging.getLogger(__name__)
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
+
+# HTTP timeout for a single request. Overpass servers apply their own,
+# usually much shorter, default query timeout (e.g. 25s) unless the query
+# itself carries a `[timeout:N]` directive, so callers building queries
+# should request a server-side timeout comfortably below this value.
+REQUEST_TIMEOUT = 180
 
 
 class OverpassClient:
@@ -42,7 +49,9 @@ class OverpassClient:
             logger.info("Querying Overpass via %s (attempt %s/%s)", endpoint, attempt, retries)
             logger.debug("Query string: %s", query_str)
             try:
-                response = self.session.post(endpoint, data={"data": query_str}, timeout=180)
+                response = self.session.post(
+                    endpoint, data={"data": query_str}, timeout=REQUEST_TIMEOUT
+                )
                 if response.status_code == http.HTTPStatus.OK:
                     return response.text
 

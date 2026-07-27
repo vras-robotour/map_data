@@ -5,7 +5,6 @@ This module provides the MapData class which orchestrates downloading,
 caching, and parsing OpenStreetMap data for use in path planning.
 """
 
-import concurrent.futures
 import json
 import logging
 from pathlib import Path
@@ -18,7 +17,7 @@ from gpxpy import parse as gpxparse
 from shapely import geometry
 
 from map_data.utils.config import load_config
-from map_data.utils.overpass import OverpassClient
+from map_data.utils.overpass import REQUEST_TIMEOUT, OverpassClient
 from map_data.utils.parsing import (
     parse_osm_nodes,
     parse_osm_rels,
@@ -261,15 +260,13 @@ class MapData:
             return None
         return Path(self.coords_file).with_suffix(".osm_cache.json")
 
-    def _save_osm_cache(self, ways_raw: str, rels_raw: str, nodes_raw: str) -> None:
+    def _save_osm_cache(self, raw: str) -> None:
         path = self._get_osm_cache_path()
         if not path:
             return
         cache_data = {
             "bbox": [self.min_lat, self.min_long, self.max_lat, self.max_long],
-            "ways": ways_raw,
-            "rels": rels_raw,
-            "nodes": nodes_raw,
+            "raw": raw,
         }
         try:
             with path.open("w", encoding="utf-8") as f:
@@ -278,7 +275,7 @@ class MapData:
         except (OSError, TypeError) as e:
             logger.warning("Could not save OSM cache: %s", e)
 
-    def _load_osm_cache(self) -> dict[str, str] | None:
+    def _load_osm_cache(self) -> str | None:
         path = self._get_osm_cache_path()
         if not path or not path.exists():
             return None
@@ -299,11 +296,7 @@ class MapData:
                 return None
 
             logger.info("Using cached OSM responses from %s", path)
-            return {
-                "ways": cache_data["ways"],
-                "rels": cache_data["rels"],
-                "nodes": cache_data["nodes"],
-            }
+            return cache_data["raw"]
         except (OSError, json.JSONDecodeError, KeyError) as e:
             logger.debug("Could not load OSM cache: %s", e)
             return None
@@ -312,57 +305,54 @@ class MapData:
         """
         Download OSM ways, relations, and nodes from the Overpass API.
 
-        Fires three concurrent Overpass queries covering the bounding box of
-        the loaded waypoints and stores the raw JSON responses internally.
-        Call :meth:`run_parse` afterwards to convert the responses into
-        :class:`~map_data.utils.way.Way` objects.
+        Fires a single Overpass query covering the bounding box of the
+        loaded waypoints — the union of ways, their nodes, the relations
+        referencing them, and all standalone nodes in the box — and stores
+        the parsed result internally. Call :meth:`run_parse` afterwards to
+        convert it into :class:`~map_data.utils.way.Way` objects.
 
         Parameters
         ----------
         use_cache : bool
-            If ``True`` (default), attempt to load responses from a local
-            ``.osm_cache.json`` file before querying the API.
+            If ``True`` (default), attempt to load the response from a
+            local ``.osm_cache.json`` file before querying the API.
 
         """
+        client = OverpassClient()
+
         if use_cache:
-            cache = self._load_osm_cache()
-            if cache:
-                client = OverpassClient()
-                self.osm_ways_data = client.api.parse_json(cache["ways"])
-                self.osm_rels_data = client.api.parse_json(cache["rels"])
-                self.osm_nodes_data = client.api.parse_json(cache["nodes"])
+            cached_raw = self._load_osm_cache()
+            if cached_raw is not None:
+                result = client.api.parse_json(cached_raw)
+                self.osm_ways_data = result
+                self.osm_rels_data = result
+                self.osm_nodes_data = result
                 return
 
         bbox = f"{self.min_lat},{self.min_long},{self.max_lat},{self.max_long}"
-        queries = {
-            "ways": f"[out:json]; (way({bbox}); >; ); out;",
-            "rels": f"[out:json]; (way({bbox}); <; ); out;",
-            "nodes": f"[out:json]; (node({bbox}); ); out;",
-        }
+        # Server-side timeout stays comfortably below OverpassClient's HTTP
+        # timeout so a slow query is reported by Overpass (as a proper
+        # error) rather than by the client giving up mid-response.
+        ql_timeout = REQUEST_TIMEOUT - 10
+        query = (
+            f"[out:json][timeout:{ql_timeout}];"
+            f"way({bbox})->.w;"
+            f"(.w; .w >; .w <; node({bbox}););"
+            f"out;"
+        )
 
-        client = OverpassClient()
-
-        def _fetch(q: str) -> str | None:
-            return client.query_raw(q)
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
-            futs = {name: ex.submit(_fetch, q) for name, q in queries.items()}
-            ways_raw = futs["ways"].result()
-            rels_raw = futs["rels"].result()
-            nodes_raw = futs["nodes"].result()
-
-        if any(r is None for r in (ways_raw, rels_raw, nodes_raw)):
-            logger.error("One or more Overpass queries failed.")
+        raw = client.query_raw(query)
+        if raw is None:
+            logger.error("Overpass query failed.")
             return
 
-        self.osm_ways_data = client.api.parse_json(ways_raw)
-        self.osm_rels_data = client.api.parse_json(rels_raw)
-        self.osm_nodes_data = client.api.parse_json(nodes_raw)
+        result = client.api.parse_json(raw)
+        self.osm_ways_data = result
+        self.osm_rels_data = result
+        self.osm_nodes_data = result
 
-        logger.info("All OSM queries finished.")
-        # Already guarded by the `any(r is None ...)` check above; mypy can't
-        # narrow all three tuple members through an `any()` over a generator.
-        self._save_osm_cache(ways_raw, rels_raw, nodes_raw)  # type: ignore[arg-type]
+        logger.info("OSM query finished.")
+        self._save_osm_cache(raw)
 
     def run_parse(self) -> int:
         """

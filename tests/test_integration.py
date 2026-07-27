@@ -118,24 +118,17 @@ def test_osm_cache_roundtrip(tmp_path):
     # Give the instance a file path so _get_osm_cache_path can derive its location
     md.coords_file = str(tmp_path / "test.gpx")
 
-    ways_raw = _EMPTY_JSON
-    rels_raw = _EMPTY_JSON
-    nodes_raw = _EMPTY_JSON
-
-    md._save_osm_cache(ways_raw, rels_raw, nodes_raw)
+    md._save_osm_cache(_WAYS_JSON)
     loaded = md._load_osm_cache()
 
-    assert loaded is not None
-    assert loaded["ways"] == ways_raw
-    assert loaded["rels"] == rels_raw
-    assert loaded["nodes"] == nodes_raw
+    assert loaded == _WAYS_JSON
 
 
 def test_osm_cache_bbox_mismatch_returns_none(tmp_path):
     md = _make_md()
     md.coords_file = str(tmp_path / "test.gpx")
 
-    md._save_osm_cache(_EMPTY_JSON, _EMPTY_JSON, _EMPTY_JSON)
+    md._save_osm_cache(_EMPTY_JSON)
 
     # Shift the stored bounding box by more than the 1e-6 tolerance
     md.min_lat += 1.0
