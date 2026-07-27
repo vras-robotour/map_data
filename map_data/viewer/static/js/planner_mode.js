@@ -159,7 +159,7 @@ class PlannerMode {
     this.isProcessing = true;
 
     try {
-      const data = await fetchAreaApi(bbox);
+      const data = await fetchAreaApi(bbox, task => setStatus(formatFetchProgress(task), 'text-warning'));
       setStatus(`Map created: ${data.filename}. Loading and planning...`, 'text-success');
 
       // Add to file select if it's there

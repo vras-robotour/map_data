@@ -165,7 +165,7 @@ async function initApp() {
             return;
         }
         bootstrap.Modal.getInstance(document.getElementById('fetch-area-modal')).hide();
-        setStatus('Fetching & parsing OSM data… (may take 1–2 min)', 'text-warning');
+        setStatus('Fetching & parsing OSM data…', 'text-warning');
 
         try {
             const data = await fetchAreaApi({
@@ -178,7 +178,7 @@ async function initApp() {
                     footway: parseFloat(document.getElementById('fetch-buf-footway')?.value) || 3.0,
                     barrier: parseFloat(document.getElementById('fetch-buf-barrier')?.value) || 2.0,
                 },
-            });
+            }, task => setStatus(formatFetchProgress(task), 'text-warning'));
             setStatus(
                 `Fetched: ${data.roads} roads, ${data.footways} footways, ${data.barriers} barriers`,
                 'text-success'

@@ -156,7 +156,12 @@ async function undoWayNodeMovesApi(filename, wayId) {
     });
 }
 
-async function fetchAreaApi(params) {
+function formatFetchProgress(task) {
+    const detail = task.detail || (task.status === 'parsing' ? 'Parsing OSM data…' : 'Fetching OSM data…');
+    return `${detail} (${task.elapsedSeconds}s)`;
+}
+
+async function fetchAreaApi(params, onProgress) {
     const res = await fetch('/api/fetch_area', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -164,6 +169,7 @@ async function fetchAreaApi(params) {
     });
     if (!res.ok) throw new Error(await res.text());
     const { task_id } = await res.json();
+    const startedAt = Date.now();
     while (true) {
         await new Promise(r => setTimeout(r, 1500));
         const poll = await fetch(`/api/fetch_area/${task_id}`);
@@ -171,6 +177,7 @@ async function fetchAreaApi(params) {
         const task = await poll.json();
         if (task.status === 'done') return task.result;
         if (task.status === 'failed') throw new Error(task.error || 'Fetch failed');
+        onProgress?.({ ...task, elapsedSeconds: Math.round((Date.now() - startedAt) / 1000) });
     }
 }
 

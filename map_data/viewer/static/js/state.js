@@ -1,3 +1,7 @@
+// Mirrors MAX_FETCH_AREA_KM2 in routes.py — server is authoritative, this just
+// gives immediate feedback instead of waiting on a round trip to find out.
+const MAX_FETCH_AREA_KM2 = 25.0;
+
 // ── State ────────────────────────────────────────────────────────────────────
 let currentAppMode = 'viewer'; // 'viewer' or 'planner'
 let plannerMode = null; // Will hold the PlannerMode instance

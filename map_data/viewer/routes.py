@@ -57,6 +57,7 @@ import copy
 import io
 import json
 import logging
+import math
 import os
 import re
 import select
@@ -723,6 +724,19 @@ def delete_annotation(ann_id: str) -> ResponseReturnValue:
     return "", 204
 
 
+# A robotour course is a few km at most; this comfortably covers that with
+# room to spare while still rejecting the "whole city" rectangles that make
+# Overpass queries time out no matter how many mirrors are available.
+MAX_FETCH_AREA_KM2 = 25.0
+
+
+def _bbox_area_km2(min_lat: float, min_lon: float, max_lat: float, max_lon: float) -> float:
+    mean_lat_rad = math.radians((min_lat + max_lat) / 2)
+    km_per_deg_lat = 111.32
+    km_per_deg_lon = 111.32 * math.cos(mean_lat_rad)
+    return abs(max_lat - min_lat) * km_per_deg_lat * abs(max_lon - min_lon) * km_per_deg_lon
+
+
 _fetch_tasks: dict[str, dict[str, Any]] = {}
 
 
@@ -769,9 +783,11 @@ def _run_fetch_task(
 
     Side Effects
     ------------
-    Writes *out_path* on success. Updates ``_fetch_tasks[task_id]`` to a
-    dict with ``"status"`` of ``"failed"`` (plus an ``"error"`` message)
-    or ``"done"`` (plus a ``"result"`` summary).
+    Writes *out_path* on success. Updates ``_fetch_tasks[task_id]`` as work
+    progresses: ``"querying"`` (plus a ``"detail"`` string naming the
+    Overpass mirror/attempt in flight) while the Overpass request is out,
+    then ``"parsing"``, then a terminal ``"failed"`` (plus an ``"error"``
+    message) or ``"done"`` (plus a ``"result"`` summary).
 
     """
     try:
@@ -782,13 +798,19 @@ def _run_fetch_task(
             obstacle_radius=obstacle_radius,
             buffer_widths=buffer_widths,
         )
-        md.run_queries()
+
+        def _report(detail: str) -> None:
+            _fetch_tasks[task_id] = {"status": "querying", "detail": detail}
+
+        _report("Querying Overpass…")
+        md.run_queries(progress_cb=_report)
         if any(d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)):
             _fetch_tasks[task_id] = {
                 "status": "failed",
                 "error": "Overpass API unavailable — try again later",
             }
             return
+        _fetch_tasks[task_id] = {"status": "parsing", "detail": "Parsing OSM data…"}
         if md.run_parse() != 0:
             _fetch_tasks[task_id] = {"status": "failed", "error": "Parsing failed"}
             return
@@ -849,6 +871,14 @@ def fetch_area() -> Response:
 
     if body["min_lat"] >= body["max_lat"] or body["min_lon"] >= body["max_lon"]:
         abort(400, "min_lat/min_lon must be strictly less than max_lat/max_lon")
+
+    area_km2 = _bbox_area_km2(body["min_lat"], body["min_lon"], body["max_lat"], body["max_lon"])
+    if area_km2 > MAX_FETCH_AREA_KM2:
+        abort(
+            400,
+            f"Requested area is {area_km2:.1f} km², which exceeds the "
+            f"{MAX_FETCH_AREA_KM2:.0f} km² limit for a single fetch. Draw a smaller area.",
+        )
 
     name = re.sub(r"[^a-zA-Z0-9_\-]", "_", str(body["name"]).strip())
     if not name:
@@ -1002,6 +1032,14 @@ def upload_gpx() -> Response:
         )
         # Restore the original filename for metadata purposes
         md.coords_file = file.filename
+
+        area_km2 = _bbox_area_km2(md.min_lat, md.min_long, md.max_lat, md.max_long)
+        if area_km2 > MAX_FETCH_AREA_KM2:
+            abort(
+                400,
+                f"Track's surrounding area is {area_km2:.1f} km², which exceeds the "
+                f"{MAX_FETCH_AREA_KM2:.0f} km² limit for a single fetch.",
+            )
 
         md.run_queries()
         if any(d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)):

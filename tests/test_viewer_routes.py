@@ -1,6 +1,10 @@
+import io
 import json
+import time
+from unittest.mock import MagicMock, patch
 
 import numpy as np
+import overpy
 import pytest
 import utm
 from shapely.geometry import LineString
@@ -8,6 +12,7 @@ from shapely.geometry import LineString
 from map_data.map_data import MapData
 from map_data.utils.way import Way
 from map_data.viewer.app import create_app
+from map_data.viewer.routes import MAX_FETCH_AREA_KM2, _bbox_area_km2
 
 
 def _make_mapdata(path):
@@ -393,3 +398,91 @@ def test_split_way_undo(app_client_3node):
     data = resp.get_json()
     # After undo, only one segment (original way)
     assert len(data["segments"]) == 1
+
+
+# ── fetch_area / upload_gpx area limit ──────────────────────────────────────
+
+
+def test_bbox_area_km2_matches_known_scale():
+    # ~1 deg lat is ~111km; 1x1 deg box near the equator is ~111x111 km
+    assert _bbox_area_km2(0.0, 0.0, 1.0, 1.0) == pytest.approx(111.32 * 111.32, rel=0.01)
+
+
+def test_fetch_area_rejects_oversized_bbox(app_client):
+    client, _ = app_client
+    # 1x1 deg box near Prague is ~7700 km^2, well over the limit
+    assert _bbox_area_km2(50.0, 14.0, 51.0, 15.0) > MAX_FETCH_AREA_KM2
+    resp = client.post(
+        "/api/fetch_area",
+        data=json.dumps(
+            {
+                "min_lat": 50.0,
+                "max_lat": 51.0,
+                "min_lon": 14.0,
+                "max_lon": 15.0,
+                "name": "too_big",
+            },
+        ),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+    assert "km" in resp.get_data(as_text=True)
+
+
+def test_fetch_area_accepts_small_bbox_and_completes(app_client):
+    client, _ = app_client
+    ways_raw = json.dumps(
+        {
+            "version": 0.6,
+            "elements": [
+                {"type": "node", "id": 1, "lat": 50.0005, "lon": 14.0005},
+                {"type": "node", "id": 2, "lat": 50.0006, "lon": 14.0006},
+                {"type": "way", "id": 101, "nodes": [1, 2], "tags": {"highway": "footway"}},
+            ],
+        },
+    )
+    with patch("map_data.map_data.OverpassClient") as MockClient:
+        instance = MagicMock()
+        instance.query_raw.return_value = ways_raw
+        instance.api = overpy.Overpass()
+        MockClient.return_value = instance
+
+        resp = client.post(
+            "/api/fetch_area",
+            data=json.dumps(
+                {
+                    "min_lat": 50.000,
+                    "max_lat": 50.001,
+                    "min_lon": 14.000,
+                    "max_lon": 14.001,
+                    "name": "small",
+                },
+            ),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        task_id = resp.get_json()["task_id"]
+
+        status = None
+        for _ in range(100):
+            poll = client.get(f"/api/fetch_area/{task_id}")
+            status = poll.get_json()["status"]
+            if status in ("done", "failed"):
+                break
+            time.sleep(0.05)
+        assert status == "done"
+
+
+def test_upload_gpx_rejects_oversized_track(app_client):
+    client, _ = app_client
+    gpx_content = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">\n'
+        '  <wpt lat="50.0" lon="14.0"/>\n'
+        '  <wpt lat="51.0" lon="15.0"/>\n'
+        "</gpx>"
+    )
+    data = {"file": (io.BytesIO(gpx_content.encode()), "big_track.gpx")}
+    resp = client.post("/api/upload_gpx", data=data, content_type="multipart/form-data")
+    assert resp.status_code == 400
+    assert "km" in resp.get_data(as_text=True)

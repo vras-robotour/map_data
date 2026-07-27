@@ -513,13 +513,23 @@ function setupDrawEvents() {
         // Fetch-area rectangle
         if (currentMode === 'fetch') {
             const bounds = e.layer.getBounds();
+            const widthM = bounds.getNorthWest().distanceTo(bounds.getNorthEast());
+            const heightM = bounds.getNorthWest().distanceTo(bounds.getSouthWest());
+            const areaKm2 = (widthM * heightM) / 1e6;
+            setMode('view', false);
+            if (areaKm2 > MAX_FETCH_AREA_KM2) {
+                setStatus(
+                    `Selected area is ${areaKm2.toFixed(1)} km², which exceeds the ${MAX_FETCH_AREA_KM2} km² limit for a single fetch. Draw a smaller rectangle.`,
+                    'text-danger'
+                );
+                return;
+            }
             pendingBbox = {
                 min_lat: bounds.getSouth(), max_lat: bounds.getNorth(),
                 min_lon: bounds.getWest(), max_lon: bounds.getEast(),
             };
             document.getElementById('area-name-input').value = '';
             new bootstrap.Modal(document.getElementById('fetch-area-modal')).show();
-            setMode('view', false);
             return;
         }
 

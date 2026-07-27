@@ -85,6 +85,30 @@ def test_query_raw_request_exception():
     assert result is None
 
 
+def test_query_raw_default_retries_covers_every_endpoint_twice():
+    client = OverpassClient()
+    with (
+        patch.object(client.session, "get", return_value=_resp(200, "")),
+        patch.object(client.session, "post", return_value=_resp(500, "error")) as mock_post,
+        patch("map_data.utils.overpass.time.sleep"),
+    ):
+        result = client.query_raw("test query")
+    assert result is None
+    assert mock_post.call_count == 2 * len(client.endpoints)
+
+
+def test_query_raw_calls_on_attempt_with_endpoint_and_counts():
+    client = OverpassClient()
+    calls = []
+    with (
+        patch.object(client.session, "get", return_value=_resp(200, "")),
+        patch.object(client.session, "post", return_value=_resp(200, MINIMAL_OVERPASS_JSON)),
+        patch("map_data.utils.overpass.time.sleep"),
+    ):
+        client.query_raw("test query", retries=2, on_attempt=lambda *args: calls.append(args))
+    assert calls == [(client.endpoints[0], 1, 2)]
+
+
 def test_wait_for_slot_skips_non_overpass_endpoint():
     client = OverpassClient()
     with (

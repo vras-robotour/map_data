@@ -2,6 +2,7 @@ import http
 import logging
 import re
 import time
+from collections.abc import Callable
 
 import overpy
 import requests
@@ -35,19 +36,31 @@ class OverpassClient:
         )
         self.api = overpy.Overpass()
 
-    def query(self, query_str: str, retries: int = 3) -> overpy.Result | None:
+    def query(self, query_str: str, retries: int | None = None) -> overpy.Result | None:
         raw_text = self.query_raw(query_str, retries)
         if raw_text:
             return self.api.parse_json(raw_text)
         return None
 
-    def query_raw(self, query_str: str, retries: int = 3) -> str | None:
+    def query_raw(
+        self,
+        query_str: str,
+        retries: int | None = None,
+        on_attempt: Callable[[str, int, int], None] | None = None,
+    ) -> str | None:
+        # Give every endpoint two shots by default rather than hardcoding a
+        # count that has to be kept in sync by hand as endpoints are added.
+        if retries is None:
+            retries = 2 * len(self.endpoints)
+
         for attempt in range(1, retries + 1):
             endpoint = self.endpoints[self._endpoint_index % len(self.endpoints)]
             self._wait_for_slot(endpoint)
 
             logger.info("Querying Overpass via %s (attempt %s/%s)", endpoint, attempt, retries)
             logger.debug("Query string: %s", query_str)
+            if on_attempt is not None:
+                on_attempt(endpoint, attempt, retries)
             try:
                 response = self.session.post(
                     endpoint, data={"data": query_str}, timeout=REQUEST_TIMEOUT

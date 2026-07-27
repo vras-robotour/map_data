@@ -7,6 +7,7 @@ caching, and parsing OpenStreetMap data for use in path planning.
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -301,7 +302,12 @@ class MapData:
             logger.debug("Could not load OSM cache: %s", e)
             return None
 
-    def run_queries(self, *, use_cache: bool = True) -> None:
+    def run_queries(
+        self,
+        *,
+        use_cache: bool = True,
+        progress_cb: Callable[[str], None] | None = None,
+    ) -> None:
         """
         Download OSM ways, relations, and nodes from the Overpass API.
 
@@ -316,6 +322,10 @@ class MapData:
         use_cache : bool
             If ``True`` (default), attempt to load the response from a
             local ``.osm_cache.json`` file before querying the API.
+        progress_cb : callable, optional
+            Called with a short human-readable status string before each
+            Overpass request attempt (e.g. which mirror/attempt is in
+            flight), so a caller can surface fetch progress to a user.
 
         """
         client = OverpassClient()
@@ -341,7 +351,11 @@ class MapData:
             f"out;"
         )
 
-        raw = client.query_raw(query)
+        def _on_attempt(endpoint: str, attempt: int, retries: int) -> None:
+            if progress_cb is not None:
+                progress_cb(f"Querying {endpoint} (attempt {attempt}/{retries})")
+
+        raw = client.query_raw(query, on_attempt=_on_attempt)
         if raw is None:
             logger.error("Overpass query failed.")
             return
