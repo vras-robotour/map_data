@@ -189,10 +189,10 @@ from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.gpx import parse_path
 
 md = MapData.load("coords.mapdata")
-path_data = parse_path("waypoints.gpx")   # (utm_array, zone_num, zone_let)
+path_data = parse_path("waypoints.gpx")  # (utm_array, zone_num, zone_let)
 
 args = parse_args([])
-args.low  = (md.min_x, md.min_y)
+args.low = (md.min_x, md.min_y)
 args.high = (md.max_x, md.max_y)
 
 replanner = ReplanPath(args, ways_to_shapely(md.barriers_list))

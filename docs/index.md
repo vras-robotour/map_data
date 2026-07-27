@@ -74,7 +74,7 @@ from map_data.map_data import MapData
 
 md = MapData.load("coords.mapdata")
 
-print(len(md.roads_list))    # list of Way objects
+print(len(md.roads_list))  # list of Way objects
 print(len(md.footways_list))
 print(len(md.barriers_list))
 ```

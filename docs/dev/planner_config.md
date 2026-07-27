@@ -115,7 +115,7 @@ from map_data.pathsolver.replan import ReplanPath
 
 planner = ReplanPath(
     map_data=md,
-    cell_size=0.5,          # coarser grid for faster planning
+    cell_size=0.5,  # coarser grid for faster planning
     inflate_obstacles=0.5,  # wider obstacle clearance
 )
 ```

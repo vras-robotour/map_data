@@ -85,26 +85,38 @@ if sidecar_path.exists():
     with open(sidecar_path) as f:
         sidecar = json.load(f)
 else:
-    sidecar = {"version": 1, "annotations": [], "deleted_ways": [],
-                "hidden_ways": [], "tag_overrides": {}, "split_ways": {},
-                "deleted_nodes": {}, "node_position_overrides": {},
-                "change_log": [], "change_log_migration": "1"}
+    sidecar = {
+        "version": 1,
+        "annotations": [],
+        "deleted_ways": [],
+        "hidden_ways": [],
+        "tag_overrides": {},
+        "split_ways": {},
+        "deleted_nodes": {},
+        "node_position_overrides": {},
+        "change_log": [],
+        "change_log_migration": "1",
+    }
 
 # Polygon coordinates are WGS-84 (lon, lat) pairs, closed ring
-sidecar["annotations"].append({
-    "id": f"ann_{int(time.time() * 1000)}",
-    "type": "obstacle",
-    "geometry": {
-        "type": "Polygon",
-        "coordinates": [[
-            [14.5678, 50.1234],
-            [14.5680, 50.1234],
-            [14.5680, 50.1236],
-            [14.5678, 50.1234],
-        ]]
-    },
-    "properties": {}
-})
+sidecar["annotations"].append(
+    {
+        "id": f"ann_{int(time.time() * 1000)}",
+        "type": "obstacle",
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [14.5678, 50.1234],
+                    [14.5680, 50.1234],
+                    [14.5680, 50.1236],
+                    [14.5678, 50.1234],
+                ]
+            ],
+        },
+        "properties": {},
+    }
+)
 
 with open(sidecar_path, "w") as f:
     json.dump(sidecar, f, indent=2)

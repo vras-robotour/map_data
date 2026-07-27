@@ -47,10 +47,10 @@ import numpy as np
 md = MapData.load("coords.mapdata")
 
 start = np.array([md.min_x + 10, md.min_y + 10])
-goal  = np.array([md.max_x - 10, md.max_y - 10])
+goal = np.array([md.max_x - 10, md.max_y - 10])
 
 planner = GraphPlanner(md, highway_types=["footway", "road"])
-result  = planner.plan(np.array([start, goal]))  # np.ndarray or None
+result = planner.plan(np.array([start, goal]))  # np.ndarray or None
 ```
 
 ### ReplanPath
@@ -64,10 +64,10 @@ from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.gpx import parse_path, utm_path_to_latlon, create_gpx_content
 
 md = MapData.load("coords.mapdata")
-path_data = parse_path("waypoints.gpx")   # returns (utm_array, zone_num, zone_let)
+path_data = parse_path("waypoints.gpx")  # returns (utm_array, zone_num, zone_let)
 
 args = parse_args([])
-args.low  = (md.min_x, md.min_y)
+args.low = (md.min_x, md.min_y)
 args.high = (md.max_x, md.max_y)
 args.cell_size = 0.25
 args.inflate_obstacles = 0.25
@@ -191,15 +191,18 @@ controller benefits from smooth curvature and the small positional deviation is 
 ```python
 from map_data.pathsolver.astar import astar_search
 
+
 # Example: plan over a simple weighted grid
 def neighbors(node):
     r, c = node
-    candidates = [(r-1,c),(r+1,c),(r,c-1),(r,c+1)]
+    candidates = [(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)]
     return [(n, 1.0) for n in candidates if 0 <= n[0] < 10 and 0 <= n[1] < 10]
+
 
 def heuristic(node):
     goal = (9, 9)
     return abs(node[0] - goal[0]) + abs(node[1] - goal[1])
+
 
 path = astar_search(
     start_node=(0, 0),
