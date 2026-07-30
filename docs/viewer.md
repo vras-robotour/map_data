@@ -4,6 +4,13 @@
 It lets you inspect and edit parsed features, view their OSM tags, draw manual annotations,
 and plan paths — without needing ROS2.
 
+!!! tip "Live demo"
+    A read-only demo of the viewer (Buchlovice dataset) runs at
+    <https://vras-robotour.github.io/map_data/demo/> — no install needed.
+    It is rebuilt automatically from the current code on every push.
+    Editing, OSM fetching, path planning, and the tracker require running
+    `map_data_viewer` locally.
+
 ## Running the Viewer
 
 ```bash

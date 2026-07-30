@@ -15,6 +15,11 @@ paths/*
 *.mapdata
 *.annotations.json
 site
+_demo_out/
+
+# Committed demo dataset (served by the static docs demo)
+!demo/*.mapdata
+!demo/*.annotations.json
 
 # OS
 .DS_Store

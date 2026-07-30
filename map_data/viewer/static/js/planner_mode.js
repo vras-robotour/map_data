@@ -30,9 +30,14 @@ class PlannerMode {
 
   async fetchDefaults() {
     try {
-      const res = await fetch('/api/planner_defaults');
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
+      let data;
+      if (STATIC_BASE) {
+        data = await _staticJson('api/planner_defaults.json');
+      } else {
+        const res = await fetch('/api/planner_defaults');
+        if (!res.ok) throw new Error(await res.text());
+        data = await res.json();
+      }
       this.defaults = data;
       this.highwayCosts = { ...data.highway_costs };
       this.surfaceCosts = { ...data.surface_costs };
@@ -286,6 +291,10 @@ class PlannerMode {
   }
 
   async fetchCostGrid() {
+    if (STATIC_BASE) {
+      setStatus('Cost grid needs the backend — run map_data_viewer locally', 'text-warning');
+      return;
+    }
     if (!currentFile) return;
     const bounds = map.getBounds();
     setStatus('Fetching cost grid...', 'text-warning');
@@ -645,6 +654,10 @@ class PlannerMode {
   }
 
   async replanPath() {
+    if (STATIC_BASE) {
+      setStatus('Path planning needs the backend — run map_data_viewer locally', 'text-warning');
+      return;
+    }
     if (this.isProcessing) {
       if (this.abortController) {
         this.abortController.abort();
@@ -736,6 +749,7 @@ class PlannerMode {
   }
 
   async cancelReplan() {
+    if (STATIC_BASE) return;
     if (!this.currentReplanId) return;
     setStatus('Cancelling...', 'text-warning');
     try {
@@ -800,6 +814,10 @@ ${pts}
   }
 
   async shareViaWormhole() {
+    if (STATIC_BASE) {
+      setStatus('Wormhole sharing needs the backend — run map_data_viewer locally', 'text-warning');
+      return;
+    }
     const gpx = this.generateGPX();
     setStatus('Creating wormhole...', 'text-warning');
     try {

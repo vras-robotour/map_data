@@ -70,6 +70,7 @@ nav:
   - Usage:
       - Overview: usage.md
       - Interactive Viewer:
+          - Live Demo: https://vras-robotour.github.io/map_data/demo/
           - Overview: viewer.md
           - Viewer: viewer_view.md
           - Planner: viewer_planner.md

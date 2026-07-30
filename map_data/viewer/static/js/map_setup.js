@@ -37,6 +37,10 @@ function _enforceLayerOrder() {
 
 // ── Mode switching ────────────────────────────────────────────────────────────
 function setMode(newMode, commit = true) {
+    if (STATIC_BASE && newMode !== 'view') {
+        setStatus('Editing modes are not available in this read-only demo', 'text-warning');
+        return;
+    }
     const prev = currentMode;
     currentMode = newMode;
 
@@ -140,12 +144,16 @@ async function initApp() {
 
     document.getElementById('export-btn')?.addEventListener('click', () => {
         if (currentFile)
-            window.location = `/api/export?file=${encodeURIComponent(currentFile)}`;
+            window.location = STATIC_BASE
+                ? `${STATIC_BASE}/api/export.mapdata`
+                : `/api/export?file=${encodeURIComponent(currentFile)}`;
     });
 
     document.getElementById('export-geojson-btn')?.addEventListener('click', () => {
         if (currentFile)
-            window.location = `/api/export/geojson?file=${encodeURIComponent(currentFile)}`;
+            window.location = STATIC_BASE
+                ? `${STATIC_BASE}/api/export.geojson`
+                : `/api/export/geojson?file=${encodeURIComponent(currentFile)}`;
     });
 
     document.getElementById('gpx-create-btn')?.addEventListener('click', () => {
@@ -398,6 +406,52 @@ async function initApp() {
                 break;
         }
     });
+
+    if (STATIC_BASE) await initStaticDemo();
+}
+
+// ── Static demo mode ─────────────────────────────────────────────────────────
+// Dims every control that needs the backend, badges the page as a demo, and
+// auto-loads the bundled dataset. Only runs on the scraped GitHub Pages build.
+async function initStaticDemo() {
+    const serverOnly = [
+        ['.mode-btn[data-mode="edit"]', 'Editing needs the backend — run map_data_viewer locally'],
+        ['.mode-btn[data-mode="add"]', 'Editing needs the backend — run map_data_viewer locally'],
+        ['.mode-btn[data-mode="path"]', 'Editing needs the backend — run map_data_viewer locally'],
+        ['.mode-btn[data-mode="delete"]', 'Editing needs the backend — run map_data_viewer locally'],
+        ['.mode-btn[data-mode="fetch"]', 'OSM fetching needs the backend — run map_data_viewer locally'],
+        ['#gpx-create-btn', 'GPX import needs the backend — run map_data_viewer locally'],
+        ['#clear-btn', 'File management needs the backend — run map_data_viewer locally'],
+        ['#load-btn', 'File loading needs the backend — run map_data_viewer locally'],
+        ['#file-select', 'File loading needs the backend — run map_data_viewer locally'],
+        ['.app-mode-btn[data-app-mode="planner"]', 'Path planning runs server-side — run map_data_viewer locally'],
+    ];
+    serverOnly.forEach(([sel, tip]) => {
+        const el = document.querySelector(sel);
+        if (!el) return;
+        el.setAttribute('disabled', '');
+        el.title = tip;
+    });
+
+    const pill = document.createElement('a');
+    pill.className = 'demo-pill';
+    pill.href = 'https://vras-robotour.github.io/map_data/';
+    pill.title = 'Read-only demo of the full tool — click for the documentation';
+    pill.textContent = 'Demo';
+    document.getElementById('status')?.before(pill);
+
+    const demoFile = window.__mapdataDemoFile;
+    if (demoFile) {
+        const sel = document.getElementById('file-select');
+        if (sel) {
+            if (![...sel.options].some(o => o.value === demoFile)) {
+                sel.appendChild(new Option(demoFile, demoFile));
+            }
+            sel.value = demoFile;
+        }
+        await loadMapData(demoFile);
+    }
+    setStatus('Read-only demo — run map_data_viewer locally for editing & planning', 'text-info');
 }
 
 initApp();

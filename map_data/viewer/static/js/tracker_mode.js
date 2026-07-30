@@ -20,6 +20,7 @@ const trackerMode = (() => {
   `;
 
     function initSocket() {
+        if (window.__mapdataStaticBase) return;
         if (socket) return;
 
         socket = io();
