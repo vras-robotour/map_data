@@ -35,13 +35,6 @@
     "file": "map_data/viewer/routes.py, map_data/viewer/app.py"
   },
   {
-    "type": "security",
-    "sev": "minor",
-    "title": "cost_grid and replan accept unbounded/unvalidated client parameters",
-    "desc": "<code>get_cost_grid</code> deep-copies the merged map and fills a 1 m grid over any client-supplied bbox with no area cap (unlike <code>fetch_area</code>'s <code>MAX_FETCH_AREA_KM2</code>), then reprojects every cell in a Python loop — a compute/memory DoS lever. <code>create_replan</code> passes client JSON (<code>cell_size</code>, cost dicts) into the planner without type/range validation. Fix: clamp bbox area/cell count and validate parameter types up front.",
-    "file": "map_data/viewer/routes.py"
-  },
-  {
     "type": "bug",
     "sev": "minor",
     "title": "Multipolygon inner rings are never subtracted",
@@ -201,26 +194,5 @@
     "title": "Wire up or remove the node anti-tag mechanism",
     "desc": "<code>parameters/anti_obstacle_tags.csv</code> is loaded nowhere and <code>parse_osm_nodes</code> has no anti-tag override analogous to <code>Way.is_barrier</code>. Related: <code>way_node_ids</code> is built from <em>all</em> ways, so obstacle nodes sitting on any way (the normal OSM position for <code>barrier=gate</code>/<code>bollard</code>) are always skipped and never become obstacles — if intentional, document it.",
     "file": "map_data/utils/parsing.py, map_data/map_data.py, parameters/anti_obstacle_tags.csv"
-  },
-  {
-    "type": "testing",
-    "sev": "minor",
-    "title": "Cover the riskiest viewer endpoints",
-    "desc": "No tests exist for the <code>MAP_DATA_ACCESS_TOKEN</code> gate (on/off), virtual-ID suffix validation in <code>delete_way</code>/<code>restore_way</code>, <code>get_cost_grid</code>, <code>create_replan</code>, <code>upload_mapdata</code>, <code>add_way_node</code>, or the wormhole endpoints. The auth and virtual-ID tests are the highest value.",
-    "file": "tests/test_viewer_routes.py"
-  },
-  {
-    "type": "testing",
-    "sev": "minor",
-    "title": "Cover get_stats, combine_ways edge branches, and grid_astar cost behavior",
-    "desc": "<code>info.get_stats</code> is untested (the perimeter-vs-length bug survived because of it); <code>combine_ways</code>' backward-prepend and ring-closing merge branches are untested; nothing asserts <code>grid_astar</code> actually prefers low-cost corridors (<code>grid_cost_weight</code> never exercised) or checks diagonal corner-cutting; the replan cancellation machinery is untested.",
-    "file": "tests/"
-  },
-  {
-    "type": "testing",
-    "sev": "nice-to-have",
-    "title": "Centralize pytest config and the Overpass mock fixture",
-    "desc": "There is no <code>[tool.pytest.ini_options]</code> and no <code>tests/conftest.py</code>: coverage flags live only in the CI workflow (local runs differ from CI), and the mocked-Overpass setup is duplicated across <code>test_integration.py</code> and <code>test_viewer_routes.py</code>. Add <code>addopts</code> and a shared fixture.",
-    "file": "pyproject.toml, tests/"
   }
 ]
