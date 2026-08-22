@@ -1,6 +1,10 @@
 import argparse
 import logging
+import math
 from pathlib import Path
+
+import numpy as np
+import utm
 
 from map_data.map_data import MapData
 from map_data.utils.config import setup_logging
@@ -14,6 +18,42 @@ _METADATA_FIELDS = ("zone_number", "zone_letter", "min_x", "max_x", "min_y", "ma
 def _way_node_ids(way: Way) -> list:
     # way.nodes holds plain ids after JSON round-trip, overpy objects otherwise
     return [getattr(n, "id", n) for n in way.nodes or []]
+
+
+def _footway_centerline_length(way: Way, md: MapData) -> float:
+    """
+    Length of a footway's centerline in metres.
+
+    By save time footways have been buffered into Polygons, so ``line.length``
+    is the buffer's *perimeter* (~2x the walked distance plus the end caps),
+    not the walked distance. Prefer reconstructing the centerline from the
+    way's node coordinates via ``nodes_cache``; fall back to inverting the
+    round-capped buffer formulas (perimeter ``P = 2L + pi*w``, area
+    ``A = L*w + pi*w^2/4`` give ``L = sqrt(P^2 - 4*pi*A) / 2``).
+    """
+    line = way.line
+    if line is None:
+        return 0.0
+    if line.geom_type == "LineString":
+        return float(line.length)
+
+    node_ids = _way_node_ids(way)
+    nodes_cache = getattr(md, "nodes_cache", None) or {}
+    zone_number = getattr(md, "zone_number", None)
+    zone_letter = getattr(md, "zone_letter", None)
+    min_nodes = 2
+    if len(node_ids) >= min_nodes and zone_number and all(n in nodes_cache for n in node_ids):
+        lats = np.array([nodes_cache[n]["lat"] for n in node_ids])
+        lons = np.array([nodes_cache[n]["lon"] for n in node_ids])
+        easting, northing, _, _ = utm.from_latlon(
+            lats, lons, force_zone_number=zone_number, force_zone_letter=zone_letter
+        )
+        return float(np.sum(np.hypot(np.diff(easting), np.diff(northing))))
+
+    discriminant = line.length**2 - 4.0 * math.pi * line.area
+    if discriminant <= 0:
+        return 0.0  # ~circular blob, no meaningful centerline
+    return math.sqrt(discriminant) / 2.0
 
 
 def _footway_components(footways: list[Way]) -> int:
@@ -135,7 +175,7 @@ def get_stats(path: str) -> None:
     print(f"Footways:    {len(md.footways_list)}")
     print(f"Barriers:    {len(md.barriers_list)}")
 
-    total_footway_len = sum(w.line.length for w in md.footways_list if w.line)
+    total_footway_len = sum(_footway_centerline_length(w, md) for w in md.footways_list)
     print(f"Total Footway Distance: {total_footway_len:.1f} m")
 
     # Check for annotations sidecar

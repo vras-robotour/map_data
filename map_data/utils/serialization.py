@@ -1,10 +1,13 @@
+import contextlib
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from shapely import wkt
+from shapely import geometry, wkt
 
 from map_data.utils.way import Way
 
@@ -63,8 +66,19 @@ def map_data_to_dict(md: "MapData") -> dict[str, Any]:
 
 def save_mapdata(md: "MapData", path: str | Path) -> None:
     data = map_data_to_dict(md)
-    with Path(path).open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    p = Path(path)
+    # Atomic write: dump to a temp file in the same directory, then replace
+    # the target, so a crash or full disk mid-dump cannot truncate a
+    # previously good file (mirrors viewer/helpers.py save_annotations).
+    fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=p.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, str(p))
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
 
 
 def load_mapdata(md_class: type["MapData"], path: str | Path) -> "MapData":
@@ -111,6 +125,13 @@ def load_mapdata(md_class: type["MapData"], path: str | Path) -> "MapData":
     md.osm_nodes_data = None
 
     md.waypoints = np.array(data["waypoints"])
+    # Constructed instances expose the waypoints as shapely Points too;
+    # restore the attribute for parity (MapData.__init__ builds the same list).
+    md.points = (
+        [geometry.Point(x, y) for x, y in zip(md.waypoints[:, 0], md.waypoints[:, 1], strict=True)]
+        if md.waypoints.ndim == 2
+        else []
+    )
     md.nodes_cache = {int(k): v for k, v in data["nodes_cache"].items()}
 
     md.roads_list = [way_from_dict(w) for w in data["roads"]]

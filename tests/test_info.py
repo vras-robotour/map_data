@@ -2,6 +2,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+import utm
 from shapely.geometry import LineString
 
 from map_data import info
@@ -114,10 +115,6 @@ def test_get_stats_missing_file_prints_nothing(tmp_path, monkeypatch, capsys):
     assert capsys.readouterr().out == ""
 
 
-@pytest.mark.xfail(
-    reason="footway distance sums buffer perimeters — tracked in backlog",
-    strict=True,
-)
 def test_get_stats_footway_distance_is_centerline_length(tmp_path, monkeypatch, capsys):
     """
     In a loaded MapData, footways have been buffered into Polygons, so
@@ -138,3 +135,32 @@ def test_get_stats_footway_distance_is_centerline_length(tmp_path, monkeypatch, 
 
     reported = float(_stat(out, "Total Footway Distance").removesuffix(" m"))
     assert reported == pytest.approx(centerline.length, abs=0.1)
+
+
+def test_get_stats_footway_distance_uses_node_coordinates(tmp_path, monkeypatch, capsys):
+    """
+    When the loaded MapData has a nodes_cache covering the footway's nodes,
+    the centerline length is reconstructed from the node coordinates rather
+    than estimated from the buffer polygon.
+    """
+    e, n, zn, zl = utm.from_latlon(50.0, 14.0)
+    lat2, lon2 = utm.to_latlon(e + 10.0, n, zn, zl)
+    centerline = LineString([(e, n), (e + 10.0, n)])
+    footway = Way(
+        id=1,
+        is_area=True,
+        nodes=[100, 101],
+        tags={"highway": "footway"},
+        line=centerline.buffer(1.5),
+    )
+    md = _make_mapdata(footways=[footway])
+    md.zone_number, md.zone_letter = zn, zl
+    md.nodes_cache = {
+        100: {"lat": 50.0, "lon": 14.0, "tags": {}},
+        101: {"lat": lat2, "lon": lon2, "tags": {}},
+    }
+
+    out = _run_stats(tmp_path, monkeypatch, capsys, md)
+
+    reported = float(_stat(out, "Total Footway Distance").removesuffix(" m"))
+    assert reported == pytest.approx(10.0, abs=0.01)

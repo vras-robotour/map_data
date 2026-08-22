@@ -5,7 +5,7 @@ import numpy as np
 import overpy
 import utm
 from shapely import geometry
-from shapely.ops import linemerge
+from shapely.ops import linemerge, unary_union
 from tqdm import tqdm
 
 from map_data.utils.config import load_config
@@ -42,6 +42,18 @@ def parse_osm_ways(
                 }
 
         is_area = coords[0] == coords[-1]
+        # Degenerate ways must not abort the whole parse: a LineString needs
+        # at least 2 coordinates and a closed ring (Polygon) at least 4
+        # (3 distinct + the closing one), else shapely raises.
+        min_coords = 4 if is_area else 2
+        if len(coords) < min_coords:
+            logger.warning(
+                "Skipping degenerate way %s: %d coordinate(s) is too few for a %s",
+                way.id,
+                len(coords),
+                "Polygon" if is_area else "LineString",
+            )
+            continue
         ways[way.id] = Way(
             id=way.id,
             is_area=is_area,
@@ -53,6 +65,9 @@ def parse_osm_ways(
 
 
 def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
+    consumed_ids: set[int] = set()
+    kept_ids: set[int] = set()
+
     for rel in tqdm(osm_rels_data.relations, desc="Parse rels"):
         outer_ids: list[int] = []
         inner_ids: list[int] = []
@@ -61,15 +76,39 @@ def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
             if member._type_value == "way" and int(member.ref) in ways:  # noqa: SLF001
                 (outer_ids if member.role == "outer" else inner_ids).append(int(member.ref))
 
-        outer_ids = combine_ways(outer_ids, ways)
+        outer_ids = combine_ways(outer_ids, ways, consumed=consumed_ids)
+        inner_ids = combine_ways(inner_ids, ways, consumed=consumed_ids)
+        kept_ids.update(outer_ids)
+        kept_ids.update(inner_ids)
         rel_tags = dict(rel.tags) if rel.tags else {}
 
+        # Inner rings are holes in the relation geometry (e.g. a courtyard in
+        # a building): subtract them from the outer polygons so the merged
+        # geometry does not cover them.
+        inner_rings = [
+            ways[wid].line
+            for wid in inner_ids
+            if ways[wid].is_area and isinstance(ways[wid].line, geometry.Polygon)
+        ]
+
         for wid in outer_ids:
-            ways[wid].in_out = "outer"
-            ways[wid].tags.update(rel_tags)
+            way = ways[wid]
+            way.in_out = "outer"
+            way.tags.update(rel_tags)
+            if inner_rings and way.is_area and isinstance(way.line, geometry.Polygon):
+                holes = [ring for ring in inner_rings if way.line.intersects(ring)]
+                if holes:
+                    way.line = way.line.difference(unary_union(holes))
 
         for wid in inner_ids:
             ways[wid].in_out = "inner"
+
+    # Member ways merged into a relation geometry would otherwise be
+    # classified a second time by separate_ways (duplicate barriers). Drop
+    # them once ALL relations are processed — a way can be a member of
+    # several relations, and one of them may have kept it unmerged.
+    for wid in consumed_ids - kept_ids:
+        ways.pop(wid, None)
 
 
 def parse_osm_nodes(
@@ -125,7 +164,17 @@ def parse_osm_nodes(
     return barriers
 
 
-def combine_ways(ids: list[int], ways: dict[int, Way]) -> list[int]:
+def combine_ways(
+    ids: list[int],
+    ways: dict[int, Way],
+    consumed: set[int] | None = None,
+) -> list[int]:
+    """
+    Merge chains of member ways into single ways (added to *ways* under new
+    negative ids). When *consumed* is given, the ids of member ways that were
+    merged into a new way are added to it so the caller can drop them from
+    *ways* — the merged way fully replaces them.
+    """
     if not ids:
         return ids
 
@@ -216,6 +265,8 @@ def combine_ways(ids: list[int], ways: dict[int, Way]) -> list[int]:
             )
             ways[new_id] = new_way
             merged_ids.append(new_id)
+            if consumed is not None:
+                consumed.update(used_ways_this_loop)
         else:
             merged_ids.append(start_way.id)
 
