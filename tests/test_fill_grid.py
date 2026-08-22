@@ -165,8 +165,9 @@ def test_fill_grid_no_zero_cost_cells_off_path():
     off_path_cells = 0
     for iy in range(num_y):
         for ix in range(num_x):
-            x = low[0] + ix * cell_size
-            y = low[1] + iy * cell_size
+            # Cells are sampled at their centers
+            x = low[0] + (ix + 0.5) * cell_size
+            y = low[1] + (iy + 0.5) * cell_size
             dist_to_way = footway_line.distance(geom.Point(x, y))
             if dist_to_way > off_path_threshold:
                 off_path_cells += 1
@@ -179,3 +180,63 @@ def test_fill_grid_no_zero_cost_cells_off_path():
 
     # Sanity check that the test actually exercised off-path cells.
     assert off_path_cells > 0
+
+
+# ── regression: cells are sampled at their centers, not the lower-left corner ─
+#
+# Obstacle membership used to be decided at each cell's lower-left corner,
+# which shifted burned regions ~cell_size/2 toward -x/-y and let sub-cell
+# obstacles sitting in the middle of a cell escape burning entirely.
+
+
+def _make_path_grid(cell_size=1.0, low=(0.0, 0.0), high=(10.0, 10.0)):
+    from map_data.pathsolver.grid_constructor import PathGrid
+
+    return PathGrid(
+        low=low,
+        high=high,
+        cell_size=cell_size,
+        highway_costs={},
+        surface_costs={},
+    )
+
+
+def test_create_empty_grid_points_are_cell_centers():
+    pg = _make_path_grid()
+    # First point is the center of cell (0, 0), not its lower-left corner
+    assert np.allclose(pg.grid[0, :2], [0.5, 0.5])
+    # x varies fastest: second point is the center of cell (1, 0)
+    assert np.allclose(pg.grid[1, :2], [1.5, 0.5])
+
+
+def test_burn_obstacles_sub_cell_obstacle_centered_in_cell_burns_it():
+    pg = _make_path_grid()
+    # Sub-cell obstacle centered on the center of cell (x=4, y=4); it does not
+    # touch the cell's lower-left corner (4.0, 4.0), so corner sampling would
+    # miss it entirely.
+    obstacle = geom.box(4.3, 4.3, 4.7, 4.7)
+
+    grid_2d = np.full((10, 10), 0.5, dtype=np.float32)
+    pg.burn_obstacles(grid_2d, [obstacle])
+
+    assert np.isinf(grid_2d[4, 4])
+    # Neighboring cells (centers 1m away) are untouched
+    assert not np.isinf(grid_2d[4, 3])
+    assert not np.isinf(grid_2d[3, 4])
+    assert not np.isinf(grid_2d[4, 5])
+    assert not np.isinf(grid_2d[5, 4])
+
+
+def test_burn_obstacles_region_not_shifted_toward_origin():
+    pg = _make_path_grid()
+    # Obstacle exactly covering cells x in {2, 3}, y in {2, 3}. With corner
+    # sampling the burned region used to extend one cell too far towards +x/+y
+    # (corners at 4.0 lie on the boundary) while membership was evaluated half
+    # a cell off-center.
+    obstacle = geom.box(2.0, 2.0, 4.0, 4.0)
+
+    grid_2d = np.full((10, 10), 0.5, dtype=np.float32)
+    pg.burn_obstacles(grid_2d, [obstacle])
+
+    burned = np.argwhere(np.isinf(grid_2d))
+    assert {tuple(c) for c in burned} == {(2, 2), (2, 3), (3, 2), (3, 3)}

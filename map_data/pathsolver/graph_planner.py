@@ -5,6 +5,7 @@ This module provides the GraphPlanner class which builds a graph from
 OpenStreetMap ways and finds paths using Dijkstra or A*.
 """
 
+import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -13,7 +14,17 @@ from shapely.strtree import STRtree
 
 from map_data.pathsolver.astar import astar_search
 
+logger = logging.getLogger(__name__)
+
 TOLERANCE = 1e-3
+
+#: Default maximum distance (in metres) between a waypoint and the nearest
+#: graph edge for the waypoint to be snapped onto the network. Deliberately
+#: generous — unlike annotation splicing (5 m), waypoints come from user
+#: clicks or GPS fixes that can legitimately sit well off the mapped network —
+#: while still rejecting waypoints that would otherwise snap to an arbitrarily
+#: distant, unrelated edge.
+DEFAULT_MAX_SNAP_DISTANCE = 100.0
 
 if TYPE_CHECKING:
     from map_data.map_data import MapData
@@ -33,7 +44,12 @@ class GraphPlanner:
     entirely in UTM coordinates.
     """
 
-    def __init__(self, map_data: "MapData", highway_types: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        map_data: "MapData",
+        highway_types: list[str] | None = None,
+        max_snap_distance: float = DEFAULT_MAX_SNAP_DISTANCE,
+    ) -> None:
         """
         Initialize the graph planner.
 
@@ -44,10 +60,17 @@ class GraphPlanner:
         highway_types : list of str, optional
             Way categories to include in the graph. Supported values are
             ``"footway"`` and ``"road"``. Defaults to ``["footway"]``.
+        max_snap_distance : float
+            Maximum distance (metres) a waypoint passed to :meth:`plan` may
+            be from the nearest graph edge to be snapped onto it. Waypoints
+            farther than this fail the plan instead of snapping to an
+            arbitrarily distant edge
+            (default :data:`DEFAULT_MAX_SNAP_DISTANCE`).
 
         """
         self.map_data = map_data
         self.highway_types = highway_types or ["footway"]
+        self.max_snap_distance = max_snap_distance
         self.nodes: dict[int, np.ndarray] = self.map_data.get_points()
         self.graph: dict[int, list[tuple[int, float]]] = {}
         self._build_graph()
@@ -278,15 +301,25 @@ class GraphPlanner:
         ----------
         path_utm : np.ndarray
             Array of shape ``(N, 2)`` containing ``[x, y]`` UTM coordinates
-            of the desired waypoints, in order.
+            of the desired waypoints, in order. At least two waypoints are
+            required.
 
         Returns
         -------
         np.ndarray or None
             Concatenated path as an ``(M, 2)`` UTM coordinate array, or
-            ``None`` if any segment could not be routed.
+            ``None`` if fewer than two waypoints were given, a waypoint is
+            farther than :attr:`max_snap_distance` from the network, or any
+            segment could not be routed.
 
         """
+        if len(path_utm) < 2:
+            logger.warning(
+                "plan() requires at least two waypoints, got %d; cannot plan.",
+                len(path_utm),
+            )
+            return None
+
         full_path = []
 
         for i in range(len(path_utm) - 1):
@@ -294,11 +327,23 @@ class GraphPlanner:
             p_goal = path_utm[i + 1]
 
             # Find nearest edges and projections
-            edge_start_info, _ = self._find_closest_edge(p_start)
-            edge_goal_info, _ = self._find_closest_edge(p_goal)
+            edge_start_info, dist_start = self._find_closest_edge(p_start)
+            edge_goal_info, dist_goal = self._find_closest_edge(p_goal)
 
             if not edge_start_info or not edge_goal_info:
                 return None
+
+            for waypoint, dist in ((p_start, dist_start), (p_goal, dist_goal)):
+                if dist > self.max_snap_distance:
+                    logger.warning(
+                        "Waypoint (%.1f, %.1f) is %.1f m from the nearest graph "
+                        "edge, beyond the %.1f m snap limit; cannot plan.",
+                        waypoint[0],
+                        waypoint[1],
+                        dist,
+                        self.max_snap_distance,
+                    )
+                    return None
 
             id_s = "temp_start"
             id_g = "temp_goal"

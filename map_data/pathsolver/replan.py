@@ -12,7 +12,7 @@ import shapely as sh
 from shapely.geometry import LineString
 
 from map_data.map_data import MapData
-from map_data.pathsolver.grid_astar import grid_astar
+from map_data.pathsolver.grid_astar import grid_astar, simplify_path_checked
 from map_data.pathsolver.rrt_star import RRTStar
 from map_data.utils.config import load_config
 from map_data.utils.gpx import create_gpx_content, parse_path, utm_path_to_latlon
@@ -185,28 +185,39 @@ class ReplanPath:
                 segment_path.extend(way[1:-1])
             return segment_path
 
-        # This is pure-Python, GIL-bound work, so it runs sequentially. Warm the
-        # grid cache once up front to avoid every segment lazily (and redundantly)
-        # rebuilding it in _astar/_rrt_star.
-        if self.path_grid.grid_2d_cache is None:
-            grid_2d = self.path_grid.get_grid_2d()
-            self.path_grid.grid_2d_cache = self.path_grid.burn_obstacles(grid_2d, self.obstacles)
+        # A cancel targeting a *previous* replan with the same transfer_id may
+        # arrive after that run already returned; discard any such stale ID on
+        # entry so it cannot instantly abort this run, and again on exit (via
+        # finally) so a cancel arriving after we return cannot poison the next
+        # run. Cancels registered while this run is in progress still abort it.
+        _discard_cancelled(self.transfer_id)
+        try:
+            # This is pure-Python, GIL-bound work, so it runs sequentially.
+            # Warm the grid cache once up front to avoid every segment lazily
+            # (and redundantly) rebuilding it in _astar/_rrt_star.
+            if self.path_grid.grid_2d_cache is None:
+                grid_2d = self.path_grid.get_grid_2d()
+                self.path_grid.grid_2d_cache = self.path_grid.burn_obstacles(
+                    grid_2d,
+                    self.obstacles,
+                )
 
-        new_path: list[np.ndarray] = []
-        for i in range(len(path) - 1):
-            segment_path = process_segment(i, path, self.args)
+            new_path: list[np.ndarray] = []
+            for i in range(len(path) - 1):
+                segment_path = process_segment(i, path, self.args)
 
-            if _is_cancelled(self.transfer_id):
-                _discard_cancelled(self.transfer_id)
-                return None
+                if _is_cancelled(self.transfer_id):
+                    return None
 
-            if segment_path is None:
-                logger.warning("%s failed to find a path.", algorithm)
-                return None
-            new_path.extend(segment_path)
+                if segment_path is None:
+                    logger.warning("%s failed to find a path.", algorithm)
+                    return None
+                new_path.extend(segment_path)
 
-        new_path.append(path[-1][:2])
-        return self._post_process_path(np.array(new_path))
+            new_path.append(path[-1][:2])
+            return self._post_process_path(np.array(new_path))
+        finally:
+            _discard_cancelled(self.transfer_id)
 
     def _post_process_path(self, path: np.ndarray | None) -> np.ndarray | None:
         """
@@ -228,9 +239,16 @@ class ReplanPath:
         if getattr(self.args, "smooth_path", False):
             path = smooth_path(path, collision_check_func=self._colides)
 
-        # 3. Final Douglas-Peucker simplification on the whole path
+        # 3. Final Douglas-Peucker simplification on the whole path.
+        #    Every shortcut the simplification introduces is collision-checked
+        #    against the obstacle polygons; colliding shortcuts keep their
+        #    original vertices so the path cannot chord into an obstacle.
         if self.args.simplify_path:
-            path = np.array(LineString(path).simplify(self.args.cell_size).coords)
+            path = simplify_path_checked(
+                path,
+                self.args.cell_size,
+                lambda p1, p2: self._colides(LineString([p1, p2])),
+            )
 
         return path
 

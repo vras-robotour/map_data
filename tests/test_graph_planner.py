@@ -185,6 +185,66 @@ def test_graph_planner_does_not_mutate_map_data_ways():
     assert annotation.nodes == [20, 21]
 
 
+# ── plan() edge cases ────────────────────────────────────────────────────────
+
+
+def _simple_planner(**kwargs):
+    nodes_coords = {100: (0.0, 0.0), 101: (10.0, 0.0)}
+    way = _make_footway(1, [100, 101], nodes_coords)
+    md = MockMapData([way], nodes_coords)
+    return GraphPlanner(md, **kwargs)
+
+
+def test_graph_planner_fewer_than_two_waypoints_returns_none(caplog):
+    """
+    plan() honours its documented failure contract: None, not np.array([]).
+    """
+    planner = _simple_planner()
+
+    with caplog.at_level("WARNING"):
+        assert planner.plan(np.array([[5.0, 0.0]])) is None
+        assert planner.plan(np.empty((0, 2))) is None
+
+    assert any("two waypoints" in rec.message for rec in caplog.records)
+
+
+def test_graph_planner_waypoint_beyond_snap_distance_returns_none(caplog):
+    """
+    A waypoint far from every edge fails the plan instead of snapping to the
+    globally nearest edge hundreds of metres away.
+    """
+    planner = _simple_planner()  # default max_snap_distance = 100 m
+
+    with caplog.at_level("WARNING"):
+        result = planner.plan(np.array([[0.0, 0.0], [500.0, 0.0]]))
+
+    assert result is None
+    assert any("snap limit" in rec.message for rec in caplog.records)
+
+
+def test_graph_planner_custom_snap_distance_allows_far_waypoint():
+    planner = _simple_planner(max_snap_distance=1000.0)
+
+    result = planner.plan(np.array([[0.0, 0.0], [500.0, 0.0]]))
+
+    assert result is not None
+    assert len(result) >= 2
+    # Path starts at the first waypoint and ends at the far (unsnappable-by-
+    # default) waypoint, routed via the network end at x=10
+    assert np.allclose(result[0], [0.0, 0.0])
+    assert np.allclose(result[-1], [500.0, 0.0])
+
+
+def test_graph_planner_waypoint_within_snap_distance_still_plans():
+    planner = _simple_planner()
+
+    # 50 m off the network is within the default 100 m snap limit
+    result = planner.plan(np.array([[0.0, 50.0], [10.0, 0.0]]))
+
+    assert result is not None
+    assert len(result) >= 2
+
+
 def test_graph_planner_l_shaped():
     """
     L-shaped footway: path must navigate around the corner.

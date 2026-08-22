@@ -66,14 +66,60 @@ def test_replan_completes_without_cancel(transfer_id):
     assert np.allclose(result[-1], [9.0, 9.0])
 
 
-def test_replan_cancelled_before_start_returns_none(transfer_id):
+def test_replan_stale_cancel_before_start_is_cleared_and_run_completes(transfer_id):
+    """
+    A cancel left over from an earlier run must not abort a new replan.
+
+    Cancels only apply to the replan that is running when they arrive; an ID
+    already present when replan() starts is stale and is discarded on entry.
+    """
     replanner = _make_replanner(transfer_id)
+    cancel_replan_backend(transfer_id)  # stale — no replan is running yet
+
+    result = replanner.replan(np.array([[1.0, 1.0], [9.0, 9.0]]))
+
+    assert result is not None
+    assert not replan_mod._is_cancelled(transfer_id)
+
+
+def test_replan_cancel_after_completion_does_not_poison_next_run(transfer_id):
+    """
+    Regression: a cancel arriving after replan() returned used to sit in
+    _cancelled_transfers forever, instantly "cancelling" the next replan
+    that reused the same transfer_id.
+    """
+    replanner = _make_replanner(transfer_id)
+    path = np.array([[1.0, 1.0], [9.0, 9.0]])
+
+    assert replanner.replan(path) is not None
+
+    # Cancel lands after the run already completed
     cancel_replan_backend(transfer_id)
+
+    # A new replan with the same transfer_id must run normally to completion
+    result = replanner.replan(path)
+    assert result is not None
+    assert not replan_mod._is_cancelled(transfer_id)
+
+
+def test_replan_discards_cancel_id_even_on_planner_failure(transfer_id):
+    """
+    The finally-block discard also runs when planning fails mid-way.
+    """
+    replanner = _make_replanner(transfer_id)
+
+    def cancel_then_fail(start, goal):
+        # Simulate a cancel arriving while planning, followed by "no path"
+        cancel_replan_backend(transfer_id)
+        return None
+
+    replanner._astar = cancel_then_fail
+    # Force the planner to be invoked by making the direct segment collide
+    replanner._colides = lambda seg: True
 
     result = replanner.replan(np.array([[1.0, 1.0], [9.0, 9.0]]))
 
     assert result is None
-    # The pending cancellation was consumed when the replan aborted
     assert not replan_mod._is_cancelled(transfer_id)
 
 

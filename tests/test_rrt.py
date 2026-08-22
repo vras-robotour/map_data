@@ -1,4 +1,7 @@
+import random
+
 import numpy as np
+import pytest
 
 from map_data.pathsolver.rrt_star import RRTStar
 
@@ -194,6 +197,84 @@ def test_adaptive_radius_shrinks_with_more_nodes():
     n_large = 300
     r = min(rrt._gamma * math.sqrt(math.log(n_large) / n_large), rrt.neighbor_radius)
     assert r <= rrt.neighbor_radius
+
+
+# ── regression: rewiring must not leave stale costs / a stale ellipse ────────
+#
+# After a rewire, all descendants of the rewired node used to keep their old
+# cached costs, and a goal rewired through the generic loop bypassed
+# _best_cost, leaving informed sampling with an oversized ellipse.
+
+
+def _append_node(rrt, point):
+    idx = len(rrt.nodes)
+    pt = np.asarray(point, dtype=float)
+    rrt.nodes.append(pt)
+    rrt._nodes_buf[idx] = pt
+    return idx
+
+
+def test_set_parent_propagates_cost_delta_to_descendants():
+    rrt = _make_rrt(max_iter=10)
+
+    # Chain 0 -> 1 -> 2 -> 3 with costs 1.0, 2.0, 3.0
+    for i, pt in enumerate([(1.0, 0.0), (2.0, 0.0), (3.0, 0.0)], start=1):
+        idx = _append_node(rrt, pt)
+        rrt._set_parent(idx, i - 1, float(i))
+
+    # New node 4 offers node 1 a cheaper route: rewire 1 under 4 (cost 1.0 -> 0.5)
+    idx4 = _append_node(rrt, (1.0, 0.5))
+    rrt._set_parent(idx4, 0, 0.4)
+    rrt._set_parent(1, idx4, 0.5)
+
+    # Children index updated
+    assert rrt.parent[1] == idx4
+    assert 1 in rrt._children[idx4]
+    assert 1 not in rrt._children[0]
+    # The -0.5 delta reached every descendant of node 1
+    assert rrt.cost[1] == pytest.approx(0.5)
+    assert rrt.cost[2] == pytest.approx(1.5)
+    assert rrt.cost[3] == pytest.approx(2.5)
+
+
+def _goal_index(rrt):
+    return next(i for i, nd in enumerate(rrt.nodes) if np.allclose(nd, rrt.goal))
+
+
+def test_tree_costs_consistent_after_seeded_run_with_rewiring():
+    """
+    Every node's cached cost equals its parent's cost plus the edge cost.
+
+    With improve_after_goal the tree keeps rewiring after the first solution,
+    so stale descendant costs (the old bug) would break this invariant.
+    """
+    random.seed(7)
+    rrt = _make_rrt(informed=True, improve_after_goal=True, max_iter=400)
+    path = rrt.find_path()
+    assert path is not None
+
+    for idx, parent in rrt.parent.items():
+        if parent is None:
+            continue
+        collision, seg_cost = rrt._segment_cost(rrt.nodes[parent], rrt.nodes[idx])
+        assert not collision
+        assert rrt.cost[idx] == pytest.approx(rrt.cost[parent] + seg_cost), (
+            f"stale cached cost at node {idx}"
+        )
+
+
+def test_best_cost_tracks_goal_cost_after_rewiring():
+    random.seed(3)
+    rrt = _make_rrt(informed=True, improve_after_goal=True, max_iter=600)
+    path = rrt.find_path()
+    assert path is not None
+
+    goal_idx = _goal_index(rrt)
+    # The informed ellipse must be driven by the goal's true (rewired) cost
+    assert rrt._best_cost == pytest.approx(rrt.cost[goal_idx])
+    # And the reported path length matches that cost on a zero-cost grid
+    path_len = sum(float(np.linalg.norm(path[i + 1] - path[i])) for i in range(len(path) - 1))
+    assert rrt.cost[goal_idx] >= path_len - 1e-6
 
 
 def test_combined_informed_and_adaptive():
