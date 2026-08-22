@@ -33,5 +33,271 @@
     "title": "Progress reporting for fetch_area via SocketIO",
     "desc": "The fetch task is polled over REST while a SocketIO channel already exists for telemetry — pushing progress (query, parse, save stages) would remove the polling and its 404-on-second-poll footgun.",
     "file": "map_data/viewer/routes.py, map_data/viewer/app.py"
+  },
+  {
+    "type": "bug",
+    "sev": "important",
+    "title": "GraphPlanner annotation splits use stale segment indices",
+    "desc": "Splits are keyed by <code>(id(way), segment_idx)</code> captured before any insertion, then applied with <code>nodes.insert(segment_idx + 1, ...)</code>. Inserting a junction into an earlier segment shifts the later segment indices of the same way, so a way with two annotation splits can get a junction spliced between the wrong nodes — zig-zag edges and paths that double back, intermittently depending on dict insertion order. Fix: apply splits per way sorted by <code>segment_idx</code> descending, or re-derive indices after each insert.",
+    "file": "map_data/pathsolver/graph_planner.py"
+  },
+  {
+    "type": "bug",
+    "sev": "important",
+    "title": "GraphPlanner mutates the shared MapData; second construction crashes",
+    "desc": "<code>__init__</code> inserts synthetic node IDs (<code>-2000000...</code>) directly into <code>Way.nodes</code> of the shared <code>MapData</code>, while <code>self.nodes</code> is rebuilt fresh from <code>nodes_cache</code> each time. Constructing a second <code>GraphPlanner</code> on the same <code>MapData</code> (as <code>docs/planning.md</code> encourages) raises <code>KeyError</code> on the synthetic ID whenever the first run spliced an annotation; the viewer only survives because it deep-copies per request. Fix: splice into per-planner copies of the node lists instead of mutating the <code>Way</code>.",
+    "file": "map_data/pathsolver/graph_planner.py"
+  },
+  {
+    "type": "bug",
+    "sev": "important",
+    "title": "grid_astar diagonal moves cut corners through blocked cells",
+    "desc": "Diagonal neighbors are admitted by checking only the destination cell, so a thin obstacle rasterized as a diagonal chain of <code>inf</code> cells (realistic for a fence at <code>cell_size=0.25</code>) can be crossed straight through between two touching-corner blocked cells. Fix: for diagonal offsets also require both orthogonally adjacent cells to be finite. RRT*'s Bresenham edge check shares the corner-slip property (documented as expected in tests) — worth revisiting together.",
+    "file": "map_data/pathsolver/grid_astar.py"
+  },
+  {
+    "type": "bug",
+    "sev": "important",
+    "title": "Mixed UTM zones in parse_gpx_file/parse_yaml_file",
+    "desc": "<code>convert_waypoint</code> converts each waypoint in its own natural UTM zone while the zone of the first point is reported for the whole array. A route crossing a zone boundary (e.g. lon 11.999° → 12.001°) gets a ~400 km easting discontinuity inside one array, breaking the bbox and geometry for <code>coords_type=\"array\"</code> consumers such as <code>replan</code>. The vectorized <code>MapData._latlon_to_utm</code> path is already correct; pass <code>force_zone_number/letter</code> from the first point into every per-point conversion.",
+    "file": "map_data/utils/gpx.py"
+  },
+  {
+    "type": "bug",
+    "sev": "important",
+    "title": "Overpass HTTP-200 error bodies crash the fetch instead of retrying",
+    "desc": "Overpass reports query timeouts/memory exhaustion as HTTP 200 with a <code>\"remark\": \"runtime error: ...\"</code> body, and a mirror can return a 200 HTML page. <code>query_raw</code> treats any 200 as success, so <code>parse_json</code> later raises <code>OverpassRuntimeError</code>/<code>JSONDecodeError</code> uncaught and the whole run dies even though retries and two other mirrors remain. Fix: validate the body inside <code>query_raw</code> and treat failures as retryable; wrap <code>parse_json</code> in <code>run_queries</code>. Most likely real-world failure mode; currently untested.",
+    "file": "map_data/utils/overpass.py, map_data/map_data.py"
+  },
+  {
+    "type": "bug",
+    "sev": "important",
+    "title": "Lost-update race on the viewer annotation store",
+    "desc": "Every mutating endpoint does an unlocked load → mutate → save (<code>save_annotations</code> takes the per-file lock only around the write). Two concurrent editors — the network-deployment scenario — silently drop each other's edits, and concurrent <code>add_way_node</code> calls can both compute <code>min(existing_ids)-1</code> and mint the same synthetic node ID, corrupting later edits keyed on it. Fix: hold the per-path lock around the whole load-mutate-save cycle (e.g. a <code>with annotation_store(path) as store:</code> context manager) across the ~15 handlers.",
+    "file": "map_data/viewer/helpers.py, map_data/viewer/routes.py"
+  },
+  {
+    "type": "security",
+    "sev": "important",
+    "title": "Stored XSS via unvalidated virtual-ID suffix in delete_way",
+    "desc": "<code>delete_way</code> int-validates only the part before the first <code>:</code> and stores the raw suffix in <code>deleted_ways</code>/<code>change_log</code>; the changes panel then embeds the id via <code>JSON.stringify</code> inside a single-quoted <code>onclick</code>, which does not escape single quotes. A crafted <code>DELETE /api/ways/123:0'...</code> plants script that runs for every client that opens that file's changes panel. Fix: validate the segment suffix as an integer (as <code>get_way</code> does) and build panel rows with DOM APIs instead of string-built handlers.",
+    "file": "map_data/viewer/routes.py, map_data/viewer/static/js/ui_handlers.js"
+  },
+  {
+    "type": "security",
+    "sev": "important",
+    "title": "escHtml does not escape quotes — attribute-context XSS in the tag editor",
+    "desc": "<code>escHtml</code> escapes only <code>&amp;</code>, <code>&lt;</code>, <code>&gt;</code>, but the way-edit modal renders tag keys/values as <code>value=\"${escHtml(k)}\"</code>. A tag value containing <code>\" autofocus onfocus=\"...</code> breaks out of the attribute; tag values come from OSM itself (third-party data) or from any client via the tag-edit endpoint. Fix: extend <code>escHtml</code> to escape <code>\"</code> and <code>'</code>, or assign via <code>.value =</code> instead of string templates.",
+    "file": "map_data/viewer/static/js/utils.js, map_data/viewer/static/js/ui_handlers.js"
+  },
+  {
+    "type": "security",
+    "sev": "important",
+    "title": "No CSRF protection and unbounded uploads on the viewer",
+    "desc": "When <code>MAP_DATA_ACCESS_TOKEN</code> is set, the token is also accepted from a <code>SameSite=Lax</code> cookie with no CSRF token, so cross-site POSTs from a logged-in browser can hit mutating endpoints. <code>upload_mapdata</code> has no <code>MAX_CONTENT_LENGTH</code> (a large upload fills the data dir) and a check-then-write race in its name-disambiguation loop. Fix: require the header (not the cookie) for mutations or add a CSRF token; set <code>app.config[\"MAX_CONTENT_LENGTH\"]</code>; document the deployment threat model.",
+    "file": "map_data/viewer/app.py, map_data/viewer/routes.py"
+  },
+  {
+    "type": "security",
+    "sev": "minor",
+    "title": "cost_grid and replan accept unbounded/unvalidated client parameters",
+    "desc": "<code>get_cost_grid</code> deep-copies the merged map and fills a 1 m grid over any client-supplied bbox with no area cap (unlike <code>fetch_area</code>'s <code>MAX_FETCH_AREA_KM2</code>), then reprojects every cell in a Python loop — a compute/memory DoS lever. <code>create_replan</code> passes client JSON (<code>cell_size</code>, cost dicts) into the planner without type/range validation. Fix: clamp bbox area/cell count and validate parameter types up front.",
+    "file": "map_data/viewer/routes.py"
+  },
+  {
+    "type": "bug",
+    "sev": "minor",
+    "title": "Multipolygon inner rings are never subtracted",
+    "desc": "<code>parse_osm_rels</code> only labels inner member ways with <code>in_out=\"inner\"</code> (used for display); nothing cuts them out of the outer polygon. A courtyard inside a building relation or an island in a lake is covered by the outer barrier polygon and planned around as untraversable. Fix: build outer rings as Polygons with holes in <code>parse_osm_rels</code>/<code>combine_ways</code>.",
+    "file": "map_data/utils/parsing.py"
+  },
+  {
+    "type": "bug",
+    "sev": "minor",
+    "title": "combine_ways leaves merged members in ways_dict — duplicate classification",
+    "desc": "The merged negative-id way is added but the original relation members stay in <code>ways</code>, so <code>separate_ways</code> classifies both. Any member carrying its own classifying tags (e.g. <code>waterway=riverbank</code> ways in a water relation) yields duplicated barrier geometry and doubled point clouds. Fix: drop or mark consumed member ids after a successful merge.",
+    "file": "map_data/utils/parsing.py"
+  },
+  {
+    "type": "bug",
+    "sev": "minor",
+    "title": "info.py total footway distance sums buffer perimeters",
+    "desc": "By the time footways are saved they have been through <code>buffer_line</code> and are Polygons, so <code>w.line.length</code> is the buffer <em>perimeter</em> — the reported stat is roughly 2× the real path length plus the cap arcs. Fix: derive length from node coordinates (or keep the centerline). <code>get_stats</code> has no tests, which is how this survived.",
+    "file": "map_data/info.py"
+  },
+  {
+    "type": "bug",
+    "sev": "minor",
+    "title": "Degenerate OSM ways abort the entire parse",
+    "desc": "A way with one node makes <code>LineString</code> raise, and a closed 3-node way <code>[a, b, a]</code> sets <code>is_area=True</code> and <code>Polygon</code> raises (\"linearring requires at least 4 coordinates\"). One malformed way in a response or hand-edited cache kills <code>run_parse</code> with an unhandled exception. Fix: skip-and-warn ways with too few distinct coordinates.",
+    "file": "map_data/utils/parsing.py"
+  },
+  {
+    "type": "bug",
+    "sev": "minor",
+    "title": "Non-atomic .mapdata/cache writes can destroy the previous good file",
+    "desc": "<code>save_mapdata</code> and the OSM cache writer open the target with <code>\"w\"</code> and <code>json.dump</code> directly; a crash, Ctrl-C, or full disk mid-dump leaves a truncated file where a valid one was (and <code>create_mapdata</code> without <code>-d</code> re-saves over the file it just loaded). Fix: write to a temp file in the same directory and <code>os.replace</code>.",
+    "file": "map_data/utils/serialization.py, map_data/map_data.py"
+  },
+  {
+    "type": "bug",
+    "sev": "minor",
+    "title": "Path simplification runs after collision checking and can chord into obstacles",
+    "desc": "In <code>replan</code> smoothing is collision-checked but the subsequent <code>LineString(path).simplify(cell_size)</code> (tolerance equal to the default obstacle inflation) is not, so a path hugging an inflated obstacle can be chorded into it; <code>grid_astar</code>'s internal simplify has the same gap. RRT*'s <code>_simplify_path</code> checks every shortcut and is the model to follow. Fix: collision-check the simplified result and fall back, or simplify before smoothing.",
+    "file": "map_data/pathsolver/replan.py, map_data/pathsolver/grid_astar.py"
+  },
+  {
+    "type": "bug",
+    "sev": "minor",
+    "title": "RRT* rewiring leaves stale costs and a stale informed ellipse",
+    "desc": "After <code>parent[idx] = new_idx</code> the cached costs of the rewired node's descendants are never updated, so later parent-selection/rewiring comparisons use wrong values and <code>cost[goal_idx]</code> can misreport the path cost. Separately, goal rewires through the generic loop bypass <code>_best_cost</code>, so informed sampling keeps a larger-than-necessary ellipse. Paths stay collision-free but suboptimal. Fix: recompute cost via parent-chain traversal (or update children on rewire) and sync <code>_best_cost</code> with <code>cost.get(goal_idx)</code> each iteration.",
+    "file": "map_data/pathsolver/rrt_star.py"
+  },
+  {
+    "type": "bug",
+    "sev": "minor",
+    "title": "Three viewer endpoints 500 on missing JSON content type",
+    "desc": "<code>cancel_replan_route</code>, <code>create_wormhole</code>, and <code>cancel_wormhole</code> call <code>request.json.get(...)</code>; a request without <code>Content-Type: application/json</code> or with an empty body yields an unhandled 500 instead of a clean 400. Fix: <code>(request.get_json(silent=True) or {}).get(...)</code> as the other handlers do.",
+    "file": "map_data/viewer/routes.py"
+  },
+  {
+    "type": "bug",
+    "sev": "minor",
+    "title": "Fetch-task and cancelled-transfer registries grow without bound",
+    "desc": "<code>_fetch_tasks</code> entries are pruned only when a client re-polls the same task 60 s after completion — abandoned tasks accumulate forever. <code>ReplanPath</code>'s cancelled-transfer set keeps IDs whose cancel arrived after <code>replan()</code> returned, and a reused <code>transfer_id</code> is then instantly \"cancelled\". Fix: sweep terminal tasks on each <code>fetch_area</code> POST and discard cancel IDs in a <code>finally</code> at replan entry/exit.",
+    "file": "map_data/viewer/routes.py, map_data/pathsolver/replan.py"
+  },
+  {
+    "type": "bug",
+    "sev": "minor",
+    "title": "GraphPlanner.plan() edge cases: empty-array return and unlimited waypoint snapping",
+    "desc": "With fewer than two waypoints the loop never runs and a <code>(0,)</code> <code>np.array([])</code> is returned — neither the documented \"(M, 2) array or None\" contract nor checkable as failure. Separately, <code>_find_closest_edge</code> snaps waypoints to the globally nearest edge with no distance cap, so a waypoint clicked 500 m off the network silently produces a huge straight connector (annotation splicing uses an explicit 5 m threshold). Fix: guard the waypoint count and add a configurable max snap distance.",
+    "file": "map_data/pathsolver/graph_planner.py"
+  },
+  {
+    "type": "bug",
+    "sev": "minor",
+    "title": "Grid cells are sampled at their lower-left corner, not their center",
+    "desc": "<code>fill</code>, <code>burn_obstacles</code>, and <code>grid_astar</code>'s back-conversion all use <code>low + i*cs</code>, so obstacle membership is decided half a cell off-center: a sub-cell obstacle straddling no corner sample burns nothing, and burned regions shift ~cs/2 toward −x/−y. Mostly masked by <code>inflate_obstacles</code>. Fix: add <code>cs/2</code> in the three places plus test updates.",
+    "file": "map_data/pathsolver/grid_constructor.py, map_data/pathsolver/grid_astar.py"
+  },
+  {
+    "type": "bug",
+    "sev": "minor",
+    "title": "Latent input-shape traps in MapData helpers",
+    "desc": "A 1-D <code>(2,)</code> <code>current_robot_position</code> (or a 2-column position against 3-column elevation waypoints) raises a cryptic <code>np.concatenate</code> error; <code>_csv_to_dict</code> on a single-row CSV iterates characters because <code>np.genfromtxt</code> returns 1-D; a loaded <code>MapData</code> lacks the <code>points</code> attribute that constructed instances have. Fix: <code>np.atleast_2d</code> + column checks, and restore <code>points</code> on load.",
+    "file": "map_data/map_data.py, map_data/utils/serialization.py"
+  },
+  {
+    "type": "improvement",
+    "sev": "minor",
+    "title": "Version the .mapdata format",
+    "desc": "The JSON schema has no <code>format_version</code> field, so future changes cannot be detected or migrated, and <code>way_from_dict</code> hard-KeyErrors on files missing newer keys (the crossroads list already needed a <code>.get</code> band-aid). Fix: write a version marker and use <code>.get</code> defaults on load.",
+    "file": "map_data/utils/serialization.py"
+  },
+  {
+    "type": "improvement",
+    "sev": "minor",
+    "title": "Injectable RNG for RRT*",
+    "desc": "All sampling draws from the module-global <code>random</code>: planning failures from the viewer cannot be reproduced, concurrent Flask request threads interleave draws non-deterministically, and tests must hack the global seed. Fix: accept <code>rng: random.Random | None</code> in <code>__init__</code> and thread it through.",
+    "file": "map_data/pathsolver/rrt_star.py"
+  },
+  {
+    "type": "improvement",
+    "sev": "minor",
+    "title": "Vectorize Way.to_pcd_points and smooth_path hot loops",
+    "desc": "The polygon branch materializes a <code>MultiPoint</code> over the full bbox grid and filters point-by-point with <code>prepared.contains</code> (~1M Point objects for a 500×500 m barrier at density 2) — <code>shapely.contains_xy</code> does this vectorized with no object churn; the segment loop grows <code>pcd_points</code> with <code>np.concatenate</code> per segment (quadratic copying). <code>smooth_path</code> is a scalar triple-loop that vectorizes directly as a Jacobi iteration. Distinct from the backlogged native-extension item (which covers the RRT*/grid_astar raster loops).",
+    "file": "map_data/utils/way.py, map_data/pathsolver/smoothing.py"
+  },
+  {
+    "type": "improvement",
+    "sev": "minor",
+    "title": "Cache /api/mapdata responses",
+    "desc": "Every call shallow-copies the cached map, re-applies all edits (recomputing <code>crossroads_list</code> via <code>parse_intersections</code> whenever any edit exists), and rebuilds the full GeoJSON FeatureCollection. Fix: cache the merged GeoJSON keyed on (mapdata mtime, annotation-store hash), or serve an ETag and honor <code>If-None-Match</code>.",
+    "file": "map_data/viewer/routes.py, map_data/viewer/helpers.py"
+  },
+  {
+    "type": "improvement",
+    "sev": "minor",
+    "title": "Pin ruff to one version across CI, pre-commit, and dev extras",
+    "desc": "CI installs unpinned latest ruff while pre-commit pins v0.11.13 — this drift already caused the ruff-0.16 reformat churn commits. Pin the <code>[dev]</code> extra and CI to the pre-commit rev (or bump all three together).",
+    "file": ".github/workflows/ci.yml, .pre-commit-config.yaml, pyproject.toml"
+  },
+  {
+    "type": "improvement",
+    "sev": "minor",
+    "title": "CI tightening: strict docs build, demo smoke on PRs, enforced coverage",
+    "desc": "<code>mkdocs build</code> lacks <code>--strict</code>, so broken links deploy silently; the viewer demo smoke test runs only on push to master, discovering breakage post-merge; coverage is measured but has no <code>--cov-fail-under</code> and is never published; <code>ci.yml</code> lacks <code>workflow_dispatch</code>. All small YAML changes.",
+    "file": ".github/workflows/"
+  },
+  {
+    "type": "improvement",
+    "sev": "nice-to-have",
+    "title": "Delete dead code and misleading names in the geometry/planner helpers",
+    "desc": "<code>points_to_graph_points</code> and <code>increase_line</code> have no callers (and the offset-row distance metric adds parallel and perpendicular components linearly — wrong if ever revived); RRT*'s <code>_is_collision</code> segment branch is unreachable; <code>GOAL_SAMPLE_BIAS</code> doubles as the unrelated traversable-cell sampling bias; the <code>density</code> parameter across geometry helpers actually means <em>spacing</em> (callers pass <code>1/density</code>).",
+    "file": "map_data/utils/points_to_graph_points.py, map_data/pathsolver/rrt_star.py"
+  },
+  {
+    "type": "improvement",
+    "sev": "nice-to-have",
+    "title": "Route all viewer filename handling through one validated resolver",
+    "desc": "GET endpoints call <code>_safe_data_path</code> but many mutating endpoints pass the raw filename straight to <code>_annotation_path</code>, which contains traversal only incidentally (via <code>Path.stem</code>) and never verifies the referenced <code>.mapdata</code> exists. Harmless today but inconsistent defense-in-depth. Related lifecycle nit: <code>create_app</code> has no idempotency guard — a second call double-starts the telemetry thread and re-inits the ROS node.",
+    "file": "map_data/viewer/routes.py, map_data/viewer/app.py"
+  },
+  {
+    "type": "improvement",
+    "sev": "nice-to-have",
+    "title": "Repo hygiene batch",
+    "desc": "Delete the stale <code>todo_fixes_plan.md</code> at the repo root (PR #12 merged, its fixes verified landed); drop the unused <code>python3-joblib</code> from <code>package.xml</code>; add <code>.mypy_cache/</code> to <code>.gitignore</code>; consider a CI check asserting the version triplicated across <code>pyproject.toml</code>/<code>package.xml</code>/<code>CITATION.cff</code> stays in sync.",
+    "file": "todo_fixes_plan.md, package.xml, .gitignore"
+  },
+  {
+    "type": "improvement",
+    "sev": "nice-to-have",
+    "title": "Cheap linter/typechecker wins",
+    "desc": "mypy: add <code>check_untyped_defs</code>, <code>warn_unused_ignores</code>, <code>warn_redundant_casts</code> (none require stubs). ruff: add the <code>RUF</code>, <code>C4</code>, and <code>PT</code> rule families (<code>PT</code> is valuable given the ~3,000-line test suite).",
+    "file": "pyproject.toml"
+  },
+  {
+    "type": "improvement",
+    "sev": "nice-to-have",
+    "title": "Wire up or remove the node anti-tag mechanism",
+    "desc": "<code>parameters/anti_obstacle_tags.csv</code> is loaded nowhere and <code>parse_osm_nodes</code> has no anti-tag override analogous to <code>Way.is_barrier</code>. Related: <code>way_node_ids</code> is built from <em>all</em> ways, so obstacle nodes sitting on any way (the normal OSM position for <code>barrier=gate</code>/<code>bollard</code>) are always skipped and never become obstacles — if intentional, document it.",
+    "file": "map_data/utils/parsing.py, map_data/map_data.py, parameters/anti_obstacle_tags.csv"
+  },
+  {
+    "type": "testing",
+    "sev": "important",
+    "title": "Cover Overpass body-level failures",
+    "desc": "No test exercises a 200 response with a <code>remark</code> runtime error or a non-JSON 200 body — the fetch pipeline's most likely real-world failure mode (<code>test_overpass.py</code> covers only 429/500/exception).",
+    "file": "tests/test_overpass.py"
+  },
+  {
+    "type": "testing",
+    "sev": "important",
+    "title": "Cover GraphPlanner annotation splicing",
+    "desc": "The ~80 most intricate planner lines (STRtree endpoint query, nearest-foreign-edge selection, split insertion ordering, connector edges) have zero coverage — <code>test_graph_planner.py</code> only builds plain positive-ID footways. A test splicing a negative-ID annotation way into a multi-segment way at two places, plus one constructing <code>GraphPlanner</code> twice on the same map, would have caught both open planner bugs.",
+    "file": "tests/test_graph_planner.py"
+  },
+  {
+    "type": "testing",
+    "sev": "minor",
+    "title": "Cover the riskiest viewer endpoints",
+    "desc": "No tests exist for the <code>MAP_DATA_ACCESS_TOKEN</code> gate (on/off), virtual-ID suffix validation in <code>delete_way</code>/<code>restore_way</code>, <code>get_cost_grid</code>, <code>create_replan</code>, <code>upload_mapdata</code>, <code>add_way_node</code>, or the wormhole endpoints. The auth and virtual-ID tests are the highest value.",
+    "file": "tests/test_viewer_routes.py"
+  },
+  {
+    "type": "testing",
+    "sev": "minor",
+    "title": "Cover get_stats, combine_ways edge branches, and grid_astar cost behavior",
+    "desc": "<code>info.get_stats</code> is untested (the perimeter-vs-length bug survived because of it); <code>combine_ways</code>' backward-prepend and ring-closing merge branches are untested; nothing asserts <code>grid_astar</code> actually prefers low-cost corridors (<code>grid_cost_weight</code> never exercised) or checks diagonal corner-cutting; the replan cancellation machinery is untested.",
+    "file": "tests/"
+  },
+  {
+    "type": "testing",
+    "sev": "nice-to-have",
+    "title": "Centralize pytest config and the Overpass mock fixture",
+    "desc": "There is no <code>[tool.pytest.ini_options]</code> and no <code>tests/conftest.py</code>: coverage flags live only in the CI workflow (local runs differ from CI), and the mocked-Overpass setup is duplicated across <code>test_integration.py</code> and <code>test_viewer_routes.py</code>. Add <code>addopts</code> and a shared fixture.",
+    "file": "pyproject.toml, tests/"
   }
 ]
