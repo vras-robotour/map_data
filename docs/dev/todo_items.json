@@ -35,69 +35,6 @@
     "file": "map_data/viewer/routes.py, map_data/viewer/app.py"
   },
   {
-    "type": "bug",
-    "sev": "important",
-    "title": "GraphPlanner annotation splits use stale segment indices",
-    "desc": "Splits are keyed by <code>(id(way), segment_idx)</code> captured before any insertion, then applied with <code>nodes.insert(segment_idx + 1, ...)</code>. Inserting a junction into an earlier segment shifts the later segment indices of the same way, so a way with two annotation splits can get a junction spliced between the wrong nodes — zig-zag edges and paths that double back, intermittently depending on dict insertion order. Fix: apply splits per way sorted by <code>segment_idx</code> descending, or re-derive indices after each insert.",
-    "file": "map_data/pathsolver/graph_planner.py"
-  },
-  {
-    "type": "bug",
-    "sev": "important",
-    "title": "GraphPlanner mutates the shared MapData; second construction crashes",
-    "desc": "<code>__init__</code> inserts synthetic node IDs (<code>-2000000...</code>) directly into <code>Way.nodes</code> of the shared <code>MapData</code>, while <code>self.nodes</code> is rebuilt fresh from <code>nodes_cache</code> each time. Constructing a second <code>GraphPlanner</code> on the same <code>MapData</code> (as <code>docs/planning.md</code> encourages) raises <code>KeyError</code> on the synthetic ID whenever the first run spliced an annotation; the viewer only survives because it deep-copies per request. Fix: splice into per-planner copies of the node lists instead of mutating the <code>Way</code>.",
-    "file": "map_data/pathsolver/graph_planner.py"
-  },
-  {
-    "type": "bug",
-    "sev": "important",
-    "title": "grid_astar diagonal moves cut corners through blocked cells",
-    "desc": "Diagonal neighbors are admitted by checking only the destination cell, so a thin obstacle rasterized as a diagonal chain of <code>inf</code> cells (realistic for a fence at <code>cell_size=0.25</code>) can be crossed straight through between two touching-corner blocked cells. Fix: for diagonal offsets also require both orthogonally adjacent cells to be finite. RRT*'s Bresenham edge check shares the corner-slip property (documented as expected in tests) — worth revisiting together.",
-    "file": "map_data/pathsolver/grid_astar.py"
-  },
-  {
-    "type": "bug",
-    "sev": "important",
-    "title": "Mixed UTM zones in parse_gpx_file/parse_yaml_file",
-    "desc": "<code>convert_waypoint</code> converts each waypoint in its own natural UTM zone while the zone of the first point is reported for the whole array. A route crossing a zone boundary (e.g. lon 11.999° → 12.001°) gets a ~400 km easting discontinuity inside one array, breaking the bbox and geometry for <code>coords_type=\"array\"</code> consumers such as <code>replan</code>. The vectorized <code>MapData._latlon_to_utm</code> path is already correct; pass <code>force_zone_number/letter</code> from the first point into every per-point conversion.",
-    "file": "map_data/utils/gpx.py"
-  },
-  {
-    "type": "bug",
-    "sev": "important",
-    "title": "Overpass HTTP-200 error bodies crash the fetch instead of retrying",
-    "desc": "Overpass reports query timeouts/memory exhaustion as HTTP 200 with a <code>\"remark\": \"runtime error: ...\"</code> body, and a mirror can return a 200 HTML page. <code>query_raw</code> treats any 200 as success, so <code>parse_json</code> later raises <code>OverpassRuntimeError</code>/<code>JSONDecodeError</code> uncaught and the whole run dies even though retries and two other mirrors remain. Fix: validate the body inside <code>query_raw</code> and treat failures as retryable; wrap <code>parse_json</code> in <code>run_queries</code>. Most likely real-world failure mode; currently untested.",
-    "file": "map_data/utils/overpass.py, map_data/map_data.py"
-  },
-  {
-    "type": "bug",
-    "sev": "important",
-    "title": "Lost-update race on the viewer annotation store",
-    "desc": "Every mutating endpoint does an unlocked load → mutate → save (<code>save_annotations</code> takes the per-file lock only around the write). Two concurrent editors — the network-deployment scenario — silently drop each other's edits, and concurrent <code>add_way_node</code> calls can both compute <code>min(existing_ids)-1</code> and mint the same synthetic node ID, corrupting later edits keyed on it. Fix: hold the per-path lock around the whole load-mutate-save cycle (e.g. a <code>with annotation_store(path) as store:</code> context manager) across the ~15 handlers.",
-    "file": "map_data/viewer/helpers.py, map_data/viewer/routes.py"
-  },
-  {
-    "type": "security",
-    "sev": "important",
-    "title": "Stored XSS via unvalidated virtual-ID suffix in delete_way",
-    "desc": "<code>delete_way</code> int-validates only the part before the first <code>:</code> and stores the raw suffix in <code>deleted_ways</code>/<code>change_log</code>; the changes panel then embeds the id via <code>JSON.stringify</code> inside a single-quoted <code>onclick</code>, which does not escape single quotes. A crafted <code>DELETE /api/ways/123:0'...</code> plants script that runs for every client that opens that file's changes panel. Fix: validate the segment suffix as an integer (as <code>get_way</code> does) and build panel rows with DOM APIs instead of string-built handlers.",
-    "file": "map_data/viewer/routes.py, map_data/viewer/static/js/ui_handlers.js"
-  },
-  {
-    "type": "security",
-    "sev": "important",
-    "title": "escHtml does not escape quotes — attribute-context XSS in the tag editor",
-    "desc": "<code>escHtml</code> escapes only <code>&amp;</code>, <code>&lt;</code>, <code>&gt;</code>, but the way-edit modal renders tag keys/values as <code>value=\"${escHtml(k)}\"</code>. A tag value containing <code>\" autofocus onfocus=\"...</code> breaks out of the attribute; tag values come from OSM itself (third-party data) or from any client via the tag-edit endpoint. Fix: extend <code>escHtml</code> to escape <code>\"</code> and <code>'</code>, or assign via <code>.value =</code> instead of string templates.",
-    "file": "map_data/viewer/static/js/utils.js, map_data/viewer/static/js/ui_handlers.js"
-  },
-  {
-    "type": "security",
-    "sev": "important",
-    "title": "No CSRF protection and unbounded uploads on the viewer",
-    "desc": "When <code>MAP_DATA_ACCESS_TOKEN</code> is set, the token is also accepted from a <code>SameSite=Lax</code> cookie with no CSRF token, so cross-site POSTs from a logged-in browser can hit mutating endpoints. <code>upload_mapdata</code> has no <code>MAX_CONTENT_LENGTH</code> (a large upload fills the data dir) and a check-then-write race in its name-disambiguation loop. Fix: require the header (not the cookie) for mutations or add a CSRF token; set <code>app.config[\"MAX_CONTENT_LENGTH\"]</code>; document the deployment threat model.",
-    "file": "map_data/viewer/app.py, map_data/viewer/routes.py"
-  },
-  {
     "type": "security",
     "sev": "minor",
     "title": "cost_grid and replan accept unbounded/unvalidated client parameters",
@@ -264,20 +201,6 @@
     "title": "Wire up or remove the node anti-tag mechanism",
     "desc": "<code>parameters/anti_obstacle_tags.csv</code> is loaded nowhere and <code>parse_osm_nodes</code> has no anti-tag override analogous to <code>Way.is_barrier</code>. Related: <code>way_node_ids</code> is built from <em>all</em> ways, so obstacle nodes sitting on any way (the normal OSM position for <code>barrier=gate</code>/<code>bollard</code>) are always skipped and never become obstacles — if intentional, document it.",
     "file": "map_data/utils/parsing.py, map_data/map_data.py, parameters/anti_obstacle_tags.csv"
-  },
-  {
-    "type": "testing",
-    "sev": "important",
-    "title": "Cover Overpass body-level failures",
-    "desc": "No test exercises a 200 response with a <code>remark</code> runtime error or a non-JSON 200 body — the fetch pipeline's most likely real-world failure mode (<code>test_overpass.py</code> covers only 429/500/exception).",
-    "file": "tests/test_overpass.py"
-  },
-  {
-    "type": "testing",
-    "sev": "important",
-    "title": "Cover GraphPlanner annotation splicing",
-    "desc": "The ~80 most intricate planner lines (STRtree endpoint query, nearest-foreign-edge selection, split insertion ordering, connector edges) have zero coverage — <code>test_graph_planner.py</code> only builds plain positive-ID footways. A test splicing a negative-ID annotation way into a multi-segment way at two places, plus one constructing <code>GraphPlanner</code> twice on the same map, would have caught both open planner bugs.",
-    "file": "tests/test_graph_planner.py"
   },
   {
     "type": "testing",
