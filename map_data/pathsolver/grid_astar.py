@@ -89,13 +89,17 @@ def grid_astar(
     h0 = np.sqrt((start_ix - goal_ix) ** 2 + (start_iy - goal_iy) ** 2)
     pq = [(h0, 0.0, start_ix, start_iy)]
 
-    # Neighbor offsets in flattened padded grid (dy * p_nx + dx, dist)
+    # Neighbor offsets in flattened padded grid (dy * p_nx + dx, dist, ortho_offsets).
+    # For diagonal moves, ortho_offsets are the two edge-adjacent cells the move
+    # passes between; both must be traversable so the path cannot cut through
+    # the corner where two blocked cells touch diagonally.
     neighbors_data = []
     for dy in [-1, 0, 1]:
         for dx in [-1, 0, 1]:
             if dx == 0 and dy == 0:
                 continue
-            neighbors_data.append((dy * p_nx + dx, float(np.sqrt(dx**2 + dy**2))))
+            ortho_offsets = (dy * p_nx, dx) if dx != 0 and dy != 0 else ()
+            neighbors_data.append((dy * p_nx + dx, float(np.sqrt(dx**2 + dy**2)), ortho_offsets))
 
     flat_costs = padded_costs.ravel()
 
@@ -126,11 +130,16 @@ def grid_astar(
 
         current_g = g_scores[u_flat]
 
-        for offset, dist in neighbors_data:
+        for offset, dist, ortho_offsets in neighbors_data:
             v_flat = u_flat + offset
             cost_val = flat_costs[v_flat]
 
             if np.isinf(cost_val):
+                continue
+
+            # Diagonal moves must not slip between two corner-touching
+            # blocked cells: both edge-adjacent cells have to be free.
+            if ortho_offsets and any(np.isinf(flat_costs[u_flat + o]) for o in ortho_offsets):
                 continue
 
             new_g = current_g + dist * cost_val

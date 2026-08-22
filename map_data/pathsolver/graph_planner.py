@@ -67,22 +67,27 @@ class GraphPlanner:
         if "road" in self.highway_types:
             self._allowed_ways.extend(self.map_data.roads_list)
 
+        # Per-planner copies of the node lists. Splits are spliced into these
+        # copies so the shared Way objects owned by map_data stay untouched
+        # (a second GraphPlanner on the same MapData must not see synthetic IDs).
+        way_nodes: list[list[int]] = [list(way.nodes) for way in self._allowed_ways]
+
         # First pass: identify potential splits from annotations
         edge_segments = []
-        edge_way_info = []  # (way_obj, segment_index)
+        edge_way_info = []  # (way_index, segment_index)
 
-        for way in self._allowed_ways:
-            for i in range(len(way.nodes) - 1):
-                n1, n2 = way.nodes[i], way.nodes[i + 1]
+        for way_idx, nodes in enumerate(way_nodes):
+            for i in range(len(nodes) - 1):
+                n1, n2 = nodes[i], nodes[i + 1]
                 p1 = self.nodes[n1].ravel()[:2]
                 p2 = self.nodes[n2].ravel()[:2]
                 edge_segments.append(LineString([p1, p2]))
-                edge_way_info.append((way, i))
+                edge_way_info.append((way_idx, i))
 
         tree = STRtree(edge_segments) if edge_segments else None
 
         # Group splits by way and segment
-        # (way_id, segment_index) -> [(proj_dist, proj_node_id, node_id, dist_to_edge)]
+        # (way_index, segment_index) -> [(proj_dist, proj_node_id, node_id, dist_to_edge)]
         splits: dict[tuple[int, int], list[tuple[float, int, int, float]]] = {}
         new_internal_id = -2000000
 
@@ -109,7 +114,7 @@ class GraphPlanner:
                     best_idx = -1
                     min_dist = float("inf")
                     for idx in indices:
-                        if edge_way_info[idx][0].id == way.id:
+                        if self._allowed_ways[edge_way_info[idx][0]].id == way.id:
                             continue
                         d = edge_segments[idx].distance(p_sh)
                         if d < min_dist:
@@ -128,29 +133,37 @@ class GraphPlanner:
                             1,
                         )
 
-                        target_way, segment_idx = edge_way_info[best_idx]
-                        splits.setdefault((id(target_way), segment_idx), []).append(
+                        target_way_idx, segment_idx = edge_way_info[best_idx]
+                        splits.setdefault((target_way_idx, segment_idx), []).append(
                             (proj_dist, proj_node_id, node_id, min_dist),
                         )
 
-        # Apply splits to _allowed_ways by inserting new nodes
-        for (way_ptr, segment_idx), s_list in splits.items():
-            # Find the way object by pointer (since we might have modified nodes)
-            target_way = next(w for w in self._allowed_ways if id(w) == way_ptr)
-            # Sort splits on this segment by distance from segment start
-            s_list.sort(key=lambda x: x[0], reverse=True)
-            for _, proj_node_id, ann_node_id, dist_to_edge in s_list:
-                target_way.nodes.insert(segment_idx + 1, proj_node_id)
-                # Manually add the connection from annotation endpoint to the new junction node
-                self._add_edge(ann_node_id, proj_node_id, dist_to_edge)
+        # Group pending splits per way so they can be applied in descending
+        # segment order: inserting a junction into an earlier segment would
+        # otherwise shift the indices of later segments of the same way.
+        splits_by_way: dict[int, list[tuple[int, list[tuple[float, int, int, float]]]]] = {}
+        for (way_idx, segment_idx), s_list in splits.items():
+            splits_by_way.setdefault(way_idx, []).append((segment_idx, s_list))
 
-        # Second pass: build final graph and tree from (possibly modified) ways
+        # Apply splits to the per-planner node-list copies by inserting new nodes
+        for way_idx, seg_splits in splits_by_way.items():
+            target_nodes = way_nodes[way_idx]
+            seg_splits.sort(key=lambda x: x[0], reverse=True)
+            for segment_idx, s_list in seg_splits:
+                # Sort splits on this segment by distance from segment start
+                s_list.sort(key=lambda x: x[0], reverse=True)
+                for _, proj_node_id, ann_node_id, dist_to_edge in s_list:
+                    target_nodes.insert(segment_idx + 1, proj_node_id)
+                    # Manually add the connection from annotation endpoint to the new junction node
+                    self._add_edge(ann_node_id, proj_node_id, dist_to_edge)
+
+        # Second pass: build final graph and tree from (possibly modified) node lists
         final_edge_segments = []
         final_edge_node_pairs = []
 
-        for way in self._allowed_ways:
-            for i in range(len(way.nodes) - 1):
-                n1, n2 = way.nodes[i], way.nodes[i + 1]
+        for nodes in way_nodes:
+            for i in range(len(nodes) - 1):
+                n1, n2 = nodes[i], nodes[i + 1]
                 p1 = self.nodes[n1].ravel()[:2]
                 p2 = self.nodes[n2].ravel()[:2]
                 dist = float(np.linalg.norm(p1 - p2))

@@ -1,6 +1,7 @@
 import numpy as np
 import shapely.geometry as sh
 
+from map_data.pathsolver.grid_astar import grid_astar
 from map_data.pathsolver.replan import ReplanPath
 
 
@@ -183,6 +184,44 @@ def test_astar_grid_start_equals_goal_same_cell():
 
     assert path is not None
     assert len(path) == 2
+
+
+def _diagonal_wall_grid(n=10):
+    """
+    Free n x n grid with the main diagonal blocked (cells touch only at corners).
+    """
+    grid = np.zeros((n, n), dtype=float)
+    for i in range(n):
+        grid[i, i] = np.inf
+    return grid
+
+
+def test_grid_astar_does_not_cut_through_diagonal_corners():
+    """
+    A diagonal wall of blocked cells fully separates start and goal.
+
+    The blocked cells touch only at their corners; a diagonal move slipping
+    between two corner-touching blocked cells would cut through the wall,
+    so no path may be found.
+    """
+    grid = _diagonal_wall_grid()
+
+    path = grid_astar(grid, (8.5, 1.5), (1.5, 8.5), (0.0, 0.0), 1.0)
+
+    assert path is None
+
+
+def test_grid_astar_diagonal_wall_with_gap_is_passable():
+    """
+    Opening one cell in the diagonal wall makes the goal reachable again.
+    """
+    grid = _diagonal_wall_grid()
+    grid[5, 5] = 0.0
+
+    path = grid_astar(grid, (8.5, 1.5), (1.5, 8.5), (0.0, 0.0), 1.0)
+
+    assert path is not None
+    assert len(path) >= 2
 
 
 def test_post_process_path_very_close_points():
