@@ -18,6 +18,7 @@ import logging
 import os
 import tempfile
 import threading
+from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -215,12 +216,14 @@ def mapdata_to_geojson(map_data: "MapData") -> dict[str, Any]:
     return {"type": "FeatureCollection", "features": features}
 
 
-# Per-file lock for thread-safe annotation writes
-_annotation_locks: dict[str, threading.Lock] = {}
+# Per-file lock for thread-safe annotation access. Re-entrant so that
+# annotation_store() can hold it across a whole load -> mutate -> save cycle
+# while save_annotations() re-acquires it internally.
+_annotation_locks: dict[str, threading.RLock] = {}
 _locks_lock = threading.Lock()
 
 
-def _get_annotation_lock(path: str) -> threading.Lock:
+def _get_annotation_lock(path: str) -> threading.RLock:
     """
     Return the process-wide lock guarding writes to a given annotation file.
 
@@ -237,13 +240,13 @@ def _get_annotation_lock(path: str) -> threading.Lock:
 
     Returns
     -------
-    threading.Lock
+    threading.RLock
         The lock instance associated with *path*.
 
     """
     with _locks_lock:
         if path not in _annotation_locks:
-            _annotation_locks[path] = threading.Lock()
+            _annotation_locks[path] = threading.RLock()
         return _annotation_locks[path]
 
 
@@ -307,6 +310,43 @@ def save_annotations(path: str, data: dict[str, Any]) -> None:
             with contextlib.suppress(OSError):
                 os.unlink(tmp)
             raise
+
+
+@contextlib.contextmanager
+def annotation_store(path: str) -> Iterator[dict[str, Any]]:
+    """
+    Context manager for a whole load -> mutate -> save cycle on the store.
+
+    Holds the per-path lock from :func:`_get_annotation_lock` across the
+    entire cycle, so concurrent mutators serialize their read-modify-write
+    sequences instead of silently overwriting each other's edits (the
+    lost-update race that plain ``load_annotations`` + ``save_annotations``
+    calls are subject to). The lock is re-entrant, so the nested
+    :func:`save_annotations` call taken on exit does not deadlock.
+
+    The store is written back (atomically, via :func:`save_annotations`)
+    only when the ``with`` body exits normally; if the body raises --
+    including a Flask ``abort()`` from a request handler -- nothing is
+    saved and the on-disk store is left untouched.
+
+    Parameters
+    ----------
+    path : str
+        Path to the annotation JSON file.
+
+    Yields
+    ------
+    dict
+        The parsed annotation store, as returned by
+        :func:`load_annotations`. Mutate it in place; it is persisted on
+        normal exit.
+
+    """
+    lock = _get_annotation_lock(path)
+    with lock:
+        store = load_annotations(path)
+        yield store
+        save_annotations(path, store)
 
 
 def get_deleted_way_ids(store: dict[str, Any]) -> set[int | str]:

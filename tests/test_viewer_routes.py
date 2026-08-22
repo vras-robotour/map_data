@@ -1,7 +1,9 @@
 import io
 import json
+import threading
 import time
 from unittest.mock import MagicMock, patch
+from urllib.parse import quote
 
 import numpy as np
 import overpy
@@ -11,7 +13,7 @@ from shapely.geometry import LineString
 
 from map_data.map_data import MapData
 from map_data.utils.way import Way
-from map_data.viewer.app import create_app
+from map_data.viewer.app import ACCESS_TOKEN_COOKIE, MAX_CONTENT_LENGTH, create_app
 from map_data.viewer.routes import MAX_FETCH_AREA_KM2, _bbox_area_km2
 
 
@@ -486,3 +488,176 @@ def test_upload_gpx_rejects_oversized_track(app_client):
     resp = client.post("/api/upload_gpx", data=data, content_type="multipart/form-data")
     assert resp.status_code == 400
     assert "km" in resp.get_data(as_text=True)
+
+
+# ── virtual way IDs ───────────────────────────────────────────────────────────
+
+
+def test_delete_way_valid_virtual_id(app_client_with_file):
+    client, tmp_path, filename = app_client_with_file
+    resp = client.delete(
+        f"/api/ways/1:0?file={filename}",
+        data=json.dumps({"category": "footway", "label": ""}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 204
+
+    with (tmp_path / "test.annotations.json").open() as f:
+        store = json.load(f)
+    deleted_ids = {(d["id"] if isinstance(d, dict) else d) for d in store["deleted_ways"]}
+    assert "1:0" in deleted_ids
+
+
+@pytest.mark.parametrize(
+    "bad_id",
+    [
+        "1:evil",
+        "1:0');alert(1);('",
+        "1:0:1",
+        "abc",
+        "1:",
+        "1:<img src=x onerror=alert(1)>",
+    ],
+)
+def test_delete_way_invalid_virtual_id_rejected(app_client_with_file, bad_id):
+    client, tmp_path, filename = app_client_with_file
+    resp = client.delete(
+        f"/api/ways/{quote(bad_id, safe='')}?file={filename}",
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+    # Nothing may have been written to the store
+    assert not (tmp_path / "test.annotations.json").exists()
+
+
+def test_restore_way_invalid_virtual_id_rejected(app_client_with_file):
+    client, _, filename = app_client_with_file
+    resp = client.put(
+        f"/api/ways/{quote('1:evil', safe='')}/restore?file={filename}",
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+
+
+def test_delete_way_node_valid_virtual_way_id(app_client_with_file):
+    client, tmp_path, filename = app_client_with_file
+    resp = client.delete(f"/api/way_node?file={filename}&way_id=1:0&node_id=101")
+    assert resp.status_code == 204
+
+    with (tmp_path / "test.annotations.json").open() as f:
+        store = json.load(f)
+    assert {"way_id": "1:0", "node_id": 101} in store["deleted_nodes"]
+
+
+def test_delete_way_node_invalid_virtual_way_id_rejected(app_client_with_file):
+    client, _, filename = app_client_with_file
+    bad = quote("1:0');alert(1);('", safe="")
+    resp = client.delete(f"/api/way_node?file={filename}&way_id={bad}&node_id=101")
+    assert resp.status_code == 400
+
+
+# ── request size limit ────────────────────────────────────────────────────────
+
+
+def test_max_content_length_configured(app_client):
+    client, _ = app_client
+    assert client.application.config["MAX_CONTENT_LENGTH"] == MAX_CONTENT_LENGTH
+    assert MAX_CONTENT_LENGTH == 100 * 1024 * 1024
+
+
+# ── access token auth / CSRF ──────────────────────────────────────────────────
+
+
+def test_auth_get_with_cookie_accepted(app_client, monkeypatch):
+    client, _ = app_client
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "sekret")
+    assert client.get("/api/files").status_code == 401
+    client.set_cookie(ACCESS_TOKEN_COOKIE, "sekret")
+    assert client.get("/api/files").status_code == 200
+
+
+def test_auth_mutating_cookie_only_rejected(app_client_with_file, monkeypatch):
+    client, _, filename = app_client_with_file
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "sekret")
+    client.set_cookie(ACCESS_TOKEN_COOKIE, "sekret")
+    resp = client.delete(
+        f"/api/ways/1?file={filename}",
+        data=json.dumps({}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 401
+
+
+def test_auth_mutating_cookie_with_csrf_header_accepted(app_client_with_file, monkeypatch):
+    client, _, filename = app_client_with_file
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "sekret")
+    client.set_cookie(ACCESS_TOKEN_COOKIE, "sekret")
+    resp = client.delete(
+        f"/api/ways/1?file={filename}",
+        data=json.dumps({}),
+        content_type="application/json",
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert resp.status_code == 204
+
+
+def test_auth_mutating_token_header_accepted(app_client_with_file, monkeypatch):
+    client, _, filename = app_client_with_file
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "sekret")
+    resp = client.delete(
+        f"/api/ways/1?file={filename}",
+        data=json.dumps({}),
+        content_type="application/json",
+        headers={"X-Access-Token": "sekret"},
+    )
+    assert resp.status_code == 204
+
+
+def test_auth_wrong_token_header_rejected(app_client_with_file, monkeypatch):
+    client, _, filename = app_client_with_file
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "sekret")
+    resp = client.delete(
+        f"/api/ways/1?file={filename}",
+        data=json.dumps({}),
+        content_type="application/json",
+        headers={"X-Access-Token": "wrong"},
+    )
+    assert resp.status_code == 401
+
+
+# ── annotation store concurrency ──────────────────────────────────────────────
+
+
+def test_add_way_node_concurrent_ids_unique(app_client_with_file):
+    # Two concurrent adds must not mint the same min(existing_ids)-1 synthetic
+    # ID or lose each other's entries.
+    client, tmp_path, filename = app_client_with_file
+    app = client.application
+    n = 4
+    barrier = threading.Barrier(n)
+    results = []
+    results_lock = threading.Lock()
+
+    def worker():
+        c = app.test_client()
+        barrier.wait()
+        resp = c.post(
+            f"/api/way_node?file={filename}&way_id=1",
+            data=json.dumps({"after_node_id": 101, "lat": 50.0, "lon": 14.0}),
+            content_type="application/json",
+        )
+        with results_lock:
+            results.append(resp.get_json()["id"])
+
+    threads = [threading.Thread(target=worker) for _ in range(n)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert sorted(results) == [-4, -3, -2, -1]
+    with (tmp_path / "test.annotations.json").open() as f:
+        store = json.load(f)
+    assert len(store["added_nodes"]) == n
