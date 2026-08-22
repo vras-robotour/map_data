@@ -340,6 +340,30 @@ def test_to_pcd_points_cache_invalidated_on_filled_change():
 # ── parse_gpx_file: empty GPX ────────────────────────────────────────────────
 
 
+def test_parse_gpx_file_zone_boundary_single_zone(tmp_path):
+    """
+    A path crossing a UTM zone boundary (18 deg E splits zones 33/34) must be
+    converted entirely in the first waypoint's zone. Per-point natural-zone
+    conversion would put the second point ~400 km away in easting.
+    """
+    gpx_content = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">\n'
+        '  <wpt lat="50.0" lon="17.999"></wpt>\n'
+        '  <wpt lat="50.0" lon="18.001"></wpt>\n'
+        "</gpx>\n"
+    )
+    gpx_path = tmp_path / "zone_boundary.gpx"
+    gpx_path.write_text(gpx_content)
+
+    waypoints, zone_num, zone_let = parse_gpx_file(str(gpx_path))
+
+    assert zone_num == 33
+    assert zone_let == "U"
+    # ~0.002 deg of longitude at lat 50 is ~140 m, not ~400 km.
+    assert abs(waypoints[1][0] - waypoints[0][0]) < 1000
+
+
 def test_parse_gpx_file_empty_returns_empty_list(tmp_path):
     """
     A structurally valid GPX file with no waypoints, tracks, or routes

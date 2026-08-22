@@ -333,11 +333,15 @@ class MapData:
         if use_cache:
             cached_raw = self._load_osm_cache()
             if cached_raw is not None:
-                result = client.api.parse_json(cached_raw)
-                self.osm_ways_data = result
-                self.osm_rels_data = result
-                self.osm_nodes_data = result
-                return
+                try:
+                    result = client.api.parse_json(cached_raw)
+                except (overpy.exception.OverPyException, json.JSONDecodeError):
+                    logger.warning("Cached OSM response is invalid. Re-querying.")
+                else:
+                    self.osm_ways_data = result
+                    self.osm_rels_data = result
+                    self.osm_nodes_data = result
+                    return
 
         bbox = f"{self.min_lat},{self.min_long},{self.max_lat},{self.max_long}"
         # Server-side timeout stays comfortably below OverpassClient's HTTP
@@ -357,7 +361,15 @@ class MapData:
             logger.error("Overpass query failed.")
             return
 
-        result = client.api.parse_json(raw)
+        # query_raw validates 200 bodies, but stay defensive: a malformed
+        # response that slips through must not kill the run with an
+        # uncaught overpy/json traceback.
+        try:
+            result = client.api.parse_json(raw)
+        except (overpy.exception.OverPyException, json.JSONDecodeError):
+            logger.exception("Overpass returned an unparseable response.")
+            return
+
         self.osm_ways_data = result
         self.osm_rels_data = result
         self.osm_nodes_data = result

@@ -8,6 +8,18 @@ from map_data.utils.overpass import OverpassClient
 
 MINIMAL_OVERPASS_JSON = json.dumps({"version": 0.6, "elements": []})
 
+# Overpass reports query timeouts/memory exhaustion as HTTP 200 with a
+# JSON body carrying a "remark" instead of a proper error status.
+REMARK_ERROR_JSON = json.dumps(
+    {
+        "version": 0.6,
+        "elements": [],
+        "remark": 'runtime error: Query timed out in "query" at line 1.',
+    },
+)
+
+HTML_ERROR_BODY = "<html><body>Overpass is too busy</body></html>"
+
 
 def _resp(status_code, text=""):
     r = MagicMock()
@@ -61,6 +73,54 @@ def test_query_raw_server_error_retries():
     ):
         result = client.query_raw("test query", retries=2)
     assert result == MINIMAL_OVERPASS_JSON
+
+
+def test_query_raw_remark_error_body_retries():
+    client = OverpassClient()
+    side_effects = [_resp(200, REMARK_ERROR_JSON), _resp(200, MINIMAL_OVERPASS_JSON)]
+    with (
+        patch.object(client.session, "get", return_value=_resp(200, "")),
+        patch.object(client.session, "post", side_effect=side_effects),
+        patch("map_data.utils.overpass.time.sleep"),
+    ):
+        result = client.query_raw("test query", retries=2)
+    assert result == MINIMAL_OVERPASS_JSON
+    assert client._endpoint_index > 0
+
+
+def test_query_raw_html_body_retries():
+    client = OverpassClient()
+    side_effects = [_resp(200, HTML_ERROR_BODY), _resp(200, MINIMAL_OVERPASS_JSON)]
+    with (
+        patch.object(client.session, "get", return_value=_resp(200, "")),
+        patch.object(client.session, "post", side_effect=side_effects),
+        patch("map_data.utils.overpass.time.sleep"),
+    ):
+        result = client.query_raw("test query", retries=2)
+    assert result == MINIMAL_OVERPASS_JSON
+    assert client._endpoint_index > 0
+
+
+def test_query_raw_persistent_remark_errors_return_none():
+    client = OverpassClient()
+    with (
+        patch.object(client.session, "get", return_value=_resp(200, "")),
+        patch.object(client.session, "post", return_value=_resp(200, REMARK_ERROR_JSON)),
+        patch("map_data.utils.overpass.time.sleep"),
+    ):
+        result = client.query_raw("test query")
+    assert result is None
+
+
+def test_query_persistent_remark_errors_return_none_without_raising():
+    client = OverpassClient()
+    with (
+        patch.object(client.session, "get", return_value=_resp(200, "")),
+        patch.object(client.session, "post", return_value=_resp(200, REMARK_ERROR_JSON)),
+        patch("map_data.utils.overpass.time.sleep"),
+    ):
+        result = client.query("test query")
+    assert result is None
 
 
 def test_query_raw_exhausts_retries():

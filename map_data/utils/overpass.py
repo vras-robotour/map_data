@@ -1,4 +1,5 @@
 import http
+import json
 import logging
 import re
 import time
@@ -38,9 +39,13 @@ class OverpassClient:
 
     def query(self, query_str: str, retries: int | None = None) -> overpy.Result | None:
         raw_text = self.query_raw(query_str, retries)
-        if raw_text:
+        if not raw_text:
+            return None
+        try:
             return self.api.parse_json(raw_text)
-        return None
+        except (overpy.exception.OverPyException, json.JSONDecodeError):
+            logger.exception("Could not parse Overpass response")
+            return None
 
     def query_raw(
         self,
@@ -66,9 +71,21 @@ class OverpassClient:
                     endpoint, data={"data": query_str}, timeout=REQUEST_TIMEOUT
                 )
                 if response.status_code == http.HTTPStatus.OK:
-                    return response.text
-
-                if response.status_code in (429, 406):
+                    body_error = self._body_error(response.text)
+                    if body_error is None:
+                        return response.text
+                    # Overpass reports query timeouts / memory exhaustion as
+                    # HTTP 200 with a "remark" in the JSON body, and a busy
+                    # mirror may answer 200 with an HTML page. Treat both
+                    # exactly like a retryable server error.
+                    logger.warning(
+                        "Overpass error body (HTTP 200) on %s: %s",
+                        endpoint,
+                        body_error,
+                    )
+                    self._endpoint_index += 1
+                    time.sleep(2 * attempt)
+                elif response.status_code in (429, 406):
                     logger.warning(
                         "Rate limited (HTTP %s) on %s. Switching endpoint...",
                         response.status_code,
@@ -93,6 +110,24 @@ class OverpassClient:
                 if attempt < retries:
                     time.sleep(2 * attempt)
 
+        return None
+
+    @staticmethod
+    def _body_error(text: str) -> str | None:
+        """
+        Detect an error hidden in an HTTP 200 body.
+
+        Returns a short description of the problem (an Overpass ``remark``
+        such as ``runtime error: Query timed out ...``, or a non-JSON body),
+        or ``None`` if the body looks like a valid result.
+        """
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            return f"non-JSON body: {text[:200]!r}"
+        remark = data.get("remark") if isinstance(data, dict) else None
+        if remark:
+            return str(remark)[:200]
         return None
 
     def _wait_for_slot(self, endpoint: str, max_wait: int = 300) -> None:
