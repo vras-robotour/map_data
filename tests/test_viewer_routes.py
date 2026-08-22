@@ -460,6 +460,51 @@ def test_fetch_area_accepts_small_bbox_and_completes(app_client, mock_overpass_c
     assert status == "done"
 
 
+def test_fetch_area_sweeps_stale_terminal_tasks(app_client, mock_overpass_client):
+    client, _ = app_client
+    now = time.time()
+    stale = now - viewer_routes.FETCH_TASK_RETENTION_S - 1
+    injected = {
+        "stale-done": {"status": "done", "result": {}, "completed_at": stale},
+        "stale-failed": {"status": "failed", "error": "boom", "completed_at": stale},
+        "fresh-done": {"status": "done", "result": {}, "completed_at": now},
+        "unstamped-done": {"status": "done", "result": {}},
+        "still-running": {"status": "querying", "detail": "…"},
+    }
+    viewer_routes._fetch_tasks.update(injected)
+    try:
+        resp = client.post(
+            "/api/fetch_area",
+            data=json.dumps(
+                {
+                    "min_lat": 50.000,
+                    "max_lat": 50.001,
+                    "min_lon": 14.000,
+                    "max_lon": 14.001,
+                    "name": "sweep",
+                },
+            ),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        task_id = resp.get_json()["task_id"]
+        # Abandoned terminal tasks past the retention window are swept.
+        assert "stale-done" not in viewer_routes._fetch_tasks
+        assert "stale-failed" not in viewer_routes._fetch_tasks
+        # Recent terminal, non-terminal, and the new task all survive.
+        assert "fresh-done" in viewer_routes._fetch_tasks
+        assert "still-running" in viewer_routes._fetch_tasks
+        assert task_id in viewer_routes._fetch_tasks
+        # A terminal task never polled gets its retention clock started.
+        assert "unstamped-done" in viewer_routes._fetch_tasks
+        assert viewer_routes._fetch_tasks["unstamped-done"]["completed_at"] >= now
+        # The sweep never stamps non-terminal tasks.
+        assert "completed_at" not in viewer_routes._fetch_tasks["still-running"]
+    finally:
+        for key in injected:
+            viewer_routes._fetch_tasks.pop(key, None)
+
+
 def test_upload_gpx_rejects_oversized_track(app_client):
     client, _ = app_client
     gpx_content = (
@@ -982,3 +1027,48 @@ def test_cancel_wormhole_unknown_transfer(app_client):
     resp = client.post("/api/cancel_wormhole", json={"transfer_id": "does-not-exist"})
     assert resp.status_code == 200
     assert resp.get_json() == {"success": False, "message": "Invalid or unknown transfer ID"}
+
+
+# ── non-JSON / empty bodies on JSON endpoints ────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    ["/api/cancel_replan", "/api/create_wormhole", "/api/cancel_wormhole"],
+)
+def test_json_endpoints_reject_missing_content_type(app_client, endpoint):
+    client, _ = app_client
+    # No Content-Type header at all.
+    resp = client.post(endpoint, data="transfer_id=x")
+    assert resp.status_code == 400
+    assert resp.get_json()["success"] is False
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    ["/api/cancel_replan", "/api/create_wormhole", "/api/cancel_wormhole"],
+)
+def test_json_endpoints_reject_empty_json_body(app_client, endpoint):
+    client, _ = app_client
+    # Correct content type but an empty body.
+    resp = client.post(endpoint, data="", content_type="application/json")
+    assert resp.status_code == 400
+    assert resp.get_json()["success"] is False
+
+
+def test_cancel_replan_with_transfer_id_succeeds(app_client):
+    client, _ = app_client
+    with patch.object(viewer_routes, "cancel_replan_backend") as mock_cancel:
+        resp = client.post("/api/cancel_replan", json={"transfer_id": "tid-9"})
+    assert resp.status_code == 200
+    assert resp.get_json() == {"success": True}
+    mock_cancel.assert_called_once_with("tid-9")
+
+
+def test_cancel_replan_missing_transfer_id_rejected(app_client):
+    client, _ = app_client
+    with patch.object(viewer_routes, "cancel_replan_backend") as mock_cancel:
+        resp = client.post("/api/cancel_replan", json={})
+    assert resp.status_code == 400
+    assert resp.get_json()["success"] is False
+    mock_cancel.assert_not_called()

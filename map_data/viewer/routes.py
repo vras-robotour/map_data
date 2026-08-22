@@ -922,6 +922,31 @@ def _check_grid_cells(area_m2: float, cell_size: float) -> None:
 
 _fetch_tasks: dict[str, dict[str, Any]] = {}
 
+#: How long a terminal ("done"/"failed") fetch task is retained, in seconds,
+#: before it is evicted -- either by a poll in :func:`fetch_area_status` or by
+#: the sweep in :func:`fetch_area`.
+FETCH_TASK_RETENTION_S = 60.0
+
+
+def _sweep_stale_fetch_tasks() -> None:
+    """
+    Evict terminal fetch tasks older than :data:`FETCH_TASK_RETENTION_S`.
+
+    Called on every :func:`fetch_area` POST so that abandoned tasks (ones
+    whose client never polls them to their terminal state, which is what
+    normally triggers eviction in :func:`fetch_area_status`) cannot
+    accumulate in ``_fetch_tasks`` forever. Terminal tasks that do not yet
+    carry a ``completed_at`` timestamp are stamped with the current time,
+    starting their retention clock; non-terminal tasks are never touched.
+    """
+    now = time.time()
+    for task_id, task in list(_fetch_tasks.items()):
+        if task.get("status") not in ("done", "failed"):
+            continue
+        completed_at = task.setdefault("completed_at", now)
+        if now - completed_at > FETCH_TASK_RETENTION_S:
+            _fetch_tasks.pop(task_id, None)
+
 
 def _run_fetch_task(
     task_id: str,
@@ -1086,6 +1111,7 @@ def fetch_area() -> Response:
     easting, northing, zone_number, zone_letter = utm.from_latlon(corners[:, 0], corners[:, 1])
     waypoints = np.column_stack([easting, northing])
 
+    _sweep_stale_fetch_tasks()
     task_id = str(uuid.uuid4())
     _fetch_tasks[task_id] = {"status": "pending"}
     threading.Thread(
@@ -1111,9 +1137,10 @@ def fetch_area_status(task_id: str) -> Response:
     Poll the status of an async fetch job started by :func:`fetch_area`.
 
     Once a task reaches a terminal state (``"done"``/``"failed"``), it is
-    kept around for 60 seconds after first being observed as terminal
-    (to give the client a chance to see the final status), then evicted
-    from ``_fetch_tasks`` on the next poll.
+    kept around for :data:`FETCH_TASK_RETENTION_S` seconds after first
+    being observed as terminal (to give the client a chance to see the
+    final status), then evicted from ``_fetch_tasks`` on the next poll
+    (or by the sweep :func:`fetch_area` runs on each new fetch).
 
     Returns
     -------
@@ -1134,7 +1161,7 @@ def fetch_area_status(task_id: str) -> Response:
     if task["status"] in ("done", "failed"):
         if "completed_at" not in task:
             task["completed_at"] = time.time()
-        elif time.time() - task["completed_at"] > 60:
+        elif time.time() - task["completed_at"] > FETCH_TASK_RETENTION_S:
             _fetch_tasks.pop(task_id, None)
     return jsonify(task)
 
@@ -2726,7 +2753,7 @@ def get_cost_grid() -> Response:
 
 
 @bp.route("/api/cancel_replan", methods=["POST"])
-def cancel_replan_route() -> Response:
+def cancel_replan_route() -> ResponseReturnValue:
     """
     Cancel an in-progress replan started by :func:`create_replan`.
 
@@ -2738,13 +2765,17 @@ def cancel_replan_route() -> Response:
 
     Returns
     -------
-    Response
-        JSON ``{"success": true}`` (always -- an unknown or already
-        finished ``transfer_id`` is not reported as an error by
-        :func:`~map_data.pathsolver.replan.cancel_replan_backend`).
+    ResponseReturnValue
+        JSON ``{"success": true}`` for any provided ``transfer_id`` (an
+        unknown or already finished one is not reported as an error by
+        :func:`~map_data.pathsolver.replan.cancel_replan_backend`);
+        ``{"success": false, "message": ...}`` with status 400 if the
+        request body is not JSON or lacks ``transfer_id``.
 
     """
-    transfer_id = request.json.get("transfer_id")
+    transfer_id = (request.get_json(silent=True) or {}).get("transfer_id")
+    if not transfer_id:
+        return jsonify({"success": False, "message": "No transfer_id provided"}), 400
     cancel_replan_backend(transfer_id)
     return jsonify({"success": True})
 
@@ -3008,7 +3039,7 @@ def create_wormhole() -> ResponseReturnValue:
         (wormhole code not captured in time, or an internal error).
 
     """
-    gpx_data = request.json.get("gpx")
+    gpx_data = (request.get_json(silent=True) or {}).get("gpx")
     if not gpx_data:
         return jsonify({"success": False, "message": "No GPX data provided"}), 400
 
@@ -3027,18 +3058,22 @@ def create_wormhole() -> ResponseReturnValue:
 
 
 @bp.route("/api/cancel_wormhole", methods=["POST"])
-def cancel_wormhole() -> Response:
+def cancel_wormhole() -> ResponseReturnValue:
     """
     Cancel an in-progress ``magic-wormhole`` GPX transfer.
 
     Returns
     -------
-    Response
+    ResponseReturnValue
         JSON ``{"success": ..., "message": ...}`` per
-        :meth:`WormholeManager.cancel_transfer`.
+        :meth:`WormholeManager.cancel_transfer`; ``{"success": false,
+        "message": ...}`` with status 400 if the request body is not
+        JSON or lacks ``transfer_id``.
 
     """
-    transfer_id = request.json.get("transfer_id")
+    transfer_id = (request.get_json(silent=True) or {}).get("transfer_id")
+    if not transfer_id:
+        return jsonify({"success": False, "message": "No transfer_id provided"}), 400
     success, message = wormhole_manager.cancel_transfer(transfer_id)
     return jsonify({"success": success, "message": message})
 
