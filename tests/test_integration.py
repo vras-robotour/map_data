@@ -1,29 +1,14 @@
-import json
-from unittest.mock import MagicMock, patch
-
 import numpy as np
-import overpy
 import pytest
 import utm
+from conftest import EMPTY_OSM_JSON as _EMPTY_JSON
+from conftest import FOOTWAY_WAYS_JSON as _WAYS_JSON
 from shapely.geometry import LineString
 
 from map_data.map_data import MapData
 from map_data.utils.way import Way
 
 _LAT, _LON = 50.0, 14.0
-
-# One footway way between two nodes — used as the mocked Overpass response
-_WAYS_JSON = json.dumps(
-    {
-        "version": 0.6,
-        "elements": [
-            {"type": "node", "id": 1, "lat": 50.001, "lon": 14.001},
-            {"type": "node", "id": 2, "lat": 50.002, "lon": 14.002},
-            {"type": "way", "id": 101, "nodes": [1, 2], "tags": {"highway": "footway"}},
-        ],
-    },
-)
-_EMPTY_JSON = json.dumps({"version": 0.6, "elements": []})
 
 
 def _make_md():
@@ -67,15 +52,9 @@ def test_mapdata_save_reload_preserves_ways(tmp_path):
     assert w.line is not None
 
 
-def test_run_parse_with_mocked_overpass(tmp_path):
+def test_run_parse_with_mocked_overpass(tmp_path, mock_overpass_client):
     md = _make_md()
-
-    with patch("map_data.map_data.OverpassClient") as MockClient:
-        instance = MagicMock()
-        instance.query_raw.return_value = _WAYS_JSON
-        instance.api = overpy.Overpass()
-        MockClient.return_value = instance
-        md.run_queries(use_cache=False)
+    md.run_queries(use_cache=False)
 
     assert md.osm_ways_data is not None
     result = md.run_parse()

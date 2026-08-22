@@ -37,6 +37,12 @@ dev = [
     "mkdocstrings[python]",
 ]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Keep local runs identical to CI: coverage flags live here, not in the
+# workflow, so a plain `pytest` measures the same thing everywhere.
+addopts = "--cov=map_data --cov-report=term-missing"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
