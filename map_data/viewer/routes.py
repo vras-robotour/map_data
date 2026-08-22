@@ -778,6 +778,148 @@ def _bbox_area_km2(min_lat: float, min_lon: float, max_lat: float, max_lon: floa
     return abs(max_lat - min_lat) * km_per_deg_lat * abs(max_lon - min_lon) * km_per_deg_lon
 
 
+# Upper bound on the number of grid cells a single cost-grid/replan request may
+# allocate. Each cell costs ~32 bytes in the planner's [N, 4] float64 grid plus
+# per-cell Python-loop time, so a few million is already generous: 4 million
+# cells is a 2 km x 2 km box at the 1 m visualization resolution, or
+# 500 m x 500 m at the 0.25 m default replan cell size.
+MAX_GRID_CELLS = 4_000_000
+
+# Sane grid-planner parameter ranges: cell sizes below 5 cm explode the cell
+# count (see MAX_GRID_CELLS) while sizes above 10 m are useless for a footpath
+# planner; obstacle inflation beyond 10 m would swallow whole maps.
+MIN_CELL_SIZE_M = 0.05
+MAX_CELL_SIZE_M = 10.0
+MAX_INFLATE_OBSTACLES_M = 10.0
+
+# utm.from_latlon() only supports latitudes in [-80, 84]; reject anything
+# outside so bad input becomes a 400 instead of an exception deep in planning.
+_MIN_LAT, _MAX_LAT = -80.0, 84.0
+_MIN_LON, _MAX_LON = -180.0, 180.0
+
+
+def _validated_number(value: Any, name: str, minimum: float, maximum: float) -> float:
+    """
+    Validate that *value* is a finite JSON number within ``[minimum, maximum]``.
+
+    Booleans are rejected (JSON ``true``/``false`` are not numbers even though
+    ``bool`` subclasses ``int`` in Python), as are numeric strings, NaN, and
+    infinities.
+
+    Returns
+    -------
+    float
+        The validated value as a ``float``.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if *value* is not a number or is outside the allowed range.
+
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        abort(400, f"{name} must be a number")
+    num = float(value)
+    if not math.isfinite(num) or not (minimum <= num <= maximum):
+        abort(400, f"{name} must be a finite number between {minimum} and {maximum}")
+    return num
+
+
+def _validated_bbox(
+    min_lat: Any,
+    min_lon: Any,
+    max_lat: Any,
+    max_lon: Any,
+) -> tuple[float, float, float, float]:
+    """
+    Validate a client-supplied WGS84 bounding box.
+
+    Each corner must be a finite number within the UTM-supported lat/lon
+    range, and min must be strictly less than max on each axis.
+
+    Returns
+    -------
+    tuple of float
+        ``(min_lat, min_lon, max_lat, max_lon)`` as validated floats.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if any corner is not a finite in-range number or the box is
+        inverted/degenerate.
+
+    """
+    min_lat_f = _validated_number(min_lat, "min_lat", _MIN_LAT, _MAX_LAT)
+    max_lat_f = _validated_number(max_lat, "max_lat", _MIN_LAT, _MAX_LAT)
+    min_lon_f = _validated_number(min_lon, "min_lon", _MIN_LON, _MAX_LON)
+    max_lon_f = _validated_number(max_lon, "max_lon", _MIN_LON, _MAX_LON)
+    if min_lat_f >= max_lat_f or min_lon_f >= max_lon_f:
+        abort(400, "min_lat/min_lon must be strictly less than max_lat/max_lon")
+    return min_lat_f, min_lon_f, max_lat_f, max_lon_f
+
+
+def _validated_cost_dict(value: Any, name: str) -> dict[str, float] | None:
+    """
+    Validate a client-supplied per-tag cost override dict.
+
+    ``None`` passes through unchanged (meaning "use the defaults"); anything
+    else must be a dict mapping strings to finite non-negative numbers.
+
+    Returns
+    -------
+    dict of str to float, or None
+        The validated cost dict (values coerced to ``float``), or ``None``.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if *value* is not a dict of str -> finite non-negative number.
+
+    """
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        abort(400, f"{name} must be an object mapping tag values to costs")
+    out: dict[str, float] = {}
+    for key, cost in value.items():
+        if not isinstance(key, str):
+            abort(400, f"{name} keys must be strings")
+        if isinstance(cost, bool) or not isinstance(cost, (int, float)):
+            abort(400, f"{name}[{key!r}] must be a number")
+        cost_f = float(cost)
+        if not math.isfinite(cost_f) or cost_f < 0:
+            abort(400, f"{name}[{key!r}] must be a finite non-negative number")
+        out[key] = cost_f
+    return out
+
+
+def _check_grid_cells(area_m2: float, cell_size: float) -> None:
+    """
+    Reject a grid request whose cell count would exceed :data:`MAX_GRID_CELLS`.
+
+    Parameters
+    ----------
+    area_m2 : float
+        Grid area in square meters (a non-positive area trivially passes).
+    cell_size : float
+        Grid cell edge length in meters.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if ``area_m2 / cell_size**2`` exceeds :data:`MAX_GRID_CELLS`.
+
+    """
+    cells = area_m2 / (cell_size * cell_size)
+    if cells > MAX_GRID_CELLS:
+        abort(
+            400,
+            f"Requested area needs ~{cells / 1e6:.1f} million grid cells at "
+            f"cell_size={cell_size} m, exceeding the {MAX_GRID_CELLS / 1e6:.0f} million "
+            "cell limit. Request a smaller area or a larger cell size.",
+        )
+
+
 _fetch_tasks: dict[str, dict[str, Any]] = {}
 
 
@@ -2486,12 +2628,12 @@ def get_cost_grid() -> Response:
     file : str
         Mapdata filename.
     min_lat, min_lon, max_lat, max_lon : float
-        Bounding box (WGS84 degrees; order-independent -- min/max are
-        computed from the two corners regardless of which is given as
-        "min").
+        Bounding box (WGS84 degrees); min must be strictly less than max
+        on each axis, and the box must fit within the
+        :data:`MAX_GRID_CELLS` cell budget at the fixed 1 m resolution.
     highway_costs, surface_costs : str, optional
-        JSON-encoded cost-override dicts; a malformed value is logged and
-        ignored (falls back to defaults) rather than erroring the request.
+        JSON-encoded cost-override dicts (str -> finite non-negative
+        number); a malformed value aborts the request with 400.
 
     Returns
     -------
@@ -2501,20 +2643,51 @@ def get_cost_grid() -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if any required parameter is missing. 404 if the file
-        doesn't exist.
+        400 if any required parameter is missing, the bounding box is
+        malformed (non-finite, out of lat/lon range, or min >= max),
+        the box exceeds the grid-cell budget, or a cost-override dict is
+        malformed. 404 if the file doesn't exist.
 
     """
     filename = request.args.get("file")
-    min_lat = request.args.get("min_lat", type=float)
-    min_lon = request.args.get("min_lon", type=float)
-    max_lat = request.args.get("max_lat", type=float)
-    max_lon = request.args.get("max_lon", type=float)
+    min_lat_arg = request.args.get("min_lat", type=float)
+    min_lon_arg = request.args.get("min_lon", type=float)
+    max_lat_arg = request.args.get("max_lat", type=float)
+    max_lon_arg = request.args.get("max_lon", type=float)
 
-    if filename is None or any(v is None for v in (min_lat, min_lon, max_lat, max_lon)):
+    if filename is None or any(
+        v is None for v in (min_lat_arg, min_lon_arg, max_lat_arg, max_lon_arg)
+    ):
         abort(400, "Missing required parameters")
-    if filename is None:
-        abort(400, "Filename cannot be None")
+
+    min_lat, min_lon, max_lat, max_lon = _validated_bbox(
+        min_lat_arg,
+        min_lon_arg,
+        max_lat_arg,
+        max_lon_arg,
+    )
+
+    cell_size = 1.0  # Use a coarser grid for visualization performance
+    _check_grid_cells(_bbox_area_km2(min_lat, min_lon, max_lat, max_lon) * 1e6, cell_size)
+
+    # Get custom highway costs from request if provided
+    highway_costs_dict = None
+    highway_costs = request.args.get("highway_costs")
+    if highway_costs:
+        try:
+            parsed_hw = json.loads(highway_costs)
+        except json.JSONDecodeError:
+            abort(400, "highway_costs must be valid JSON")
+        highway_costs_dict = _validated_cost_dict(parsed_hw, "highway_costs")
+
+    surface_costs_dict = None
+    surface_costs = request.args.get("surface_costs")
+    if surface_costs:
+        try:
+            parsed_sf = json.loads(surface_costs)
+        except json.JSONDecodeError:
+            abort(400, "surface_costs must be valid JSON")
+        surface_costs_dict = _validated_cost_dict(parsed_sf, "surface_costs")
 
     md, _ = get_merged_mapdata(filename)
     if md is None:
@@ -2530,25 +2703,8 @@ def get_cost_grid() -> Response:
     args = parse_args([])
     args.low = low
     args.high = high
-    args.cell_size = 1.0  # Use a coarser grid for visualization performance
+    args.cell_size = cell_size
     args.inflate_obstacles = 0.0
-
-    # Get custom highway costs from request if provided
-    highway_costs_dict = None
-    highway_costs = request.args.get("highway_costs")
-    if highway_costs:
-        try:
-            highway_costs_dict = json.loads(highway_costs)
-        except json.JSONDecodeError as e:
-            logger.warning("Failed to parse custom highway costs: %s", e)
-
-    surface_costs_dict = None
-    surface_costs = request.args.get("surface_costs")
-    if surface_costs:
-        try:
-            surface_costs_dict = json.loads(surface_costs)
-        except json.JSONDecodeError as e:
-            logger.warning("Failed to parse custom surface costs: %s", e)
 
     obstacles = ways_to_shapely(md.barriers_list)
     replanner = ReplanPath(
@@ -2923,9 +3079,11 @@ def create_replan() -> Response:
     highway_costs, surface_costs : dict, optional
         Custom per-tag traversal cost overrides (grid planner only).
     cell_size : float, default 0.25
-        Grid cell size in meters (grid planner only).
+        Grid cell size in meters (grid planner only); must be within
+        [:data:`MIN_CELL_SIZE_M`, :data:`MAX_CELL_SIZE_M`].
     inflate_obstacles : float, default 0.25
-        Obstacle inflation radius in meters (grid planner only).
+        Obstacle inflation radius in meters (grid planner only); must be
+        within [0, :data:`MAX_INFLATE_OBSTACLES_M`].
     simplify_path, smooth_path : bool
         Post-processing toggles (grid planner only).
     grid_cost_weight : float, optional
@@ -2945,8 +3103,13 @@ def create_replan() -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``points`` or ``file`` is missing. 404 if the file doesn't
-        exist.
+        400 if ``points`` or ``file`` is missing, or any parameter fails
+        validation: non-numeric/out-of-range points, ``cell_size``
+        outside [:data:`MIN_CELL_SIZE_M`, :data:`MAX_CELL_SIZE_M`],
+        ``inflate_obstacles`` outside [0, :data:`MAX_INFLATE_OBSTACLES_M`],
+        malformed cost dicts, wrongly-typed flags/strings, or a planning
+        area exceeding the :data:`MAX_GRID_CELLS` cell budget. 404 if the
+        file doesn't exist.
 
     """
     body = request.get_json(force=True) or {}
@@ -2956,17 +3119,44 @@ def create_replan() -> Response:
     transfer_id = body.get("transfer_id")
     algorithm = body.get("algorithm", "rrt")
     sub_algorithm = body.get("sub_algorithm", "astar")
-    highway_costs = body.get("highway_costs")
-    surface_costs = body.get("surface_costs")
-
-    cell_size = body.get("cell_size", 0.25)
-    inflate_obstacles = body.get("inflate_obstacles", 0.25)
-    simplify_path = body.get("simplify_path", True)
-    smooth_path = body.get("smooth_path", False)
-    grid_cost_weight = body.get("grid_cost_weight")
 
     if not path_data or not filename:
         abort(400, "Missing points or file parameter")
+    if not isinstance(filename, str):
+        abort(400, "file must be a string")
+    if not isinstance(path_data, list):
+        abort(400, "points must be a list of [lat, lon] pairs")
+    if not isinstance(highway_types, list) or not all(isinstance(h, str) for h in highway_types):
+        abort(400, "allowed_ways must be a list of strings")
+    if transfer_id is not None and not isinstance(transfer_id, str):
+        abort(400, "transfer_id must be a string")
+    if not isinstance(algorithm, str):
+        abort(400, "algorithm must be a string")
+    if not isinstance(sub_algorithm, str):
+        abort(400, "sub_algorithm must be a string")
+
+    highway_costs = _validated_cost_dict(body.get("highway_costs"), "highway_costs")
+    surface_costs = _validated_cost_dict(body.get("surface_costs"), "surface_costs")
+
+    cell_size = _validated_number(
+        body.get("cell_size", 0.25),
+        "cell_size",
+        MIN_CELL_SIZE_M,
+        MAX_CELL_SIZE_M,
+    )
+    inflate_obstacles = _validated_number(
+        body.get("inflate_obstacles", 0.25),
+        "inflate_obstacles",
+        0.0,
+        MAX_INFLATE_OBSTACLES_M,
+    )
+    simplify_path = body.get("simplify_path", True)
+    smooth_path = body.get("smooth_path", False)
+    if not isinstance(simplify_path, bool) or not isinstance(smooth_path, bool):
+        abort(400, "simplify_path and smooth_path must be booleans")
+    grid_cost_weight = body.get("grid_cost_weight")
+    if grid_cost_weight is not None:
+        grid_cost_weight = _validated_number(grid_cost_weight, "grid_cost_weight", 0.0, 1000.0)
 
     md, _ = get_merged_mapdata(filename)
     if md is None:
@@ -2974,8 +3164,12 @@ def create_replan() -> Response:
 
     zn, zl = md.zone_number, md.zone_letter
     utm_path_list: list[list[float]] = []
-    for p in path_data:
-        e, n, _, _ = utm.from_latlon(float(p[0]), float(p[1]), zn, zl)
+    for i, p in enumerate(path_data):
+        if not isinstance(p, (list, tuple)) or len(p) < 2:
+            abort(400, "points must be a list of [lat, lon] pairs")
+        lat = _validated_number(p[0], f"points[{i}] latitude", _MIN_LAT, _MAX_LAT)
+        lon = _validated_number(p[1], f"points[{i}] longitude", _MIN_LON, _MAX_LON)
+        e, n, _, _ = utm.from_latlon(lat, lon, zn, zl)
         utm_path_list.append([e, n])
     utm_path: np.ndarray = np.array(utm_path_list, dtype=np.float64)
 
@@ -2994,6 +3188,9 @@ def create_replan() -> Response:
         planner = GraphPlanner(md, highway_types=highway_types)
         res = planner.plan(utm_path)
     else:
+        area_m2 = max(0.0, p_high[0] - p_low[0]) * max(0.0, p_high[1] - p_low[1])
+        _check_grid_cells(area_m2, cell_size)
+
         args = parse_args([])
         args.simplify_path = simplify_path
         args.smooth_path = smooth_path

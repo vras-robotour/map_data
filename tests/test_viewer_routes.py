@@ -1,20 +1,21 @@
 import io
 import json
+import math
 import threading
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from urllib.parse import quote
 
 import numpy as np
-import overpy
 import pytest
 import utm
 from shapely.geometry import LineString
 
 from map_data.map_data import MapData
 from map_data.utils.way import Way
+from map_data.viewer import routes as viewer_routes
 from map_data.viewer.app import ACCESS_TOKEN_COOKIE, MAX_CONTENT_LENGTH, create_app
-from map_data.viewer.routes import MAX_FETCH_AREA_KM2, _bbox_area_km2
+from map_data.viewer.routes import MAX_FETCH_AREA_KM2, MAX_GRID_CELLS, _bbox_area_km2
 
 
 def _make_mapdata(path):
@@ -431,48 +432,32 @@ def test_fetch_area_rejects_oversized_bbox(app_client):
     assert "km" in resp.get_data(as_text=True)
 
 
-def test_fetch_area_accepts_small_bbox_and_completes(app_client):
+def test_fetch_area_accepts_small_bbox_and_completes(app_client, mock_overpass_client):
     client, _ = app_client
-    ways_raw = json.dumps(
-        {
-            "version": 0.6,
-            "elements": [
-                {"type": "node", "id": 1, "lat": 50.0005, "lon": 14.0005},
-                {"type": "node", "id": 2, "lat": 50.0006, "lon": 14.0006},
-                {"type": "way", "id": 101, "nodes": [1, 2], "tags": {"highway": "footway"}},
-            ],
-        },
+    resp = client.post(
+        "/api/fetch_area",
+        data=json.dumps(
+            {
+                "min_lat": 50.000,
+                "max_lat": 50.001,
+                "min_lon": 14.000,
+                "max_lon": 14.001,
+                "name": "small",
+            },
+        ),
+        content_type="application/json",
     )
-    with patch("map_data.map_data.OverpassClient") as MockClient:
-        instance = MagicMock()
-        instance.query_raw.return_value = ways_raw
-        instance.api = overpy.Overpass()
-        MockClient.return_value = instance
+    assert resp.status_code == 200
+    task_id = resp.get_json()["task_id"]
 
-        resp = client.post(
-            "/api/fetch_area",
-            data=json.dumps(
-                {
-                    "min_lat": 50.000,
-                    "max_lat": 50.001,
-                    "min_lon": 14.000,
-                    "max_lon": 14.001,
-                    "name": "small",
-                },
-            ),
-            content_type="application/json",
-        )
-        assert resp.status_code == 200
-        task_id = resp.get_json()["task_id"]
-
-        status = None
-        for _ in range(100):
-            poll = client.get(f"/api/fetch_area/{task_id}")
-            status = poll.get_json()["status"]
-            if status in ("done", "failed"):
-                break
-            time.sleep(0.05)
-        assert status == "done"
+    status = None
+    for _ in range(100):
+        poll = client.get(f"/api/fetch_area/{task_id}")
+        status = poll.get_json()["status"]
+        if status in ("done", "failed"):
+            break
+        time.sleep(0.05)
+    assert status == "done"
 
 
 def test_upload_gpx_rejects_oversized_track(app_client):
@@ -661,3 +646,339 @@ def test_add_way_node_concurrent_ids_unique(app_client_with_file):
     with (tmp_path / "test.annotations.json").open() as f:
         store = json.load(f)
     assert len(store["added_nodes"]) == n
+
+
+# ── added node resolution round-trip ─────────────────────────────────────────
+
+
+def test_add_way_node_and_resolution_round_trip(app_client_with_file):
+    client, _, filename = app_client_with_file
+    resp = client.post(
+        f"/api/way_node?file={filename}&way_id=1",
+        data=json.dumps({"after_node_id": 101, "lat": 50.00025, "lon": 14.00025}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    new_id = resp.get_json()["id"]
+    assert new_id == -1
+
+    nodes = client.get(f"/api/way_nodes?file={filename}&way_id=1").get_json()["nodes"]
+    assert [n["id"] for n in nodes] == [101, new_id, 102]
+    added = next(n for n in nodes if n["id"] == new_id)
+    assert added["lat"] == pytest.approx(50.00025)
+    assert added["lon"] == pytest.approx(14.00025)
+
+
+# ── cost grid ────────────────────────────────────────────────────────────────
+
+
+def test_cost_grid_small_bbox_returns_points(app_client_with_file):
+    client, _, filename = app_client_with_file
+    resp = client.get(
+        f"/api/cost_grid?file={filename}&min_lat=50.0&min_lon=14.0&max_lat=50.0005&max_lon=14.0005",
+    )
+    assert resp.status_code == 200
+    points = resp.get_json()
+    assert isinstance(points, list)
+    assert points
+    for point in points:
+        lat, lon, cost = point
+        assert 49.99 < lat < 50.01
+        assert 13.99 < lon < 14.01
+        assert math.isfinite(cost)
+
+
+def test_cost_grid_oversized_bbox_rejected(app_client_with_file):
+    client, _, filename = app_client_with_file
+    # 0.1 x 0.1 deg near Prague is ~80 km^2 -> ~80M cells at 1 m, over the cap
+    assert _bbox_area_km2(50.0, 14.0, 50.1, 14.1) * 1e6 > MAX_GRID_CELLS
+    resp = client.get(
+        f"/api/cost_grid?file={filename}&min_lat=50.0&min_lon=14.0&max_lat=50.1&max_lon=14.1",
+    )
+    assert resp.status_code == 400
+    assert "cell" in resp.get_data(as_text=True)
+
+
+def test_cost_grid_inverted_bbox_rejected(app_client_with_file):
+    client, _, filename = app_client_with_file
+    resp = client.get(
+        f"/api/cost_grid?file={filename}&min_lat=50.001&min_lon=14.0&max_lat=50.0&max_lon=14.001",
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.parametrize("bad_value", ["abc", "nan", "inf", "1e999"])
+def test_cost_grid_non_numeric_bbox_rejected(app_client_with_file, bad_value):
+    client, _, filename = app_client_with_file
+    resp = client.get(
+        f"/api/cost_grid?file={filename}"
+        f"&min_lat={bad_value}&min_lon=14.0&max_lat=50.001&max_lon=14.001",
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "bad_costs",
+    [
+        "not-json",
+        '["footway"]',
+        '{"footway": "cheap"}',
+        '{"footway": -1}',
+        '{"footway": NaN}',
+    ],
+)
+def test_cost_grid_malformed_cost_dict_rejected(app_client_with_file, bad_costs):
+    client, _, filename = app_client_with_file
+    resp = client.get(
+        f"/api/cost_grid?file={filename}"
+        "&min_lat=50.0&min_lon=14.0&max_lat=50.0005&max_lon=14.0005"
+        f"&highway_costs={quote(bad_costs, safe='')}",
+    )
+    assert resp.status_code == 400
+
+
+# ── create_replan ────────────────────────────────────────────────────────────
+
+
+def _replan_body(filename, **overrides):
+    body = {
+        "points": [[50.0, 14.0], [50.0005, 14.0005]],
+        "file": filename,
+        "algorithm": "grid",
+        "sub_algorithm": "astar",
+        "cell_size": 1.0,
+    }
+    body.update(overrides)
+    return body
+
+
+def test_create_replan_minimal_grid_request(app_client_with_file):
+    client, _, filename = app_client_with_file
+    resp = client.post(
+        "/api/create_replan",
+        data=json.dumps(_replan_body(filename)),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["retrieveNum"] in (-1, 0)
+    assert data["newPath"] is not None
+    for lat, lon in data["newPath"]:
+        assert 49.9 < lat < 50.1
+        assert 13.9 < lon < 14.1
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"cell_size": 0.001},
+        {"cell_size": 100},
+        {"cell_size": "0.25"},
+        {"cell_size": True},
+        {"inflate_obstacles": -1},
+        {"inflate_obstacles": 100},
+        {"highway_costs": "footway"},
+        {"highway_costs": {"footway": "cheap"}},
+        {"highway_costs": {"footway": -0.5}},
+        {"surface_costs": ["asphalt"]},
+        {"points": [[50.0, 14.0], ["x", 14.0]]},
+        {"points": [[50.0, 14.0], [91.0, 14.0]]},
+        {"points": "not-a-list"},
+        {"simplify_path": "yes"},
+        {"allowed_ways": "footway"},
+        {"grid_cost_weight": "heavy"},
+        {"transfer_id": 42},
+    ],
+)
+def test_create_replan_invalid_params_rejected(app_client_with_file, overrides):
+    client, _, filename = app_client_with_file
+    resp = client.post(
+        "/api/create_replan",
+        data=json.dumps(_replan_body(filename, **overrides)),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+
+
+def test_create_replan_missing_points_rejected(app_client_with_file):
+    client, _, filename = app_client_with_file
+    resp = client.post(
+        "/api/create_replan",
+        data=json.dumps({"file": filename}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+
+
+def test_create_replan_grid_cell_budget_rejected(app_client_with_file):
+    client, _, filename = app_client_with_file
+    # The tiny cell size makes even this small map's clipped planning bbox
+    # (~400 m x 400 m incl. grid margin) exceed the cell budget.
+    body = _replan_body(
+        filename,
+        cell_size=0.05,
+        points=[[49.999, 13.999], [50.002, 14.003]],
+    )
+    resp = client.post(
+        "/api/create_replan",
+        data=json.dumps(body),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+    assert "cell" in resp.get_data(as_text=True)
+
+
+# ── upload_mapdata ───────────────────────────────────────────────────────────
+
+
+def _mapdata_bytes(tmp_path):
+    src_dir = tmp_path / "upload_src"
+    src_dir.mkdir(exist_ok=True)
+    src = src_dir / "orig.mapdata"
+    if not src.exists():
+        _make_mapdata(src)
+    return src.read_bytes()
+
+
+def test_upload_mapdata_valid(app_client):
+    client, tmp_path = app_client
+    payload = _mapdata_bytes(tmp_path)
+    resp = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(payload), "uploaded.mapdata")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 200
+    assert resp.get_json()["filename"] == "uploaded.mapdata"
+    assert (tmp_path / "uploaded.mapdata").is_file()
+
+
+def test_upload_mapdata_invalid_extension_rejected(app_client):
+    client, tmp_path = app_client
+    resp = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(b"whatever"), "notmap.txt")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 400
+    assert not (tmp_path / "notmap.txt").exists()
+
+
+def test_upload_mapdata_invalid_content_deleted(app_client):
+    client, tmp_path = app_client
+    resp = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(b"this is not a mapdata file"), "bad.mapdata")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 400
+    # The failed upload must not be left behind in the data dir
+    assert not (tmp_path / "bad.mapdata").exists()
+
+
+def test_upload_mapdata_duplicate_name_disambiguated(app_client):
+    client, tmp_path = app_client
+    payload = _mapdata_bytes(tmp_path)
+    first = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(payload), "dup.mapdata")},
+        content_type="multipart/form-data",
+    )
+    assert first.get_json()["filename"] == "dup.mapdata"
+    second = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(payload), "dup.mapdata")},
+        content_type="multipart/form-data",
+    )
+    assert second.status_code == 200
+    assert second.get_json()["filename"] == "dup_1.mapdata"
+    assert (tmp_path / "dup.mapdata").is_file()
+    assert (tmp_path / "dup_1.mapdata").is_file()
+
+
+# ── native export ────────────────────────────────────────────────────────────
+
+
+def test_export_native_missing_param(app_client):
+    client, _ = app_client
+    assert client.get("/api/export").status_code == 400
+
+
+def test_export_native_not_found(app_client):
+    client, _ = app_client
+    assert client.get("/api/export?file=missing.mapdata").status_code == 404
+
+
+def test_export_native_success(app_client_with_file):
+    client, _, filename = app_client_with_file
+    resp = client.get(f"/api/export?file={filename}")
+    assert resp.status_code == 200
+    assert resp.headers["Content-Type"].startswith("application/json")
+    disposition = resp.headers["Content-Disposition"]
+    assert "attachment" in disposition
+    assert "test.exported.mapdata" in disposition
+    data = json.loads(resp.get_data(as_text=True))
+    assert data["metadata"]["zone_number"] == 33
+    assert len(data["footways"]) == 1
+    assert data["footways"][0]["id"] == 1
+    assert data["footways"][0]["tags"] == {"highway": "footway"}
+
+
+# ── wormhole ─────────────────────────────────────────────────────────────────
+
+
+def test_create_wormhole_returns_code_and_transfer_id(app_client):
+    client, _ = app_client
+    with (
+        patch.object(
+            viewer_routes.wormhole_manager,
+            "create_transfer",
+            return_value="tid-1",
+        ) as mock_create,
+        patch.object(
+            viewer_routes.wormhole_manager,
+            "get_transfer_code",
+            return_value="7-crossover-clockwork",
+        ),
+    ):
+        resp = client.post("/api/create_wormhole", json={"gpx": "<gpx></gpx>"})
+    assert resp.status_code == 200
+    assert resp.get_json() == {
+        "success": True,
+        "code": "7-crossover-clockwork",
+        "transfer_id": "tid-1",
+    }
+    mock_create.assert_called_once_with("<gpx></gpx>")
+
+
+def test_create_wormhole_missing_gpx_rejected(app_client):
+    client, _ = app_client
+    with patch.object(viewer_routes.wormhole_manager, "create_transfer") as mock_create:
+        resp = client.post("/api/create_wormhole", json={})
+    assert resp.status_code == 400
+    assert resp.get_json()["success"] is False
+    mock_create.assert_not_called()
+
+
+def test_create_wormhole_code_timeout_cancels_transfer(app_client):
+    client, _ = app_client
+    with (
+        patch.object(viewer_routes.wormhole_manager, "create_transfer", return_value="tid-2"),
+        patch.object(viewer_routes.wormhole_manager, "get_transfer_code", return_value=None),
+        patch.object(
+            viewer_routes.wormhole_manager,
+            "cancel_transfer",
+            return_value=(True, "Transfer cancelled"),
+        ) as mock_cancel,
+    ):
+        resp = client.post("/api/create_wormhole", json={"gpx": "<gpx></gpx>"})
+    assert resp.status_code == 500
+    assert resp.get_json()["success"] is False
+    mock_cancel.assert_called_once_with("tid-2")
+
+
+def test_cancel_wormhole_unknown_transfer(app_client):
+    client, _ = app_client
+    resp = client.post("/api/cancel_wormhole", json={"transfer_id": "does-not-exist"})
+    assert resp.status_code == 200
+    assert resp.get_json() == {"success": False, "message": "Invalid or unknown transfer ID"}
