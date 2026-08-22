@@ -92,6 +92,74 @@ def test_combine_ways_reversed():
     assert new_way.nodes == [10, 11, 12]
 
 
+def test_combine_ways_backward_prepend():
+    """
+    Starting from a middle segment, the forward pass exhausts and the
+    remaining way is prepended to the FRONT of the accumulated chain
+    (prev_way ends at the chain's first node).
+    """
+    w1 = Way(id=1, nodes=[10, 11], line=LineString([(0, 0), (1, 0)]))
+    w2 = Way(id=2, nodes=[11, 12], line=LineString([(1, 0), (2, 0)]))
+    w3 = Way(id=3, nodes=[12, 13], line=LineString([(2, 0), (3, 0)]))
+    ways = {1: w1, 2: w2, 3: w3}
+
+    # Merge starts at w2 (first in the ids list): forward attaches w3 at the
+    # back, then w1 can only attach at the front of the chain.
+    merged_ids = combine_ways([2, 3, 1], ways)
+
+    assert len(merged_ids) == 1
+    new_way = ways[merged_ids[0]]
+    assert new_way.id < 0
+    assert new_way.nodes == [10, 11, 12, 13]
+    assert not new_way.is_area
+    assert new_way.line.geom_type == "LineString"
+    assert new_way.line.length == pytest.approx(3.0)
+
+
+def test_combine_ways_backward_prepend_reversed_orientation():
+    """
+    Backward prepend where the previous way is oriented AWAY from the chain
+    (its first node, not its last, matches the chain's first node), so its
+    nodes must be reversed before prepending.
+    """
+    w1 = Way(id=1, nodes=[11, 10], line=LineString([(1, 0), (0, 0)]))
+    w2 = Way(id=2, nodes=[11, 12], line=LineString([(1, 0), (2, 0)]))
+    w3 = Way(id=3, nodes=[12, 13], line=LineString([(2, 0), (3, 0)]))
+    ways = {1: w1, 2: w2, 3: w3}
+
+    merged_ids = combine_ways([2, 3, 1], ways)
+
+    assert len(merged_ids) == 1
+    new_way = ways[merged_ids[0]]
+    assert new_way.nodes == [10, 11, 12, 13]
+    assert new_way.line.geom_type == "LineString"
+    assert new_way.line.length == pytest.approx(3.0)
+
+
+def test_combine_ways_closed_ring_becomes_area():
+    """
+    Member ways that together close a ring merge into a single area way:
+    is_area is set and the geometry becomes a Polygon.
+    """
+    # 3-4-5 right triangle: (0,0) -> (4,0) -> (0,3) -> (0,0)
+    w1 = Way(id=1, nodes=[1, 2], line=LineString([(0, 0), (4, 0)]))
+    w2 = Way(id=2, nodes=[2, 3], line=LineString([(4, 0), (0, 3)]))
+    w3 = Way(id=3, nodes=[3, 1], line=LineString([(0, 3), (0, 0)]))
+    ways = {1: w1, 2: w2, 3: w3}
+
+    merged_ids = combine_ways([1, 2, 3], ways)
+
+    assert len(merged_ids) == 1
+    new_way = ways[merged_ids[0]]
+    assert new_way.id < 0
+    assert new_way.is_area
+    assert new_way.line.geom_type == "Polygon"
+    assert new_way.line.area == pytest.approx(6.0)
+    # The node chain closes back on the starting node
+    assert new_way.nodes[0] == new_way.nodes[-1]
+    assert new_way.nodes == [1, 2, 3, 1]
+
+
 def test_way_pcd_points_filled_polygon():
     """
     to_pcd_points with filled=True returns interior grid points for a polygon.

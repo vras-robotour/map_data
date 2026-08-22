@@ -224,6 +224,69 @@ def test_grid_astar_diagonal_wall_with_gap_is_passable():
     assert len(path) >= 2
 
 
+def _two_corridor_grid():
+    """
+    3 x 11 grid with two corridors between the endpoints.
+
+    Row 2 (where start and goal sit) is a short direct corridor whose interior
+    cells carry a high traversal cost (grid value 1.0). Row 0 is a longer
+    zero-cost detour, reachable only through the connector cells in column 0
+    and column 10 — everything else in row 1 is blocked, which also keeps
+    diagonal moves from cutting between the corridors (both edge-adjacent
+    cells of such a diagonal are blocked).
+    """
+    grid = np.full((3, 11), np.inf, dtype=float)
+    grid[0, :] = 0.0  # low-cost detour corridor
+    grid[2, 1:10] = 1.0  # high-cost interior of the direct corridor
+    grid[2, 0] = grid[2, 10] = 0.0  # start / goal cells
+    grid[1, 0] = grid[1, 10] = 0.0  # connectors between the corridors
+    return grid
+
+
+def test_grid_astar_weighted_prefers_low_cost_corridor():
+    """
+    With cost weighting on, the 9-cell high-cost direct corridor costs
+    9 * (1 + 5.0) + 1 = 55 while the 14-step zero-cost detour costs 14,
+    so the planner must route through the detour (row 0, y == 0).
+    """
+    path = grid_astar(
+        _two_corridor_grid(),
+        (0.5, 2.5),
+        (10.5, 2.5),
+        (0.0, 0.0),
+        1.0,
+        simplify_path=False,
+        grid_cost_weight=5.0,
+    )
+
+    assert path is not None
+    assert min(pt[1] for pt in path) == 0.0, "path should use the low-cost row-0 corridor"
+    # It still starts and ends in the direct corridor's row
+    assert path[0][1] == 2.0
+    assert path[-1][1] == 2.0
+
+
+def test_grid_astar_negligible_weight_takes_short_corridor():
+    """
+    With a negligible cost weight every free cell costs (almost) the same, so
+    the shorter direct corridor (10 steps vs 14) wins and the path stays in
+    row 2. (Exactly 0.0 would turn the inf blocked cells into 0 * inf = NaN,
+    so a tiny epsilon stands in for "weighting off".)
+    """
+    path = grid_astar(
+        _two_corridor_grid(),
+        (0.5, 2.5),
+        (10.5, 2.5),
+        (0.0, 0.0),
+        1.0,
+        simplify_path=False,
+        grid_cost_weight=1e-9,
+    )
+
+    assert path is not None
+    assert all(pt[1] == 2.0 for pt in path), "uniform costs should keep the path in the direct row"
+
+
 def test_post_process_path_very_close_points():
     args = Args()
     args.simplify_path = False  # Disable DP simplification to test only distance-based removal
