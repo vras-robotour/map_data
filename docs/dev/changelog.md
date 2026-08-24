@@ -2,6 +2,95 @@
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-08-24
+
+### Security
+
+- Fixed two stored-XSS vectors in the viewer: virtual way IDs are now strictly
+  validated server-side (`<int>` or `<int>:<int>` only) before being stored in
+  the annotation store or change log, the changes/hidden panels build rows via
+  DOM APIs instead of inline `onclick` strings, and `escHtml` escapes quotes so
+  attribute-context interpolation (e.g. the tag editor's `value="..."`) cannot
+  break out
+- CSRF protection for cookie-based auth: with `MAP_DATA_ACCESS_TOKEN` set, the
+  cookie alone now authenticates only safe methods — state-changing requests
+  must carry the `X-Requested-With` header (attached automatically by the
+  viewer's same-origin fetches) or the token header/query parameter; threat
+  model documented in the viewer docs
+- Request bodies are capped at 100 MB (`MAX_CONTENT_LENGTH`), so an oversized
+  upload can no longer fill the data directory
+- `cost_grid` and `create_replan` validate every client parameter up front
+  (bbox sanity, cell budget of at most `MAX_GRID_CELLS`, numeric ranges for
+  `cell_size`/`inflate_obstacles`/`grid_cost_weight`, cost-dict shapes, path
+  points within UTM-supported ranges), closing a compute-DoS lever and turning
+  deep planner 500s into clean 400s
+
+### Fixed
+
+- Annotation edits no longer race: a shared `annotation_store` context manager
+  holds the per-file lock across the whole load → mutate → save cycle in all
+  16 mutating viewer routes, fixing lost updates between concurrent editors
+  and duplicate synthetic node IDs from concurrent `add_way_node` calls
+- `GraphPlanner` applies annotation splits per way in descending segment order
+  (junctions no longer land between the wrong nodes when one way is split in
+  several places) and splices into per-planner node-list copies instead of
+  mutating the shared `MapData` (a second planner on the same map no longer
+  raises `KeyError`)
+- `grid_astar` diagonal moves require both edge-adjacent cells to be free, so
+  paths can no longer cut through the corner where two blocked cells touch;
+  grid cells are sampled at their centers, removing the half-cell
+  obstacle-membership bias
+- Douglas–Peucker simplification in `replan`/`grid_astar` collision-checks
+  every shortcut it introduces and keeps the original vertices where a chord
+  would cross an obstacle
+- RRT* rewiring propagates cost changes to descendants and keeps the informed
+  ellipse synced with the goal's true cost, instead of sampling from a stale,
+  oversized ellipse
+- `GraphPlanner.plan()` returns `None` for fewer than two waypoints (per its
+  documented contract) and rejects waypoints farther than a configurable
+  `max_snap_distance` (default 100 m) from the network instead of silently
+  snapping to an arbitrarily distant edge
+- GPX/YAML parsing forces every waypoint into the first point's UTM zone, so a
+  route crossing a zone boundary no longer produces a ~400 km easting
+  discontinuity
+- Overpass HTTP-200 error bodies (a `remark` runtime error or an HTML page
+  from a busy mirror) now rotate to the next mirror and retry like server
+  errors instead of crashing the fetch; unparseable bodies — including a
+  corrupt cached response — degrade gracefully
+- OSM relation inner rings are subtracted from the outer polygons, so
+  courtyards and islands are no longer covered by the merged barrier; member
+  ways consumed by a relation merge are dropped from the parse, eliminating
+  duplicated barrier geometry
+- Degenerate OSM ways (too few coordinates for their geometry type) are
+  skipped with a warning instead of aborting the whole parse
+- `.mapdata` and OSM-cache writes are atomic (temp file + `os.replace`), so a
+  crash or full disk mid-save can no longer truncate a previously good file
+- `map_data_info` reports the footway centerline length instead of the
+  buffered-polygon perimeter (which was roughly double the walked distance)
+- `MapData` accepts a 1-D `current_robot_position` and reconciles its
+  elevation column against the waypoints; `_csv_to_dict` handles single-row
+  CSVs; loaded instances restore the `points` attribute
+- Viewer: `cancel_replan`, `create_wormhole`, and `cancel_wormhole` return a
+  clean 400 on a missing/non-JSON body (previously an unhandled 500); the two
+  cancel endpoints also 400 on a missing `transfer_id`
+- Abandoned fetch tasks are swept from the registry after the 60 s retention
+  window on every new fetch; cancelled replan transfer IDs are discarded on
+  entry and exit, so a late cancel cannot poison the next replan with the
+  same transfer ID
+
+### Added
+
+- Regression tests for every fix above plus coverage for the previously
+  untested riskiest paths: Overpass body-level failures, `GraphPlanner`
+  annotation splicing, the auth/CSRF gate, `cost_grid`/`create_replan`
+  validation, `upload_mapdata`, native export, mocked wormhole transfers,
+  `info.get_stats`, `combine_ways` backward-prepend and closed-ring merges,
+  grid A* cost-weighting, and replan cancellation (~130 new tests; suite now
+  311 tests in ~6 s)
+- `tests/conftest.py` with a shared mocked-Overpass fixture, and pytest
+  configuration centralized in `[tool.pytest.ini_options]` so a plain
+  `pytest` runs with the same coverage flags locally and in CI
+
 ## [1.2.1] — 2026-07-15
 
 ### Security
