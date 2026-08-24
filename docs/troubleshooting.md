@@ -12,7 +12,7 @@ The Overpass API enforces per-IP rate limits. If a request is rejected, `map_dat
 
 ### Query timeout (HTTP 504)
 
-Overpass imposes a default query timeout. Very large bounding boxes (many kilometres across) may exceed it. Reduce the query area by using a shorter GPX route or decreasing `osm_margin` in `config/planner_defaults.yaml`.
+Overpass imposes a default query timeout. Very large bounding boxes (many kilometres across) may exceed it. Reduce the query area by using a shorter GPX route or decreasing `grid_margin` in `config/planner_defaults.yaml` (default `150` m).
 
 ### No features returned
 

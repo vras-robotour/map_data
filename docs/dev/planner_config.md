@@ -1,6 +1,18 @@
 # Planner Configuration
 
-All default planning parameters are stored in `config/planner_defaults.yaml`. The file is loaded once at import time by `map_data/map_data.py` (which reads `osm_margin` and `reserve_margin`) and by `ReplanPath` (which reads all cost and grid parameters). Values can be overridden at runtime through the viewer's Highway Costs modal or via CLI flags such as `--cell_size` and `--inflate_obstacles`.
+All default planning parameters are stored in `config/planner_defaults.yaml`. The file is
+loaded once at import time by four modules, each reading a different subset:
+
+| Module | Keys it reads |
+|--------|---------------|
+| `map_data/map_data.py` | `grid_margin` |
+| `map_data/utils/parsing.py` | `obstacle_radius`, `buffer_widths` |
+| `map_data/pathsolver/replan.py` (`ReplanPath`) | `highway_costs`, `surface_costs`, `default_off_path_cost`, `path_cost_cap`, `grid_cost_weight` |
+| `map_data/pathsolver/grid_astar.py`, `rrt_star.py` | `grid_cost_weight` |
+
+Every key is a *default* — each is overridable per call, either through a keyword argument
+(see [Runtime overrides](#runtime-overrides)) or through the viewer, which reads the whole
+file over `GET /api/planner_defaults` and posts explicit values back with each request.
 
 ---
 
@@ -34,9 +46,14 @@ cell_size: 0.25
 inflate_obstacles: 0.25
 simplify_path: true
 smooth_path: false
-osm_margin: 100
-reserve_margin: 50
+grid_margin: 150
 path_cost_cap: 0.85
+grid_cost_weight: 5.0
+obstacle_radius: 2.0
+buffer_widths:
+  road: 7.0
+  footway: 3.0
+  barrier: 2.0
 ```
 
 ---
@@ -92,9 +109,36 @@ Surface values not listed receive a penalty of 0.0.
 | `inflate_obstacles` | float (m) | 0.25 | Safety buffer added around all barrier polygons before rasterisation. Increases the clearance between the planned path and physical obstacles. |
 | `simplify_path` | bool | `true` | Apply Douglas-Peucker simplification to the output path after planning. Reduces the number of waypoints while preserving the overall shape. |
 | `smooth_path` | bool | `false` | Apply gradient-descent smoothing after planning (and after simplification if enabled). Produces rounder curves but may shift the path slightly away from the original grid solution. |
-| `osm_margin` | int (m) | 100 | Metres added to each side of the waypoint bounding box when constructing the Overpass API query. Ensures features near the route boundary are included. |
-| `reserve_margin` | int (m) | 50 | Additional metres added on top of `osm_margin` for the internal UTM bounding box (`min_x/max_x/min_y/max_y`). Used to clip the planning grid with a small safety margin. |
+| `grid_margin` | float (m) | 150 | Metres added to each side of the waypoint bounding box, in UTM. This single margin sets both the internal planning bounds (`min_x/max_x/min_y/max_y`) *and*, after conversion back to WGS84, the Overpass query bounding box — see [Bounding box and margins](../usage.md#bounding-box-and-margins). Increase it for routes near dense urban areas with large building footprints; decrease it to cut query time and file size on simple open terrain. |
 | `path_cost_cap` | float | 0.85 | Maximum cost a way cell can receive after adding highway and surface penalties. Ensures that all recognised way types remain cheaper than `default_off_path_cost` (0.9), so the planner always prefers a way over open terrain. |
+| `grid_cost_weight` | float | 5.0 | How strongly terrain cost is weighted against distance in the search. Both Grid A\* and RRT\* score a step as `length × (1 + cell_cost × grid_cost_weight)`, so at the default a metre of off-path terrain (`cell_cost` 0.9) costs the same as 5.5 m of free footway. Raise it to hug good surfaces at the price of longer detours; lower it toward `0` to approach a shortest-distance planner. |
+| `obstacle_radius` | float (m) | 2.0 | Radius of the circular footprint generated for *point* obstacles — OSM nodes tagged as barriers (bollards, gates, trees), which have no geometry of their own. Way and area barriers use `buffer_widths` instead. |
+
+!!! warning "`grid_margin` is applied at parse time"
+    `grid_margin` is baked into a `.mapdata` file when it is created, because it determines
+    the area that was downloaded. Changing the value does not retroactively widen an
+    existing file — re-download with `create_mapdata -d` (or the viewer's fetch panel) for
+    the new margin to take effect.
+
+---
+
+## `buffer_widths`
+
+Linear OSM features have no width, so each parsed way is buffered into a polygon before it
+reaches the planner. `buffer_widths` sets the buffer distance per category, in metres.
+
+| Key | Default | Applies to |
+|-----|---------|-----------|
+| `road` | 7.0 | Ways classified as roads (`highway=*` outside the footway value set) |
+| `footway` | 3.0 | Ways classified as footways |
+| `barrier` | 2.0 | Non-area barrier ways (walls, fences); barriers already mapped as closed areas keep their own geometry |
+
+Each value is the **total** corridor width: `buffer_line` buffers the centerline by
+`width / 2` on both sides, so `road: 7.0` produces a 7 m-wide polygon. Roads are
+deliberately wider than footways so the planner keeps clear of the carriageway.
+
+Closed ways that are not tagged `area=yes` (roundabouts, loop paths) are converted back to
+a `LineString` before buffering, so they become an annular ring rather than a filled disc.
 
 ---
 
@@ -106,18 +150,63 @@ The viewer exposes a modal panel where `highway_costs` values can be edited per 
 
 ### CLI flags
 
-The `ReplanPath` constructor accepts `--cell_size` and `--inflate_obstacles` as command-line arguments. These override the YAML defaults for that invocation only; the YAML file is not modified.
+Running `replan.py` as a script exposes its own flags via `parse_args()`. They override the
+YAML defaults for that invocation only; the YAML file is never modified.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--path` | `data/coords.gpx` | Waypoint file to replan |
+| `--file` | `None` | `.mapdata` file to load. If omitted, OSM data is downloaded for the waypoints first. |
+| `--cell_size` | `0.25` | Grid resolution in metres |
+| `--inflate_obstacles` | `0.25` | Buffer added around obstacle geometries in metres |
+| `--max_path_dist` | `2.0` | Radius around a way within which cells inherit its cost |
+| `--simplify_path` | off | Apply Douglas–Peucker simplification (flag, no value) |
+| `--smooth_path` | off | Apply gradient-descent smoothing (flag, no value) |
+| `--save` | `None` | Write the replanned path to this GPX file |
+| `--visualize` | off | Save a matplotlib debug plot as `replan.png` |
+
+```bash
+python -m map_data.pathsolver.replan --file coords.mapdata --cell_size 0.5 --visualize
+```
 
 ### Programmatic override
 
+`ReplanPath` takes an `argparse.Namespace` as its first positional argument rather than
+individual keyword arguments. Build one with `parse_args([])` to get the defaults above,
+then set the fields you want — `low` and `high` are required and have no default:
+
 ```python
-from map_data.pathsolver.replan import ReplanPath
+from map_data.map_data import MapData
+from map_data.pathsolver.replan import ReplanPath, parse_args
+from map_data.utils.parsing import ways_to_shapely
+
+md = MapData.load("coords.mapdata")
+
+args = parse_args([])
+args.low = (md.min_x, md.min_y)  # required: planning bounds in UTM metres
+args.high = (md.max_x, md.max_y)
+args.cell_size = 0.5  # coarser grid for faster planning
+args.inflate_obstacles = 0.5  # wider obstacle clearance
 
 planner = ReplanPath(
-    map_data=md,
-    cell_size=0.5,  # coarser grid for faster planning
-    inflate_obstacles=0.5,  # wider obstacle clearance
+    args,
+    ways_to_shapely(md.barriers_list),
+    grid_cost_weight=2.0,  # weight terrain cost less against distance
 )
 ```
 
-Any keyword argument accepted by `ReplanPath.__init__` takes precedence over the YAML defaults.
+Besides `args`, the constructor accepts `obstacles`, `transfer_id`, `grid_cost_weight`,
+`highway_costs`, and `surface_costs`; the last three override the YAML values for that
+instance. See the [Pathsolvers API reference](../api/pathsolver.md#replanpath) for the full
+signature.
+
+The parse-time keys are overridden separately, as arguments to `MapData`:
+
+```python
+md = MapData(
+    "coords.gpx",
+    grid_margin=300,  # download a wider area
+    obstacle_radius=1.0,  # smaller footprint for point barriers
+    buffer_widths={"road": 10.0, "footway": 3.0, "barrier": 2.0},
+)
+```
