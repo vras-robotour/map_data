@@ -11,12 +11,19 @@
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `id` | `int` | OSM way or relation ID |
+| `id` | `Any` | OSM way or relation ID (positive `int`). Manually annotated ways use a negative `int`, and split segments use a `"<id>:<index>"` string. Defaults to `-1`. |
+| `is_area` | `bool` | `True` if `line` is a polygon (area), `False` for a linestring. Set to `True` by `buffer_line()` once a way has been buffered to its corridor width, and by `parse_osm_nodes()` for point barriers. |
 | `nodes` | `list` | Ordered list of OSM node IDs defining the geometry |
 | `tags` | `dict[str, str]` | OSM tags (e.g. `{"highway": "footway", "surface": "asphalt"}`) |
-| `line` | `shapely.Geometry \| None` | Geometry in UTM metres. `LineString` for roads and footways; `Polygon` for area-type barriers. `None` if unparsed. |
-| `in_out` | `str \| None` | Direction hint set by `GraphPlanner`: `"in"`, `"out"`, or `None` for bidirectional |
+| `line` | `shapely.Geometry \| None` | Geometry in UTM metres. `LineString` for unbuffered ways; `Polygon` after buffering and for area-type barriers. `None` if unparsed. |
+| `in_out` | `str` | Direction hint set by `GraphPlanner`: `"in"`, `"out"`, or `""` (the default) for bidirectional |
 | `pcd_points` | `np.ndarray \| None` | Array of equidistant 3D points along the way, populated by `to_pcd_points()` |
+
+!!! note "Most ways are polygons by the time you see them"
+    `separate_ways()` buffers every road and footway to a corridor polygon using
+    [`buffer_widths`](../dev/planner_config.md#buffer_widths), so a `Way` reached through
+    `md.roads_list` or `md.footways_list` normally has `is_area=True` and a `Polygon`
+    `line`, not the raw centerline.
 
 !!! note
     The `line` geometry uses the same UTM coordinate system (metres) as the parent `MapData`

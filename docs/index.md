@@ -84,29 +84,39 @@ print(len(md.barriers_list))
 ```text
 map_data/
 ├── map_data.py              # MapData class — parses GPX + OSM into roads/footways/barriers
-├── info.py                  # CLI tool to print information about a .mapdata file
+├── info.py                  # CLI tool: .mapdata statistics and structural validation
 ├── create_mapdata.py        # CLI (standalone or ROS2): download and parse OSM data
 ├── osm_cloud.py             # ROS2 node: publishes footway grid and intersections
 ├── pathsolver/              # Path planning algorithms
+│   ├── astar.py             # Generic A* search logic
 │   ├── graph_planner.py     # Global A* planning on OSM ways
-│   ├── replan.py            # Local/Grid-based replanning (Grid A*, RRT*)
 │   ├── grid_astar.py        # Grid-based A* implementation
+│   ├── grid_constructor.py  # PathGrid — builds the cost raster
+│   ├── replan.py            # Local/Grid-based replanning (Grid A*, RRT*)
 │   ├── rrt_star.py          # RRT* implementation
-│   └── astar.py             # Generic A* search logic
+│   ├── smoothing.py         # Gradient-descent path smoother
+│   └── visualizer.py        # Matplotlib debug visualizer
 ├── utils/                   # Shared utility functions
-│   ├── way.py               # Way class — represents a single OSM feature with geometry
+│   ├── config.py            # YAML config loading and logging setup
+│   ├── gpx.py               # GPX / YAML waypoint parsing
 │   ├── overpass.py          # OSM Overpass API client
-│   ├── parsing.py           # OSM XML/JSON parsing logic
+│   ├── parsing.py           # OSM feature classification and buffering
+│   ├── points_to_graph_points.py # Equidistant point interpolation
 │   ├── serialization.py     # .mapdata file I/O
-│   └── points_to_graph_points.py # Equidistant point interpolation
+│   └── way.py               # Way class — a single OSM feature with geometry
 └── viewer/                  # Modular interactive viewer (Flask + Leaflet)
-    ├── app.py               # App factory and server entry point
+    ├── app.py               # App factory, SocketIO, and server entry point
     ├── routes.py            # REST API endpoints and GeoJSON conversion
     ├── helpers.py           # Geometry and annotation utility functions
     ├── cache.py             # MapData object caching
+    ├── ros_node.py          # TrackerNode — optional ROS2 telemetry source
     ├── templates/           # HTML templates
     └── static/              # External CSS and Modular JS assets
 ```
+
+For the full repository layout — config, launch files, parameters, and tests — and how the
+pieces fit together at runtime, see the
+[Architecture overview](dev/architecture.md#project-structure).
 
 ## License
 

@@ -79,6 +79,7 @@ nav:
       - MapData: api/map_data.md
       - Way: api/way.md
       - Pathsolvers: api/pathsolver.md
+      - Utilities: api/utils.md
       - Viewer REST API: api/viewer_routes.md
   - Troubleshooting: troubleshooting.md
   - Developer Guide:

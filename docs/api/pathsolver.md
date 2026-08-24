@@ -40,6 +40,68 @@ See [Using `astar_search` directly](../planning.md#using-astar_search-directly) 
       show_source: true
       heading_level: 3
 
+::: map_data.pathsolver.grid_astar.grid_segment_blocked
+    options:
+      show_source: true
+      heading_level: 3
+
+::: map_data.pathsolver.grid_astar.simplify_path_checked
+    options:
+      show_source: true
+      heading_level: 3
+
+## PathGrid
+
+`PathGrid` is the cost-raster builder that `ReplanPath` delegates to. It discretizes the
+planning area into `cell_size` squares and assigns each cell a traversal cost from the
+`highway_costs`/`surface_costs` tables, capped at `path_cost_cap`, falling back to
+`default_off_path_cost` for cells beyond `max_path_dist` of any way. Obstacles are burned in
+as `inf`.
+
+::: map_data.pathsolver.grid_constructor.PathGrid
+    options:
+      show_root_heading: false
+      members: false
+
+::: map_data.pathsolver.grid_constructor.PathGrid.__init__
+    options:
+      show_source: true
+      heading_level: 3
+
+::: map_data.pathsolver.grid_constructor.PathGrid.create_empty_grid
+    options:
+      show_source: true
+      heading_level: 3
+
+::: map_data.pathsolver.grid_constructor.PathGrid.fill
+    options:
+      show_source: true
+      heading_level: 3
+
+::: map_data.pathsolver.grid_constructor.PathGrid.burn_obstacles
+    options:
+      show_source: true
+      heading_level: 3
+
+::: map_data.pathsolver.grid_constructor.PathGrid.get_grid_2d
+    options:
+      show_source: true
+      heading_level: 3
+
+## Smoothing
+
+::: map_data.pathsolver.smoothing.smooth_path
+    options:
+      show_source: true
+      heading_level: 3
+
+## Visualization
+
+::: map_data.pathsolver.visualizer.visualize_replan
+    options:
+      show_source: true
+      heading_level: 3
+
 ## RRT*
 
 ::: map_data.pathsolver.rrt_star.RRTStar
@@ -119,7 +181,14 @@ overridden per-instance:
 ### Constructor
 
 ```python
-ReplanPath(args, obstacles=None, transfer_id=None)
+ReplanPath(
+    args,
+    obstacles=None,
+    transfer_id=None,
+    grid_cost_weight=None,
+    highway_costs=None,
+    surface_costs=None,
+)
 ```
 
 | Parameter | Type | Description |
@@ -127,6 +196,9 @@ ReplanPath(args, obstacles=None, transfer_id=None)
 | `args` | `argparse.Namespace` | Planning parameters. Use `parse_args([])` to get defaults. |
 | `obstacles` | `list[shapely.Geometry]` | Obstacle geometries (from `ways_to_shapely(md.barriers_list)`). |
 | `transfer_id` | `str \| None` | Optional UUID for cancellation via `cancel_replan_backend()`. |
+| `grid_cost_weight` | `float \| None` | How strongly terrain cost is weighted against distance: a step costs `length × (1 + cell_cost × grid_cost_weight)`. Falls back to the YAML default (`5.0`). |
+| `highway_costs` | `dict[str, float] \| None` | Overrides the `HIGHWAY_COSTS` table for this instance. Used by the viewer's Highway Costs modal. |
+| `surface_costs` | `dict[str, float] \| None` | Overrides the `SURFACE_COSTS` table for this instance. |
 
 **`args` attributes used by `ReplanPath`:**
 

@@ -46,6 +46,23 @@ To build a static copy:
 mkdocs build
 ```
 
+### The static viewer demo
+
+The [live demo](https://vras-robotour.github.io/map_data/demo/) linked from the site nav is
+a read-only scrape of the real viewer, not a separate implementation. `build_static_demo.sh`
+boots `map_data_viewer` against the committed `demo/` dataset, dumps the rendered page and
+every JSON endpoint the frontend needs, and rewrites the page to run in static mode:
+
+```bash
+bash scripts/build_static_demo.sh    # writes _demo_out/
+```
+
+`PORT` (default `5017`) and `OUT` (default `_demo_out`) can be overridden via the
+environment. The `Demo` workflow runs this and publishes `_demo_out/` to `gh-pages` whenever
+`map_data/viewer/**`, `demo/**`, or the script itself changes — so **frontend changes that
+alter which endpoints the page calls need the script updated too**, or the demo will 404 on
+the missing JSON.
+
 ## Code style
 
 The project uses [Ruff](https://docs.astral.sh/ruff/) for both formatting and linting. Configuration lives in `pyproject.toml`.

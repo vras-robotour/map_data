@@ -6,6 +6,9 @@ venv/
 .venv/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 .python-version
 uv.lock
 

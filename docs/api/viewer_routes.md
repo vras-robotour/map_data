@@ -52,8 +52,11 @@ is returned.
 
 ### `POST /api/fetch_area`
 
-Download and parse a new OSM area and save the result as a `.mapdata` file. Queries the
-Overpass API — may take several seconds for large areas.
+Start downloading and parsing a new OSM area, saving the result as a `.mapdata` file.
+
+**Asynchronous.** The Overpass query runs in a background thread and this endpoint returns
+immediately with a task ID — poll [`GET /api/fetch_area/<task_id>`](#get-apifetch_areatask_id)
+for progress and the result.
 
 **Request body**
 
@@ -63,30 +66,68 @@ Overpass API — may take several seconds for large areas.
   "max_lat": 50.09,
   "min_lon": 14.40,
   "max_lon": 14.43,
-  "name": "my_area"
+  "name": "my_area",
+  "grid_margin": 150,
+  "obstacle_radius": 2.0,
+  "buffer_widths": { "road": 7.0, "footway": 3.0, "barrier": 2.0 }
 }
 ```
 
-**Response 200**
+The bounding box and `name` are required; `name` is sanitized to `[A-Za-z0-9_-]`. The last
+three fields are optional and are passed through to `MapData` — see
+[Planner Configuration](../dev/planner_config.md).
+
+**Response 202/200**
+
+```json
+{ "task_id": "3f2b1c8e-..." }
+```
+
+**Error 400** — a required field is missing, the bounding box is degenerate or inverted,
+`name` sanitizes to empty, or the requested area exceeds the **25 km²** per-fetch limit.
+
+---
+
+### `GET /api/fetch_area/<task_id>`
+
+Poll the status of a fetch job started by `POST /api/fetch_area`.
+
+**Response 200** — the task record. `status` moves through `pending` → `querying` →
+`parsing` → a terminal `done` or `failed`:
+
+```json
+{ "status": "querying", "detail": "Querying overpass-api.de (attempt 1/3)" }
+```
 
 ```json
 {
-  "filename": "my_area.mapdata",
-  "roads": 14,
-  "footways": 52,
-  "barriers": 91,
-  "crossroads": 23
+  "status": "done",
+  "result": {
+    "filename": "my_area.mapdata",
+    "roads": 14,
+    "footways": 52,
+    "barriers": 91,
+    "crossroads": 23
+  }
 }
 ```
 
-**Error 503** — Overpass API unavailable; try again later.
+```json
+{ "status": "failed", "error": "Overpass API unavailable — try again later" }
+```
+
+**Error 404** — unknown task ID: it never existed, or it completed and was already evicted.
+Terminal tasks are retained for 60 s after the first poll that observes them as terminal,
+so a client that stops polling does not leak the record.
 
 ---
 
 ### `POST /api/upload_gpx`
 
 Upload a `.gpx` file, parse it (fetching OSM data for its bounds), and save the result as a
-`.mapdata` file.
+`.mapdata` file. Unlike `/api/fetch_area` this is **synchronous** — the request blocks until
+the fetch and parse finish. The uploaded GPX itself is written to a temp file and deleted
+afterwards; it is never persisted in the data directory.
 
 **Request** — `multipart/form-data`
 
@@ -95,7 +136,48 @@ Upload a `.gpx` file, parse it (fetching OSM data for its bounds), and save the 
 | `file` | yes | The `.gpx` file |
 | `name` | no | Base name for the output file (defaults to the uploaded filename) |
 
-**Response 200** — same shape as `/api/fetch_area`.
+**Response 200** — the same shape as the `result` object of a completed fetch task:
+
+```json
+{
+  "filename": "my_track.mapdata",
+  "roads": 14,
+  "footways": 52,
+  "barriers": 91,
+  "crossroads": 23
+}
+```
+
+**Error 400** — no file given, `name` sanitizes to empty, or the track's surrounding area
+exceeds the 25 km² limit.
+**Error 503** — Overpass API unavailable; try again later.
+
+---
+
+### `POST /api/upload_mapdata`
+
+Upload a pre-built `.mapdata` file directly to the data directory, skipping any Overpass
+query.
+
+**Request** — `multipart/form-data`
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `file` | yes | The `.mapdata` file. Must have a `.mapdata` extension. |
+
+The file is saved under its own basename. If that name is taken, a `_1`, `_2`, … suffix is
+appended rather than overwriting. The saved file is then validated by loading it; an
+unloadable file is deleted again rather than left behind.
+
+**Response 200**
+
+```json
+{ "filename": "coords_1.mapdata" }
+```
+
+`filename` is the name actually saved under, which may differ from the uploaded name.
+
+**Error 400** — no file part, wrong extension, or the file fails to load as valid map data.
 
 ---
 
@@ -296,6 +378,33 @@ Get the ordered node list for a way, including WGS84 coordinates.
 
 ---
 
+### `POST /api/way_node?file=<name>&way_id=<id>`
+
+Insert a new node into a way, immediately after an existing one.
+
+The new node is synthetic — it has no OSM counterpart — so it is assigned a **negative** ID,
+one less than the smallest synthetic ID already recorded for this file (starting at `-1`).
+Real OSM node IDs are always positive, so the sign alone distinguishes the two.
+
+**Request body**
+
+```json
+{ "after_node_id": 111, "lat": 50.0715, "lon": 14.4015 }
+```
+
+`after_node_id` may itself be a previously added synthetic node, so nodes can be chained.
+
+**Response 200**
+
+```json
+{ "id": -1, "lat": 50.0715, "lon": 14.4015 }
+```
+
+**Error 400** — `file` or `way_id` missing, `way_id`'s non-segment part is not an integer,
+or the body is missing `after_node_id`, `lat`, or `lon`.
+
+---
+
 ### `DELETE /api/way_node?file=<name>`
 
 Delete a single node from a way.
@@ -473,3 +582,73 @@ Cancel an active wormhole transfer.
 ```
 
 **Response** — `{"success": bool, "message": "..."}`
+
+---
+
+## WebSocket (SocketIO)
+
+Live robot telemetry is pushed over SocketIO rather than polled over REST. The server is a
+Flask-SocketIO app, so clients connect to the same host and port as the REST API.
+
+### `connect`
+
+Handled server-side to enforce authentication. When `MAP_DATA_ACCESS_TOKEN` is set, the
+connecting client must supply a matching token — via the `X-Access-Token` header, an
+`access_token` query parameter, or the `map_data_access_token` cookie set by a prior
+authenticated HTTP request — or the connection is rejected. With the token unset, all
+connections are accepted. Allowed origins are governed by `MAP_DATA_CORS_ORIGINS`; see
+[Deployment Security](../viewer.md#deployment-security).
+
+### `telemetry` (server → client)
+
+Broadcast by a background thread at the rate set by `map_data_viewer --telemetry-rate`
+(default 2 Hz). Emitted only when the tracker node has new data since the last broadcast,
+so a stationary robot produces no traffic. Nothing is emitted at all unless the viewer was
+started inside a sourced ROS2 workspace and the tracker node initialized successfully.
+
+```json
+{
+  "enabled_features": { "gps": true, "ekf": true },
+  "position": {
+    "gps": { "lat": 50.071, "lon": 14.401 },
+    "ekf": { "lat": 50.071, "lon": 14.401 }
+  },
+  "mission": {
+    "waypoints": [{ "lat": 50.072, "lon": 14.402 }],
+    "current_waypoint_index": 0
+  },
+  "status": {
+    "battery": { "voltage": 24.6, "current": 3.1 },
+    "motors_enabled": true,
+    "motor_error": 0,
+    "gps_fix": 2,
+    "teensy_temp": 41.2,
+    "speed": 0.8,
+    "speed_limit": { "value": 0.5, "percentage": false },
+    "collision_action": null,
+    "recovery_active": false,
+    "teleop_active": false,
+    "nav_state": "navigating",
+    "localization_state": null,
+    "last_speech": { "level": "info", "text": "..." }
+  }
+}
+```
+
+Field notes: `enabled_features` is a map of feature name to enabled flag, not a list.
+`gps_fix` is the raw integer `NavSatStatus.status`. `motor_error` is an integer error code
+(`0` = no error). `position.gps`, `position.ekf`, `speed_limit`, `collision_action`, and
+`last_speech` are `null`/`{}` until the corresponding topic publishes.
+
+See [Tracker mode](../viewer_tracker.md) for how the viewer renders these fields.
+
+---
+
+## Page routes
+
+### `GET /`
+
+Serves the viewer's single-page application shell (`templates/index.html`). Not a JSON
+endpoint. The template receives `THUNDERFOREST_API_KEY` and `SEZNAM_API_KEY` from the
+environment so the optional basemap layers can be enabled — see
+[Tile Layer API Keys](../viewer.md#tile-layer-api-keys).

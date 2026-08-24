@@ -512,17 +512,26 @@ map_data/                          # repository root
 ├── launch/                        # ROS2 launch files
 ├── parameters/                    # ROS2 parameter files
 ├── resource/                      # ROS2 ament resource marker
+├── scripts/                       # helper scripts
+│   └── build_static_demo.sh       # regenerates the static viewer demo
+├── demo/                          # committed dataset served by the static demo
 ├── tests/                         # pytest test suite
+│   ├── conftest.py                # shared Overpass mock + canned payloads
 │   ├── test_astar.py
 │   ├── test_core.py
 │   ├── test_errors.py
 │   ├── test_fill_grid.py
 │   ├── test_graph_planner.py
+│   ├── test_info.py
 │   ├── test_integration.py
+│   ├── test_launch.py
+│   ├── test_osm_cloud.py
 │   ├── test_overpass.py
 │   ├── test_parsing.py
+│   ├── test_replan.py
 │   ├── test_rrt.py
 │   ├── test_smoothing.py
+│   ├── test_validate.py
 │   ├── test_viewer_helpers.py
 │   └── test_viewer_routes.py
 ├── pyproject.toml                 # build metadata, ruff config

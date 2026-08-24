@@ -3,10 +3,13 @@
 ## Running the suite
 
 ```bash
-pytest tests/ -v
+pytest
 ```
 
-No ROS2 context, no network access, and no external services are required — all external dependencies are mocked.
+No arguments needed: `[tool.pytest.ini_options]` in `pyproject.toml` sets `testpaths` to
+`tests` and puts the coverage flags in `addopts`, so a bare `pytest` runs exactly what CI
+runs. No ROS2 context, no network access, and no external services are required — all
+external dependencies are mocked.
 
 Run a single file:
 
@@ -17,8 +20,25 @@ pytest tests/test_viewer_routes.py -v
 Run tests matching a keyword:
 
 ```bash
-pytest tests/ -k "overpass" -v
+pytest -k "overpass" -v
 ```
+
+### Coverage
+
+Coverage is measured on every run, not just in CI — `addopts` carries
+`--cov=map_data --cov-report=term-missing`, so each invocation ends with a per-module table
+listing the line numbers that were never executed.
+
+```bash
+pytest                       # coverage table in the terminal
+pytest --cov-report=html     # browsable report in htmlcov/
+pytest --no-cov              # skip coverage when iterating on one test
+```
+
+!!! note "Why the flags live in `pyproject.toml`"
+    Keeping them in the config rather than in the workflow file means local runs and CI
+    measure the same thing. The CI job runs a bare `pytest` and relies on this — moving the
+    flags to the workflow would silently stop local runs from reporting coverage.
 
 ## Test files
 
@@ -35,16 +55,40 @@ pytest tests/ -k "overpass" -v
 | `test_viewer_routes.py` | Flask REST API — annotation CRUD, file listing, mapdata fetch, way operations, path-traversal security | Filesystem (temp dir) |
 | `test_integration.py` | Full pipeline — GPX parse, save/reload roundtrip, OSM cache, mocked Overpass query, `parse_intersections` | `OverpassClient` |
 | `test_errors.py` | Error paths — malformed GPX, corrupt files, Overpass timeouts, planning failures | `requests.Session`, `time.sleep` |
+| `test_info.py` | `info.get_stats` — feature counts, metadata, array-vs-file sources, annotation sidecars, centerline footway distance | — |
+| `test_validate.py` | `info.validate_mapdata` — missing geometry/metadata, duplicate way IDs, absent node-cache entries, disconnected footways | — |
+| `test_replan.py` | `ReplanPath` cancellation — stale IDs, cancel after completion, mid-run cancellation, cleanup on planner failure | — |
+| `test_smoothing.py` | `smooth_path` — endpoint preservation, collision-aware fallback, 3-D paths | — |
+| `test_osm_cloud.py` | `osm_cloud` grid helpers and node construction — parameter wiring, publisher/timer setup, grid cloud building | Whole ROS2 stack via `sys.modules` |
+| `test_launch.py` | Static AST checks on `launch/osm_cloud.launch.py` | — (no import) |
 
 ## Test design principles
 
 **No network.** Every test that would otherwise reach the Overpass API patches `requests.Session.post` / `requests.Session.get` via `unittest.mock.patch`. `time.sleep` is patched alongside so retries complete instantly.
 
-**No ROS2.** The Flask app is created via `create_app(data_dir=...)` which bypasses the ROS2 node initialisation (guarded by `ROS_AVAILABLE`).
+**No ROS2.** The Flask app is created via `create_app(data_dir=...)` which bypasses the ROS2 node initialisation (guarded by `ROS_AVAILABLE`). `test_osm_cloud.py` goes further and installs `MagicMock`s into `sys.modules` for `rclpy`, `geometry_msgs.msg`, `ros2_numpy`, and friends *before* importing the node, so the node's construction logic can be exercised without a ROS2 install. `test_launch.py` avoids the problem entirely by parsing the launch file's AST instead of importing it.
 
 **Real filesystem, isolated.** Route tests use pytest's `tmp_path` fixture, giving each test function its own directory. The `load_mapdata_cached` cache keys on `(path, mtime)` so cross-test contamination cannot occur.
 
-**Minimal fixtures.** Shared helper functions (e.g. `_make_mapdata`) are plain functions defined in the test module, not conftest fixtures, to keep test files self-contained.
+**Fixtures are shared only when the payload is.** `tests/conftest.py` holds the canned Overpass data — `FOOTWAY_WAYS_JSON`, `EMPTY_OSM_JSON` — and the `mock_overpass_client` fixture that patches `map_data.map_data.OverpassClient` with it. Anything reused across files belongs there; per-file helpers that build test objects (`_make_mapdata`, `_make_md`, `_straight`) stay as plain module-level functions, so a test file can be read without chasing indirection.
+
+### The `mock_overpass_client` fixture
+
+Request it in any test that needs `MapData` to "download" data:
+
+```python
+def test_something(mock_overpass_client, tmp_path):
+    md = MapData("coords.gpx")
+    md.run_queries(use_cache=False)  # served from FOOTWAY_WAYS_JSON
+```
+
+It yields the mock instance, so a test can override the payload or assert on calls:
+
+```python
+mock_overpass_client.query_raw.return_value = EMPTY_OSM_JSON
+```
+
+`instance.api` is a **real** `overpy.Overpass()` rather than a mock, so `parse_json` behaves exactly as it does in production — only the network call is faked. The canned nodes sit inside a tight `50.000–50.001 / 14.000–14.001` bounding box so the same payload satisfies both the `MapData` integration tests and the viewer's `fetch_area` tests.
 
 ## Module-by-module notes
 
@@ -80,13 +124,25 @@ Tests `ReplanPath.fill_grid` with a hand-built `MapData` containing a 16 m footw
 
 ### `test_overpass.py`
 
-`OverpassClient` is instantiated directly and its `session` attribute is patched in place, which avoids replacing the class globally and keeps each test independent. The nine tests cover:
+`OverpassClient` is instantiated directly and its `session` attribute is patched in place, which avoids replacing the class globally and keeps each test independent. Coverage falls into three groups:
 
-- Successful query returning an `overpy.Result`
+**Success paths**
+
+- Successful query returning raw JSON, and the `overpy.Result` wrapper around it
+
+**Retry and rotation** — note that Overpass signals several failures with HTTP **200** plus an error body, so these are not all status-code cases:
+
 - 429/406 response rotating the active endpoint
 - 500 response triggering a retry on the same endpoint
-- All retries exhausted → `None`
-- `requests.Timeout` → `None`
+- A `remark` runtime-error body (HTTP 200) rotating and retrying
+- An HTML body from a busy mirror (HTTP 200) rotating and retrying
+- Persistent `remark` errors returning `None` rather than raising, through both `query_raw` and `query`
+- All retries exhausted → `None`; `requests.Timeout` → `None`
+- The default retry count covering every configured endpoint twice
+- The `on_attempt` callback receiving the endpoint and attempt counters that drive the viewer's fetch-progress display
+
+**Rate limiting**
+
 - `_wait_for_slot` short-circuiting for non-`overpass-api.de` endpoints
 - `_wait_for_slot` returning immediately when slots are available
 - `_wait_for_slot` sleeping the correct number of seconds when no slots are available
