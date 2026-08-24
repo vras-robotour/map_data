@@ -33,5 +33,82 @@
     "title": "Progress reporting for fetch_area via SocketIO",
     "desc": "The fetch task is polled over REST while a SocketIO channel already exists for telemetry — pushing progress (query, parse, save stages) would remove the polling and its 404-on-second-poll footgun.",
     "file": "map_data/viewer/routes.py, map_data/viewer/app.py"
+  },
+  {
+    "type": "improvement",
+    "sev": "minor",
+    "title": "Version the .mapdata format",
+    "desc": "The JSON schema has no <code>format_version</code> field, so future changes cannot be detected or migrated, and <code>way_from_dict</code> hard-KeyErrors on files missing newer keys (the crossroads list already needed a <code>.get</code> band-aid). Fix: write a version marker and use <code>.get</code> defaults on load.",
+    "file": "map_data/utils/serialization.py"
+  },
+  {
+    "type": "improvement",
+    "sev": "minor",
+    "title": "Injectable RNG for RRT*",
+    "desc": "All sampling draws from the module-global <code>random</code>: planning failures from the viewer cannot be reproduced, concurrent Flask request threads interleave draws non-deterministically, and tests must hack the global seed. Fix: accept <code>rng: random.Random | None</code> in <code>__init__</code> and thread it through.",
+    "file": "map_data/pathsolver/rrt_star.py"
+  },
+  {
+    "type": "improvement",
+    "sev": "minor",
+    "title": "Vectorize Way.to_pcd_points and smooth_path hot loops",
+    "desc": "The polygon branch materializes a <code>MultiPoint</code> over the full bbox grid and filters point-by-point with <code>prepared.contains</code> (~1M Point objects for a 500×500 m barrier at density 2) — <code>shapely.contains_xy</code> does this vectorized with no object churn; the segment loop grows <code>pcd_points</code> with <code>np.concatenate</code> per segment (quadratic copying). <code>smooth_path</code> is a scalar triple-loop that vectorizes directly as a Jacobi iteration. Distinct from the backlogged native-extension item (which covers the RRT*/grid_astar raster loops).",
+    "file": "map_data/utils/way.py, map_data/pathsolver/smoothing.py"
+  },
+  {
+    "type": "improvement",
+    "sev": "minor",
+    "title": "Cache /api/mapdata responses",
+    "desc": "Every call shallow-copies the cached map, re-applies all edits (recomputing <code>crossroads_list</code> via <code>parse_intersections</code> whenever any edit exists), and rebuilds the full GeoJSON FeatureCollection. Fix: cache the merged GeoJSON keyed on (mapdata mtime, annotation-store hash), or serve an ETag and honor <code>If-None-Match</code>.",
+    "file": "map_data/viewer/routes.py, map_data/viewer/helpers.py"
+  },
+  {
+    "type": "improvement",
+    "sev": "minor",
+    "title": "Pin ruff to one version across CI, pre-commit, and dev extras",
+    "desc": "CI installs unpinned latest ruff while pre-commit pins v0.11.13 — this drift already caused the ruff-0.16 reformat churn commits. Pin the <code>[dev]</code> extra and CI to the pre-commit rev (or bump all three together).",
+    "file": ".github/workflows/ci.yml, .pre-commit-config.yaml, pyproject.toml"
+  },
+  {
+    "type": "improvement",
+    "sev": "minor",
+    "title": "CI tightening: strict docs build, demo smoke on PRs, enforced coverage",
+    "desc": "<code>mkdocs build</code> lacks <code>--strict</code>, so broken links deploy silently; the viewer demo smoke test runs only on push to master, discovering breakage post-merge; coverage is measured but has no <code>--cov-fail-under</code> and is never published; <code>ci.yml</code> lacks <code>workflow_dispatch</code>. All small YAML changes.",
+    "file": ".github/workflows/"
+  },
+  {
+    "type": "improvement",
+    "sev": "nice-to-have",
+    "title": "Delete dead code and misleading names in the geometry/planner helpers",
+    "desc": "<code>points_to_graph_points</code> and <code>increase_line</code> have no callers (and the offset-row distance metric adds parallel and perpendicular components linearly — wrong if ever revived); RRT*'s <code>_is_collision</code> segment branch is unreachable; <code>GOAL_SAMPLE_BIAS</code> doubles as the unrelated traversable-cell sampling bias; the <code>density</code> parameter across geometry helpers actually means <em>spacing</em> (callers pass <code>1/density</code>).",
+    "file": "map_data/utils/points_to_graph_points.py, map_data/pathsolver/rrt_star.py"
+  },
+  {
+    "type": "improvement",
+    "sev": "nice-to-have",
+    "title": "Route all viewer filename handling through one validated resolver",
+    "desc": "GET endpoints call <code>_safe_data_path</code> but many mutating endpoints pass the raw filename straight to <code>_annotation_path</code>, which contains traversal only incidentally (via <code>Path.stem</code>) and never verifies the referenced <code>.mapdata</code> exists. Harmless today but inconsistent defense-in-depth. Related lifecycle nit: <code>create_app</code> has no idempotency guard — a second call double-starts the telemetry thread and re-inits the ROS node.",
+    "file": "map_data/viewer/routes.py, map_data/viewer/app.py"
+  },
+  {
+    "type": "improvement",
+    "sev": "nice-to-have",
+    "title": "Repo hygiene batch",
+    "desc": "Delete the stale <code>todo_fixes_plan.md</code> at the repo root (PR #12 merged, its fixes verified landed); drop the unused <code>python3-joblib</code> from <code>package.xml</code>; add <code>.mypy_cache/</code> to <code>.gitignore</code>; consider a CI check asserting the version triplicated across <code>pyproject.toml</code>/<code>package.xml</code>/<code>CITATION.cff</code> stays in sync.",
+    "file": "todo_fixes_plan.md, package.xml, .gitignore"
+  },
+  {
+    "type": "improvement",
+    "sev": "nice-to-have",
+    "title": "Cheap linter/typechecker wins",
+    "desc": "mypy: add <code>check_untyped_defs</code>, <code>warn_unused_ignores</code>, <code>warn_redundant_casts</code> (none require stubs). ruff: add the <code>RUF</code>, <code>C4</code>, and <code>PT</code> rule families (<code>PT</code> is valuable given the ~3,000-line test suite).",
+    "file": "pyproject.toml"
+  },
+  {
+    "type": "improvement",
+    "sev": "nice-to-have",
+    "title": "Wire up or remove the node anti-tag mechanism",
+    "desc": "<code>parameters/anti_obstacle_tags.csv</code> is loaded nowhere and <code>parse_osm_nodes</code> has no anti-tag override analogous to <code>Way.is_barrier</code>. Related: <code>way_node_ids</code> is built from <em>all</em> ways, so obstacle nodes sitting on any way (the normal OSM position for <code>barrier=gate</code>/<code>bollard</code>) are always skipped and never become obstacles — if intentional, document it.",
+    "file": "map_data/utils/parsing.py, map_data/map_data.py, parameters/anti_obstacle_tags.csv"
   }
 ]
