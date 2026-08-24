@@ -9,8 +9,9 @@ venv/
 .mypy_cache/
 .coverage
 htmlcov/
+# .python-version stays ignored: it pins one developer's interpreter, while the
+# project supports 3.12+. uv.lock IS committed — see docs/dev/contributing.md.
 .python-version
-uv.lock
 
 # Generated data
 *.png

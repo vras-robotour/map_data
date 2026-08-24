@@ -24,6 +24,32 @@ uv pip install -e ".[dev]"
 !!! warning "Use `uv pip`, not plain `pip`"
     The project uses `uv` for package management. Plain `pip` may install into the wrong interpreter on machines with multiple Python environments.
 
+### The lockfile
+
+`uv.lock` is committed, pinning an exact, fully resolved set of 78 packages so a build can
+be reproduced later. Note that the command above — `uv pip install`, the pip-compatible
+interface — resolves from `pyproject.toml` and **ignores the lockfile**. To install the
+locked versions exactly, use `uv sync` instead:
+
+```bash
+uv sync --extra dev
+```
+
+!!! warning "Regenerate with an explicit `--python 3.12`"
+    `pyproject.toml` intentionally omits `requires-python` (see the comment there: colcon's
+    `ament_python` build chokes on the `SpecifierSet` it produces). Without it, `uv` infers
+    the floor from whichever interpreter you happen to run it with — so a plain `uv lock` on
+    a 3.13 machine silently rewrites the floor to `>=3.13` and locks out 3.12 contributors.
+    Always regenerate with:
+
+    ```bash
+    uv lock --python 3.12
+    ```
+
+    For the same reason, `uv sync --locked` fails on 3.13 against the `>=3.12` lockfile.
+    Drop `--locked` (or use `uv pip install -e ".[dev]"`) on newer interpreters. CI does not
+    consume the lockfile at all — it installs with plain `pip` across a 3.12/3.13 matrix.
+
 ## Running the tests
 
 ```bash
