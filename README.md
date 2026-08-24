@@ -78,6 +78,22 @@ map_data_viewer --data-dir /path/to/data --host 0.0.0.0 --port 8080
 Set `THUNDERFOREST_API_KEY` and/or `SEZNAM_API_KEY` in the environment before launching to make
 those keys available to the viewer for the corresponding optional basemap tile layers.
 
+## Contributing
+
+Bug reports, feature requests, and pull requests are welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for the development setup and the PR checklist. Please
+report security vulnerabilities privately as described in [SECURITY.md](SECURITY.md) rather
+than in a public issue.
+
+## Citing
+
+If you use this package in academic work, please cite it. GitHub renders an APA and BibTeX
+citation from [CITATION.cff](CITATION.cff) under **Cite this repository** in the sidebar.
+
 ## License
 
-BSD 3-Clause License. See [LICENSE](LICENSE) for more information.
+BSD 3-Clause License — see [LICENSE](LICENSE) for the full text.
+
+Map features are downloaded from OpenStreetMap and remain © OpenStreetMap contributors,
+licensed under the [ODbL](https://www.openstreetmap.org/copyright). That license covers the
+data in generated `.mapdata` files, separately from the BSD license covering this software.

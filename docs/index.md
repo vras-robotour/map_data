@@ -109,3 +109,7 @@ map_data/
 ```
 
 ## License
+
+Released under the **BSD 3-Clause License** — see the [License](license.md) page for the
+full text, the OpenStreetMap data terms that apply to downloaded map features, and citation
+details.

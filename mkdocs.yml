@@ -90,4 +90,5 @@ nav:
       - Testing: dev/testing.md
       - Known Issues & Backlog: dev/todo.md
       - Changelog: dev/changelog.md
+  - License: license.md
   - Demo: https://vras-robotour.github.io/map_data/demo/
