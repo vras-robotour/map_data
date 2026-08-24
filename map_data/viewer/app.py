@@ -40,6 +40,11 @@ def _resolve_cors_origins() -> str | list[str] | None:
 socketio = SocketIO()
 tracker_node = None
 
+# Upper bound on any request body (uploads included). Keeps a single oversized
+# POST from exhausting disk/memory; comfortably above any realistic .mapdata
+# or .gpx file. Flask rejects larger requests with 413 before the view runs.
+MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100 MB
+
 # ---------------------------------------------------------------------------
 # Optional access token, off by default. Set MAP_DATA_ACCESS_TOKEN to require
 # it on every request (HTTP and SocketIO). Read fresh on every check (rather
@@ -50,6 +55,15 @@ ACCESS_TOKEN_HEADER = "X-Access-Token"
 ACCESS_TOKEN_QUERY_PARAM = "access_token"
 ACCESS_TOKEN_COOKIE = "map_data_access_token"
 
+# CSRF protection for cookie-based auth: state-changing requests that
+# authenticate via the cookie alone must also carry this custom header (any
+# value). Browsers refuse to attach custom headers to cross-site requests
+# without a successful CORS preflight -- which this server never grants for
+# its HTTP API -- so a cross-site page can't forge such a request, while the
+# viewer's own JS (see static/js/utils.js) sets the header on every fetch.
+CSRF_CUSTOM_HEADER = "X-Requested-With"
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
 
 def _configured_access_token() -> str | None:
     return os.environ.get("MAP_DATA_ACCESS_TOKEN") or None
@@ -59,12 +73,26 @@ def _access_token_valid(req: Any) -> bool:
     expected = _configured_access_token()
     if not expected:
         return True
-    supplied = (
-        req.headers.get(ACCESS_TOKEN_HEADER)
-        or req.args.get(ACCESS_TOKEN_QUERY_PARAM)
-        or req.cookies.get(ACCESS_TOKEN_COOKIE)
-    )
-    return bool(supplied) and hmac.compare_digest(supplied, expected)
+    # Header and query param are immune to CSRF (a cross-site page can't set
+    # either on a request that carries them to a same-origin-only API), so
+    # they authenticate any method.
+    supplied = req.headers.get(ACCESS_TOKEN_HEADER) or req.args.get(ACCESS_TOKEN_QUERY_PARAM)
+    if supplied:
+        return hmac.compare_digest(supplied, expected)
+    cookie = req.cookies.get(ACCESS_TOKEN_COOKIE)
+    if not cookie or not hmac.compare_digest(cookie, expected):
+        return False
+    # Cookie-only auth: sufficient for safe methods (page loads, static
+    # assets, API reads), but state-changing requests additionally need the
+    # custom CSRF header -- the browser attaches the cookie automatically, so
+    # the cookie alone doesn't prove the request came from the viewer's own
+    # page. SocketIO traffic is exempt: engineio already enforces its own
+    # same-origin Origin check on polling requests (MAP_DATA_CORS_ORIGINS).
+    if getattr(req, "method", "GET") in _SAFE_METHODS:
+        return True
+    if req.path.startswith("/socket.io"):
+        return True
+    return CSRF_CUSTOM_HEADER in req.headers
 
 
 @socketio.on("connect")
@@ -109,6 +137,7 @@ def create_app(data_dir: str | None = None, telemetry_hz: float = 2.0) -> Flask:
 
     app = Flask(__name__, template_folder=str(template_dir), static_folder=str(static_dir))
     app.url_map.converters["signed_int"] = SignedIntConverter
+    app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
     if data_dir:
         app.config["DATA_DIR"] = data_dir

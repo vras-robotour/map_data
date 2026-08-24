@@ -100,6 +100,7 @@ from map_data.utils.way import FOOTWAY_VALUES, Way
 
 from .cache import load_mapdata_cached
 from .helpers import (
+    annotation_store,
     apply_added_nodes,
     apply_node_position_overrides,
     geojson_geom_to_utm,
@@ -112,7 +113,6 @@ from .helpers import (
     mapdata_to_geojson,
     migrate_change_log,
     rebuild_way_without_nodes,
-    save_annotations,
     split_way,
 )
 
@@ -502,6 +502,50 @@ def _annotation_path(filename: str) -> Path:
     return _get_data_dir().resolve() / f"{base}.annotations.json"
 
 
+def _parse_way_id(way_id: str) -> int | str:
+    """
+    Validate a possibly-virtual way ID and return its canonical stored form.
+
+    A plain integer ID is returned as an ``int``. A virtual segment ID
+    (``"<original_id>:<segment_index>"``, produced by
+    :func:`~map_data.viewer.helpers.split_way`) is returned as a
+    canonicalized ``str`` only if *both* parts parse as integers. Anything
+    else -- a non-numeric base, a non-numeric segment suffix, or extra
+    colons -- is rejected, so raw attacker-controlled strings never reach
+    the annotation store or the change log (where the frontend would later
+    render them).
+
+    Parameters
+    ----------
+    way_id : str
+        Way ID as supplied by the client.
+
+    Returns
+    -------
+    int or str
+        ``int`` for a plain way ID, ``"<int>:<int>"`` for a virtual one.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if *way_id* is not a valid plain or virtual way ID.
+
+    """
+    way_id_str = str(way_id)
+    base_str, sep, suffix_str = way_id_str.partition(":")
+    try:
+        base_int = int(base_str)
+    except ValueError:
+        abort(400, "Invalid way ID")
+    if not sep:
+        return base_int
+    try:
+        suffix_int = int(suffix_str)
+    except ValueError:
+        abort(400, "Invalid virtual way ID")
+    return f"{base_int}:{suffix_int}"
+
+
 @bp.route("/")
 def index() -> str:
     """Render the viewer's single-page HTML shell, injecting tile-provider API keys."""
@@ -645,15 +689,14 @@ def add_annotation() -> ResponseReturnValue:
     if not body or "geometry" not in body:
         abort(400, "Request body must include 'geometry'")
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
     ann = {
         "id": str(uuid.uuid4()),
         "type": body.get("type", "obstacle"),
         "geometry": body["geometry"],
         "properties": body.get("properties", {}),
     }
-    store["annotations"].append(ann)
-    save_annotations(ann_path, store)
+    with annotation_store(ann_path) as store:
+        store["annotations"].append(ann)
     return jsonify(ann), 201
 
 
@@ -681,16 +724,15 @@ def update_annotation(ann_id: str) -> Response:
     if not body or "geometry" not in body:
         abort(400, "Request body must include 'geometry'")
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
-    ann = next((a for a in store["annotations"] if a["id"] == ann_id), None)
-    if ann is None:
-        abort(404, "Annotation not found")
-    ann["geometry"] = body["geometry"]
-    if "type" in body:
-        ann["type"] = body["type"]
-    if "properties" in body:
-        ann["properties"] = body["properties"]
-    save_annotations(ann_path, store)
+    with annotation_store(ann_path) as store:
+        ann = next((a for a in store["annotations"] if a["id"] == ann_id), None)
+        if ann is None:
+            abort(404, "Annotation not found")
+        ann["geometry"] = body["geometry"]
+        if "type" in body:
+            ann["type"] = body["type"]
+        if "properties" in body:
+            ann["properties"] = body["properties"]
     return jsonify(ann)
 
 
@@ -715,12 +757,11 @@ def delete_annotation(ann_id: str) -> ResponseReturnValue:
     if not filename:
         abort(400, "Missing 'file' query parameter")
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
-    before = len(store["annotations"])
-    store["annotations"] = [a for a in store["annotations"] if a["id"] != ann_id]
-    if len(store["annotations"]) == before:
-        abort(404, "Annotation not found")
-    save_annotations(ann_path, store)
+    with annotation_store(ann_path) as store:
+        before = len(store["annotations"])
+        store["annotations"] = [a for a in store["annotations"] if a["id"] != ann_id]
+        if len(store["annotations"]) == before:
+            abort(404, "Annotation not found")
     return "", 204
 
 
@@ -737,7 +778,174 @@ def _bbox_area_km2(min_lat: float, min_lon: float, max_lat: float, max_lon: floa
     return abs(max_lat - min_lat) * km_per_deg_lat * abs(max_lon - min_lon) * km_per_deg_lon
 
 
+# Upper bound on the number of grid cells a single cost-grid/replan request may
+# allocate. Each cell costs ~32 bytes in the planner's [N, 4] float64 grid plus
+# per-cell Python-loop time, so a few million is already generous: 4 million
+# cells is a 2 km x 2 km box at the 1 m visualization resolution, or
+# 500 m x 500 m at the 0.25 m default replan cell size.
+MAX_GRID_CELLS = 4_000_000
+
+# Sane grid-planner parameter ranges: cell sizes below 5 cm explode the cell
+# count (see MAX_GRID_CELLS) while sizes above 10 m are useless for a footpath
+# planner; obstacle inflation beyond 10 m would swallow whole maps.
+MIN_CELL_SIZE_M = 0.05
+MAX_CELL_SIZE_M = 10.0
+MAX_INFLATE_OBSTACLES_M = 10.0
+
+# utm.from_latlon() only supports latitudes in [-80, 84]; reject anything
+# outside so bad input becomes a 400 instead of an exception deep in planning.
+_MIN_LAT, _MAX_LAT = -80.0, 84.0
+_MIN_LON, _MAX_LON = -180.0, 180.0
+
+
+def _validated_number(value: Any, name: str, minimum: float, maximum: float) -> float:
+    """
+    Validate that *value* is a finite JSON number within ``[minimum, maximum]``.
+
+    Booleans are rejected (JSON ``true``/``false`` are not numbers even though
+    ``bool`` subclasses ``int`` in Python), as are numeric strings, NaN, and
+    infinities.
+
+    Returns
+    -------
+    float
+        The validated value as a ``float``.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if *value* is not a number or is outside the allowed range.
+
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        abort(400, f"{name} must be a number")
+    num = float(value)
+    if not math.isfinite(num) or not (minimum <= num <= maximum):
+        abort(400, f"{name} must be a finite number between {minimum} and {maximum}")
+    return num
+
+
+def _validated_bbox(
+    min_lat: Any,
+    min_lon: Any,
+    max_lat: Any,
+    max_lon: Any,
+) -> tuple[float, float, float, float]:
+    """
+    Validate a client-supplied WGS84 bounding box.
+
+    Each corner must be a finite number within the UTM-supported lat/lon
+    range, and min must be strictly less than max on each axis.
+
+    Returns
+    -------
+    tuple of float
+        ``(min_lat, min_lon, max_lat, max_lon)`` as validated floats.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if any corner is not a finite in-range number or the box is
+        inverted/degenerate.
+
+    """
+    min_lat_f = _validated_number(min_lat, "min_lat", _MIN_LAT, _MAX_LAT)
+    max_lat_f = _validated_number(max_lat, "max_lat", _MIN_LAT, _MAX_LAT)
+    min_lon_f = _validated_number(min_lon, "min_lon", _MIN_LON, _MAX_LON)
+    max_lon_f = _validated_number(max_lon, "max_lon", _MIN_LON, _MAX_LON)
+    if min_lat_f >= max_lat_f or min_lon_f >= max_lon_f:
+        abort(400, "min_lat/min_lon must be strictly less than max_lat/max_lon")
+    return min_lat_f, min_lon_f, max_lat_f, max_lon_f
+
+
+def _validated_cost_dict(value: Any, name: str) -> dict[str, float] | None:
+    """
+    Validate a client-supplied per-tag cost override dict.
+
+    ``None`` passes through unchanged (meaning "use the defaults"); anything
+    else must be a dict mapping strings to finite non-negative numbers.
+
+    Returns
+    -------
+    dict of str to float, or None
+        The validated cost dict (values coerced to ``float``), or ``None``.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if *value* is not a dict of str -> finite non-negative number.
+
+    """
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        abort(400, f"{name} must be an object mapping tag values to costs")
+    out: dict[str, float] = {}
+    for key, cost in value.items():
+        if not isinstance(key, str):
+            abort(400, f"{name} keys must be strings")
+        if isinstance(cost, bool) or not isinstance(cost, (int, float)):
+            abort(400, f"{name}[{key!r}] must be a number")
+        cost_f = float(cost)
+        if not math.isfinite(cost_f) or cost_f < 0:
+            abort(400, f"{name}[{key!r}] must be a finite non-negative number")
+        out[key] = cost_f
+    return out
+
+
+def _check_grid_cells(area_m2: float, cell_size: float) -> None:
+    """
+    Reject a grid request whose cell count would exceed :data:`MAX_GRID_CELLS`.
+
+    Parameters
+    ----------
+    area_m2 : float
+        Grid area in square meters (a non-positive area trivially passes).
+    cell_size : float
+        Grid cell edge length in meters.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if ``area_m2 / cell_size**2`` exceeds :data:`MAX_GRID_CELLS`.
+
+    """
+    cells = area_m2 / (cell_size * cell_size)
+    if cells > MAX_GRID_CELLS:
+        abort(
+            400,
+            f"Requested area needs ~{cells / 1e6:.1f} million grid cells at "
+            f"cell_size={cell_size} m, exceeding the {MAX_GRID_CELLS / 1e6:.0f} million "
+            "cell limit. Request a smaller area or a larger cell size.",
+        )
+
+
 _fetch_tasks: dict[str, dict[str, Any]] = {}
+
+#: How long a terminal ("done"/"failed") fetch task is retained, in seconds,
+#: before it is evicted -- either by a poll in :func:`fetch_area_status` or by
+#: the sweep in :func:`fetch_area`.
+FETCH_TASK_RETENTION_S = 60.0
+
+
+def _sweep_stale_fetch_tasks() -> None:
+    """
+    Evict terminal fetch tasks older than :data:`FETCH_TASK_RETENTION_S`.
+
+    Called on every :func:`fetch_area` POST so that abandoned tasks (ones
+    whose client never polls them to their terminal state, which is what
+    normally triggers eviction in :func:`fetch_area_status`) cannot
+    accumulate in ``_fetch_tasks`` forever. Terminal tasks that do not yet
+    carry a ``completed_at`` timestamp are stamped with the current time,
+    starting their retention clock; non-terminal tasks are never touched.
+    """
+    now = time.time()
+    for task_id, task in list(_fetch_tasks.items()):
+        if task.get("status") not in ("done", "failed"):
+            continue
+        completed_at = task.setdefault("completed_at", now)
+        if now - completed_at > FETCH_TASK_RETENTION_S:
+            _fetch_tasks.pop(task_id, None)
 
 
 def _run_fetch_task(
@@ -903,6 +1111,7 @@ def fetch_area() -> Response:
     easting, northing, zone_number, zone_letter = utm.from_latlon(corners[:, 0], corners[:, 1])
     waypoints = np.column_stack([easting, northing])
 
+    _sweep_stale_fetch_tasks()
     task_id = str(uuid.uuid4())
     _fetch_tasks[task_id] = {"status": "pending"}
     threading.Thread(
@@ -928,9 +1137,10 @@ def fetch_area_status(task_id: str) -> Response:
     Poll the status of an async fetch job started by :func:`fetch_area`.
 
     Once a task reaches a terminal state (``"done"``/``"failed"``), it is
-    kept around for 60 seconds after first being observed as terminal
-    (to give the client a chance to see the final status), then evicted
-    from ``_fetch_tasks`` on the next poll.
+    kept around for :data:`FETCH_TASK_RETENTION_S` seconds after first
+    being observed as terminal (to give the client a chance to see the
+    final status), then evicted from ``_fetch_tasks`` on the next poll
+    (or by the sweep :func:`fetch_area` runs on each new fetch).
 
     Returns
     -------
@@ -951,7 +1161,7 @@ def fetch_area_status(task_id: str) -> Response:
     if task["status"] in ("done", "failed"):
         if "completed_at" not in task:
             task["completed_at"] = time.time()
-        elif time.time() - task["completed_at"] > 60:
+        elif time.time() - task["completed_at"] > FETCH_TASK_RETENTION_S:
             _fetch_tasks.pop(task_id, None)
     return jsonify(task)
 
@@ -1384,41 +1594,33 @@ def delete_way(way_id: str) -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing or ``way_id``'s non-segment part isn't
-        a valid integer.
+        400 if ``file`` is missing or ``way_id`` isn't a valid plain or
+        virtual way ID (see :func:`_parse_way_id`).
 
     """
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
 
-    way_id_str = str(way_id)
-    original_way_id_str = way_id_str.split(":")[0]
-    try:
-        int(original_way_id_str)
-    except ValueError:
-        abort(400, "Invalid way ID")
-
     # Segments (virtual IDs like "123:0") are stored as strings so that only the
     # specific segment is suppressed on reload, not the whole original way.
-    stored_id: int | str = way_id_str if ":" in way_id_str else int(original_way_id_str)
+    stored_id = _parse_way_id(way_id)
 
     body = request.get_json(force=True) or {}
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
-    migrate_change_log(store)
-    if stored_id not in get_deleted_way_ids(store):
-        store.setdefault("deleted_ways", []).append(
-            {
-                "id": stored_id,
-                "category": body.get("category", "unknown"),
-                "label": body.get("label", ""),
-            },
-        )
-        cl = store.setdefault("change_log", [])
-        if not any(e.get("type") == "way" and e.get("id") == stored_id for e in cl):
-            cl.append({"type": "way", "id": stored_id, "ts": time.time()})
-    save_annotations(ann_path, store)
+    with annotation_store(ann_path) as store:
+        migrate_change_log(store)
+        if stored_id not in get_deleted_way_ids(store):
+            store.setdefault("deleted_ways", []).append(
+                {
+                    "id": stored_id,
+                    "category": body.get("category", "unknown"),
+                    "label": body.get("label", ""),
+                },
+            )
+            cl = store.setdefault("change_log", [])
+            if not any(e.get("type") == "way" and e.get("id") == stored_id for e in cl):
+                cl.append({"type": "way", "id": stored_id, "ts": time.time()})
     return Response("", 204)
 
 
@@ -1455,17 +1657,16 @@ def update_way_tags(way_id: str) -> Response:
     if not isinstance(tags, dict):
         abort(400, "Request body must include 'tags' dict")
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
-    migrate_change_log(store)
-    store.setdefault("tag_overrides", {})[original_way_id_str] = tags
-    store.setdefault("tag_override_meta", {})[original_way_id_str] = {
-        "category": body.get("category", "unknown"),
-        "label": body.get("label", ""),
-    }
-    cl = store.setdefault("change_log", [])
-    if not any(e.get("type") == "tag" and e.get("id") == original_way_id_str for e in cl):
-        cl.append({"type": "tag", "id": original_way_id_str, "ts": time.time()})
-    save_annotations(ann_path, store)
+    with annotation_store(ann_path) as store:
+        migrate_change_log(store)
+        store.setdefault("tag_overrides", {})[original_way_id_str] = tags
+        store.setdefault("tag_override_meta", {})[original_way_id_str] = {
+            "category": body.get("category", "unknown"),
+            "label": body.get("label", ""),
+        }
+        cl = store.setdefault("change_log", [])
+        if not any(e.get("type") == "tag" and e.get("id") == original_way_id_str for e in cl):
+            cl.append({"type": "tag", "id": original_way_id_str, "ts": time.time()})
     return Response("", 204)
 
 
@@ -1495,12 +1696,13 @@ def delete_way_tags(way_id: str) -> Response:
     if not filename:
         abort(400, "Missing 'file' query parameter")
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
-    store.get("tag_overrides", {}).pop(str(way_id), None)
-    store.get("tag_override_meta", {}).pop(str(way_id), None)
-    cl = store.get("change_log", [])
-    store["change_log"] = [e for e in cl if not (e.get("type") == "tag" and e.get("id") == way_id)]
-    save_annotations(ann_path, store)
+    with annotation_store(ann_path) as store:
+        store.get("tag_overrides", {}).pop(str(way_id), None)
+        store.get("tag_override_meta", {}).pop(str(way_id), None)
+        cl = store.get("change_log", [])
+        store["change_log"] = [
+            e for e in cl if not (e.get("type") == "tag" and e.get("id") == way_id)
+        ]
     return Response("", 204)
 
 
@@ -1680,30 +1882,28 @@ def split_way_endpoint() -> Response:
     original_way_id = way_id_val.split(":", maxsplit=1)[0]
 
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
-    migrate_change_log(store)
-    splits = store.setdefault("split_ways", {})
-    way_splits = splits.setdefault(original_way_id, [])
+    with annotation_store(ann_path) as store:
+        migrate_change_log(store)
+        splits = store.setdefault("split_ways", {})
+        way_splits = splits.setdefault(original_way_id, [])
 
-    if node_id_int not in way_splits:
-        way_splits.append(node_id_int)
-        cl = store.setdefault("change_log", [])
-        if not any(
-            e.get("type") == "split"
-            and e.get("way_id") == int(original_way_id)
-            and e.get("node_id") == node_id_int
-            for e in cl
-        ):
-            cl.append(
-                {
-                    "type": "split",
-                    "way_id": int(original_way_id),
-                    "node_id": node_id_int,
-                    "ts": time.time(),
-                },
-            )
-
-    save_annotations(ann_path, store)
+        if node_id_int not in way_splits:
+            way_splits.append(node_id_int)
+            cl = store.setdefault("change_log", [])
+            if not any(
+                e.get("type") == "split"
+                and e.get("way_id") == int(original_way_id)
+                and e.get("node_id") == node_id_int
+                for e in cl
+            ):
+                cl.append(
+                    {
+                        "type": "split",
+                        "way_id": int(original_way_id),
+                        "node_id": node_id_int,
+                        "ts": time.time(),
+                    },
+                )
 
     segments = _get_way_segments_geojson(filename, original_way_id)
     return jsonify({"success": True, "segments": segments})
@@ -1743,24 +1943,23 @@ def undo_way_split() -> Response:
     except (ValueError, TypeError):
         abort(400, "way_id and node_id must be integers")
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
-    splits = store.get("split_ways", {})
-    if str(way_id_int) in splits:
-        splits[str(way_id_int)] = [nid for nid in splits[str(way_id_int)] if nid != node_id_int]
-        if not splits[str(way_id_int)]:
-            del splits[str(way_id_int)]
+    with annotation_store(ann_path) as store:
+        splits = store.get("split_ways", {})
+        if str(way_id_int) in splits:
+            splits[str(way_id_int)] = [nid for nid in splits[str(way_id_int)] if nid != node_id_int]
+            if not splits[str(way_id_int)]:
+                del splits[str(way_id_int)]
 
-    cl = store.get("change_log", [])
-    store["change_log"] = [
-        e
-        for e in cl
-        if not (
-            e.get("type") == "split"
-            and e.get("way_id") == way_id_int
-            and e.get("node_id") == node_id_int
-        )
-    ]
-    save_annotations(ann_path, store)
+        cl = store.get("change_log", [])
+        store["change_log"] = [
+            e
+            for e in cl
+            if not (
+                e.get("type") == "split"
+                and e.get("way_id") == way_id_int
+                and e.get("node_id") == node_id_int
+            )
+        ]
 
     segments = _get_way_segments_geojson(filename, str(way_id_int))
     return jsonify({"segments": segments})
@@ -1800,18 +1999,17 @@ def hide_way(way_id: str) -> Response:
 
     body = request.get_json(force=True) or {}
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
-    hw = store.setdefault("hidden_ways", [])
-    existing_ids = {(d["id"] if isinstance(d, dict) else d) for d in hw}
-    if way_id_int not in existing_ids:
-        hw.append(
-            {
-                "id": way_id_int,
-                "category": body.get("category", "unknown"),
-                "label": body.get("label", ""),
-            },
-        )
-    save_annotations(ann_path, store)
+    with annotation_store(ann_path) as store:
+        hw = store.setdefault("hidden_ways", [])
+        existing_ids = {(d["id"] if isinstance(d, dict) else d) for d in hw}
+        if way_id_int not in existing_ids:
+            hw.append(
+                {
+                    "id": way_id_int,
+                    "category": body.get("category", "unknown"),
+                    "label": body.get("label", ""),
+                },
+            )
     return Response("", 204)
 
 
@@ -1845,10 +2043,11 @@ def show_way(way_id: str) -> Response:
         abort(400, "Invalid way ID")
 
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
-    hw = store.get("hidden_ways", [])
-    store["hidden_ways"] = [d for d in hw if (d["id"] if isinstance(d, dict) else d) != way_id_int]
-    save_annotations(ann_path, store)
+    with annotation_store(ann_path) as store:
+        hw = store.get("hidden_ways", [])
+        store["hidden_ways"] = [
+            d for d in hw if (d["id"] if isinstance(d, dict) else d) != way_id_int
+        ]
     return Response("", 204)
 
 
@@ -1869,32 +2068,26 @@ def restore_way(way_id: str) -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing or ``way_id``'s non-segment part isn't
-        a valid integer.
+        400 if ``file`` is missing or ``way_id`` isn't a valid plain or
+        virtual way ID (see :func:`_parse_way_id`).
 
     """
     filename = request.args.get("file")
     if not filename:
         abort(400, "Missing 'file' query parameter")
 
-    way_id_str = str(way_id)
-    original_way_id_str = way_id_str.split(":")[0]
-    try:
-        int(original_way_id_str)
-    except ValueError:
-        abort(400, "Invalid way ID")
-
-    stored_id: int | str = way_id_str if ":" in way_id_str else int(original_way_id_str)
+    stored_id = _parse_way_id(way_id)
 
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
-    dw = store.get("deleted_ways", [])
-    store["deleted_ways"] = [d for d in dw if (d["id"] if isinstance(d, dict) else d) != stored_id]
-    cl = store.get("change_log", [])
-    store["change_log"] = [
-        e for e in cl if not (e.get("type") == "way" and e.get("id") == stored_id)
-    ]
-    save_annotations(ann_path, store)
+    with annotation_store(ann_path) as store:
+        dw = store.get("deleted_ways", [])
+        store["deleted_ways"] = [
+            d for d in dw if (d["id"] if isinstance(d, dict) else d) != stored_id
+        ]
+        cl = store.get("change_log", [])
+        store["change_log"] = [
+            e for e in cl if not (e.get("type") == "way" and e.get("id") == stored_id)
+        ]
     return Response("", 204)
 
 
@@ -1949,30 +2142,28 @@ def add_way_node() -> Response:
         abort(400, "Request body must include after_node_id, lat, lon")
 
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
+    with annotation_store(ann_path) as store:
+        existing_ids = [a["id"] for a in store.get("added_nodes", []) if a["id"] < 0]
+        synth_id = (min(existing_ids) - 1) if existing_ids else -1
 
-    existing_ids = [a["id"] for a in store.get("added_nodes", []) if a["id"] < 0]
-    synth_id = (min(existing_ids) - 1) if existing_ids else -1
-
-    store.setdefault("added_nodes", []).append(
-        {
-            "id": synth_id,
-            "way_id": way_id_int,
-            "after_node_id": int(after_node_id),
-            "lat": float(lat),
-            "lon": float(lon),
-        }
-    )
-    cl = store.setdefault("change_log", [])
-    cl.append(
-        {
-            "type": "add_node",
-            "way_id": way_id_int,
-            "node_id": synth_id,
-            "ts": time.time(),
-        }
-    )
-    save_annotations(ann_path, store)
+        store.setdefault("added_nodes", []).append(
+            {
+                "id": synth_id,
+                "way_id": way_id_int,
+                "after_node_id": int(after_node_id),
+                "lat": float(lat),
+                "lon": float(lon),
+            }
+        )
+        cl = store.setdefault("change_log", [])
+        cl.append(
+            {
+                "type": "add_node",
+                "way_id": way_id_int,
+                "node_id": synth_id,
+                "ts": time.time(),
+            }
+        )
     return jsonify({"id": synth_id, "lat": float(lat), "lon": float(lon)})
 
 
@@ -2008,64 +2199,62 @@ def delete_way_node() -> Response:
     if not filename or way_id is None or node_id_arg is None:
         abort(400, "Missing required query parameters")
 
-    original_way_id_str = str(way_id).split(":")[0]
+    # Use the full way_id (could be virtual like "123:0") to allow segment-specific
+    # deletion; _parse_way_id validates the segment suffix so raw strings never
+    # reach the store.
+    target_id = _parse_way_id(way_id)
+    way_id_int = int(str(target_id).split(":")[0])
     try:
-        way_id_int = int(original_way_id_str)
         node_id = int(node_id_arg)
     except (ValueError, TypeError):
-        abort(400, "way_id and node_id must be integers (way_id can be virtual)")
+        abort(400, "node_id must be an integer")
 
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
-    migrate_change_log(store)
+    with annotation_store(ann_path) as store:
+        migrate_change_log(store)
 
-    # Synthetic nodes (negative IDs) live in added_nodes, not in the OSM node list
-    if node_id < 0:
-        store["added_nodes"] = [
-            a
-            for a in store.get("added_nodes", [])
-            if not (a.get("way_id") == way_id_int and a.get("id") == node_id)
-        ]
-        pos_ov = store.get("node_position_overrides", {}).get(str(way_id_int), {})
-        pos_ov.pop(str(node_id), None)
-        store["change_log"] = [
-            e
-            for e in store.get("change_log", [])
-            if not (
-                e.get("type") == "add_node"
-                and e.get("way_id") == way_id_int
+        # Synthetic nodes (negative IDs) live in added_nodes, not in the OSM node list
+        if node_id < 0:
+            store["added_nodes"] = [
+                a
+                for a in store.get("added_nodes", [])
+                if not (a.get("way_id") == way_id_int and a.get("id") == node_id)
+            ]
+            pos_ov = store.get("node_position_overrides", {}).get(str(way_id_int), {})
+            pos_ov.pop(str(node_id), None)
+            store["change_log"] = [
+                e
+                for e in store.get("change_log", [])
+                if not (
+                    e.get("type") == "add_node"
+                    and e.get("way_id") == way_id_int
+                    and e.get("node_id") == node_id
+                )
+            ]
+            return Response("", 204)
+
+        dn = store.setdefault("deleted_nodes", [])
+        if isinstance(dn, dict):
+            dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
+            store["deleted_nodes"] = dn
+
+        if node_id not in get_deleted_node_ids(store, target_id):
+            dn.append({"way_id": target_id, "node_id": node_id})
+            cl = store.setdefault("change_log", [])
+            if not any(
+                e.get("type") == "node"
+                and str(e.get("way_id")) == str(target_id)
                 and e.get("node_id") == node_id
-            )
-        ]
-        save_annotations(ann_path, store)
-        return Response("", 204)
-
-    dn = store.setdefault("deleted_nodes", [])
-    if isinstance(dn, dict):
-        dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
-        store["deleted_nodes"] = dn
-
-    # Use the full way_id (could be virtual like "123:0") to allow segment-specific deletion
-    target_id = way_id if ":" in str(way_id) else way_id_int
-
-    if node_id not in get_deleted_node_ids(store, target_id):
-        dn.append({"way_id": target_id, "node_id": node_id})
-        cl = store.setdefault("change_log", [])
-        if not any(
-            e.get("type") == "node"
-            and str(e.get("way_id")) == str(target_id)
-            and e.get("node_id") == node_id
-            for e in cl
-        ):
-            cl.append(
-                {
-                    "type": "node",
-                    "way_id": target_id,
-                    "node_id": node_id,
-                    "ts": time.time(),
-                },
-            )
-    save_annotations(ann_path, store)
+                for e in cl
+            ):
+                cl.append(
+                    {
+                        "type": "node",
+                        "way_id": target_id,
+                        "node_id": node_id,
+                        "ts": time.time(),
+                    },
+                )
     return Response("", 204)
 
 
@@ -2098,38 +2287,34 @@ def restore_way_node() -> Response:
     if not filename or way_id is None or node_id_arg is None:
         abort(400, "Missing required query parameters")
 
-    original_way_id_str = str(way_id).split(":")[0]
+    # Use the full way_id to match the deletion record; validated the same way
+    # as in delete_way_node.
+    target_id = _parse_way_id(way_id)
     try:
-        way_id_int = int(original_way_id_str)
         node_id = int(node_id_arg)
     except (ValueError, TypeError):
-        abort(400, "way_id and node_id must be integers (way_id can be virtual)")
+        abort(400, "node_id must be an integer")
 
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
-
-    # Use the full way_id to match the deletion record
-    target_id = way_id if ":" in str(way_id) else way_id_int
-
-    dn = store.get("deleted_nodes", [])
-    if isinstance(dn, dict):
-        dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
-    store["deleted_nodes"] = [
-        d
-        for d in dn
-        if not (str(d.get("way_id")) == str(target_id) and d.get("node_id") == node_id)
-    ]
-    cl = store.get("change_log", [])
-    store["change_log"] = [
-        e
-        for e in cl
-        if not (
-            e.get("type") == "node"
-            and str(e.get("way_id")) == str(target_id)
-            and e.get("node_id") == node_id
-        )
-    ]
-    save_annotations(ann_path, store)
+    with annotation_store(ann_path) as store:
+        dn = store.get("deleted_nodes", [])
+        if isinstance(dn, dict):
+            dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
+        store["deleted_nodes"] = [
+            d
+            for d in dn
+            if not (str(d.get("way_id")) == str(target_id) and d.get("node_id") == node_id)
+        ]
+        cl = store.get("change_log", [])
+        store["change_log"] = [
+            e
+            for e in cl
+            if not (
+                e.get("type") == "node"
+                and str(e.get("way_id")) == str(target_id)
+                and e.get("node_id") == node_id
+            )
+        ]
     return Response("", 204)
 
 
@@ -2178,29 +2363,28 @@ def move_way_nodes() -> Response:
     if not isinstance(nodes, list):
         abort(400, "Request body must include 'nodes' list")
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
-    overrides = store.setdefault("node_position_overrides", {})
-    way_key = original_way_id_str
-    if way_key not in overrides:
-        overrides[way_key] = {}
-    for n in nodes:
-        overrides[way_key][str(n["id"])] = {
-            "lat": float(n["lat"]),
-            "lon": float(n["lon"]),
-        }
-    migrate_change_log(store)
-    cl = store.setdefault("change_log", [])
-    if not any(e.get("type") == "move" and e.get("id") == way_id_int for e in cl):
-        cl.append(
-            {
-                "type": "move",
-                "id": way_id_int,
-                "category": body.get("category", "unknown"),
-                "label": body.get("label", ""),
-                "ts": time.time(),
-            },
-        )
-    save_annotations(ann_path, store)
+    with annotation_store(ann_path) as store:
+        overrides = store.setdefault("node_position_overrides", {})
+        way_key = original_way_id_str
+        if way_key not in overrides:
+            overrides[way_key] = {}
+        for n in nodes:
+            overrides[way_key][str(n["id"])] = {
+                "lat": float(n["lat"]),
+                "lon": float(n["lon"]),
+            }
+        migrate_change_log(store)
+        cl = store.setdefault("change_log", [])
+        if not any(e.get("type") == "move" and e.get("id") == way_id_int for e in cl):
+            cl.append(
+                {
+                    "type": "move",
+                    "id": way_id_int,
+                    "category": body.get("category", "unknown"),
+                    "label": body.get("label", ""),
+                    "ts": time.time(),
+                },
+            )
     return Response("", 204)
 
 
@@ -2237,13 +2421,12 @@ def undo_move_way_nodes() -> Response:
         abort(400, "way_id must be an integer or virtual ID")
 
     ann_path = str(_annotation_path(filename))
-    store = load_annotations(ann_path)
-    store.get("node_position_overrides", {}).pop(original_way_id_str, None)
-    cl = store.get("change_log", [])
-    store["change_log"] = [
-        e for e in cl if not (e.get("type") == "move" and e.get("id") == way_id_int)
-    ]
-    save_annotations(ann_path, store)
+    with annotation_store(ann_path) as store:
+        store.get("node_position_overrides", {}).pop(original_way_id_str, None)
+        cl = store.get("change_log", [])
+        store["change_log"] = [
+            e for e in cl if not (e.get("type") == "move" and e.get("id") == way_id_int)
+        ]
     return Response("", 204)
 
 
@@ -2472,12 +2655,12 @@ def get_cost_grid() -> Response:
     file : str
         Mapdata filename.
     min_lat, min_lon, max_lat, max_lon : float
-        Bounding box (WGS84 degrees; order-independent -- min/max are
-        computed from the two corners regardless of which is given as
-        "min").
+        Bounding box (WGS84 degrees); min must be strictly less than max
+        on each axis, and the box must fit within the
+        :data:`MAX_GRID_CELLS` cell budget at the fixed 1 m resolution.
     highway_costs, surface_costs : str, optional
-        JSON-encoded cost-override dicts; a malformed value is logged and
-        ignored (falls back to defaults) rather than erroring the request.
+        JSON-encoded cost-override dicts (str -> finite non-negative
+        number); a malformed value aborts the request with 400.
 
     Returns
     -------
@@ -2487,20 +2670,51 @@ def get_cost_grid() -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if any required parameter is missing. 404 if the file
-        doesn't exist.
+        400 if any required parameter is missing, the bounding box is
+        malformed (non-finite, out of lat/lon range, or min >= max),
+        the box exceeds the grid-cell budget, or a cost-override dict is
+        malformed. 404 if the file doesn't exist.
 
     """
     filename = request.args.get("file")
-    min_lat = request.args.get("min_lat", type=float)
-    min_lon = request.args.get("min_lon", type=float)
-    max_lat = request.args.get("max_lat", type=float)
-    max_lon = request.args.get("max_lon", type=float)
+    min_lat_arg = request.args.get("min_lat", type=float)
+    min_lon_arg = request.args.get("min_lon", type=float)
+    max_lat_arg = request.args.get("max_lat", type=float)
+    max_lon_arg = request.args.get("max_lon", type=float)
 
-    if filename is None or any(v is None for v in (min_lat, min_lon, max_lat, max_lon)):
+    if filename is None or any(
+        v is None for v in (min_lat_arg, min_lon_arg, max_lat_arg, max_lon_arg)
+    ):
         abort(400, "Missing required parameters")
-    if filename is None:
-        abort(400, "Filename cannot be None")
+
+    min_lat, min_lon, max_lat, max_lon = _validated_bbox(
+        min_lat_arg,
+        min_lon_arg,
+        max_lat_arg,
+        max_lon_arg,
+    )
+
+    cell_size = 1.0  # Use a coarser grid for visualization performance
+    _check_grid_cells(_bbox_area_km2(min_lat, min_lon, max_lat, max_lon) * 1e6, cell_size)
+
+    # Get custom highway costs from request if provided
+    highway_costs_dict = None
+    highway_costs = request.args.get("highway_costs")
+    if highway_costs:
+        try:
+            parsed_hw = json.loads(highway_costs)
+        except json.JSONDecodeError:
+            abort(400, "highway_costs must be valid JSON")
+        highway_costs_dict = _validated_cost_dict(parsed_hw, "highway_costs")
+
+    surface_costs_dict = None
+    surface_costs = request.args.get("surface_costs")
+    if surface_costs:
+        try:
+            parsed_sf = json.loads(surface_costs)
+        except json.JSONDecodeError:
+            abort(400, "surface_costs must be valid JSON")
+        surface_costs_dict = _validated_cost_dict(parsed_sf, "surface_costs")
 
     md, _ = get_merged_mapdata(filename)
     if md is None:
@@ -2516,25 +2730,8 @@ def get_cost_grid() -> Response:
     args = parse_args([])
     args.low = low
     args.high = high
-    args.cell_size = 1.0  # Use a coarser grid for visualization performance
+    args.cell_size = cell_size
     args.inflate_obstacles = 0.0
-
-    # Get custom highway costs from request if provided
-    highway_costs_dict = None
-    highway_costs = request.args.get("highway_costs")
-    if highway_costs:
-        try:
-            highway_costs_dict = json.loads(highway_costs)
-        except json.JSONDecodeError as e:
-            logger.warning("Failed to parse custom highway costs: %s", e)
-
-    surface_costs_dict = None
-    surface_costs = request.args.get("surface_costs")
-    if surface_costs:
-        try:
-            surface_costs_dict = json.loads(surface_costs)
-        except json.JSONDecodeError as e:
-            logger.warning("Failed to parse custom surface costs: %s", e)
 
     obstacles = ways_to_shapely(md.barriers_list)
     replanner = ReplanPath(
@@ -2556,7 +2753,7 @@ def get_cost_grid() -> Response:
 
 
 @bp.route("/api/cancel_replan", methods=["POST"])
-def cancel_replan_route() -> Response:
+def cancel_replan_route() -> ResponseReturnValue:
     """
     Cancel an in-progress replan started by :func:`create_replan`.
 
@@ -2568,13 +2765,17 @@ def cancel_replan_route() -> Response:
 
     Returns
     -------
-    Response
-        JSON ``{"success": true}`` (always -- an unknown or already
-        finished ``transfer_id`` is not reported as an error by
-        :func:`~map_data.pathsolver.replan.cancel_replan_backend`).
+    ResponseReturnValue
+        JSON ``{"success": true}`` for any provided ``transfer_id`` (an
+        unknown or already finished one is not reported as an error by
+        :func:`~map_data.pathsolver.replan.cancel_replan_backend`);
+        ``{"success": false, "message": ...}`` with status 400 if the
+        request body is not JSON or lacks ``transfer_id``.
 
     """
-    transfer_id = request.json.get("transfer_id")
+    transfer_id = (request.get_json(silent=True) or {}).get("transfer_id")
+    if not transfer_id:
+        return jsonify({"success": False, "message": "No transfer_id provided"}), 400
     cancel_replan_backend(transfer_id)
     return jsonify({"success": True})
 
@@ -2838,7 +3039,7 @@ def create_wormhole() -> ResponseReturnValue:
         (wormhole code not captured in time, or an internal error).
 
     """
-    gpx_data = request.json.get("gpx")
+    gpx_data = (request.get_json(silent=True) or {}).get("gpx")
     if not gpx_data:
         return jsonify({"success": False, "message": "No GPX data provided"}), 400
 
@@ -2857,18 +3058,22 @@ def create_wormhole() -> ResponseReturnValue:
 
 
 @bp.route("/api/cancel_wormhole", methods=["POST"])
-def cancel_wormhole() -> Response:
+def cancel_wormhole() -> ResponseReturnValue:
     """
     Cancel an in-progress ``magic-wormhole`` GPX transfer.
 
     Returns
     -------
-    Response
+    ResponseReturnValue
         JSON ``{"success": ..., "message": ...}`` per
-        :meth:`WormholeManager.cancel_transfer`.
+        :meth:`WormholeManager.cancel_transfer`; ``{"success": false,
+        "message": ...}`` with status 400 if the request body is not
+        JSON or lacks ``transfer_id``.
 
     """
-    transfer_id = request.json.get("transfer_id")
+    transfer_id = (request.get_json(silent=True) or {}).get("transfer_id")
+    if not transfer_id:
+        return jsonify({"success": False, "message": "No transfer_id provided"}), 400
     success, message = wormhole_manager.cancel_transfer(transfer_id)
     return jsonify({"success": success, "message": message})
 
@@ -2909,9 +3114,11 @@ def create_replan() -> Response:
     highway_costs, surface_costs : dict, optional
         Custom per-tag traversal cost overrides (grid planner only).
     cell_size : float, default 0.25
-        Grid cell size in meters (grid planner only).
+        Grid cell size in meters (grid planner only); must be within
+        [:data:`MIN_CELL_SIZE_M`, :data:`MAX_CELL_SIZE_M`].
     inflate_obstacles : float, default 0.25
-        Obstacle inflation radius in meters (grid planner only).
+        Obstacle inflation radius in meters (grid planner only); must be
+        within [0, :data:`MAX_INFLATE_OBSTACLES_M`].
     simplify_path, smooth_path : bool
         Post-processing toggles (grid planner only).
     grid_cost_weight : float, optional
@@ -2931,8 +3138,13 @@ def create_replan() -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``points`` or ``file`` is missing. 404 if the file doesn't
-        exist.
+        400 if ``points`` or ``file`` is missing, or any parameter fails
+        validation: non-numeric/out-of-range points, ``cell_size``
+        outside [:data:`MIN_CELL_SIZE_M`, :data:`MAX_CELL_SIZE_M`],
+        ``inflate_obstacles`` outside [0, :data:`MAX_INFLATE_OBSTACLES_M`],
+        malformed cost dicts, wrongly-typed flags/strings, or a planning
+        area exceeding the :data:`MAX_GRID_CELLS` cell budget. 404 if the
+        file doesn't exist.
 
     """
     body = request.get_json(force=True) or {}
@@ -2942,17 +3154,44 @@ def create_replan() -> Response:
     transfer_id = body.get("transfer_id")
     algorithm = body.get("algorithm", "rrt")
     sub_algorithm = body.get("sub_algorithm", "astar")
-    highway_costs = body.get("highway_costs")
-    surface_costs = body.get("surface_costs")
-
-    cell_size = body.get("cell_size", 0.25)
-    inflate_obstacles = body.get("inflate_obstacles", 0.25)
-    simplify_path = body.get("simplify_path", True)
-    smooth_path = body.get("smooth_path", False)
-    grid_cost_weight = body.get("grid_cost_weight")
 
     if not path_data or not filename:
         abort(400, "Missing points or file parameter")
+    if not isinstance(filename, str):
+        abort(400, "file must be a string")
+    if not isinstance(path_data, list):
+        abort(400, "points must be a list of [lat, lon] pairs")
+    if not isinstance(highway_types, list) or not all(isinstance(h, str) for h in highway_types):
+        abort(400, "allowed_ways must be a list of strings")
+    if transfer_id is not None and not isinstance(transfer_id, str):
+        abort(400, "transfer_id must be a string")
+    if not isinstance(algorithm, str):
+        abort(400, "algorithm must be a string")
+    if not isinstance(sub_algorithm, str):
+        abort(400, "sub_algorithm must be a string")
+
+    highway_costs = _validated_cost_dict(body.get("highway_costs"), "highway_costs")
+    surface_costs = _validated_cost_dict(body.get("surface_costs"), "surface_costs")
+
+    cell_size = _validated_number(
+        body.get("cell_size", 0.25),
+        "cell_size",
+        MIN_CELL_SIZE_M,
+        MAX_CELL_SIZE_M,
+    )
+    inflate_obstacles = _validated_number(
+        body.get("inflate_obstacles", 0.25),
+        "inflate_obstacles",
+        0.0,
+        MAX_INFLATE_OBSTACLES_M,
+    )
+    simplify_path = body.get("simplify_path", True)
+    smooth_path = body.get("smooth_path", False)
+    if not isinstance(simplify_path, bool) or not isinstance(smooth_path, bool):
+        abort(400, "simplify_path and smooth_path must be booleans")
+    grid_cost_weight = body.get("grid_cost_weight")
+    if grid_cost_weight is not None:
+        grid_cost_weight = _validated_number(grid_cost_weight, "grid_cost_weight", 0.0, 1000.0)
 
     md, _ = get_merged_mapdata(filename)
     if md is None:
@@ -2960,8 +3199,12 @@ def create_replan() -> Response:
 
     zn, zl = md.zone_number, md.zone_letter
     utm_path_list: list[list[float]] = []
-    for p in path_data:
-        e, n, _, _ = utm.from_latlon(float(p[0]), float(p[1]), zn, zl)
+    for i, p in enumerate(path_data):
+        if not isinstance(p, (list, tuple)) or len(p) < 2:
+            abort(400, "points must be a list of [lat, lon] pairs")
+        lat = _validated_number(p[0], f"points[{i}] latitude", _MIN_LAT, _MAX_LAT)
+        lon = _validated_number(p[1], f"points[{i}] longitude", _MIN_LON, _MAX_LON)
+        e, n, _, _ = utm.from_latlon(lat, lon, zn, zl)
         utm_path_list.append([e, n])
     utm_path: np.ndarray = np.array(utm_path_list, dtype=np.float64)
 
@@ -2980,6 +3223,9 @@ def create_replan() -> Response:
         planner = GraphPlanner(md, highway_types=highway_types)
         res = planner.plan(utm_path)
     else:
+        area_m2 = max(0.0, p_high[0] - p_low[0]) * max(0.0, p_high[1] - p_low[1])
+        _check_grid_cells(area_m2, cell_size)
+
         args = parse_args([])
         args.simplify_path = simplify_path
         args.smooth_path = smooth_path

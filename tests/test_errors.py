@@ -60,6 +60,17 @@ def test_overpass_timeout_returns_none():
     assert result is None
 
 
+def test_current_robot_position_unreconcilable_shape_raises():
+    e, n, zn, zl = utm.from_latlon(50.0, 14.0)
+    waypoints = np.array([[e, n], [e + 200, n + 200]])
+    with pytest.raises(ValueError, match="current_robot_position"):
+        MapData(
+            [waypoints, int(zn), zl],
+            coords_type="array",
+            current_robot_position=np.array([e]),  # a single scalar column
+        )
+
+
 def test_run_parse_without_queries_returns_error():
     e, n, zn, zl = utm.from_latlon(50.0, 14.0)
     md = MapData([np.array([[e, n]]), int(zn), zl], coords_type="array")

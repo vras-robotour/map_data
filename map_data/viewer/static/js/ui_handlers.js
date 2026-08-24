@@ -811,6 +811,30 @@ function focusFeatureById(wayId) {
     });
 }
 
+// Rows for the changes/hidden/annotation panels are built with DOM APIs
+// (createElement/addEventListener) instead of inline onclick attribute
+// strings, so IDs and labels read back from the annotation store are never
+// interpolated into executable attribute code.
+function _buildPanelRow({ itemClass, idClass, labelHtml, idHtml, focusId, btnClass, btnTitle, btnHtml, onBtnClick }) {
+    const row = document.createElement('div');
+    row.className = itemClass;
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', () => focusFeatureById(focusId));
+
+    const info = document.createElement('div');
+    info.innerHTML = `<span>${labelHtml}</span><br><span class="${idClass}">${idHtml}</span>`;
+    row.appendChild(info);
+
+    const btn = document.createElement('button');
+    btn.className = btnClass;
+    btn.style.fontSize = '0.7rem';
+    btn.title = btnTitle;
+    btn.innerHTML = btnHtml;
+    btn.addEventListener('click', e => { e.stopPropagation(); onBtnClick(); });
+    row.appendChild(btn);
+    return row;
+}
+
 function renderChangesPanel() {
     const panel = document.getElementById('changes-panel');
     const list = document.getElementById('changes-list');
@@ -819,55 +843,42 @@ function renderChangesPanel() {
     if (!changeLog.length || currentAppMode === 'planner') { panel.style.display = 'none'; return; }
     panel.style.display = '';
     count.textContent = `(${changeLog.length})`;
-    list.innerHTML = [...changeLog].reverse().map(d => {
-        const wayIdJson = JSON.stringify(d.id || d.way_id);
-        if (d.type === 'way') return `
-      <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
-        <div>
-          <span>del ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
-          <br><span class="change-id">#${d.id}</span>
-        </div>
-        <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Undo deletion" onclick='event.stopPropagation(); undoWayDeletion(${wayIdJson})'>&#8617;</button>
-      </div>`;
-        if (d.type === 'node') return `
-      <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
-        <div>
-          <span>del node in way</span>
-          <br><span class="change-id">#${d.node_id} &rarr; #${d.way_id}</span>
-        </div>
-        <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Undo deletion" onclick='event.stopPropagation(); undoNodeDeletion(${wayIdJson}, ${d.node_id})'>&#8617;</button>
-      </div>`;
-        if (d.type === 'tag') return `
-      <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
-        <div>
-          <span>edit ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
-          <br><span class="change-id">#${d.id}</span>
-        </div>
-        <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Undo tag edit" onclick='event.stopPropagation(); undoTagOverride(${wayIdJson})'>&#8617;</button>
-      </div>`;
-        if (d.type === 'move') return `
-      <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
-        <div>
-          <span>move ${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
-          <br><span class="change-id">#${d.id}</span>
-        </div>
-        <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Undo move" onclick='event.stopPropagation(); undoWayNodeMoves(${wayIdJson})'>&#8617;</button>
-      </div>`;
-        if (d.type === 'split') return `
-      <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
-        <div>
-          <span>split way</span>
-          <br><span class="change-id">#${d.way_id} @ node #${d.node_id}</span>
-        </div>
-        <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Undo split" onclick='event.stopPropagation(); undoWaySplit(${wayIdJson}, ${d.node_id})'>&#8617;</button>
-      </div>`;
-        return '';
-    }).join('');
+    list.textContent = '';
+    [...changeLog].reverse().forEach(d => {
+        const wayId = d.id || d.way_id;
+        const catLabel = escHtml(d.category) + (d.label ? ' · ' + escHtml(d.label) : '');
+        const base = {
+            itemClass: 'change-item',
+            idClass: 'change-id',
+            focusId: wayId,
+            btnClass: 'btn btn-sm btn-outline-warning py-0 px-1',
+            btnHtml: '&#8617;',
+        };
+        let row = null;
+        if (d.type === 'way') row = _buildPanelRow({
+            ...base, labelHtml: `del ${catLabel}`, idHtml: `#${escHtml(d.id)}`,
+            btnTitle: 'Undo deletion', onBtnClick: () => undoWayDeletion(wayId),
+        });
+        if (d.type === 'node') row = _buildPanelRow({
+            ...base, labelHtml: 'del node in way',
+            idHtml: `#${escHtml(d.node_id)} &rarr; #${escHtml(d.way_id)}`,
+            btnTitle: 'Undo deletion', onBtnClick: () => undoNodeDeletion(wayId, d.node_id),
+        });
+        if (d.type === 'tag') row = _buildPanelRow({
+            ...base, labelHtml: `edit ${catLabel}`, idHtml: `#${escHtml(d.id)}`,
+            btnTitle: 'Undo tag edit', onBtnClick: () => undoTagOverride(wayId),
+        });
+        if (d.type === 'move') row = _buildPanelRow({
+            ...base, labelHtml: `move ${catLabel}`, idHtml: `#${escHtml(d.id)}`,
+            btnTitle: 'Undo move', onBtnClick: () => undoWayNodeMoves(wayId),
+        });
+        if (d.type === 'split') row = _buildPanelRow({
+            ...base, labelHtml: 'split way',
+            idHtml: `#${escHtml(d.way_id)} @ node #${escHtml(d.node_id)}`,
+            btnTitle: 'Undo split', onBtnClick: () => undoWaySplit(wayId, d.node_id),
+        });
+        if (row) list.appendChild(row);
+    });
 }
 
 async function undoWaySplit(wayId, nodeId) {
@@ -912,18 +923,20 @@ function renderHiddenPanel() {
     if (!hiddenWays.length || currentAppMode === 'planner') { panel.style.display = 'none'; return; }
     panel.style.display = '';
     count.textContent = `(${hiddenWays.length})`;
-    list.innerHTML = [...hiddenWays].reverse().map(d => {
-        const wayIdJson = JSON.stringify(d.id);
-        return `
-    <div class="change-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
-      <div>
-        <span>${escHtml(d.category)}${d.label ? ' · ' + escHtml(d.label) : ''}</span>
-        <br><span class="change-id">#${d.id}</span>
-      </div>
-      <button class="btn btn-sm btn-outline-info py-0 px-1" style="font-size:0.7rem;"
-              title="Show object" onclick='event.stopPropagation(); showWay(${wayIdJson})'>&#128065;</button>
-    </div>`;
-    }).join('');
+    list.textContent = '';
+    [...hiddenWays].reverse().forEach(d => {
+        list.appendChild(_buildPanelRow({
+            itemClass: 'change-item',
+            idClass: 'change-id',
+            focusId: d.id,
+            labelHtml: escHtml(d.category) + (d.label ? ' · ' + escHtml(d.label) : ''),
+            idHtml: `#${escHtml(d.id)}`,
+            btnClass: 'btn btn-sm btn-outline-info py-0 px-1',
+            btnTitle: 'Show object',
+            btnHtml: '&#128065;',
+            onBtnClick: () => showWay(d.id),
+        }));
+    });
 }
 
 async function undoWayDeletion(wayId) {
@@ -1017,19 +1030,20 @@ function renderAnnotationList() {
       </div>
     </div>
   `).join('');
-    const nodeHtml = addedNodeEntries.map(d => {
-        const wayIdJson = JSON.stringify(d.way_id);
-        return `
-    <div class="ann-item" style="cursor:pointer;" onclick='focusFeatureById(${wayIdJson})'>
-      <div>
-        <span>add node to way</span>
-        <br><span class="ann-id">#${d.node_id} &rarr; #${d.way_id}</span>
-      </div>
-      <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-              title="Undo node addition" onclick='event.stopPropagation(); undoNodeAddition(${wayIdJson}, ${d.node_id})'>&#8617;</button>
-    </div>`;
-    }).join('');
-    el.innerHTML = annHtml + nodeHtml;
+    el.innerHTML = annHtml;
+    addedNodeEntries.forEach(d => {
+        el.appendChild(_buildPanelRow({
+            itemClass: 'ann-item',
+            idClass: 'ann-id',
+            focusId: d.way_id,
+            labelHtml: 'add node to way',
+            idHtml: `#${escHtml(d.node_id)} &rarr; #${escHtml(d.way_id)}`,
+            btnClass: 'btn btn-sm btn-outline-warning py-0 px-1',
+            btnTitle: 'Undo node addition',
+            btnHtml: '&#8617;',
+            onBtnClick: () => undoNodeAddition(d.way_id, d.node_id),
+        }));
+    });
 }
 
 async function deleteSelectedAnnotation() {

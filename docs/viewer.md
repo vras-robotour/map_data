@@ -72,6 +72,20 @@ unaffected. When set, the token can be supplied any of three ways:
   with `?access_token=...` and have the browser carry that cookie on all subsequent
   same-origin page, static asset, API, and SocketIO requests. No login UI is involved.
 
+**CSRF threat model.** The browser attaches the cookie to requests automatically, so a
+cookie by itself doesn't prove a request originated from the viewer's own page — a
+malicious page could otherwise trigger state-changing requests with your session. To
+prevent that, the cookie alone only authenticates *read* requests (`GET`/`HEAD`/`OPTIONS`,
+plus SocketIO traffic, which is separately protected by the same-origin CORS check below).
+State-changing requests (`POST`/`PUT`/`DELETE`) must either supply the token via the
+`X-Access-Token` header or query parameter, or carry the cookie *together with* an
+`X-Requested-With` header. The viewer's own JavaScript adds that header to every API call
+automatically, and cross-site pages can't set custom headers without a CORS preflight the
+server never grants — so the browser UI keeps working unchanged while forged cross-site
+writes are rejected with `401`. Headless API clients are unaffected as long as they send
+the token in the `X-Access-Token` header. Request bodies (uploads included) are also
+capped at 100 MB, so a single oversized `POST` can't exhaust disk or memory.
+
 The cookie is set without `Secure` (so it also works over plain HTTP on a LAN) — if the
 network itself isn't trusted, put a TLS-terminating reverse proxy in front of the viewer
 rather than relying on the token alone.

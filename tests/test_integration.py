@@ -1,29 +1,14 @@
-import json
-from unittest.mock import MagicMock, patch
-
 import numpy as np
-import overpy
 import pytest
 import utm
+from conftest import EMPTY_OSM_JSON as _EMPTY_JSON
+from conftest import FOOTWAY_WAYS_JSON as _WAYS_JSON
 from shapely.geometry import LineString
 
 from map_data.map_data import MapData
 from map_data.utils.way import Way
 
 _LAT, _LON = 50.0, 14.0
-
-# One footway way between two nodes — used as the mocked Overpass response
-_WAYS_JSON = json.dumps(
-    {
-        "version": 0.6,
-        "elements": [
-            {"type": "node", "id": 1, "lat": 50.001, "lon": 14.001},
-            {"type": "node", "id": 2, "lat": 50.002, "lon": 14.002},
-            {"type": "way", "id": 101, "nodes": [1, 2], "tags": {"highway": "footway"}},
-        ],
-    },
-)
-_EMPTY_JSON = json.dumps({"version": 0.6, "elements": []})
 
 
 def _make_md():
@@ -67,15 +52,9 @@ def test_mapdata_save_reload_preserves_ways(tmp_path):
     assert w.line is not None
 
 
-def test_run_parse_with_mocked_overpass(tmp_path):
+def test_run_parse_with_mocked_overpass(tmp_path, mock_overpass_client):
     md = _make_md()
-
-    with patch("map_data.map_data.OverpassClient") as MockClient:
-        instance = MagicMock()
-        instance.query_raw.return_value = _WAYS_JSON
-        instance.api = overpy.Overpass()
-        MockClient.return_value = instance
-        md.run_queries(use_cache=False)
+    md.run_queries(use_cache=False)
 
     assert md.osm_ways_data is not None
     result = md.run_parse()
@@ -110,6 +89,115 @@ def test_mapdata_nodes_cache_survives_roundtrip(tmp_path):
     assert loaded.nodes_cache[99]["lat"] == pytest.approx(50.001)
 
 
+# ── atomic .mapdata writes ────────────────────────────────────────────────────
+
+
+def _broken_json_dump(obj, fp, **kwargs):
+    """Simulate a crash/full disk mid-dump: write a partial file, then fail."""
+    fp.write('{"partial": ')
+    raise OSError("disk full")
+
+
+def test_save_mapdata_failure_preserves_existing_file(tmp_path, monkeypatch):
+    md = _make_md()
+    path = tmp_path / "test.mapdata"
+    md.save(str(path))
+    good_content = path.read_text()
+
+    monkeypatch.setattr("map_data.utils.serialization.json.dump", _broken_json_dump)
+    with pytest.raises(OSError, match="disk full"):
+        md.save(str(path))
+
+    # The previously good file is untouched and no temp files are left behind.
+    assert path.read_text() == good_content
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_save_mapdata_success_leaves_no_temp_files(tmp_path):
+    md = _make_md()
+    path = tmp_path / "test.mapdata"
+    md.save(str(path))
+
+    assert [p.name for p in tmp_path.iterdir()] == ["test.mapdata"]
+    MapData.load(str(path))  # and the file is loadable
+
+
+# ── MapData input-shape handling ──────────────────────────────────────────────
+
+
+def test_current_robot_position_accepts_1d_array():
+    e, n, zn, zl = utm.from_latlon(_LAT, _LON)
+    waypoints = np.array([[e, n], [e + 200, n + 200]])
+
+    md = MapData(
+        [waypoints, int(zn), zl],
+        coords_type="array",
+        current_robot_position=np.array([e - 50, n - 50]),
+    )
+
+    assert md.waypoints.shape == (3, 2)
+    assert np.allclose(md.waypoints[0], [e - 50, n - 50])
+
+
+def test_current_robot_position_padded_against_3col_waypoints():
+    e, n, zn, zl = utm.from_latlon(_LAT, _LON)
+    waypoints = np.array([[e, n, 300.0], [e + 200, n + 200, 310.0]])
+
+    md = MapData(
+        [waypoints, int(zn), zl],
+        coords_type="array",
+        current_robot_position=np.array([[e - 50, n - 50]]),
+    )
+
+    assert md.waypoints.shape == (3, 3)
+    assert md.waypoints[0, 2] == 0.0  # elevation padded like the GPX/YAML parsers
+
+
+def test_current_robot_position_elevation_dropped_against_2col_waypoints():
+    e, n, zn, zl = utm.from_latlon(_LAT, _LON)
+    waypoints = np.array([[e, n], [e + 200, n + 200]])
+
+    md = MapData(
+        [waypoints, int(zn), zl],
+        coords_type="array",
+        current_robot_position=np.array([e - 50, n - 50, 300.0]),
+    )
+
+    assert md.waypoints.shape == (3, 2)
+    assert np.allclose(md.waypoints[0], [e - 50, n - 50])
+
+
+def test_csv_to_dict_single_row(tmp_path):
+    csv_path = tmp_path / "single.csv"
+    csv_path.write_text("natural,water\n")
+
+    # A single-row CSV makes np.genfromtxt return a 1-D array; iterating its
+    # "rows" then yields characters. Must parse as one key/value pair instead.
+    assert MapData._csv_to_dict(csv_path) == {"natural": ["water"]}
+
+
+def test_csv_to_dict_multiple_rows(tmp_path):
+    csv_path = tmp_path / "multi.csv"
+    csv_path.write_text("natural,water\nnatural,wood\nbarrier,wall\n")
+
+    assert MapData._csv_to_dict(csv_path) == {
+        "natural": ["water", "wood"],
+        "barrier": ["wall"],
+    }
+
+
+def test_mapdata_load_restores_points(tmp_path):
+    md = _make_md()
+    path = str(tmp_path / "test.mapdata")
+    md.save(path)
+
+    loaded = MapData.load(path)
+
+    assert len(loaded.points) == len(md.points)
+    for p_loaded, p_orig in zip(loaded.points, md.points, strict=True):
+        assert p_loaded.equals(p_orig)
+
+
 # ── OSM cache ─────────────────────────────────────────────────────────────────
 
 
@@ -134,6 +222,21 @@ def test_osm_cache_bbox_mismatch_returns_none(tmp_path):
     md.min_lat += 1.0
     result = md._load_osm_cache()
     assert result is None
+
+
+def test_save_osm_cache_failure_preserves_existing_cache(tmp_path, monkeypatch):
+    md = _make_md()
+    md.coords_file = str(tmp_path / "test.gpx")
+    md._save_osm_cache(_WAYS_JSON)
+
+    monkeypatch.setattr("map_data.map_data.json.dump", _broken_json_dump)
+    # _save_osm_cache logs a warning on OSError instead of raising.
+    md._save_osm_cache(_EMPTY_JSON)
+    monkeypatch.undo()
+
+    # The previously good cache is untouched and no temp files remain.
+    assert md._load_osm_cache() == _WAYS_JSON
+    assert not list(tmp_path.glob("*.tmp"))
 
 
 def test_osm_cache_missing_file_returns_none(tmp_path):

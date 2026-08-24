@@ -1,4 +1,5 @@
 import json
+import logging
 
 import numpy as np
 import overpy
@@ -300,6 +301,141 @@ def test_parse_osm_rels_untagged_member_classified_as_barrier():
     assert any(w.id == 104 for w in barriers)
 
 
+# ── parse_osm_rels: inner rings become holes ────────────────────────────────
+
+
+# A building relation with a courtyard: outer square (way 105) and inner
+# square (way 106). The inner ring must be cut out of the outer polygon so
+# the courtyard stays traversable.
+_COURTYARD_JSON = json.dumps(
+    {
+        "version": 0.6,
+        "elements": [
+            # outer square (~111 m per 0.001° of latitude)
+            {"type": "node", "id": 30, "lat": _LAT, "lon": _LON},
+            {"type": "node", "id": 31, "lat": _LAT + 0.001, "lon": _LON},
+            {"type": "node", "id": 32, "lat": _LAT + 0.001, "lon": _LON + 0.001},
+            {"type": "node", "id": 33, "lat": _LAT, "lon": _LON + 0.001},
+            # inner square (the courtyard)
+            {"type": "node", "id": 34, "lat": _LAT + 0.0004, "lon": _LON + 0.0004},
+            {"type": "node", "id": 35, "lat": _LAT + 0.0006, "lon": _LON + 0.0004},
+            {"type": "node", "id": 36, "lat": _LAT + 0.0006, "lon": _LON + 0.0006},
+            {"type": "node", "id": 37, "lat": _LAT + 0.0004, "lon": _LON + 0.0006},
+            {"type": "way", "id": 105, "nodes": [30, 31, 32, 33, 30]},
+            {"type": "way", "id": 106, "nodes": [34, 35, 36, 37, 34]},
+            {
+                "type": "relation",
+                "id": 300,
+                "members": [
+                    {"type": "way", "ref": 105, "role": "outer"},
+                    {"type": "way", "ref": 106, "role": "inner"},
+                ],
+                "tags": {"type": "multipolygon", "building": "yes"},
+            },
+        ],
+    },
+)
+
+
+def test_parse_osm_rels_inner_ring_cut_from_outer():
+    ways = _ways_from_json(_COURTYARD_JSON)
+    courtyard_center = ways[106].line.centroid
+    # Sanity: before relation parsing the outer polygon is solid.
+    assert ways[105].line.contains(courtyard_center)
+
+    parse_osm_rels(_api().parse_json(_COURTYARD_JSON), ways)
+
+    outer = ways[105]
+    # A point inside the courtyard is NOT contained in the merged geometry.
+    assert not outer.line.contains(courtyard_center)
+    assert len(outer.line.interiors) == 1
+    # in_out labels stay available for display.
+    assert outer.in_out == "outer"
+    assert ways[106].in_out == "inner"
+
+
+# ── parse_osm_rels: merged members not classified twice ─────────────────────
+
+
+# Two barrier-tagged member ways that merge into one relation way. Before the
+# fix the consumed members stayed in the ways dict and separate_ways emitted
+# the barrier geometry twice (members + merged way).
+_TAGGED_MEMBER_REL_JSON = json.dumps(
+    {
+        "version": 0.6,
+        "elements": [
+            {"type": "node", "id": 40, "lat": _LAT, "lon": _LON},
+            {"type": "node", "id": 41, "lat": _LAT + 0.001, "lon": _LON},
+            {"type": "node", "id": 42, "lat": _LAT + 0.001, "lon": _LON + 0.001},
+            {
+                "type": "way",
+                "id": 107,
+                "nodes": [40, 41],
+                "tags": {"barrier": "wall"},
+            },
+            {
+                "type": "way",
+                "id": 108,
+                "nodes": [41, 42],
+                "tags": {"barrier": "wall"},
+            },
+            {
+                "type": "relation",
+                "id": 301,
+                "members": [
+                    {"type": "way", "ref": 107, "role": "outer"},
+                    {"type": "way", "ref": 108, "role": "outer"},
+                ],
+                "tags": {"type": "multipolygon"},
+            },
+        ],
+    },
+)
+
+
+def test_parse_osm_rels_merged_members_not_classified_twice():
+    ways = _ways_from_json(_TAGGED_MEMBER_REL_JSON)
+    parse_osm_rels(_api().parse_json(_TAGGED_MEMBER_REL_JSON), ways)
+
+    _, _, barriers = separate_ways(ways, {"barrier": ["*"]}, {}, {})
+
+    # Only the merged relation way remains — no duplicated member geometry.
+    assert len(barriers) == 1
+    assert barriers[0].id < 0
+
+
+# ── parse_osm_ways: degenerate ways are skipped ─────────────────────────────
+
+
+_DEGENERATE_WAYS_JSON = json.dumps(
+    {
+        "version": 0.6,
+        "elements": [
+            {"type": "node", "id": 50, "lat": _LAT, "lon": _LON},
+            {"type": "node", "id": 51, "lat": _LAT + 0.001, "lon": _LON},
+            # 1-node way: LineString would raise
+            {"type": "way", "id": 110, "nodes": [50], "tags": {"highway": "footway"}},
+            # closed 3-coordinate way [a, b, a]: Polygon would raise
+            {"type": "way", "id": 111, "nodes": [50, 51, 50], "tags": {"barrier": "wall"}},
+            # valid way that must survive the degenerate ones
+            {"type": "way", "id": 112, "nodes": [50, 51], "tags": {"highway": "footway"}},
+        ],
+    },
+)
+
+
+def test_parse_osm_ways_skips_degenerate_ways(caplog):
+    data = _api().parse_json(_DEGENERATE_WAYS_JSON)
+    with caplog.at_level(logging.WARNING, logger="map_data.utils.parsing"):
+        ways = parse_osm_ways(data, {})
+
+    assert 110 not in ways  # 1-node way skipped
+    assert 111 not in ways  # [a, b, a] closed way skipped
+    assert 112 in ways  # valid way still parsed
+    assert ways[112].line.geom_type == "LineString"
+    assert caplog.text.count("Skipping degenerate way") == 2
+
+
 # ── Way.to_pcd_points: cache invalidation ───────────────────────────────────
 
 
@@ -338,6 +474,30 @@ def test_to_pcd_points_cache_invalidated_on_filled_change():
 
 
 # ── parse_gpx_file: empty GPX ────────────────────────────────────────────────
+
+
+def test_parse_gpx_file_zone_boundary_single_zone(tmp_path):
+    """
+    A path crossing a UTM zone boundary (18 deg E splits zones 33/34) must be
+    converted entirely in the first waypoint's zone. Per-point natural-zone
+    conversion would put the second point ~400 km away in easting.
+    """
+    gpx_content = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">\n'
+        '  <wpt lat="50.0" lon="17.999"></wpt>\n'
+        '  <wpt lat="50.0" lon="18.001"></wpt>\n'
+        "</gpx>\n"
+    )
+    gpx_path = tmp_path / "zone_boundary.gpx"
+    gpx_path.write_text(gpx_content)
+
+    waypoints, zone_num, zone_let = parse_gpx_file(str(gpx_path))
+
+    assert zone_num == 33
+    assert zone_let == "U"
+    # ~0.002 deg of longitude at lat 50 is ~140 m, not ~400 km.
+    assert abs(waypoints[1][0] - waypoints[0][0]) < 1000
 
 
 def test_parse_gpx_file_empty_returns_empty_list(tmp_path):

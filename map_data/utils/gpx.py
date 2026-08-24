@@ -58,7 +58,11 @@ def parse_gpx_file(gpx_file: str) -> tuple[np.ndarray, int, str] | list:
                 "lon": waypoint.longitude,
                 "ele": waypoint.elevation or 0,
             }
-            waypoints.append(convert_waypoint(point))
+            if zone_num is None:
+                # Anchor the whole path in the first waypoint's UTM zone so a
+                # route crossing a zone boundary stays in one coordinate frame.
+                zone_num, zone_let = utm.from_latlon(point["lat"], point["lon"])[2:]
+            waypoints.append(convert_waypoint(point, zone_num, zone_let))
     except Exception:
         logger.exception("Error parsing GPX file")
         return []
@@ -67,8 +71,8 @@ def parse_gpx_file(gpx_file: str) -> tuple[np.ndarray, int, str] | list:
         return []
     else:
         logger.info("Parsed %s waypoints from GPX file.", len(waypoints))
-        zone_num, zone_let = utm.from_latlon(gpx_points[0].latitude, gpx_points[0].longitude)[2:]
 
+    assert zone_num is not None and zone_let is not None  # set with the first waypoint
     return np.array(waypoints), zone_num, zone_let
 
 
@@ -85,7 +89,11 @@ def parse_yaml_file(yaml_file: str) -> tuple[np.ndarray, int, str] | list:
                 point["ele"] = waypoint["elevation"]
             else:
                 point["ele"] = 0
-            waypoints.append(convert_waypoint(point))
+            if zone_num is None:
+                # Anchor the whole path in the first waypoint's UTM zone so a
+                # route crossing a zone boundary stays in one coordinate frame.
+                zone_num, zone_let = utm.from_latlon(point["lat"], point["lon"])[2:]
+            waypoints.append(convert_waypoint(point, zone_num, zone_let))
     except Exception:
         logger.exception("Error parsing YAML file")
         return []
@@ -94,16 +102,26 @@ def parse_yaml_file(yaml_file: str) -> tuple[np.ndarray, int, str] | list:
         return []
     else:
         logger.info("Parsed %s waypoints from YAML file.", len(waypoints))
-        zone_num, zone_let = utm.from_latlon(
-            file_waypoints[0]["latitude"],
-            file_waypoints[0]["longitude"],
-        )[2:]
 
+    assert zone_num is not None and zone_let is not None  # set with the first waypoint
     return np.array(waypoints), zone_num, zone_let
 
 
-def convert_waypoint(point: dict[str, float]) -> tuple[float, float, float]:
-    utm_point = utm.from_latlon(point["lat"], point["lon"])[:2]
+def convert_waypoint(
+    point: dict[str, float],
+    zone_number: int | None = None,
+    zone_letter: str | None = None,
+) -> tuple[float, float, float]:
+    """
+    Convert a lat/lon point to UTM, optionally forced into a given zone so
+    every point of a path shares the zone reported for the whole array.
+    """
+    utm_point = utm.from_latlon(
+        point["lat"],
+        point["lon"],
+        force_zone_number=zone_number,
+        force_zone_letter=zone_letter,
+    )[:2]
     return (*utm_point, point.get("ele", 0))
 
 

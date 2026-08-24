@@ -1,11 +1,14 @@
+import threading
 import types
 
 import numpy as np
+import pytest
 import utm
 from shapely.geometry import LineString, MultiPolygon, Polygon
 
 from map_data.utils.way import Way
 from map_data.viewer.helpers import (
+    annotation_store,
     apply_node_position_overrides,
     geojson_geom_to_utm,
     geom_to_geojson,
@@ -284,3 +287,50 @@ def test_migrate_change_log_tag_overrides_tracked():
     tag_entries = [e for e in store["change_log"] if e.get("type") == "tag"]
     assert len(tag_entries) == 1
     assert tag_entries[0]["id"] == 10
+
+
+# ── annotation_store context manager ──────────────────────────────────────────
+
+
+def test_annotation_store_saves_on_normal_exit(tmp_path):
+    path = str(tmp_path / "store.json")
+    with annotation_store(path) as store:
+        store["annotations"].append({"id": "abc"})
+    loaded = load_annotations(path)
+    assert [a["id"] for a in loaded["annotations"]] == ["abc"]
+
+
+def test_annotation_store_no_save_on_exception(tmp_path):
+    path = str(tmp_path / "store.json")
+    with annotation_store(path) as store:
+        store["annotations"].append({"id": "keep"})
+    with pytest.raises(RuntimeError), annotation_store(path) as store:
+        store["annotations"].append({"id": "discard"})
+        raise RuntimeError("boom")
+    loaded = load_annotations(path)
+    assert [a["id"] for a in loaded["annotations"]] == ["keep"]
+
+
+def test_annotation_store_concurrent_writers_no_lost_updates(tmp_path):
+    # Without the per-path lock held across the whole load -> mutate -> save
+    # cycle, concurrent read-modify-write sequences interleave and silently
+    # drop each other's appends. All writes must survive.
+    path = str(tmp_path / "store.json")
+    n_threads, per_thread = 8, 10
+    barrier = threading.Barrier(n_threads)
+
+    def worker(tid):
+        barrier.wait()
+        for i in range(per_thread):
+            with annotation_store(path) as store:
+                store["annotations"].append({"id": f"{tid}-{i}"})
+
+    threads = [threading.Thread(target=worker, args=(t,)) for t in range(n_threads)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    ids = [a["id"] for a in load_annotations(path)["annotations"]]
+    assert len(ids) == n_threads * per_thread
+    assert len(set(ids)) == n_threads * per_thread

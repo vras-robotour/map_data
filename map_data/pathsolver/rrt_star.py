@@ -132,6 +132,9 @@ class RRTStar:
         self.nodes = [self.start]
         self.parent: dict[int, int | None] = {0: None}
         self.cost = {0: 0.0}
+        # Children index (inverse of `parent`), needed to propagate cost
+        # changes to descendants when a node is rewired.
+        self._children: dict[int, set[int]] = {0: set()}
 
         self._nodes_buf = np.empty((max_iter + 2, 2), dtype=np.float64)
         self._nodes_buf[0] = self.start
@@ -267,6 +270,33 @@ class RRTStar:
         ix = np.clip(ix, 0, self.grid_shape[1] - 1)
         iy = np.clip(iy, 0, self.grid_shape[0] - 1)
         return float(self.grid[iy, ix])
+
+    def _set_parent(self, idx: int, parent_idx: int, new_cost: float) -> None:
+        """
+        Attach node *idx* to *parent_idx* with path cost *new_cost*.
+
+        Keeps the tree bookkeeping consistent: the children index is updated,
+        and when *idx* already had a cost (i.e. this is a rewire) the cost
+        change is propagated to all of its descendants so their cached costs
+        never go stale.
+        """
+        old_parent = self.parent.get(idx)
+        if old_parent is not None:
+            self._children[old_parent].discard(idx)
+        self.parent[idx] = parent_idx
+        self._children.setdefault(parent_idx, set()).add(idx)
+        children = self._children.setdefault(idx, set())
+
+        old_cost = self.cost.get(idx)
+        self.cost[idx] = new_cost
+        if old_cost is not None and children:
+            delta = new_cost - old_cost
+            if delta != 0.0:
+                stack = list(children)
+                while stack:
+                    d = stack.pop()
+                    self.cost[d] += delta
+                    stack.extend(self._children.get(d, ()))
 
     def _sample_informed(self) -> np.ndarray:
         """
@@ -444,6 +474,12 @@ class RRTStar:
             if _is_cancelled(self.transfer_id):
                 return None
 
+            # Keep the informed-sampling ellipse in sync with the goal's true
+            # cost: rewires (direct or propagated) may have improved it since
+            # the goal-connection block last ran.
+            if goal_idx is not None:
+                self._best_cost = self.cost.get(goal_idx, float("inf"))
+
             rand_point = self.goal if random.random() < GOAL_SAMPLE_BIAS else self._sample_point()
             nearest_idx = self._nearest_node(rand_point)
             new_point = self._steer(self.nodes[nearest_idx], rand_point)
@@ -479,8 +515,7 @@ class RRTStar:
                         min_cost = c
                         min_parent = idx
 
-            self.parent[new_idx] = min_parent
-            self.cost[new_idx] = min_cost
+            self._set_parent(new_idx, min_parent, min_cost)
 
             # Rewire
             for idx in near_indices:
@@ -490,8 +525,7 @@ class RRTStar:
                 if not col:
                     new_c = self.cost[new_idx] + sc
                     if new_c < self.cost[idx]:
-                        self.parent[idx] = new_idx
-                        self.cost[idx] = new_c
+                        self._set_parent(idx, new_idx, new_c)
 
             if np.linalg.norm(new_point - self.goal) < self.goal_tolerance:
                 col, sc = self._segment_cost(new_point, self.goal)
@@ -502,14 +536,16 @@ class RRTStar:
                         self.nodes.append(self.goal)
                         self._nodes_buf[goal_idx] = self.goal
                     if new_goal_cost < self.cost.get(goal_idx, float("inf")):
-                        self.parent[goal_idx] = new_idx
-                        self.cost[goal_idx] = new_goal_cost
+                        self._set_parent(goal_idx, new_idx, new_goal_cost)
                         self._best_cost = new_goal_cost
                     if not self.improve_after_goal:
                         path = self._reconstruct_path(goal_idx)
                         return np.array(path)
 
         if goal_idx is not None:
+            # Final sync: rewires in the last iteration may have improved the
+            # goal's cost after the loop-top sync last ran.
+            self._best_cost = self.cost.get(goal_idx, float("inf"))
             path = self._reconstruct_path(goal_idx)
             return np.array(path)
         return None

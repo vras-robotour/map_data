@@ -70,4 +70,5 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run tests
-        run: pytest tests/ --cov=map_data --cov-report=term-missing
+        # Coverage flags come from [tool.pytest.ini_options] in pyproject.toml
+        run: pytest

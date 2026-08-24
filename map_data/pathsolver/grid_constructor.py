@@ -113,12 +113,14 @@ class PathGrid:
         """
         Build the flat point representation of the grid, with no costs yet.
 
-        Cell centers are generated with ``np.arange(low, high, cell_size)``
-        along each axis, so the grid covers ``[low, high)`` — the *high*
-        corner itself is excluded, and (as with any float ``arange``) the
-        exact point count can be off by one cell near the upper edge due to
-        floating-point rounding. Points are laid out row-major with *x*
-        varying fastest (`numpy.meshgrid` default ``"xy"`` indexing).
+        Cell centers are generated at ``low + (i + 0.5) * cell_size`` along
+        each axis (via ``np.arange(low, high, cell_size) + cell_size / 2``),
+        so each point sits at the center of its cell and the grid covers
+        ``[low, high)`` — the *high* corner itself is excluded, and (as with
+        any float ``arange``) the exact point count can be off by one cell
+        near the upper edge due to floating-point rounding. Points are laid
+        out row-major with *x* varying fastest (`numpy.meshgrid` default
+        ``"xy"`` indexing).
 
         Returns
         -------
@@ -128,8 +130,9 @@ class PathGrid:
             :meth:`fill`).
 
         """
-        xs = np.arange(self.low[0], self.high[0], self.cell_size)
-        ys = np.arange(self.low[1], self.high[1], self.cell_size)
+        half = self.cell_size / 2.0
+        xs = np.arange(self.low[0], self.high[0], self.cell_size) + half
+        ys = np.arange(self.low[1], self.high[1], self.cell_size) + half
         # grid is (N, 3) where columns are [x, y, 0]
         return np.pad(np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2), ((0, 0), (0, 1)))
 
@@ -400,14 +403,16 @@ class PathGrid:
             if ix_min > ix_max or iy_min > iy_max:
                 continue
 
+            # Sample each candidate cell at its center, matching the cell-center
+            # convention used by create_empty_grid and the planners.
             x = np.linspace(
-                ix_min * self.cell_size + self.low[0],
-                ix_max * self.cell_size + self.low[0],
+                (ix_min + 0.5) * self.cell_size + self.low[0],
+                (ix_max + 0.5) * self.cell_size + self.low[0],
                 ix_max - ix_min + 1,
             )
             y = np.linspace(
-                iy_min * self.cell_size + self.low[1],
-                iy_max * self.cell_size + self.low[1],
+                (iy_min + 0.5) * self.cell_size + self.low[1],
+                (iy_max + 0.5) * self.cell_size + self.low[1],
                 iy_max - iy_min + 1,
             )
             xv, yv = np.meshgrid(x, y)

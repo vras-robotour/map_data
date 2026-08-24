@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "map_data"
-version = "1.2.1"
+version = "1.3.0"
 # requires-python is intentionally NOT declared: colcon's ament_python build
 # parses the setup() dump with ast.literal_eval, which chokes on the
 # SpecifierSet object it produces. The Python 3.12+ floor is enforced by CI
@@ -36,6 +36,12 @@ dev = [
     "mkdocs-material",
     "mkdocstrings[python]",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Keep local runs identical to CI: coverage flags live here, not in the
+# workflow, so a plain `pytest` measures the same thing everywhere.
+addopts = "--cov=map_data --cov-report=term-missing"
 
 [tool.ruff]
 line-length = 100

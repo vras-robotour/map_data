@@ -5,8 +5,11 @@ This module provides the MapData class which orchestrates downloading,
 caching, and parsing OpenStreetMap data for use in path planning.
 """
 
+import contextlib
 import json
 import logging
+import os
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -113,6 +116,11 @@ class MapData:
         current_robot_position : np.ndarray, optional
             If provided, prepended to the waypoint array so the robot's
             current position is included in the bounding box calculation.
+            Accepts a single ``(2,)``/``(3,)`` position or an ``(M, 2)``/
+            ``(M, 3)`` array. The column count is reconciled with the
+            waypoints: a missing elevation column is padded with ``0``
+            (matching the GPX/YAML parsers' default), a superfluous one is
+            dropped; any other shape raises :class:`ValueError`.
         flip : bool
             If ``True``, reverse the order of the parsed waypoints.
 
@@ -156,7 +164,24 @@ class MapData:
             self.waypoints = np.flip(self.waypoints, 0)
 
         if current_robot_position is not None:
-            self.waypoints = np.concatenate([current_robot_position, self.waypoints])
+            position = np.atleast_2d(np.asarray(current_robot_position, dtype=float))
+            n_cols = self.waypoints.shape[1]
+            if position.shape[1] == n_cols:
+                pass
+            elif position.shape[1] == 2 and n_cols == 3:
+                # Waypoints carry an elevation column (GPX/YAML paths default
+                # missing elevations to 0) — pad the position the same way.
+                position = np.column_stack([position, np.zeros(len(position))])
+            elif position.shape[1] == 3 and n_cols == 2:
+                position = position[:, :2]
+            else:
+                msg = (
+                    f"current_robot_position has {position.shape[1]} column(s); "
+                    f"expected 2 (easting, northing) or 3 (easting, northing, "
+                    f"elevation) to match waypoints with {n_cols} column(s)"
+                )
+                raise ValueError(msg)
+            self.waypoints = np.concatenate([position, self.waypoints])
 
         _margin = grid_margin if grid_margin is not None else GRID_MARGIN
         self.max_x = float(np.max(self.waypoints[:, 0]) + _margin)
@@ -245,7 +270,9 @@ class MapData:
 
     @staticmethod
     def _csv_to_dict(path: str | Path) -> dict[str, list[str]]:
-        arr = np.genfromtxt(path, dtype=str, delimiter=",")
+        # atleast_2d: for a single-row CSV genfromtxt returns a 1-D array,
+        # whose "rows" would iterate as individual strings (characters).
+        arr = np.atleast_2d(np.genfromtxt(path, dtype=str, delimiter=","))
         result: dict[str, list[str]] = {}
         for row in arr:
             result.setdefault(row[0], []).append(row[1])
@@ -270,8 +297,18 @@ class MapData:
             "raw": raw,
         }
         try:
-            with path.open("w", encoding="utf-8") as f:
-                json.dump(cache_data, f)
+            # Atomic write: dump to a temp file next to the target, then
+            # replace it, so a crash or full disk mid-dump cannot truncate a
+            # previously good cache file.
+            fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(cache_data, f)
+                os.replace(tmp, path)
+            except BaseException:
+                with contextlib.suppress(OSError):
+                    os.unlink(tmp)
+                raise
             logger.info("Saved OSM response cache to %s", path)
         except (OSError, TypeError) as e:
             logger.warning("Could not save OSM cache: %s", e)
@@ -333,11 +370,15 @@ class MapData:
         if use_cache:
             cached_raw = self._load_osm_cache()
             if cached_raw is not None:
-                result = client.api.parse_json(cached_raw)
-                self.osm_ways_data = result
-                self.osm_rels_data = result
-                self.osm_nodes_data = result
-                return
+                try:
+                    result = client.api.parse_json(cached_raw)
+                except (overpy.exception.OverPyException, json.JSONDecodeError):
+                    logger.warning("Cached OSM response is invalid. Re-querying.")
+                else:
+                    self.osm_ways_data = result
+                    self.osm_rels_data = result
+                    self.osm_nodes_data = result
+                    return
 
         bbox = f"{self.min_lat},{self.min_long},{self.max_lat},{self.max_long}"
         # Server-side timeout stays comfortably below OverpassClient's HTTP
@@ -357,7 +398,15 @@ class MapData:
             logger.error("Overpass query failed.")
             return
 
-        result = client.api.parse_json(raw)
+        # query_raw validates 200 bodies, but stay defensive: a malformed
+        # response that slips through must not kill the run with an
+        # uncaught overpy/json traceback.
+        try:
+            result = client.api.parse_json(raw)
+        except (overpy.exception.OverPyException, json.JSONDecodeError):
+            logger.exception("Overpass returned an unparseable response.")
+            return
+
         self.osm_ways_data = result
         self.osm_rels_data = result
         self.osm_nodes_data = result
