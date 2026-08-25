@@ -2502,6 +2502,7 @@ def get_merged_mapdata(filename: str) -> tuple[MapData | None, dict[str, Any] | 
 
     ann_id = -1
     node_id = -1
+    ann_lines: list[tuple[Way, Any]] = []  # annotated path ways with their centre lines
     if not hasattr(md, "nodes_cache") or md.nodes_cache is None:
         md.nodes_cache = {}
     for ann in store.get("annotations", []):
@@ -2535,6 +2536,7 @@ def get_merged_mapdata(filename: str) -> tuple[MapData | None, dict[str, Any] | 
                     node_id -= 1
                 w.line = geom.buffer(width_m / 2)
                 w.is_area = True
+                ann_lines.append((w, geom))
             (md.roads_list if w.is_road() else md.footways_list).append(w)
         else:
             w.tags = {"barrier": props.get("barrier", "wall")}
@@ -2542,6 +2544,13 @@ def get_merged_mapdata(filename: str) -> tuple[MapData | None, dict[str, Any] | 
                 if k != "barrier":
                     w.tags[k] = str(v)
             md.barriers_list.append(w)
+
+    # Annotated paths share no OSM node ids with the map, so node-based crossroad
+    # detection cannot see them; add crossroads where they cross or touch other ways.
+    if ann_lines:
+        md.crossroads_list = list(md.crossroads_list) + MapData.geometric_intersections(
+            ann_lines, list(md.footways_list) + list(md.roads_list)
+        )
 
     return md, store
 

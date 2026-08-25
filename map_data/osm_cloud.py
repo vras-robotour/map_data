@@ -75,6 +75,10 @@ class OSMCloud(Node):
             "publish_intersections",
             False,
         ).value
+        # Publishers are latched (transient local): late subscribers receive the last
+        # message, so a periodic re-publish of the (large) grid cloud is not needed.
+        # Set > 0 to additionally re-publish every N seconds.
+        self.republish_period: float = self.declare_parameter("republish_period", 0.0).value
 
         # Topic parameters
         self.grid_topic: str = self.declare_parameter("grid_topic", "grid").value
@@ -193,7 +197,9 @@ class OSMCloud(Node):
         if self.publish_intersections:
             self.poses, self.markers = self.get_intersections()
 
-        self.create_timer(10.0, self.publish_cb)
+        self.publish_cb()
+        if self.republish_period > 0:
+            self.create_timer(self.republish_period, self.publish_cb)
         self.get_logger().info("Initialized OSM cloud")
 
     def parameter_callback(self, params: list[rclpy.Parameter]) -> SetParametersResult:
@@ -245,6 +251,9 @@ class OSMCloud(Node):
                 self.get_logger().error(f"Failed to rebuild intersections: {e}")
                 return SetParametersResult(successful=False, reason=str(e))
 
+        if rebuild_cloud or rebuild_intersections:
+            self.publish_cb()
+
         return SetParametersResult(successful=True)
 
     def publish_cb(self) -> None:
@@ -262,7 +271,7 @@ class OSMCloud(Node):
             self.pub_poses.publish(self.poses)
             self.pub_markers.publish(self.markers)
 
-        self.get_logger().info("Published OSM data")
+        self.get_logger().info("Published OSM data", throttle_duration_sec=60.0)
 
     def get_utm_to_local(self) -> None:
         """

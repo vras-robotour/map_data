@@ -507,6 +507,73 @@ class MapData:
                 )
         return crossroads
 
+    @staticmethod
+    def geometric_intersections(
+        lines: list[tuple[Way, geometry.LineString]],
+        others: list[Way],
+        touch_tolerance: float = 1.0,
+        radius: float = 1.5,
+    ) -> list[Way]:
+        """
+        Detect crossroads geometrically for ways that share no OSM node ids.
+
+        Used for manually annotated paths: a crossroad is created wherever an
+        annotated centre line crosses another way, or where one of its endpoints
+        lies within ``touch_tolerance`` metres of another way (a T-junction).
+
+        Parameters
+        ----------
+        lines : list of (Way, LineString)
+            Annotated ways with their (unbuffered) centre lines, in UTM.
+        others : list of Way
+            Ways to test against (the annotated way itself is skipped).
+        touch_tolerance : float
+            Endpoint-to-way distance (m) that still counts as touching.
+        radius : float
+            Buffer radius (m) of the resulting crossroad polygons.
+
+        Returns
+        -------
+        list of Way
+            Crossroad ways (``type: annotation_intersection``) with negative ids.
+        """
+        crossroads: list[Way] = []
+        seen: list[geometry.Point] = []
+        next_id = -1_000_000
+
+        def add(pt: geometry.Point, count: int) -> None:
+            nonlocal next_id
+            if any(pt.distance(q) < radius for q in seen):
+                return
+            seen.append(pt)
+            crossroads.append(
+                Way(
+                    id=next_id,
+                    is_area=True,
+                    tags={"type": "annotation_intersection", "count": str(count)},
+                    line=pt.buffer(radius),
+                ),
+            )
+            next_id -= 1
+
+        for way, line in lines:
+            if line is None or line.is_empty or line.geom_type != "LineString":
+                continue
+            ends = [geometry.Point(line.coords[0]), geometry.Point(line.coords[-1])]
+            for other in others:
+                if other is way or other.line is None or other.line.is_empty:
+                    continue
+                inter = line.intersection(other.line)
+                if not inter.is_empty:
+                    geoms = getattr(inter, "geoms", [inter])
+                    for g in geoms:
+                        add(g.representative_point(), 2)
+                    continue
+                for end in ends:
+                    if end.distance(other.line) <= touch_tolerance:
+                        add(end, 2)
+        return crossroads
+
     # ------------------------------------------------------------------
     # High-level API
     # ------------------------------------------------------------------

@@ -143,6 +143,7 @@ topic (cost-aware footway grid) and optionally publishes intersections as a
 | `grid_min` | `[0.0, 0.0]` | Lower bounds of the local-frame grid (m). `[0, 0]` triggers auto-calc. |
 | `auto_utm` | `false` | Alias for `transform_mode: auto` |
 | `publish_intersections` | `true` | Whether to publish footway intersections |
+| `republish_period` | `0.0` | Publishers are latched and publish once at start-up (and after parameter changes); set > 0 s to additionally re-publish periodically |
 
 ### Launching
 

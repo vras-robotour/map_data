@@ -12,7 +12,7 @@ The toolbar at the top of the page provides the following tools:
 | **VIEW** | `v` | Inspect map features. Click any object to see its OSM tags and properties in the sidebar. |
 | **EDIT** | `e` | Select and reshape existing objects and custom annotations. |
 | **+ OBS** | `a` | Draw rectangles, polygons, or circles to add manual obstacle annotations. |
-| **+ PATH** | `p` | Draw custom paths or footways as line annotations. |
+| **+ PATH** | `p` | Draw custom paths or footways as line annotations. Where an annotated path crosses or ends on another way, a crossroad is created (exported and published by `osm_cloud`). |
 | **DEL** | `d` | Remove objects and custom annotations by clicking on them. |
 | **FETCH** | `f` | Draw a bounding box to download and parse a new OSM area on the fly. |
 | **GPX** | `g` | Upload a `.gpx` file to create a new map from a GPS track. |

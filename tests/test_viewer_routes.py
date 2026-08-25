@@ -1072,3 +1072,58 @@ def test_cancel_replan_missing_transfer_id_rejected(app_client):
     assert resp.status_code == 400
     assert resp.get_json()["success"] is False
     mock_cancel.assert_not_called()
+
+
+# ── annotated paths create crossroads ─────────────────────────────────────────
+
+
+def _post_path_annotation(client, filename, coords_lonlat):
+    body = {
+        "type": "path",
+        "geometry": {"type": "LineString", "coordinates": coords_lonlat},
+        "properties": {"highway": "footway", "width": 1.5},
+    }
+    resp = client.post(
+        f"/api/annotations?file={filename}",
+        data=json.dumps(body),
+        content_type="application/json",
+    )
+    assert resp.status_code == 201
+
+
+def test_annotated_path_crossing_footway_creates_crossroad(app_client_with_file):
+    client, _, filename = app_client_with_file
+    # The fixture footway runs from (e, n) to (e+50, n+50); draw a path across it.
+    e, n, zn, zl = utm.from_latlon(50.0, 14.0)
+    a = utm.to_latlon(e + 50, n, zn, zl)
+    b = utm.to_latlon(e, n + 50, zn, zl)
+    _post_path_annotation(client, filename, [[a[1], a[0]], [b[1], b[0]]])
+
+    resp = client.get(f"/api/export?file={filename}")
+    assert resp.status_code == 200
+    crossroads = resp.get_json()["crossroads"]
+    assert len(crossroads) == 1
+    assert crossroads[0]["tags"]["type"] == "annotation_intersection"
+
+
+def test_annotated_path_touching_footway_creates_crossroad(app_client_with_file):
+    client, _, filename = app_client_with_file
+    # T-junction: the annotated path ends 0.5 m from the footway's midpoint.
+    e, n, zn, zl = utm.from_latlon(50.0, 14.0)
+    end = utm.to_latlon(e + 25 + 0.35, n + 25 - 0.35, zn, zl)
+    far = utm.to_latlon(e + 60, n - 10, zn, zl)
+    _post_path_annotation(client, filename, [[far[1], far[0]], [end[1], end[0]]])
+
+    resp = client.get(f"/api/export?file={filename}")
+    assert len(resp.get_json()["crossroads"]) == 1
+
+
+def test_annotated_path_far_from_footway_creates_no_crossroad(app_client_with_file):
+    client, _, filename = app_client_with_file
+    e, n, zn, zl = utm.from_latlon(50.0, 14.0)
+    a = utm.to_latlon(e + 200, n, zn, zl)
+    b = utm.to_latlon(e + 250, n + 50, zn, zl)
+    _post_path_annotation(client, filename, [[a[1], a[0]], [b[1], b[0]]])
+
+    resp = client.get(f"/api/export?file={filename}")
+    assert resp.get_json()["crossroads"] == []

@@ -282,12 +282,22 @@ class TestOSMCloudInit:
         assert node_with_intersections.intersections_topic in topics
         assert node_with_intersections.intersection_markers_topic in topics
 
-    def test_construction_registers_publish_timer(self):
+    def test_construction_publishes_once_and_registers_no_timer_by_default(self):
         node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "auto_utm": True})
+
+        # Publishers are latched; the cloud is published once at construction.
+        grid_pub = dict(node.created_publishers)[node.grid_topic]
+        assert grid_pub.publish.call_count == 1
+        assert node.created_timers == []
+
+    def test_construction_registers_publish_timer_when_republish_period_set(self):
+        node = _build_osm_cloud(
+            {"mapdata_file": "fake.mapdata", "auto_utm": True, "republish_period": 7.5}
+        )
 
         assert len(node.created_timers) == 1
         period, callback, _ = node.created_timers[0]
-        assert period == pytest.approx(10.0)
+        assert period == pytest.approx(7.5)
         assert callback == node.publish_cb
 
     def test_construction_builds_grid_cloud_from_map_data(self):
