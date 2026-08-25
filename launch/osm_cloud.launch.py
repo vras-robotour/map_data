@@ -67,6 +67,18 @@ def launch_setup(context, *args, **kwargs):
             if potential_path.exists():
                 osm_grid_params = str(potential_path)
 
+    # Frame / placement overrides: only forwarded when set, so the yaml values apply
+    # otherwise (later parameter sources win in ROS 2).
+    frame_overrides = {}
+    for name, value in (
+        ("local_frame", LaunchConfiguration("local_frame").perform(context)),
+        ("utm_frame", LaunchConfiguration("utm_frame").perform(context)),
+        ("earth_frame", LaunchConfiguration("earth_frame").perform(context)),
+        ("transform_mode", LaunchConfiguration("transform_mode").perform(context)),
+    ):
+        if value:
+            frame_overrides[name] = value
+
     # Define the osm_cloud node
     osm_cloud_node = Node(
         package="map_data",
@@ -83,6 +95,7 @@ def launch_setup(context, *args, **kwargs):
                 "gpx_file": gpx_file,
                 "auto_utm": publish_static_tf,
                 "grid_topic": LaunchConfiguration("grid_topic"),
+                **frame_overrides,
             },
         ],
     )
@@ -115,7 +128,31 @@ def generate_launch_description():
     publish_static_tf_arg = DeclareLaunchArgument(
         "publish_static_tf",
         default_value="false",
-        description="Whether to publish static transforms for utm and map.",
+        description="Whether to publish static transforms for utm and map "
+        "(selects transform_mode 'auto').",
+    )
+    local_frame_arg = DeclareLaunchArgument(
+        "local_frame",
+        default_value="",
+        description="Frame the grid and intersections are published in "
+        "(empty = value from osm_grid_params, e.g. FP_ENU0).",
+    )
+    utm_frame_arg = DeclareLaunchArgument(
+        "utm_frame",
+        default_value="",
+        description="UTM frame name used by transform_mode 'tf'/'auto' (empty = from yaml).",
+    )
+    earth_frame_arg = DeclareLaunchArgument(
+        "earth_frame",
+        default_value="",
+        description="ECEF frame name used by transform_mode 'geodetic' "
+        "(empty = from yaml, e.g. FP_ECEF).",
+    )
+    transform_mode_arg = DeclareLaunchArgument(
+        "transform_mode",
+        default_value="",
+        description="How map data is placed in local_frame: 'tf', 'auto' or 'geodetic' "
+        "(empty = from yaml).",
     )
     config_file_arg = DeclareLaunchArgument(
         "config_file",
@@ -135,6 +172,10 @@ def generate_launch_description():
             gpx_file_arg,
             grid_topic_arg,
             publish_static_tf_arg,
+            local_frame_arg,
+            utm_frame_arg,
+            earth_frame_arg,
+            transform_mode_arg,
             config_file_arg,
             osm_grid_params_arg,
             OpaqueFunction(function=launch_setup),

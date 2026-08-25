@@ -28,9 +28,14 @@ from tf2_ros import (
 from visualization_msgs.msg import Marker, MarkerArray
 
 import map_data.map_data as md
+from map_data.utils.geodesy import ecef_to_latlon, utm_to_local_via_ecef
 
 CLOUD_COLS = 4
 TOLERANCE = 1e-3
+TRANSFORM_MODES = ("tf", "auto", "geodetic")
+# lookup_transform() does not spin the node, so TF messages only arrive in the
+# spin_once() between attempts; keep the blocking wait short.
+TF_POLL_TIMEOUT = 0.5
 
 
 class OSMCloud(Node):
@@ -40,6 +45,13 @@ class OSMCloud(Node):
         super().__init__("osm_cloud")
         self.utm_frame: str = self.declare_parameter("utm_frame", "utm").value
         self.local_frame: str = self.declare_parameter("local_frame", "map").value
+        self.earth_frame: str = self.declare_parameter("earth_frame", "FP_ECEF").value
+        # How UTM map data is placed in ``local_frame``:
+        #   "tf"       - look up utm_frame -> local_frame in TF (legacy default)
+        #   "auto"     - local frame at the map centre; publishes utm_frame -> local_frame
+        #   "geodetic" - UTM -> lat/lon -> ECEF, then the earth_frame -> local_frame TF
+        #                (exact for GNSS/INS stacks such as Fixposition: FP_ECEF -> FP_ENU0)
+        self.transform_mode: str = self.declare_parameter("transform_mode", "tf").value
         self.utm_to_local_param: list[float] | None = self.declare_parameter(
             "utm_to_local",
             rclpy.Parameter.Type.DOUBLE_ARRAY,
@@ -94,6 +106,7 @@ class OSMCloud(Node):
         self.tf_static_pub = StaticTransformBroadcaster(self)
 
         self.utm_to_local: np.ndarray | None = None
+        self.ecef_to_local: np.ndarray | None = None
         self.poses: PoseArray | None = None
         self.markers: MarkerArray | None = None
 
@@ -107,9 +120,19 @@ class OSMCloud(Node):
             sys.exit(1)
         self.get_logger().info(str(self.map_data))
 
+        if self.transform_mode not in TRANSFORM_MODES:
+            self.get_logger().warn(
+                f"Unknown transform_mode '{self.transform_mode}', falling back to 'tf'"
+            )
+            self.transform_mode = "tf"
+        if self.auto_utm and self.transform_mode == "tf":
+            self.transform_mode = "auto"  # backward-compatible alias
+
         if self.utm_to_local_param is not None:
             self.utm_to_local = np.array(self.utm_to_local_param)
-        elif self.auto_utm:
+        elif self.transform_mode == "geodetic":
+            self.get_ecef_to_local()
+        elif self.transform_mode == "auto":
             self.get_logger().info("Auto-calculating UTM to local transform from map center")
             center_x = (self.map_data.min_x + self.map_data.max_x) / 2
             center_y = (self.map_data.min_y + self.map_data.max_y) / 2
@@ -133,30 +156,33 @@ class OSMCloud(Node):
         else:
             self.get_utm_to_local()
 
-        self.get_logger().info(f"Using UTM to local transform: {self.utm_to_local}")
+        if self.transform_mode == "geodetic":
+            self.get_logger().info(
+                f"Using geodetic placement via {self.earth_frame} -> {self.local_frame}: "
+                f"{self.ecef_to_local}"
+            )
+        else:
+            self.get_logger().info(f"Using UTM to local transform: {self.utm_to_local}")
 
         if all(v == 0.0 for v in self.grid_min) and all(v == 0.0 for v in self.grid_max):
             self.get_logger().info("Auto-calculating grid bounds from map data")
-            # Transform map bounds to local frame
-            bounds_utm = np.array(
-                [
-                    [self.map_data.min_x, self.map_data.min_y, 0.0],
-                    [self.map_data.max_x, self.map_data.max_y, 0.0],
-                ],
-            )
-            # utm_to_local is None only if get_utm_to_local() was interrupted by
-            # rclpy shutdown mid-startup; skip the auto-calc (get_cloud() below
-            # raises a clear error in that case).
-            if self.utm_to_local is None:
+            # Transform all four corners of the UTM bounding box to the local frame
+            # (the local frame may be rotated relative to UTM).
+            xs = (self.map_data.min_x, self.map_data.max_x)
+            ys = (self.map_data.min_y, self.map_data.max_y)
+            corners = {
+                i: np.array([x, y, 0.0]).reshape(3, 1)
+                for i, (x, y) in enumerate((x, y) for x in xs for y in ys)
+            }
+            # The transform is None only if its lookup was interrupted by rclpy
+            # shutdown mid-startup; skip the auto-calc (get_cloud() below raises a
+            # clear error in that case).
+            if not self._transform_ready():
                 self.get_logger().error(
-                    "UTM-to-local transform unavailable; skipping grid-bounds auto-calc"
+                    "Map placement transform unavailable; skipping grid-bounds auto-calc"
                 )
             else:
-                m = self.utm_to_local
-                bounds_local = [
-                    (np.dot(m[:3, :3], p.reshape(3, 1)) + m[:3, 3:]).flatten() for p in bounds_utm
-                ]
-                bounds_arr = np.array(bounds_local)
+                bounds_arr = np.array([p.ravel() for p in self._to_local(corners).values()])
                 self.grid_min = [np.min(bounds_arr[:, 0]), np.min(bounds_arr[:, 1])]
                 self.grid_max = [np.max(bounds_arr[:, 0]), np.max(bounds_arr[:, 1])]
                 self.get_logger().info(
@@ -251,14 +277,75 @@ class OSMCloud(Node):
                     self.local_frame,
                     self.utm_frame,
                     rclpy.time.Time(),
-                    rclpy.duration.Duration(seconds=15.0),
+                    rclpy.duration.Duration(seconds=TF_POLL_TIMEOUT),
                 )
                 self.utm_to_local = numpify(utm_to_local.transform)
                 self.get_logger().info(f"Got UTM to local transform: {self.utm_to_local}")
                 break
             except (TransformException, RuntimeError, TypeError, ValueError) as e:
-                self.get_logger().warning(f"Failed to get UTM to local transform: {e}")
+                self.get_logger().warning(
+                    f"Failed to get UTM to local transform: {e}", throttle_duration_sec=10.0
+                )
                 rclpy.spin_once(self, timeout_sec=1.0)
+
+    def get_ecef_to_local(self) -> None:
+        """
+        Poll for the ``earth_frame -> local_frame`` transform (ECEF to local ENU).
+
+        The result is stored as a 4x4 matrix mapping ECEF points into ``local_frame``.
+        """
+        while rclpy.ok():
+            try:
+                tf_msg = self.tf.lookup_transform(
+                    self.local_frame,
+                    self.earth_frame,
+                    rclpy.time.Time(),
+                    rclpy.duration.Duration(seconds=TF_POLL_TIMEOUT),
+                )
+                self.ecef_to_local = numpify(tf_msg.transform)
+                origin = np.linalg.inv(self.ecef_to_local)[:3, 3]
+                lat, lon, alt = ecef_to_latlon(*origin)
+                self.get_logger().info(
+                    f"Got {self.earth_frame} -> {self.local_frame} transform; "
+                    f"{self.local_frame} origin at lat={lat:.7f} lon={lon:.7f} alt={alt:.1f}"
+                )
+                break
+            except (TransformException, RuntimeError, TypeError, ValueError) as e:
+                self.get_logger().warning(
+                    f"Failed to get {self.earth_frame} -> {self.local_frame} transform: {e}",
+                    throttle_duration_sec=10.0,
+                )
+                rclpy.spin_once(self, timeout_sec=1.0)
+
+    def _transform_ready(self) -> bool:
+        if self.transform_mode == "geodetic":
+            return self.ecef_to_local is not None
+        return self.utm_to_local is not None
+
+    def _to_local(self, points: dict[int, np.ndarray]) -> dict[int, np.ndarray]:
+        """
+        Place UTM points (id -> (3, 1) array) in ``local_frame`` with z set to 0.
+        """
+        if not self._transform_ready():
+            raise RuntimeError(
+                "Map placement transform unavailable; the node was shutting down "
+                "before it could be resolved."
+            )
+        if self.transform_mode != "geodetic":
+            return transform_points(points, self.utm_to_local, 0.0)  # type: ignore[arg-type]
+        if not points:
+            return {}
+        ids = list(points)
+        arr = np.array([points[i].ravel()[:2] for i in ids], dtype=float)
+        local = utm_to_local_via_ecef(
+            arr[:, 0],
+            arr[:, 1],
+            self.map_data.zone_number,
+            self.map_data.zone_letter,
+            self.ecef_to_local,  # type: ignore[arg-type]
+        )
+        local[:, 2] = 0.0
+        return {pid: local[k].reshape(3, 1) for k, pid in enumerate(ids)}
 
     def get_cloud(self) -> PointCloud2:
         """
@@ -270,13 +357,7 @@ class OSMCloud(Node):
             Created point cloud.
 
         """
-        if self.utm_to_local is None:
-            raise RuntimeError(
-                "UTM-to-local transform unavailable; the node was shutting down "
-                "before it could be resolved."
-            )
-        transform = self.utm_to_local
-        points = transform_points(self.map_data.get_points(), transform, 0.0)
+        points = self._to_local(self.map_data.get_points())
         grid = np.pad(
             create_grid(tuple(self.grid_min), tuple(self.grid_max), self.grid_res),
             ((0, 0), (0, 1)),
@@ -316,12 +397,7 @@ class OSMCloud(Node):
             centroid = way.line.centroid  # type: ignore[union-attr]
             points_to_transform[way.id] = np.array([centroid.x, centroid.y, 0.0]).reshape(3, 1)
 
-        if self.utm_to_local is None:
-            raise RuntimeError(
-                "UTM-to-local transform unavailable; the node was shutting down "
-                "before it could be resolved."
-            )
-        transformed_points = transform_points(points_to_transform, self.utm_to_local, 0.0)
+        transformed_points = self._to_local(points_to_transform)
 
         pose_array = PoseArray()
         pose_array.header.frame_id = self.local_frame

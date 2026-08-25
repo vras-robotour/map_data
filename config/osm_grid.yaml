@@ -1,7 +1,14 @@
 osm_cloud:
   ros__parameters:
+    # Frames: the Helhest field stack localises with a Fixposition GNSS/INS unit whose
+    # Earth frame is FP_ECEF and whose fixed local ENU frame is FP_ENU0. In "geodetic"
+    # mode the node converts UTM -> lat/lon -> ECEF and uses the FP_ECEF -> FP_ENU0 TF,
+    # which is exact (a plain UTM translation is off by grid convergence, ~5-8 m/km).
+    # Use transform_mode "tf" with utm_frame/local_frame on stacks that publish a UTM frame.
     utm_frame: "utm"
-    local_frame: "local_utm"
+    local_frame: "FP_ENU0"
+    earth_frame: "FP_ECEF"
+    transform_mode: "geodetic"
     save_mapdata: false
     max_path_dist: 2.5
     neighbor_cost: "linear"
