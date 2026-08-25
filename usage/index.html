@@ -1647,17 +1647,27 @@ topic (cost-aware footway grid) and optionally publishes intersections as a
 <tr>
 <td><code>utm_frame</code></td>
 <td><code>"utm"</code></td>
-<td>TF frame name for UTM coordinates</td>
+<td>TF frame name for UTM coordinates (<code>transform_mode</code> <code>tf</code>/<code>auto</code>)</td>
 </tr>
 <tr>
 <td><code>local_frame</code></td>
 <td><code>"local_utm"</code></td>
-<td>TF frame name for the local robot frame</td>
+<td>TF frame the grid and intersections are published in (<code>FP_ENU0</code> in <code>osm_grid.yaml</code>)</td>
+</tr>
+<tr>
+<td><code>earth_frame</code></td>
+<td><code>"FP_ECEF"</code></td>
+<td>ECEF TF frame used by <code>transform_mode: geodetic</code></td>
+</tr>
+<tr>
+<td><code>transform_mode</code></td>
+<td><code>"tf"</code></td>
+<td><code>tf</code>: look up <code>utm_frame → local_frame</code> in TF; <code>auto</code>: local frame at the map centre; <code>geodetic</code>: UTM → lat/lon → ECEF, then the <code>earth_frame → local_frame</code> TF (exact for GNSS/INS stacks; <code>osm_grid.yaml</code> sets this)</td>
 </tr>
 <tr>
 <td><code>utm_to_local</code></td>
 <td><code>None</code></td>
-<td>4×4 transform matrix; looked up from TF if not set</td>
+<td>4×4 transform matrix; overrides <code>transform_mode</code> if set</td>
 </tr>
 <tr>
 <td><code>mapdata_file</code></td>
@@ -1702,12 +1712,17 @@ topic (cost-aware footway grid) and optionally publishes intersections as a
 <tr>
 <td><code>auto_utm</code></td>
 <td><code>false</code></td>
-<td>Auto-calculate UTM-to-local transform from map center</td>
+<td>Alias for <code>transform_mode: auto</code></td>
 </tr>
 <tr>
 <td><code>publish_intersections</code></td>
 <td><code>true</code></td>
 <td>Whether to publish footway intersections</td>
+</tr>
+<tr>
+<td><code>republish_period</code></td>
+<td><code>0.0</code></td>
+<td>Publishers are latched and publish once at start-up (and after parameter changes); set &gt; 0 s to additionally re-publish periodically</td>
 </tr>
 </tbody>
 </table>
@@ -1750,7 +1765,27 @@ up the required static transforms and enables intersection publishing by default
 <tr>
 <td><code>publish_static_tf</code></td>
 <td><code>false</code></td>
-<td>Whether to publish static transforms for utm/map</td>
+<td>Whether to publish static transforms for utm/map (<code>transform_mode: auto</code>)</td>
+</tr>
+<tr>
+<td><code>local_frame</code></td>
+<td>from yaml</td>
+<td>Override the frame the grid/intersections are published in</td>
+</tr>
+<tr>
+<td><code>utm_frame</code></td>
+<td>from yaml</td>
+<td>Override the UTM frame name</td>
+</tr>
+<tr>
+<td><code>earth_frame</code></td>
+<td>from yaml</td>
+<td>Override the ECEF frame name (<code>geodetic</code> mode)</td>
+</tr>
+<tr>
+<td><code>transform_mode</code></td>
+<td>from yaml</td>
+<td>Override the placement mode (<code>tf</code> / <code>auto</code> / <code>geodetic</code>)</td>
 </tr>
 </tbody>
 </table>
