@@ -2,6 +2,9 @@ const trackerMode = (() => {
     let socket = null;
     let robotMarker = null;
     let robotPathLayer = null;
+    let sequenceLayer = null;
+    let roadPathLayer = null;
+    let goalMarker = null;
     let enabled = false;
 
     // Cached DOM/element references — resolved lazily on first use
@@ -113,18 +116,53 @@ const trackerMode = (() => {
             robotPathLayer = null;
             _lastWaypointKey = null;
         }
+
+        // Waypoint sequence handed to the commander (blue) and the visual road path (cyan)
+        sequenceLayer = updatePolyline(sequenceLayer, data.mission && data.mission.sequence,
+            { color: '#3b82f6', weight: 3, opacity: 0.8, dashArray: '2, 6' });
+        roadPathLayer = updatePolyline(roadPathLayer, data.mission && data.mission.road_path,
+            { color: '#22d3ee', weight: 4, opacity: 0.9 });
+
+        // Current navigation goal
+        const goal = data.position && data.position.goal;
+        if (goal && goal.lat) {
+            if (!goalMarker) {
+                goalMarker = L.circleMarker([goal.lat, goal.lon], {
+                    radius: 7, color: '#f97316', weight: 2, fillColor: '#fb923c', fillOpacity: 0.8
+                }).addTo(map).bindTooltip('Goal');
+            } else {
+                goalMarker.setLatLng([goal.lat, goal.lon]);
+            }
+        } else if (goalMarker) {
+            map.removeLayer(goalMarker);
+            goalMarker = null;
+        }
+    }
+
+    function updatePolyline(layer, pts, style) {
+        if (pts && pts.length > 1) {
+            const latlngs = pts.map(p => [p.lat, p.lon]);
+            if (!layer) return L.polyline(latlngs, style).addTo(map);
+            layer.setLatLngs(latlngs);
+            return layer;
+        }
+        if (layer) map.removeLayer(layer);
+        return null;
     }
 
     function hideRobot() {
         if (robotMarker && map.hasLayer(robotMarker)) map.removeLayer(robotMarker);
-        if (robotPathLayer && map.hasLayer(robotPathLayer)) map.removeLayer(robotPathLayer);
+        [robotPathLayer, sequenceLayer, roadPathLayer, goalMarker].forEach(l => {
+            if (l && map.hasLayer(l)) map.removeLayer(l);
+        });
         _robotSvg = null; // Leaflet recreates the element on the next addTo()
     }
 
     function showRobot() {
         initSocket();
-        if (robotMarker && !map.hasLayer(robotMarker)) robotMarker.addTo(map);
-        if (robotPathLayer && !map.hasLayer(robotPathLayer)) robotPathLayer.addTo(map);
+        [robotMarker, robotPathLayer, sequenceLayer, roadPathLayer, goalMarker].forEach(l => {
+            if (l && !map.hasLayer(l)) l.addTo(map);
+        });
     }
 
     function _initUI(container) {
@@ -133,6 +171,10 @@ const trackerMode = (() => {
         <div id="tsi-row-battery" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
           <span class="text-secondary fw-bold">BATTERY</span>
           <span id="tsi-battery" class="text-light">—</span>
+        </div>
+        <div id="tsi-row-estop" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+          <span class="text-secondary fw-bold">E-STOP</span>
+          <span id="tsi-estop">—</span>
         </div>
         <div id="tsi-row-motors" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
           <span class="text-secondary fw-bold">MOTORS</span>
@@ -162,6 +204,8 @@ const trackerMode = (() => {
         <div class="panel-title mb-1" style="font-size:0.6rem;">NAVIGATION</div>
         <div class="small">
           <div id="tsi-row-nav-state">State: <span id="tsi-nav-state" class="text-info">IDLE</span></div>
+          <div id="tsi-row-follower">Follower: <span id="tsi-follower-state" class="text-info">—</span></div>
+          <div id="tsi-row-diag">Diagnostics: <span id="tsi-diag" class="text-success">—</span></div>
           <div id="tsi-collision" style="display:none">Collision: <span id="tsi-collision-val" class="text-warning"></span></div>
           <div id="tsi-recovery" class="text-danger fw-bold" style="display:none">RECOVERY ACTIVE</div>
           <div id="tsi-teleop" class="text-warning fw-bold" style="display:none">TELEOP ACTIVE</div>
@@ -176,6 +220,8 @@ const trackerMode = (() => {
             sectionHardware: document.getElementById('tsi-section-hardware'),
             rowBattery: document.getElementById('tsi-row-battery'),
             battery: document.getElementById('tsi-battery'),
+            rowEstop: document.getElementById('tsi-row-estop'),
+            estop: document.getElementById('tsi-estop'),
             rowMotors: document.getElementById('tsi-row-motors'),
             motors: document.getElementById('tsi-motors'),
             motorError: document.getElementById('tsi-motor-error'),
@@ -193,6 +239,10 @@ const trackerMode = (() => {
             sectionNavigation: document.getElementById('tsi-section-navigation'),
             rowNavState: document.getElementById('tsi-row-nav-state'),
             navState: document.getElementById('tsi-nav-state'),
+            rowFollower: document.getElementById('tsi-row-follower'),
+            followerState: document.getElementById('tsi-follower-state'),
+            rowDiag: document.getElementById('tsi-row-diag'),
+            diag: document.getElementById('tsi-diag'),
             collision: document.getElementById('tsi-collision'),
             collisionVal: document.getElementById('tsi-collision-val'),
             recovery: document.getElementById('tsi-recovery'),
@@ -219,17 +269,31 @@ const trackerMode = (() => {
         const hasMotors = feat.motors !== false;
         const hasTemp = feat.temp !== false;
         const hasMotorError = feat.motor_error !== false;
+        const hasEstop = feat.estop === true;
 
         _uiRefs.rowBattery.style.display = hasBattery ? '' : 'none';
+        _uiRefs.rowEstop.style.display = hasEstop ? '' : 'none';
         _uiRefs.rowMotors.style.display = hasMotors ? '' : 'none';
         _uiRefs.rowTemp.style.display = hasTemp ? '' : 'none';
-        _uiRefs.sectionHardware.style.display = (hasBattery || hasMotors || hasTemp || hasMotorError) ? '' : 'none';
+        _uiRefs.sectionHardware.style.display = (hasBattery || hasMotors || hasTemp || hasMotorError || hasEstop) ? '' : 'none';
 
         if (hasBattery) {
             const battV = b.voltage != null ? b.voltage : '—';
             const battA = b.current != null ? b.current : '—';
-            _uiRefs.battery.textContent = `${battV} V / ${battA} A`;
-            _uiRefs.battery.className = (b.voltage && b.voltage < 22.0) ? 'text-danger' : 'text-light';
+            const pct = b.percentage != null ? ` (${b.percentage}%)` : '';
+            _uiRefs.battery.textContent = `${battV} V / ${battA} A${pct}`;
+            const low = b.low_voltage != null ? b.low_voltage : 22.0;
+            _uiRefs.battery.className = (b.voltage && b.voltage < low) ? 'text-danger' : 'text-light';
+        }
+
+        if (hasEstop) {
+            if (s.estop_active == null) {
+                _uiRefs.estop.textContent = '—';
+                _uiRefs.estop.className = 'text-secondary';
+            } else {
+                _uiRefs.estop.textContent = s.estop_active ? 'ACTIVE' : 'released';
+                _uiRefs.estop.className = s.estop_active ? 'text-danger fw-bold' : 'text-success';
+            }
         }
 
         if (hasMotors) {
@@ -245,7 +309,12 @@ const trackerMode = (() => {
         }
 
         if (hasTemp) {
-            _uiRefs.temp.textContent = s.teensy_temp != null ? `${s.teensy_temp} °C` : '—';
+            if (s.temp_max) {
+                _uiRefs.temp.textContent = `${s.temp_max.value} °C (${s.temp_max.name})`;
+                _uiRefs.temp.title = Object.entries(s.temperatures || {}).map(([k, v]) => `${k}: ${v} °C`).join('\n');
+            } else {
+                _uiRefs.temp.textContent = s.teensy_temp != null ? `${s.teensy_temp} °C` : '—';
+            }
         }
 
         // Localization section
@@ -283,11 +352,33 @@ const trackerMode = (() => {
         const hasRecovery = feat.recovery !== false;
         const hasTeleop = feat.teleop !== false;
 
+        const hasFollower = feat.follower_state === true;
+        const hasDiag = feat.diagnostics === true;
+
         _uiRefs.rowNavState.style.display = hasNavState ? '' : 'none';
-        _uiRefs.sectionNavigation.style.display = (hasNavState || hasCollision || hasRecovery || hasTeleop) ? '' : 'none';
+        _uiRefs.rowFollower.style.display = hasFollower ? '' : 'none';
+        _uiRefs.rowDiag.style.display = hasDiag ? '' : 'none';
+        _uiRefs.sectionNavigation.style.display = (hasNavState || hasCollision || hasRecovery || hasTeleop || hasFollower || hasDiag) ? '' : 'none';
 
         if (hasNavState) {
             _uiRefs.navState.textContent = s.nav_state || 'IDLE';
+            _uiRefs.navState.className = (s.nav_state === 'STUCK') ? 'text-danger fw-bold' : 'text-info';
+        }
+        if (hasFollower) {
+            _uiRefs.followerState.textContent = s.follower_state || '—';
+            _uiRefs.followerState.className = (s.follower_state || '').startsWith('GPS') ? 'text-warning' : 'text-info';
+        }
+        if (hasDiag) {
+            const d = s.diagnostics;
+            if (!d) {
+                _uiRefs.diag.textContent = '—'; _uiRefs.diag.className = 'text-secondary';
+            } else if (d.errors === 0 && d.warnings === 0) {
+                _uiRefs.diag.textContent = 'OK'; _uiRefs.diag.className = 'text-success';
+            } else {
+                _uiRefs.diag.textContent = `${d.errors} err / ${d.warnings} warn` + (d.worst ? ` — ${d.worst.name}` : '');
+                _uiRefs.diag.className = d.errors ? 'text-danger' : 'text-warning';
+                _uiRefs.diag.title = d.worst ? `${d.worst.name}: ${d.worst.message}` : '';
+            }
         }
 
         if (hasCollision) {

@@ -1,26 +1,62 @@
+# Helhest field stack (Fixposition GNSS/INS + crl_commander, no nav2).
+#
+#   map_data_viewer --ros-args --params-file config/helhest.yaml
+#   ros2 launch map_data osm_cloud.launch.py   (uses config/osm_grid.yaml; the osm_cloud
+#                                               section below only renames topics)
+#
+# Every *_topic can be set to "" to disable the feature and hide its UI row.
+# Topic names and types were verified against the Stromovka bags (2026-08-21).
+
 map_data_tracker:
   ros__parameters:
-    path_topic: "/path"
-    gps_fix_topic: "/gps/fix"
-    gps_filtered_topic: "/gps/filtered"
-    bus_voltage_topic: "/bus_voltage"
-    bus_current_topic: "/bus_current"
-    teensy_temp_topic: "/teensy_temp"
-    odrv_error_topic: "/odrv_error"
-    azimuth_topic: "/gps/azimuth_imu"
-    odom_topic: "/odom_2d"
-    motors_enabled_topic: "/motors_enabled"
-    speed_limit_topic: "/speed_limit"
-    collision_monitor_state_topic: "/collision_monitor_state"
-    recovery_heartbeat_topic: "/recovery/heartbeat"
-    bt_log_topic: "/behavior_tree_log"
-    teleop_topic: "/cmd_vel_teleop"
-    speak_info_topic: "/speak/info"
-    speak_warn_topic: "/speak/warn"
+    # --- geometry: paths/goals may arrive in any TF frame; they are transformed into
+    #     earth_frame (ECEF) and converted to lat/lon exactly. Empty earth_frame falls back
+    #     to the legacy utm_frame path.
+    earth_frame: "FP_ECEF"
+    utm_frame: ""
+
+    # --- position / heading
+    gps_fix_topic: "/fixposition/odometry_llh"       # NavSatFix, status 2 = RTK fixed
+    gps_filtered_topic: ""                           # the Fixposition output is already fused
+    heading_topic: "/fixposition/ypr"                # Vector3Stamped, x = yaw [rad] in FP_ENU0
+    heading_type: "yaw_vector3"                      # imu | yaw_vector3 | odometry
+    azimuth_topic: ""
+    odom_topic: "/fixposition/odometry_enu"          # Odometry -> speed
+
+    # --- hardware
+    battery_state_topic: "/battery_state"            # sensor_msgs/BatteryState (52 V pack)
+    battery_low_voltage: 46.0
+    bus_voltage_topic: ""
+    bus_current_topic: ""
+    temperature_topic: "/temperatures"               # sensor_msgs/Temperature per motor (frame_id)
+    teensy_temp_topic: ""
+    odrv_error_topic: ""
+    motors_enabled_topic: ""
+    estop_topic: "/estop_active"                     # std_msgs/Bool
+    diagnostics_topic: "/diagnostics"
+
+    # --- navigation state
+    commander_state_topic: "/commander/state"        # crl_commander mode (STOP/GOTO/SEQUENCE/...)
+    follower_state_topic: "/road_follower/state"     # robot_mission_planner road_follower (ROAD/GPS)
+    bt_log_topic: ""
+    speed_limit_topic: ""
+    collision_monitor_state_topic: ""
+    recovery_heartbeat_topic: ""
+    teleop_topic: ""
+    joy_topic: "/joy"                                # any stick/button -> TELEOP ACTIVE
+    speak_info_topic: ""
+    speak_warn_topic: ""
     speak_error_topic: "/speak/err"
-    nav_through_poses_feedback_topic: "/navigate_through_poses/_action/feedback"
-    follow_gps_waypoints_feedback_topic: "/follow_gps_waypoints/_action/feedback"
-    follow_waypoints_feedback_topic: "/follow_waypoints/_action/feedback"
+
+    # --- geometry drawn on the map
+    path_topic: "/crl_commander/plan"                # planner path (FP_ENU0), green dashed
+    goal_topic: "/commander/goal"                    # current commander goal (FP_ENU0)
+    sequence_path_topic: "/commander/sequence_waypoints"   # loaded sequence (FP_ECEF), blue
+    sequence_poses_topic: ""                         # alternative: /goal_sequence (PoseArray)
+    road_path_topic: "/predicted_path_ls"            # path_centerline output (odom_odin), cyan
+    nav_through_poses_feedback_topic: ""
+    follow_gps_waypoints_feedback_topic: ""
+    follow_waypoints_feedback_topic: ""
 
 osm_cloud:
   ros__parameters:

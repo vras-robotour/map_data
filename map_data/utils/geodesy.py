@@ -70,6 +70,24 @@ def ecef_to_latlon(x: float, y: float, z: float) -> tuple[float, float, float]:
     return float(np.degrees(lat)), float(np.degrees(lon)), float(alt)
 
 
+def ecef_to_latlon_array(xyz: np.ndarray) -> np.ndarray:
+    """
+    Vectorised ``ecef_to_latlon``: (N, 3) ECEF -> (N, 3) ``[lat_deg, lon_deg, alt_m]``.
+    """
+    pts = np.asarray(xyz, dtype=float).reshape(-1, 3)
+    x, y, z = pts[:, 0], pts[:, 1], pts[:, 2]
+    lon = np.arctan2(y, x)
+    p = np.hypot(x, y)
+    theta = np.arctan2(z * WGS84_A, p * WGS84_B)
+    lat = np.arctan2(
+        z + _EP2 * WGS84_B * np.sin(theta) ** 3,
+        p - WGS84_E2 * WGS84_A * np.cos(theta) ** 3,
+    )
+    n = WGS84_A / np.sqrt(1.0 - WGS84_E2 * np.sin(lat) ** 2)
+    alt = p / np.cos(lat) - n
+    return np.stack([np.degrees(lat), np.degrees(lon), alt], axis=-1)
+
+
 def utm_to_ecef(
     easting: np.ndarray,
     northing: np.ndarray,

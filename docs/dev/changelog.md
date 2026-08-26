@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- Viewer tracker for the Helhest field stack: poses in any TF frame are converted
+  to lat/lon through `earth_frame` (ECEF) instead of requiring a `utm` frame; new
+  inputs `BatteryState`, `Temperature`, e-stop `Bool`, `DiagnosticArray`, `Joy`,
+  crl_commander state string, `road_follower` state, goal (`PoseStamped`),
+  waypoint sequence (`Path`/`PoseArray`) and visual road path; heading from
+  `Imu`, `Vector3Stamped` yaw or `Odometry` (`heading_type`). The sidebar gained
+  E-Stop / Follower / Diagnostics rows and battery percentage; the map draws the
+  sequence (blue), road path (cyan) and goal (orange). `config/helhest.yaml`
+  now targets this stack (verified against the Stromovka bags)
+- `geodesy.ecef_to_latlon_array`
+
 ## [1.3.0] — 2026-08-24
 
 ### Security
