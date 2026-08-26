@@ -214,6 +214,17 @@ const trackerMode = (() => {
         });
     }
 
+    // Inline SVG swatch matching a Leaflet style (line / circle / robot marker)
+    function swatch(kind, color, weight = 2, dash = '', opacity = 1, fill = 'none', fillOpacity = 0.8) {
+        const common = `stroke="${color}" stroke-width="${weight}" stroke-opacity="${opacity}"` +
+            (dash ? ` stroke-dasharray="${dash}"` : '');
+        let body;
+        if (kind === 'line') body = `<line x1="1" y1="7" x2="27" y2="7" ${common}/>`;
+        else if (kind === 'circle') body = `<circle cx="14" cy="7" r="5" ${common} fill="${fill}" fill-opacity="${fillOpacity}"/>`;
+        else body = `<path d="M14,1L8,13L14,10.5L20,13Z" fill="${color}" stroke="#000" stroke-width="0.8"/>`;
+        return `<svg width="28" height="14" viewBox="0 0 28 14" style="vertical-align:middle;margin-right:4px">${body}</svg>`;
+    }
+
     function _initUI(container) {
         container.innerHTML = `
       <div id="tsi-section-hardware" class="mb-3">
@@ -264,6 +275,21 @@ const trackerMode = (() => {
           <div id="tsi-teleop" class="text-warning fw-bold" style="display:none">TELEOP ACTIVE</div>
         </div>
       </div>
+      <div id="tsi-legend" class="mb-3">
+        <div class="panel-title mb-1" style="font-size:0.6rem;">MAP LEGEND</div>
+        <div class="small" style="line-height:1.5">
+          <div id="tsi-leg-robot">${swatch('marker', '#00ff00')} Robot (heading arrow, greyed = stale fix)</div>
+          <div id="tsi-leg-trail">${swatch('line', '#4ade80', 2, '', 0.6)} Robot trail</div>
+          <div id="tsi-leg-path">${swatch('line', '#00ff00', 3, '5, 4')} Planner path</div>
+          <div id="tsi-leg-sequence">${swatch('line', '#3b82f6', 3, '2, 4')} Waypoint sequence (commander)</div>
+          <div id="tsi-leg-window">${swatch('line', '#60a5fa', 5)} Waypoint window (road_follower)</div>
+          <div id="tsi-leg-road">${swatch('line', '#22d3ee', 4)} Visual road path</div>
+          <div id="tsi-leg-goal">${swatch('circle', '#f97316', 2, '', 1, '#fb923c')} Current goal</div>
+          <div id="tsi-leg-intersections">${swatch('circle', '#e879f9', 1.5)} OSM intersections</div>
+          <div id="tsi-leg-active">${swatch('circle', '#ef4444', 2, '', 1, '#ef4444', 0.15)} Active intersection: enter radius
+            &nbsp;${swatch('circle', '#facc15', 1.5, '3, 3')} exit radius</div>
+        </div>
+      </div>
       <div id="tsi-speech-box" class="mt-3 p-2 bg-dark border border-secondary rounded" style="display:none">
         <div class="small text-secondary mb-1">LAST SPEECH (<span id="tsi-speech-level"></span>)</div>
         <div id="tsi-speech-text"></div>
@@ -303,6 +329,16 @@ const trackerMode = (() => {
             recovery: document.getElementById('tsi-recovery'),
             teleop: document.getElementById('tsi-teleop'),
 
+            legend: {
+                trail: document.getElementById('tsi-leg-trail'),
+                path: document.getElementById('tsi-leg-path'),
+                sequence: document.getElementById('tsi-leg-sequence'),
+                window: document.getElementById('tsi-leg-window'),
+                road: document.getElementById('tsi-leg-road'),
+                goal: document.getElementById('tsi-leg-goal'),
+                intersections: document.getElementById('tsi-leg-intersections'),
+                active: document.getElementById('tsi-leg-active'),
+            },
             speechBox: document.getElementById('tsi-speech-box'),
             speechLevel: document.getElementById('tsi-speech-level'),
             speechText: document.getElementById('tsi-speech-text'),
@@ -457,6 +493,17 @@ const trackerMode = (() => {
 
         _uiRefs.recovery.style.display = (hasRecovery && s.recovery_active) ? '' : 'none';
         _uiRefs.teleop.style.display = (hasTeleop && s.teleop_active) ? '' : 'none';
+
+        // Legend: only the layers that can actually appear
+        const L_ = _uiRefs.legend;
+        L_.trail.style.display = hasGps ? '' : 'none';
+        L_.path.style.display = (feat.path !== false || feat.actions !== false) ? '' : 'none';
+        L_.sequence.style.display = feat.sequence === true ? '' : 'none';
+        L_.window.style.display = feat.sequence_window === true ? '' : 'none';
+        L_.road.style.display = feat.road_path === true ? '' : 'none';
+        L_.goal.style.display = feat.goal === true ? '' : 'none';
+        L_.intersections.style.display = feat.intersections === true ? '' : 'none';
+        L_.active.style.display = feat.active_intersection === true ? '' : 'none';
 
         // Last speech
         if (feat.speech !== false && s.last_speech) {
