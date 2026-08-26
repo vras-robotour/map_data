@@ -177,9 +177,13 @@ def create_app(data_dir: str | None = None, telemetry_hz: float = 2.0) -> Flask:
     if ROS_AVAILABLE:
         try:
             import rclpy
+            from rclpy.signals import SignalHandlerOptions
 
             if not rclpy.ok():
-                rclpy.init()
+                # Keep Python's default SIGINT/SIGTERM handling: rclpy's handlers only shut
+                # the ROS context down and would leave the web server running (port 5000
+                # stays busy after Ctrl-C / kill).
+                rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
             tracker_node = TrackerNode()
 
             # Start ROS2 spin in a separate thread

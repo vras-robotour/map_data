@@ -63,7 +63,8 @@ speech topics are configured.
 
 ## Map Layers
 
-All robot geometry is part of the **Robot** layer:
+All robot geometry is part of the **Robot** layer; the Tracker sidebar shows a **Map legend**
+listing only the layers that are configured:
 
 | Layer | Source | Style |
 |-------|--------|-------|
