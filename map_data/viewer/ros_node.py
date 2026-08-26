@@ -17,6 +17,7 @@ from __future__ import annotations
 import math
 import threading
 import time
+from collections import deque
 from collections.abc import Callable
 from typing import Any, ClassVar
 
@@ -89,6 +90,14 @@ def xyz_to_latlon(xyz: np.ndarray, to_ecef: np.ndarray | None) -> list[dict[str,
     return [{"lat": float(lat), "lon": float(lon)} for lat, lon, _ in lla]
 
 
+def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in metres."""
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dlat, dlon = p2 - p1, math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlon / 2) ** 2
+    return 2.0 * 6371008.8 * math.asin(math.sqrt(a))
+
+
 def subsample(points: list[Any], every: int) -> list[Any]:
     if len(points) <= every:
         return list(points)
@@ -134,6 +143,8 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         "sequence_path_topic": "",
         "sequence_poses_topic": "",
         "road_path_topic": "",
+        "intersections_topic": "",
+        "active_intersection_topic": "",
         "nav_through_poses_feedback_topic": "/navigate_through_poses/_action/feedback",
         "follow_gps_waypoints_feedback_topic": "/follow_gps_waypoints/_action/feedback",
         "follow_waypoints_feedback_topic": "/follow_waypoints/_action/feedback",
@@ -153,10 +164,29 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         self.declare_parameter("earth_frame", "")
         self.declare_parameter("utm_frame", "utm")
         self.declare_parameter("battery_low_voltage", 22.0)
+        # Robot trail: last trail_length fixes, appended when the robot moved trail_min_step
+        self.declare_parameter("trail_length", 500)
+        self.declare_parameter("trail_min_step", 0.5)
+        # Fix older than this (s) is flagged stale in the UI
+        self.declare_parameter("stale_after", 3.0)
+        # Drawn around the active intersection (match road_follower's thresholds)
+        self.declare_parameter("intersection_enter_threshold", 5.0)
+        self.declare_parameter("intersection_exit_threshold", 6.0)
 
         self.earth_frame: str = self.get_parameter("earth_frame").value
         self.utm_frame: str = self.get_parameter("utm_frame").value
         self.battery_low_voltage: float = float(self.get_parameter("battery_low_voltage").value)
+        self.trail_min_step: float = float(self.get_parameter("trail_min_step").value)
+        self.stale_after: float = float(self.get_parameter("stale_after").value)
+        self.intersection_thresholds = {
+            "enter": float(self.get_parameter("intersection_enter_threshold").value),
+            "exit": float(self.get_parameter("intersection_exit_threshold").value),
+        }
+        self.trail: deque[dict[str, float]] = deque(
+            maxlen=max(1, int(self.get_parameter("trail_length").value))
+        )
+        self._last_fix_time: float | None = None
+        self._stale_reported = False
 
         # Track which features are enabled (topic name is not empty)
         self.enabled_features: dict[str, bool] = {}
@@ -165,7 +195,10 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         self.num_waypoints = 0
         self.waypoints_gps: list[dict[str, float]] = []
         self.sequence_gps: list[dict[str, float]] = []
+        self.sequence_window_gps: list[dict[str, float]] = []
         self.road_path_gps: list[dict[str, float]] = []
+        self.intersections_gps: list[dict[str, float]] = []
+        self.active_intersection_gps: dict[str, float] | None = None
         self.goal_gps: dict[str, float] | None = None
         self.pose_gps: dict[str, float] | None = None
         self.pose_ekf: dict[str, float] | None = None
@@ -362,16 +395,30 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         # crl_commander publishes commander/goal volatile; a volatile subscriber also matches
         # latched publishers (e.g. /goal_waypoint), only without history.
         subscribe_if_enabled("goal_topic", PoseStamped, self._goal_callback, 10, "goal")
-        seq = subscribe_if_enabled(
+        subscribe_if_enabled(
             "sequence_path_topic", Path, self._sequence_path_callback, qos_latched, "sequence"
         )
-        if (
-            subscribe_if_enabled(
-                "sequence_poses_topic", PoseArray, self._sequence_poses_callback, qos_latched
-            )
-            or seq
-        ):
-            self.enabled_features["sequence"] = True
+        subscribe_if_enabled(
+            "sequence_poses_topic",
+            PoseArray,
+            self._sequence_poses_callback,
+            qos_latched,
+            "sequence_window",
+        )
+        subscribe_if_enabled(
+            "intersections_topic",
+            PoseArray,
+            self._intersections_callback,
+            qos_latched,
+            "intersections",
+        )
+        subscribe_if_enabled(
+            "active_intersection_topic",
+            PoseStamped,
+            self._active_intersection_callback,
+            qos_latched,
+            "active_intersection",
+        )
         subscribe_if_enabled("road_path_topic", Path, self._road_path_callback, 10, "road_path")
 
         subscribe_if_enabled(
@@ -439,21 +486,35 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         if not ROS_AVAILABLE:
             return None
         with self._lock:
-            if not self._dirty:
+            age = None if self._last_fix_time is None else time.time() - self._last_fix_time
+            stale = age is not None and age > self.stale_after
+            # Emit once more when the fix goes stale so the UI can flag it
+            if not self._dirty and not (stale and not self._stale_reported):
                 return None
             self._dirty = False
+            self._stale_reported = stale
             return {
                 "enabled_features": self.enabled_features,
                 "position": {
                     "gps": dict(self.pose_gps) if self.pose_gps else {},
                     "ekf": dict(self.pose_ekf) if self.pose_ekf else {},
                     "goal": dict(self.goal_gps) if self.goal_gps else None,
+                    "fix_age": None if age is None else round(age, 1),
+                    "stale": stale,
+                    "stale_after": self.stale_after,
+                    "trail": list(self.trail),
+                    "active_intersection": (
+                        dict(self.active_intersection_gps) if self.active_intersection_gps else None
+                    ),
+                    "intersection_thresholds": dict(self.intersection_thresholds),
                 },
                 "mission": {
                     "waypoints": list(self.waypoints_gps),
                     "current_waypoint_index": self.current_waypoint,
                     "sequence": list(self.sequence_gps),
+                    "sequence_window": list(self.sequence_window_gps),
                     "road_path": list(self.road_path_gps),
+                    "intersections": list(self.intersections_gps),
                 },
                 "status": self._build_status_locked(),
             }
@@ -530,6 +591,8 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             self.pose_gps = {"lat": msg.latitude, "lon": msg.longitude}
             if self.current_heading is not None:
                 self.pose_gps["heading"] = self.current_heading
+            self._last_fix_time = time.time()
+            self._append_trail_locked(msg.latitude, msg.longitude)
             self._dirty = True
         if first:
             self.get_logger().info(f"First GPS fix received: {msg.latitude}, {msg.longitude}")
@@ -540,9 +603,19 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             self.pose_ekf = {"lat": msg.latitude, "lon": msg.longitude}
             if self.current_heading is not None:
                 self.pose_ekf["heading"] = self.current_heading
+            self._last_fix_time = time.time()
+            self._append_trail_locked(msg.latitude, msg.longitude)
             self._dirty = True
         if first:
             self.get_logger().info(f"First EKF pose received: {msg.latitude}, {msg.longitude}")
+
+    def _append_trail_locked(self, lat: float, lon: float) -> None:
+        """Append a fix to the trail if the robot moved at least trail_min_step metres."""
+        if self.trail:
+            last = self.trail[-1]
+            if haversine_m(last["lat"], last["lon"], lat, lon) < self.trail_min_step:
+                return
+        self.trail.append({"lat": lat, "lon": lon})
 
     def _set_heading(self, heading: float) -> None:
         with self._lock:
@@ -602,8 +675,30 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         pts = self._points_to_latlon(msg.header.frame_id, xyz)
         if pts is not None:
             with self._lock:
-                self.sequence_gps = pts
+                self.sequence_window_gps = pts
                 self._dirty = True
+
+    def _intersections_callback(self, msg: PoseArray) -> None:
+        xyz = np.array([[p.position.x, p.position.y, p.position.z] for p in msg.poses]).reshape(
+            -1, 3
+        )
+        pts = self._points_to_latlon(msg.header.frame_id, xyz)
+        if pts is not None:
+            with self._lock:
+                self.intersections_gps = pts
+                self._dirty = True
+
+    def _active_intersection_callback(self, msg: PoseStamped) -> None:
+        pts = (
+            self._points_to_latlon(msg.header.frame_id, self._poses_xyz([msg]))
+            if msg.header.frame_id
+            else []
+        )
+        if pts is None:
+            return  # TF not ready; the latched message is not retried, next state change will be
+        with self._lock:
+            self.active_intersection_gps = pts[0] if pts else None
+            self._dirty = True
 
     def _road_path_callback(self, msg: Path) -> None:
         pts = self._points_to_latlon(msg.header.frame_id, self._poses_xyz(msg.poses))

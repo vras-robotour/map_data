@@ -43,6 +43,7 @@ if the corresponding ROS2 topic is not configured.
 | Field | Description |
 |-------|-------------|
 | Localization | GPS fix quality: **Fixed** (RTK fixed), **Float** (RTK float), or **No Fix**. |
+| Fix age | Seconds since the last fix; red `STALE` (and a greyed marker) after `stale_after`. |
 | Speed | Current robot speed in m/s (from odometry). |
 | Limit | Active speed limit value and unit (m/s or %). |
 
@@ -67,9 +68,13 @@ All robot geometry is part of the **Robot** layer:
 | Layer | Source | Style |
 |-------|--------|-------|
 | Planned path | `path_topic` or an active Nav2 action | green dashed polyline |
-| Waypoint sequence | `sequence_path_topic` (`Path`) / `sequence_poses_topic` (`PoseArray`) | blue dotted polyline |
+| Waypoint sequence | `sequence_path_topic` (`Path`, e.g. the commander's loaded sequence) | blue dotted polyline |
+| Waypoint window | `sequence_poses_topic` (`PoseArray`, e.g. `road_follower`'s `/goal_sequence`) | light-blue polyline |
 | Road path | `road_path_topic` (`path_centerline` prediction) | cyan polyline |
 | Goal | `goal_topic` | orange circle |
+| Trail | last `trail_length` fixes, one every `trail_min_step` m | thin green polyline |
+| Intersections | `intersections_topic` (`PoseArray`, `osm_cloud`) | magenta rings |
+| Active intersection | `active_intersection_topic` (`road_follower`) with the `intersection_enter_threshold` (red) and `intersection_exit_threshold` (yellow dashed) radii | circles in metres |
 
 Poses may be stamped in **any TF frame**. With `earth_frame` set (e.g. `FP_ECEF` on the
 Fixposition stack) they are transformed into that ECEF frame through TF and converted to
@@ -119,8 +124,13 @@ map_data_viewer --ros-args --params-file config/helhest.yaml
 | `path_topic` | `/path` | Planned path for map overlay (`Path`) |
 | `goal_topic` | `""` | Current navigation goal (`PoseStamped`, latched) |
 | `sequence_path_topic` | `""` | Waypoint sequence (`Path`, latched) |
-| `sequence_poses_topic` | `""` | Waypoint sequence (`PoseArray`, latched) |
+| `sequence_poses_topic` | `""` | Waypoint window (`PoseArray`, latched) |
 | `road_path_topic` | `""` | Visual road-following path (`Path`) |
+| `intersections_topic` | `""` | Intersections (`PoseArray`, latched) |
+| `active_intersection_topic` | `""` | Intersection that triggered GPS mode (`PoseStamped`, latched; empty `frame_id` = none) |
+| `intersection_enter_threshold` / `intersection_exit_threshold` | `5.0` / `6.0` | Radii drawn around the active intersection (m) |
+| `trail_length` / `trail_min_step` | `500` / `0.5` | Robot trail size and spacing (m) |
+| `stale_after` | `3.0` | Fix age (s) after which the position is flagged stale |
 | `*_feedback_topic` | nav2 action feedback | Current waypoint index of Nav2 actions |
 
 Telemetry is polled at **2 Hz** by default and pushed to the browser over a WebSocket.

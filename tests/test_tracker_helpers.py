@@ -85,3 +85,14 @@ class TestSubsample:
 def test_module_imports_without_ros():
     # The module must stay importable in the plain (non-ROS) test environment.
     assert isinstance(ros_node.ROS_AVAILABLE, bool)
+
+
+class TestHaversine:
+    def test_known_distance(self):
+        from map_data.viewer.ros_node import haversine_m
+
+        # ~1 km north of the FP_ENU0 origin
+        assert haversine_m(
+            ORIGIN_LAT, ORIGIN_LON, ORIGIN_LAT + 0.00899, ORIGIN_LON
+        ) == pytest.approx(1000.0, rel=0.01)
+        assert haversine_m(ORIGIN_LAT, ORIGIN_LON, ORIGIN_LAT, ORIGIN_LON) == 0.0

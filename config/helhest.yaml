@@ -18,6 +18,9 @@ map_data_tracker:
     # --- position / heading
     gps_fix_topic: "/fixposition/odometry_llh"       # NavSatFix, status 2 = RTK fixed
     gps_filtered_topic: ""                           # the Fixposition output is already fused
+    stale_after: 3.0                                 # s without a fix -> STALE (marker greyed)
+    trail_length: 500                                # last fixes drawn as the robot trail
+    trail_min_step: 0.5                              # m moved before a fix is added to the trail
     heading_topic: "/fixposition/ypr"                # Vector3Stamped, x = yaw [rad] in FP_ENU0
     heading_type: "yaw_vector3"                      # imu | yaw_vector3 | odometry
     azimuth_topic: ""
@@ -52,8 +55,12 @@ map_data_tracker:
     path_topic: "/crl_commander/plan"                # planner path (FP_ENU0), green dashed
     goal_topic: "/commander/goal"                    # current commander goal (FP_ENU0)
     sequence_path_topic: "/commander/sequence_waypoints"   # loaded sequence (FP_ECEF), blue
-    sequence_poses_topic: ""                         # alternative: /goal_sequence (PoseArray)
+    sequence_poses_topic: "/goal_sequence"           # road_follower's current waypoint window, light blue
     road_path_topic: "/predicted_path_ls"            # path_centerline output (odom_odin), cyan
+    intersections_topic: "/intersections"            # osm_cloud crossroads (FP_ENU0), magenta rings
+    active_intersection_topic: "/road_follower/active_intersection"   # enter/exit circles
+    intersection_enter_threshold: 5.0                # keep equal to road_and_gps_follower.launch
+    intersection_exit_threshold: 6.0
     nav_through_poses_feedback_topic: ""
     follow_gps_waypoints_feedback_topic: ""
     follow_waypoints_feedback_topic: ""

@@ -13,6 +13,9 @@
   E-Stop / Follower / Diagnostics rows and battery percentage; the map draws the
   sequence (blue), road path (cyan) and goal (orange). `config/helhest.yaml`
   now targets this stack (verified against the Stromovka bags)
+- Tracker map: `osm_cloud` intersections, the `road_follower` active
+  intersection with its enter/exit radii, the follower's waypoint window,
+  a robot trail and a fix-age / stale indicator
 - `geodesy.ecef_to_latlon_array`
 
 ## [1.3.0] — 2026-08-24
