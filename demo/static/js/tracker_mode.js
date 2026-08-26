@@ -3,7 +3,13 @@ const trackerMode = (() => {
     let robotMarker = null;
     let robotPathLayer = null;
     let sequenceLayer = null;
+    let windowLayer = null;
     let roadPathLayer = null;
+    let trailLayer = null;
+    let intersectionsLayer = null;
+    let _intersectionsKey = null;
+    let activeEnterCircle = null;
+    let activeExitCircle = null;
     let goalMarker = null;
     let enabled = false;
 
@@ -120,8 +126,49 @@ const trackerMode = (() => {
         // Waypoint sequence handed to the commander (blue) and the visual road path (cyan)
         sequenceLayer = updatePolyline(sequenceLayer, data.mission && data.mission.sequence,
             { color: '#3b82f6', weight: 3, opacity: 0.8, dashArray: '2, 6' });
+        windowLayer = updatePolyline(windowLayer, data.mission && data.mission.sequence_window,
+            { color: '#60a5fa', weight: 5, opacity: 0.9 });
         roadPathLayer = updatePolyline(roadPathLayer, data.mission && data.mission.road_path,
             { color: '#22d3ee', weight: 4, opacity: 0.9 });
+        trailLayer = updatePolyline(trailLayer, data.position && data.position.trail,
+            { color: '#4ade80', weight: 2, opacity: 0.5 });
+
+        // OSM intersections as seen by road_follower (magenta rings)
+        const inter = data.mission && data.mission.intersections;
+        if (inter && inter.length) {
+            const key = `${inter.length}:${inter[0].lat},${inter[0].lon}`;
+            if (key !== _intersectionsKey) {
+                if (intersectionsLayer) map.removeLayer(intersectionsLayer);
+                intersectionsLayer = L.layerGroup(inter.map(p => L.circleMarker([p.lat, p.lon], {
+                    radius: 4, color: '#e879f9', weight: 1.5, fill: false, opacity: 0.8
+                }))).addTo(map);
+                _intersectionsKey = key;
+            }
+        } else if (intersectionsLayer) {
+            map.removeLayer(intersectionsLayer);
+            intersectionsLayer = null;
+            _intersectionsKey = null;
+        }
+
+        // Active intersection with the enter (red) / exit (yellow) hysteresis radii in metres
+        const act = data.position && data.position.active_intersection;
+        const thr = (data.position && data.position.intersection_thresholds) || { enter: 5, exit: 6 };
+        if (act && act.lat) {
+            const ll = [act.lat, act.lon];
+            if (!activeEnterCircle) {
+                activeExitCircle = L.circle(ll, { radius: thr.exit, color: '#facc15', weight: 1.5, fill: false, dashArray: '4, 4' }).addTo(map);
+                activeEnterCircle = L.circle(ll, { radius: thr.enter, color: '#ef4444', weight: 2, fillColor: '#ef4444', fillOpacity: 0.1 }).addTo(map);
+            } else {
+                activeEnterCircle.setLatLng(ll); activeExitCircle.setLatLng(ll);
+                activeEnterCircle.setRadius(thr.enter); activeExitCircle.setRadius(thr.exit);
+            }
+        } else if (activeEnterCircle) {
+            map.removeLayer(activeEnterCircle); map.removeLayer(activeExitCircle);
+            activeEnterCircle = activeExitCircle = null;
+        }
+
+        // Grey out the marker when the fix is stale
+        if (_robotSvg) _robotSvg.style.opacity = (data.position && data.position.stale) ? '0.35' : '1';
 
         // Current navigation goal
         const goal = data.position && data.position.goal;
@@ -152,7 +199,8 @@ const trackerMode = (() => {
 
     function hideRobot() {
         if (robotMarker && map.hasLayer(robotMarker)) map.removeLayer(robotMarker);
-        [robotPathLayer, sequenceLayer, roadPathLayer, goalMarker].forEach(l => {
+        [robotPathLayer, sequenceLayer, windowLayer, roadPathLayer, trailLayer, intersectionsLayer,
+         activeEnterCircle, activeExitCircle, goalMarker].forEach(l => {
             if (l && map.hasLayer(l)) map.removeLayer(l);
         });
         _robotSvg = null; // Leaflet recreates the element on the next addTo()
@@ -160,7 +208,8 @@ const trackerMode = (() => {
 
     function showRobot() {
         initSocket();
-        [robotMarker, robotPathLayer, sequenceLayer, roadPathLayer, goalMarker].forEach(l => {
+        [robotMarker, robotPathLayer, sequenceLayer, windowLayer, roadPathLayer, trailLayer,
+         intersectionsLayer, activeEnterCircle, activeExitCircle, goalMarker].forEach(l => {
             if (l && !map.hasLayer(l)) l.addTo(map);
         });
     }
@@ -190,6 +239,10 @@ const trackerMode = (() => {
         <div id="tsi-row-gps" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
           <span class="text-secondary fw-bold">LOCALIZATION</span>
           <span id="tsi-gps-fix">—</span>
+        </div>
+        <div id="tsi-row-fix-age" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+          <span class="text-secondary fw-bold">FIX AGE</span>
+          <span id="tsi-fix-age">—</span>
         </div>
         <div id="tsi-row-speed" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
           <span class="text-secondary fw-bold">SPEED</span>
@@ -231,6 +284,8 @@ const trackerMode = (() => {
             sectionLocalization: document.getElementById('tsi-section-localization'),
             rowGps: document.getElementById('tsi-row-gps'),
             gpsFix: document.getElementById('tsi-gps-fix'),
+            rowFixAge: document.getElementById('tsi-row-fix-age'),
+            fixAge: document.getElementById('tsi-fix-age'),
             rowSpeed: document.getElementById('tsi-row-speed'),
             speed: document.getElementById('tsi-speed'),
             rowSpeedLimit: document.getElementById('tsi-row-speed-limit'),
@@ -334,6 +389,17 @@ const trackerMode = (() => {
             else if (s.gps_fix === 2) { fixStr = 'Fixed'; fixClass = 'text-info'; }
             _uiRefs.gpsFix.textContent = fixStr;
             _uiRefs.gpsFix.className = fixClass;
+        }
+
+        const pos = data.position || {};
+        _uiRefs.rowFixAge.style.display = hasGps ? '' : 'none';
+        if (hasGps) {
+            if (pos.fix_age == null) {
+                _uiRefs.fixAge.textContent = 'no fix yet'; _uiRefs.fixAge.className = 'text-secondary';
+            } else {
+                _uiRefs.fixAge.textContent = pos.stale ? `${pos.fix_age} s — STALE` : `${pos.fix_age} s`;
+                _uiRefs.fixAge.className = pos.stale ? 'text-danger fw-bold' : 'text-light';
+            }
         }
 
         if (hasSpeed) {
