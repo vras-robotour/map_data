@@ -1231,6 +1231,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="[Unreleased]">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1268,7 +1285,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#added" class="md-nav__link">
+  <a href="#added_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Added
@@ -1329,7 +1346,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#added_1" class="md-nav__link">
+  <a href="#added_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Added
@@ -1385,7 +1402,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#added_2" class="md-nav__link">
+  <a href="#added_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Added
@@ -1435,7 +1452,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#added_3" class="md-nav__link">
+  <a href="#added_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Added
@@ -1550,6 +1567,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="[Unreleased]">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#added" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Added
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1587,7 +1621,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#added" class="md-nav__link">
+  <a href="#added_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Added
@@ -1648,7 +1682,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#added_1" class="md-nav__link">
+  <a href="#added_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Added
@@ -1704,7 +1738,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#added_2" class="md-nav__link">
+  <a href="#added_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Added
@@ -1754,7 +1788,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#added_3" class="md-nav__link">
+  <a href="#added_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Added
@@ -1813,6 +1847,19 @@
 
 <h1 id="changelog">Changelog</h1>
 <h2 id="unreleased">[Unreleased]</h2>
+<h3 id="added">Added</h3>
+<ul>
+<li>Viewer tracker for the Helhest field stack: poses in any TF frame are converted
+  to lat/lon through <code>earth_frame</code> (ECEF) instead of requiring a <code>utm</code> frame; new
+  inputs <code>BatteryState</code>, <code>Temperature</code>, e-stop <code>Bool</code>, <code>DiagnosticArray</code>, <code>Joy</code>,
+  crl_commander state string, <code>road_follower</code> state, goal (<code>PoseStamped</code>),
+  waypoint sequence (<code>Path</code>/<code>PoseArray</code>) and visual road path; heading from
+  <code>Imu</code>, <code>Vector3Stamped</code> yaw or <code>Odometry</code> (<code>heading_type</code>). The sidebar gained
+  E-Stop / Follower / Diagnostics rows and battery percentage; the map draws the
+  sequence (blue), road path (cyan) and goal (orange). <code>config/helhest.yaml</code>
+  now targets this stack (verified against the Stromovka bags)</li>
+<li><code>geodesy.ecef_to_latlon_array</code></li>
+</ul>
 <h2 id="130-2026-08-24">[1.3.0] — 2026-08-24</h2>
 <h3 id="security">Security</h3>
 <ul>
@@ -1888,7 +1935,7 @@
   entry and exit, so a late cancel cannot poison the next replan with the
   same transfer ID</li>
 </ul>
-<h3 id="added">Added</h3>
+<h3 id="added_1">Added</h3>
 <ul>
 <li>Regression tests for every fix above plus coverage for the previously
   untested riskiest paths: Overpass body-level failures, <code>GraphPlanner</code>
@@ -1949,7 +1996,7 @@
 <li>Removed the unused multi-robot <code>robot_id</code> scaffolding from the tracker (parameter,
   telemetry field, and <code>helhest.yaml</code> entry) — the viewer targets a single robot</li>
 </ul>
-<h3 id="added_1">Added</h3>
+<h3 id="added_2">Added</h3>
 <ul>
 <li>Static type checking with <code>mypy</code> (<code>[tool.mypy]</code> in <code>pyproject.toml</code>), enforced
   in CI (<code>typecheck</code> job) and as a pre-commit hook, to catch bugs like
@@ -1977,7 +2024,7 @@
 <li>Fixed viewer routes re-raising HTTP exceptions properly and applying zero-coordinate checks</li>
 </ul>
 <h2 id="110-2026-07-07">[1.1.0] — 2026-07-07</h2>
-<h3 id="added_2">Added</h3>
+<h3 id="added_3">Added</h3>
 <ul>
 <li>Interactive viewer: base-layer switcher with a satellite imagery option (Esri World Imagery); the selection persists across sessions</li>
 <li>Interactive viewer: copy-to-clipboard buttons for lat/lon in the node inspector</li>
@@ -1999,7 +2046,7 @@
 <li>Stale version numbers in <code>setup.py</code> and the Overpass User-Agent</li>
 </ul>
 <h2 id="100-2026-05-29">[1.0.0] — 2026-05-29</h2>
-<h3 id="added_3">Added</h3>
+<h3 id="added_4">Added</h3>
 <ul>
 <li>Interactive viewer: way splitting, node deletion, and node position drag editing</li>
 <li>Interactive viewer: nodes can be inserted into OSM ways by dragging the blue midpoint handles between existing nodes in Edit mode</li>

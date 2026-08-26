@@ -779,10 +779,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#mission-waypoints" class="md-nav__link">
+  <a href="#map-layers" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Mission Waypoints
+        Map Layers
       
     </span>
   </a>
@@ -1463,10 +1463,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#mission-waypoints" class="md-nav__link">
+  <a href="#map-layers" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Mission Waypoints
+        Map Layers
       
     </span>
   </a>
@@ -1539,8 +1539,8 @@ the Layers panel.</p>
 </tbody>
 </table>
 <h2 id="status-display">Status Display</h2>
-<p>The sidebar shows live telemetry grouped into three sections. Each section is hidden automatically
-if the corresponding ROS2 topics are not configured.</p>
+<p>The sidebar shows live telemetry grouped into three sections. Each row is hidden automatically
+if the corresponding ROS2 topic is not configured.</p>
 <h3 id="hardware">Hardware</h3>
 <table>
 <thead>
@@ -1552,7 +1552,11 @@ if the corresponding ROS2 topics are not configured.</p>
 <tbody>
 <tr>
 <td>Battery</td>
-<td>Bus voltage (V) and current (A). Shown in red when voltage drops below 22 V.</td>
+<td>Voltage (V), current (A) and, with <code>battery_state_topic</code>, the pack percentage. Red below <code>battery_low_voltage</code>.</td>
+</tr>
+<tr>
+<td>E-Stop</td>
+<td><code>ACTIVE</code> (red) / <code>released</code> from <code>estop_topic</code>.</td>
 </tr>
 <tr>
 <td>Motors</td>
@@ -1560,7 +1564,7 @@ if the corresponding ROS2 topics are not configured.</p>
 </tr>
 <tr>
 <td>Temp</td>
-<td>Teensy microcontroller temperature in °C.</td>
+<td>Hottest <code>sensor_msgs/Temperature</code> (name = its <code>frame_id</code>; hover for all), or the Teensy temperature.</td>
 </tr>
 <tr>
 <td>Motor Error</td>
@@ -1602,7 +1606,15 @@ if the corresponding ROS2 topics are not configured.</p>
 <tbody>
 <tr>
 <td>State</td>
-<td>Active Nav2 behavior tree node name, or <code>IDLE</code>.</td>
+<td><code>commander_state_topic</code> string (crl_commander mode, <code>STUCK</code> in red) or the active Nav2 behavior tree node, or <code>IDLE</code>.</td>
+</tr>
+<tr>
+<td>Follower</td>
+<td><code>road_follower</code> state: <code>ROAD</code> or <code>GPS:&lt;reason&gt;</code> (yellow).</td>
+</tr>
+<tr>
+<td>Diagnostics</td>
+<td><code>OK</code>, or the number of ERROR/WARN statuses and the worst one (hover for its message).</td>
 </tr>
 <tr>
 <td>Collision</td>
@@ -1614,19 +1626,55 @@ if the corresponding ROS2 topics are not configured.</p>
 </tr>
 <tr>
 <td>Teleop Active</td>
-<td>Shown in yellow when a non-zero teleop command was received in the last 2 s.</td>
+<td>Shown in yellow when a non-zero teleop twist or any joystick input arrived in the last 2 s.</td>
 </tr>
 </tbody>
 </table>
 <p>The sidebar also shows the robot's <strong>last speech message</strong> (info / warn / error level) when the
 speech topics are configured.</p>
-<h2 id="mission-waypoints">Mission Waypoints</h2>
-<p>When a Nav2 action (NavigateThroughPoses, FollowWaypoints, or FollowGPSWaypoints) is active,
-the planned path is drawn on the map as a dashed green polyline. The polyline updates automatically
-when the waypoint set changes.</p>
+<h2 id="map-layers">Map Layers</h2>
+<p>All robot geometry is part of the <strong>Robot</strong> layer:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Source</th>
+<th>Style</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Planned path</td>
+<td><code>path_topic</code> or an active Nav2 action</td>
+<td>green dashed polyline</td>
+</tr>
+<tr>
+<td>Waypoint sequence</td>
+<td><code>sequence_path_topic</code> (<code>Path</code>) / <code>sequence_poses_topic</code> (<code>PoseArray</code>)</td>
+<td>blue dotted polyline</td>
+</tr>
+<tr>
+<td>Road path</td>
+<td><code>road_path_topic</code> (<code>path_centerline</code> prediction)</td>
+<td>cyan polyline</td>
+</tr>
+<tr>
+<td>Goal</td>
+<td><code>goal_topic</code></td>
+<td>orange circle</td>
+</tr>
+</tbody>
+</table>
+<p>Poses may be stamped in <strong>any TF frame</strong>. With <code>earth_frame</code> set (e.g. <code>FP_ECEF</code> on the
+Fixposition stack) they are transformed into that ECEF frame through TF and converted to
+lat/lon exactly. With <code>earth_frame</code> empty the legacy path is used: transform into <code>utm_frame</code>
+and convert with the UTM zone of the current fix.</p>
 <h2 id="ros2-topic-configuration">ROS2 Topic Configuration</h2>
 <p>The <code>TrackerNode</code> subscribes to a set of configurable topics. Set a topic parameter to an empty
-string to disable the corresponding feature and hide its UI row.</p>
+string to disable the corresponding feature and hide its UI row. <code>config/helhest.yaml</code> is the
+full configuration for the Helhest field stack (Fixposition + crl_commander + road_follower):</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>map_data_viewer<span class="w"> </span>--ros-args<span class="w"> </span>--params-file<span class="w"> </span>config/helhest.yaml
+</span></code></pre></div>
 <table>
 <thead>
 <tr>
@@ -1636,6 +1684,16 @@ string to disable the corresponding feature and hide its UI row.</p>
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><code>earth_frame</code></td>
+<td><code>""</code></td>
+<td>ECEF TF frame for exact pose conversion (<code>FP_ECEF</code>); empty = UTM fallback</td>
+</tr>
+<tr>
+<td><code>utm_frame</code></td>
+<td><code>utm</code></td>
+<td>UTM TF frame used when <code>earth_frame</code> is empty</td>
+</tr>
 <tr>
 <td><code>gps_fix_topic</code></td>
 <td><code>/gps/fix</code></td>
@@ -1647,14 +1705,29 @@ string to disable the corresponding feature and hide its UI row.</p>
 <td>EKF-fused GPS position (<code>NavSatFix</code>)</td>
 </tr>
 <tr>
+<td><code>heading_topic</code> / <code>heading_type</code></td>
+<td><code>""</code> / <code>imu</code></td>
+<td>Heading source: <code>imu</code> (<code>Imu</code>), <code>yaw_vector3</code> (<code>Vector3Stamped</code>, x = yaw rad, e.g. <code>/fixposition/ypr</code>), <code>odometry</code> (<code>Odometry</code>)</td>
+</tr>
+<tr>
 <td><code>azimuth_topic</code></td>
 <td><code>/gps/azimuth_imu</code></td>
-<td>IMU heading for marker rotation (<code>Imu</code>)</td>
+<td>Legacy IMU heading topic, used when <code>heading_topic</code> is empty</td>
 </tr>
 <tr>
 <td><code>odom_topic</code></td>
 <td><code>/odom_2d</code></td>
 <td>Odometry for speed display (<code>Odometry</code>)</td>
+</tr>
+<tr>
+<td><code>battery_state_topic</code></td>
+<td><code>""</code></td>
+<td><code>BatteryState</code> (voltage, current, percentage); replaces the two Float32 topics</td>
+</tr>
+<tr>
+<td><code>battery_low_voltage</code></td>
+<td><code>22.0</code></td>
+<td>Voltage below which the battery row turns red</td>
 </tr>
 <tr>
 <td><code>bus_voltage_topic</code></td>
@@ -1665,6 +1738,11 @@ string to disable the corresponding feature and hide its UI row.</p>
 <td><code>bus_current_topic</code></td>
 <td><code>/bus_current</code></td>
 <td>Battery current (<code>Float32</code>)</td>
+</tr>
+<tr>
+<td><code>temperature_topic</code></td>
+<td><code>""</code></td>
+<td><code>Temperature</code> messages, one row per <code>frame_id</code>; replaces <code>teensy_temp_topic</code></td>
 </tr>
 <tr>
 <td><code>teensy_temp_topic</code></td>
@@ -1682,6 +1760,31 @@ string to disable the corresponding feature and hide its UI row.</p>
 <td>Motor enable state (<code>Bool</code>)</td>
 </tr>
 <tr>
+<td><code>estop_topic</code></td>
+<td><code>""</code></td>
+<td>Emergency stop state (<code>Bool</code>)</td>
+</tr>
+<tr>
+<td><code>diagnostics_topic</code></td>
+<td><code>""</code></td>
+<td><code>DiagnosticArray</code> summary</td>
+</tr>
+<tr>
+<td><code>commander_state_topic</code></td>
+<td><code>""</code></td>
+<td>Navigation state string (<code>String</code>, crl_commander); replaces <code>bt_log_topic</code></td>
+</tr>
+<tr>
+<td><code>follower_state_topic</code></td>
+<td><code>""</code></td>
+<td><code>road_follower</code> state (<code>String</code>, latched)</td>
+</tr>
+<tr>
+<td><code>bt_log_topic</code></td>
+<td><code>/behavior_tree_log</code></td>
+<td>Nav2 behavior tree log (<code>BehaviorTreeLog</code>)</td>
+</tr>
+<tr>
 <td><code>speed_limit_topic</code></td>
 <td><code>/speed_limit</code></td>
 <td>Active speed limit (<code>SpeedLimit</code>)</td>
@@ -1697,14 +1800,14 @@ string to disable the corresponding feature and hide its UI row.</p>
 <td>Recovery behavior heartbeat (<code>Header</code>)</td>
 </tr>
 <tr>
-<td><code>bt_log_topic</code></td>
-<td><code>/behavior_tree_log</code></td>
-<td>Nav2 behavior tree log (<code>BehaviorTreeLog</code>)</td>
-</tr>
-<tr>
 <td><code>teleop_topic</code></td>
 <td><code>/cmd_vel_teleop</code></td>
 <td>Teleop velocity command (<code>TwistStamped</code>)</td>
+</tr>
+<tr>
+<td><code>joy_topic</code></td>
+<td><code>""</code></td>
+<td>Joystick (<code>Joy</code>); any input counts as teleop</td>
 </tr>
 <tr>
 <td><code>speak_info_topic</code></td>
@@ -1725,6 +1828,31 @@ string to disable the corresponding feature and hide its UI row.</p>
 <td><code>path_topic</code></td>
 <td><code>/path</code></td>
 <td>Planned path for map overlay (<code>Path</code>)</td>
+</tr>
+<tr>
+<td><code>goal_topic</code></td>
+<td><code>""</code></td>
+<td>Current navigation goal (<code>PoseStamped</code>, latched)</td>
+</tr>
+<tr>
+<td><code>sequence_path_topic</code></td>
+<td><code>""</code></td>
+<td>Waypoint sequence (<code>Path</code>, latched)</td>
+</tr>
+<tr>
+<td><code>sequence_poses_topic</code></td>
+<td><code>""</code></td>
+<td>Waypoint sequence (<code>PoseArray</code>, latched)</td>
+</tr>
+<tr>
+<td><code>road_path_topic</code></td>
+<td><code>""</code></td>
+<td>Visual road-following path (<code>Path</code>)</td>
+</tr>
+<tr>
+<td><code>*_feedback_topic</code></td>
+<td>nav2 action feedback</td>
+<td>Current waypoint index of Nav2 actions</td>
 </tr>
 </tbody>
 </table>
