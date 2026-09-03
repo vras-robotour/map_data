@@ -84,26 +84,29 @@ from flask import (
     send_file,
 )
 from flask.typing import ResponseReturnValue
-from shapely import geometry
 
+from map_data.annotations import apply_tag_overrides, apply_way_edits, merge_annotations
 from map_data.map_data import MapData
-from map_data.pathsolver.graph_planner import GraphPlanner
 from map_data.pathsolver.replan import (
     ReplanPath,
     cancel_replan_backend,
     load_planner_defaults,
     parse_args,
 )
+from map_data.pathsolver.route import (
+    GRAPH_ALGORITHM,
+    RoutePlanningError,
+    plan_route,
+)
 from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.serialization import map_data_to_dict
-from map_data.utils.way import FOOTWAY_VALUES, Way
+from map_data.utils.way import FOOTWAY_VALUES
 
 from .cache import load_mapdata_cached
 from .helpers import (
     annotation_store,
     apply_added_nodes,
     apply_node_position_overrides,
-    geojson_geom_to_utm,
     geom_to_geojson,
     get_deleted_node_ids,
     get_deleted_way_ids,
@@ -144,111 +147,10 @@ _CAT_FOR_LIST = {
 }
 
 
-def _apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
-    """
-    Apply way/node deletions, splits, and node position overrides to *md*.
-
-    Used by both :func:`get_mapdata` (on a shallow copy) and
-    :func:`get_merged_mapdata` (on a deep copy) to turn the raw parsed
-    map data into what the user currently sees after their edits. Mutates
-    *md* by reassigning its ``roads_list``/``footways_list``/``barriers_list``
-    (and, if any way list changed, ``crossroads_list``) attributes -- see
-    the module docstring's "MapData copy semantics" section for why this
-    is safe on a shallow copy: whole lists are replaced via ``setattr``,
-    and every individual ``Way`` mutation goes through
-    :func:`~map_data.viewer.helpers.rebuild_way_without_nodes` /
-    :func:`~map_data.viewer.helpers.split_way` /
-    :func:`~map_data.viewer.helpers.apply_node_position_overrides`, all of
-    which return a fresh copy rather than mutating their argument.
-
-    Processing order: whole-way deletions are filtered out first; then,
-    for each surviving way, node deletions are applied, then splits (each
-    split segment gets its own virtual ID ``"<way_id>:<index>"`` and is
-    itself subject to deletion and segment-specific node deletion); finally,
-    in a second pass over the (possibly now-split) ways, node position
-    overrides are applied. If any way list changed, ``crossroads_list`` is
-    recomputed from the new ``footways_list``.
-
-    Parameters
-    ----------
-    md : MapData
-        Map data to edit in place (its list attributes are reassigned;
-        the ``Way`` objects referenced by the *original* lists are never
-        mutated).
-    store : dict
-        Annotation store, as returned by
-        :func:`~map_data.viewer.helpers.load_annotations`.
-
-    """
-    zn, zl = md.zone_number, md.zone_letter
-    nodes_cache = getattr(md, "nodes_cache", {})
-
-    deleted_way_ids = get_deleted_way_ids(store)
-    has_node_dels = bool(store.get("deleted_nodes"))
-    has_splits = bool(store.get("split_ways"))
-
-    if deleted_way_ids or has_node_dels or has_splits:
-        for lst_name in ("roads_list", "footways_list", "barriers_list"):
-            cat = _CAT_FOR_LIST[lst_name]
-            new_lst = []
-            for w in getattr(md, lst_name):
-                if w.id in deleted_way_ids:
-                    continue
-                del_nids = get_deleted_node_ids(store, w.id)
-                if del_nids:
-                    w = rebuild_way_without_nodes(w, del_nids, zn, zl, nodes_cache, category=cat)  # noqa: PLW2901
-                    if w is None:
-                        continue
-                split_nids = get_split_node_ids(store, w.id)
-                if split_nids:
-                    segments = split_way(w, split_nids, zn, zl, nodes_cache)
-                    for i, seg in enumerate(segments):
-                        virtual_id = f"{w.id}:{i}"
-                        seg.id = virtual_id
-                        if virtual_id in deleted_way_ids:
-                            continue
-                        seg_del_nids = get_deleted_node_ids(store, virtual_id)
-                        if seg_del_nids:
-                            seg = rebuild_way_without_nodes(  # noqa: PLW2901
-                                seg,
-                                seg_del_nids,
-                                zn,
-                                zl,
-                                nodes_cache,
-                                category=cat,
-                            )  # type: ignore[assignment] # narrowed by the `is None` check below
-                            if seg is None:
-                                continue
-                        new_lst.append(seg)
-                else:
-                    new_lst.append(w)
-            setattr(md, lst_name, new_lst)
-        # parse_intersections() only reads .values(); the str() keys here (needed
-        # because virtual split-way ids are strings) don't match its dict[int, Way]
-        # signature, but that mismatch is harmless.
-        md.crossroads_list = md.parse_intersections(
-            {str(w.id): w for w in md.footways_list},  # type: ignore[misc]
-        )
-
-    node_pos_store = store.get("node_position_overrides", {})
-    if node_pos_store:
-        for lst_name in ("roads_list", "footways_list", "barriers_list"):
-            new_lst = []
-            for w in getattr(md, lst_name):
-                ov = get_node_position_overrides(store, w.id)
-                if ov:
-                    result = apply_node_position_overrides(
-                        w,
-                        ov,
-                        zn,
-                        zl,
-                        nodes_cache,
-                        category=_CAT_FOR_LIST[lst_name],
-                    )
-                    new_lst.append(result or w)
-                else:
-                    new_lst.append(w)
-            setattr(md, lst_name, new_lst)
+# Way/node deletions, splits and node moves are applied by the shared
+# :func:`map_data.annotations.apply_way_edits`, so the viewer, the CLI and the
+# ROS route planner all see the same edited map.
+_apply_way_edits = apply_way_edits
 
 
 _WAY_LISTS = (
@@ -2474,83 +2376,10 @@ def get_merged_mapdata(filename: str) -> tuple[MapData | None, dict[str, Any] | 
 
     store = load_annotations(str(_annotation_path(filename)))
     md = copy.deepcopy(load_mapdata_cached(str(path)))
-    zn, zl = md.zone_number, md.zone_letter
 
     _apply_way_edits(md, store)
-
-    tag_overrides = store.get("tag_overrides", {})
-    if tag_overrides:
-        for lst_name in ("roads_list", "footways_list", "barriers_list"):
-            for w in getattr(md, lst_name):
-                original_id = str(w.id).split(":")[0]
-                ov = tag_overrides.get(original_id)
-                if ov:
-                    w.tags = {**(w.tags or {}), **ov}
-        new_roads: list[Way] = []
-        new_footways: list[Way] = []
-        for w in md.roads_list:
-            (new_footways if w.is_footway() else new_roads).append(w)
-        for w in md.footways_list:
-            (new_roads if w.is_road() else new_footways).append(w)
-        md.roads_list, md.footways_list = new_roads, new_footways
-        # parse_intersections() only reads .values(); the str() keys here (needed
-        # because virtual split-way ids are strings) don't match its dict[int, Way]
-        # signature, but that mismatch is harmless.
-        md.crossroads_list = md.parse_intersections(
-            {str(w.id): w for w in md.footways_list},  # type: ignore[misc]
-        )
-
-    ann_id = -1
-    node_id = -1
-    ann_lines: list[tuple[Way, Any]] = []  # annotated path ways with their centre lines
-    if not hasattr(md, "nodes_cache") or md.nodes_cache is None:
-        md.nodes_cache = {}
-    for ann in store.get("annotations", []):
-        geom = geojson_geom_to_utm(ann["geometry"], zn, zl)
-        if geom is None:
-            continue
-        props = ann.get("properties", {})
-        ann_type = ann.get("type", "obstacle")
-
-        w = Way()
-        w.id = ann_id
-        ann_id -= 1
-        w.line = geom
-        w.nodes = []
-        w.in_out = ""
-
-        if ann_type == "path":
-            hw = props.get("highway", "path")
-            w.tags = {"highway": hw}
-            if "width" in props:
-                w.tags["width"] = str(props["width"])
-            for k, v in props.items():
-                if k not in ("highway", "width"):
-                    w.tags[k] = str(v)
-            if geom.geom_type == "LineString":
-                width_m = float(props.get("width", 1.5))
-                for e_coord, n_coord in geom.coords:
-                    lat, lon = utm.to_latlon(e_coord, n_coord, zn, zl)
-                    md.nodes_cache[node_id] = {"lat": lat, "lon": lon, "tags": {}}
-                    w.nodes.append(node_id)
-                    node_id -= 1
-                w.line = geom.buffer(width_m / 2)
-                w.is_area = True
-                ann_lines.append((w, geom))
-            (md.roads_list if w.is_road() else md.footways_list).append(w)
-        else:
-            w.tags = {"barrier": props.get("barrier", "wall")}
-            for k, v in props.items():
-                if k != "barrier":
-                    w.tags[k] = str(v)
-            md.barriers_list.append(w)
-
-    # Annotated paths share no OSM node ids with the map, so node-based crossroad
-    # detection cannot see them; add crossroads where they cross or touch other ways.
-    if ann_lines:
-        md.crossroads_list = list(md.crossroads_list) + MapData.geometric_intersections(
-            ann_lines, list(md.footways_list) + list(md.roads_list)
-        )
+    apply_tag_overrides(md, store)
+    merge_annotations(md, store)
 
     return md, store
 
@@ -3206,81 +3035,44 @@ def create_replan() -> Response:
     if md is None:
         abort(404, f"File {filename} not found")
 
-    zn, zl = md.zone_number, md.zone_letter
-    utm_path_list: list[list[float]] = []
+    points: list[tuple[float, float]] = []
     for i, p in enumerate(path_data):
         if not isinstance(p, (list, tuple)) or len(p) < 2:
             abort(400, "points must be a list of [lat, lon] pairs")
         lat = _validated_number(p[0], f"points[{i}] latitude", _MIN_LAT, _MAX_LAT)
         lon = _validated_number(p[1], f"points[{i}] longitude", _MIN_LON, _MAX_LON)
-        e, n, _, _ = utm.from_latlon(lat, lon, zn, zl)
-        utm_path_list.append([e, n])
-    utm_path: np.ndarray = np.array(utm_path_list, dtype=np.float64)
+        points.append((lat, lon))
 
-    # Calculate planning bounding box to limit grid size
-    margin = 50.0  # meters
-    p_min_x = np.min(utm_path[:, 0]) - margin
-    p_max_x = np.max(utm_path[:, 0]) + margin
-    p_min_y = np.min(utm_path[:, 1]) - margin
-    p_max_y = np.max(utm_path[:, 1]) + margin
-
-    # Clip to map boundaries
-    p_low = (max(md.min_x, p_min_x), max(md.min_y, p_min_y))
-    p_high = (min(md.max_x, p_max_x), min(md.max_y, p_max_y))
-
-    if algorithm == "graph":
-        planner = GraphPlanner(md, highway_types=highway_types)
-        res = planner.plan(utm_path)
-    else:
-        area_m2 = max(0.0, p_high[0] - p_low[0]) * max(0.0, p_high[1] - p_low[1])
-        _check_grid_cells(area_m2, cell_size)
-
-        args = parse_args([])
-        args.simplify_path = simplify_path
-        args.smooth_path = smooth_path
-        args.cell_size = cell_size
-        args.inflate_obstacles = inflate_obstacles
-        args.visualize = False
-        args.low = p_low
-        args.high = p_high
-
-        # Filter barriers to bounding box for faster processing
-        bbox = geometry.box(p_low[0], p_low[1], p_high[0], p_high[1])
-        filtered_barriers = [w for w in md.barriers_list if w.line and w.line.intersects(bbox)]
-
-        obstacles = ways_to_shapely(filtered_barriers)
-        replanner = ReplanPath(
-            args,
-            obstacles,
-            transfer_id=transfer_id,
+    try:
+        result = plan_route(
+            md,
+            points,
+            algorithm=algorithm,
+            sub_algorithm=sub_algorithm,
+            highway_types=highway_types,
+            cell_size=cell_size,
+            inflate_obstacles=inflate_obstacles,
+            simplify_path=simplify_path,
+            smooth_path=smooth_path,
             grid_cost_weight=grid_cost_weight,
             highway_costs=highway_costs,
             surface_costs=surface_costs,
+            transfer_id=transfer_id,
+            max_grid_cells=MAX_GRID_CELLS,
         )
-        replanner.fill_grid(md, highway_types=highway_types)
-        res = replanner.replan(utm_path, algorithm=sub_algorithm)
+    except RoutePlanningError as e:
+        if e.reason == "grid_too_large":
+            abort(400, e.message)
+        if e.reason == "too_few_points":
+            abort(400, e.message)
+        # The grid planner cannot tell "no path" from "cancelled"; keep the
+        # historical status strings the frontend expects.
+        status = "cancelled" if algorithm != GRAPH_ALGORITHM else "failed"
+        logger.warning("Replan failed (%s): %s", e.reason, e.message)
+        return jsonify({"retrieveNum": 1, "newPath": None, "status": status, "reason": e.reason})
 
-    if res is None:
-        status = "cancelled" if algorithm != "graph" else "failed"
-        return jsonify({"retrieveNum": 1, "newPath": None, "status": status})
-
-    new_path = []
-    changed = False
-
-    # RRT* result might have more/different points
-    if len(res) != len(utm_path):
-        changed = True
-
-    for i in range(len(res)):
-        lat, lon = utm.to_latlon(res[i][0], res[i][1], zn, zl)
-        new_path.append([lat, lon])
-        # Simple heuristic to check if it actually changed significantly
-        if (
-            not changed
-            and i < len(utm_path)
-            and np.linalg.norm(res[i] - utm_path[i]) > SIGNIFICANT_CHANGE_TOLERANCE
-        ):
-            changed = True
+    new_path = [[lat, lon] for lat, lon in result.latlon]
+    changed = result.changed
 
     if changed:
         return jsonify({"retrieveNum": 0, "newPath": new_path})
