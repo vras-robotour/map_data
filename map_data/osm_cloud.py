@@ -106,7 +106,7 @@ class OSMCloud(Node):
             )
 
         self.tf = Buffer()
-        self.tf_sub = TransformListener(self.tf, self)
+        self.tf_sub = TransformListener(self.tf, self, spin_thread=True)
         self.tf_static_pub = StaticTransformBroadcaster(self)
 
         self.utm_to_local: np.ndarray | None = None
@@ -133,7 +133,7 @@ class OSMCloud(Node):
             self.transform_mode = "auto"  # backward-compatible alias
 
         if self.utm_to_local_param is not None:
-            self.utm_to_local = np.array(self.utm_to_local_param)
+            self.utm_to_local = np.array(self.utm_to_local_param).reshape(4, 4)
         elif self.transform_mode == "geodetic":
             self.get_ecef_to_local()
         elif self.transform_mode == "auto":
