@@ -1,0 +1,48 @@
+# Plan a route on a .mapdata file (annotations merged), like the viewer's Planner
+# screen but without the GUI. Served by `ros2 run map_data route_planner`.
+
+# --- Goal ---
+# .mapdata file: a name in the node's data_dir or an absolute path; empty = the
+# node's mapdata_file parameter.
+string mapdata_file
+# Ordered waypoints (lat/lon; altitude ignored). With start_from_robot=false at
+# least two are needed; with start_from_robot=true one goal is enough.
+geographic_msgs/GeoPoint[] waypoints
+# Prepend the robot's current GNSS position (gps_fix_topic) as the first waypoint.
+bool start_from_robot
+# "graph" = paths only (default when empty); "astar" or "rrt" = all-terrain grid planner.
+string algorithm
+# Allowed way types: "footway" and/or "road"; empty = the node's default.
+string[] highway_types
+# Maximum distance (m) between consecutive output waypoints; 0 = the node's
+# default; negative = keep the planner's own vertices.
+float64 spacing
+# graph: reject waypoints farther than this (m) from every allowed way; 0 = default (100).
+float64 max_snap_distance
+# grid planners only; 0 = defaults (0.25 m / 0.25 m).
+float64 cell_size
+float64 inflate_obstacles
+bool simplify_path
+bool smooth_path
+# GPX output: "" = <mission_dir>/route_<stamp>.gpx, "-" = do not save, else a file
+# name (in mission_dir) or an absolute path.
+string save_gpx
+---
+# --- Result ---
+bool success
+# Failure reason on failure (too_few_points, snap_too_far, unreachable, no_path,
+# grid_too_large, no_fix, file_not_found, ...) or a summary on success.
+string message
+string reason
+# The route in WGS84, header.frame_id = "wgs84".
+geographic_msgs/GeoPath route
+# The same route in the node's local_frame (e.g. FP_ENU0) when the earth->local
+# transform is available, otherwise empty.
+nav_msgs/Path route_local
+float64 length_m
+# graph: distance (m) of every input waypoint to the nearest allowed way.
+float64[] snap_distances
+string gpx_path
+---
+# --- Feedback ---
+string stage
