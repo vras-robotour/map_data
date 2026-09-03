@@ -26,7 +26,7 @@ import logging
 import sys
 from pathlib import Path
 
-from map_data.annotations import load_mapdata_with_annotations
+from map_data.annotations import NO_ANNOTATIONS, load_mapdata_with_annotations
 from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE
 from map_data.pathsolver.route import (
     GRAPH_ALGORITHM,
@@ -54,6 +54,18 @@ def parse_latlon(text: str) -> tuple[float, float]:
         raise argparse.ArgumentTypeError(f"expected lat,lon, got {text!r}") from e
 
 
+def annotations_arg(value: str) -> str | None:
+    """``--annotations`` -> ``annotations_path`` for :func:`load_mapdata_with_annotations`."""
+    if value in ("", "auto"):
+        return None
+    if value == NO_ANNOTATIONS:
+        return NO_ANNOTATIONS
+    p = Path(value).expanduser()
+    if not p.is_file():
+        raise SystemExit(f"annotation store {value!r} not found")
+    return str(p)
+
+
 def resolve_mapdata(name: str) -> Path:
     """A path as given, else the file of that name in the package data directory."""
     p = Path(name).expanduser()
@@ -77,6 +89,13 @@ def build_parser() -> argparse.ArgumentParser:
         description="Plan a route on a .mapdata file (annotations merged) without the viewer.",
     )
     ap.add_argument("-f", "--file", required=True, help=".mapdata file (path or name in data/)")
+    ap.add_argument(
+        "--annotations",
+        default="auto",
+        metavar="auto|none|FILE",
+        help="annotation store to merge: auto = <file>.annotations.json next to the map "
+        "(default), none = the unedited map, or an explicit store file",
+    )
     ap.add_argument("--start", type=parse_latlon, help="start lat,lon")
     ap.add_argument("--goal", type=parse_latlon, help="goal lat,lon (or geo:lat,lon)")
     ap.add_argument(
@@ -138,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     path = resolve_mapdata(args.file)
-    md, _ = load_mapdata_with_annotations(path)
+    md, _ = load_mapdata_with_annotations(path, annotations_arg(args.annotations))
     try:
         result = plan_route(
             md,

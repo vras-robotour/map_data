@@ -67,3 +67,26 @@ def test_cli_reports_failure(footway_network_mapdata, capsys):
 def test_cli_needs_two_points(footway_network_mapdata):
     path, lat0, lon0 = footway_network_mapdata
     assert main(["-f", str(path), "--goal", f"{lat0},{lon0}"]) == 2
+
+
+def test_cli_annotations_switch(footway_network_mapdata, capsys):
+    """``--annotations none`` ignores a store that would delete the needed way."""
+    path, lat0, lon0 = footway_network_mapdata
+    path.with_name(path.stem + ".annotations.json").write_text(
+        json.dumps({"version": 1, "annotations": [], "deleted_ways": [2]})
+    )
+    args = [
+        "-f",
+        str(path),
+        "--start",
+        _latlon(lat0, lon0, 0.0, 0.0),
+        "--goal",
+        _latlon(lat0, lon0, 100.0, 95.0),
+        "--max-snap-distance",
+        "50",
+        "--json",
+    ]
+    assert main(args) == 1
+    assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["reason"] == "snap_too_far"
+    assert main(args + ["--annotations", "none"]) == 0
+    assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["success"]

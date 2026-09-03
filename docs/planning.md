@@ -38,7 +38,12 @@ command line tool and the `route_planner` ROS 2 action server all call the same
 function, `map_data.pathsolver.route.plan_route`, on the same map: the `.mapdata`
 file with its `<stem>.annotations.json` merged in
 (`map_data.annotations.load_mapdata_with_annotations`). Whatever is drawn, deleted or
-split in the viewer is therefore what the robot plans on.
+split in the viewer is therefore what the robot plans on. Both tools take an explicit
+annotation choice: `--annotations auto|none|FILE` on the command line, the `annotations`
+parameter (launch argument) on the node. `none` plans on the unedited OSM map, which is
+the right choice when the store was pruned for a different area than the one you are
+planning in (a heavily edited store can delete the very paths you need; the node logs the
+footway count and the number of deleted ways it applied).
 
 ### Command line
 

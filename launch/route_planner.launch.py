@@ -31,6 +31,12 @@ def generate_launch_description():
             description="Directory .mapdata names are resolved against.",
         ),
         DeclareLaunchArgument(
+            "annotations",
+            default_value="auto",
+            description="auto = <map>.annotations.json next to the map, none = unedited map, "
+            "or a store file.",
+        ),
+        DeclareLaunchArgument(
             "mission_dir",
             default_value="~/missions",
             description="Where planned routes are written as GPX tracks.",
@@ -55,6 +61,7 @@ def generate_launch_description():
             {
                 "mapdata_file": LaunchConfiguration("mapdata_file"),
                 "data_dir": LaunchConfiguration("mapdata_path"),
+                "annotations": LaunchConfiguration("annotations"),
                 "mission_dir": LaunchConfiguration("mission_dir"),
                 "gps_fix_topic": LaunchConfiguration("gps_fix_topic"),
                 "earth_frame": LaunchConfiguration("earth_frame"),

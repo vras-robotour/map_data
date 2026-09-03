@@ -61,7 +61,7 @@ from sensor_msgs.msg import NavSatFix
 from std_msgs.msg import String
 from tf2_ros import Buffer, TransformException, TransformListener
 
-from map_data.annotations import load_mapdata_with_annotations
+from map_data.annotations import NO_ANNOTATIONS, annotation_path_for, load_mapdata_with_annotations
 from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE
 from map_data.pathsolver.route import (
     GRAPH_ALGORITHM,
@@ -92,6 +92,9 @@ class RoutePlanner(Node):
         p = self.declare_parameter
         self.mapdata_file = p("mapdata_file", "").value
         self.data_dir = p("data_dir", _default_data_dir()).value
+        # "auto" = <mapdata>.annotations.json next to the map, "none" = the unedited map,
+        # or an explicit store file.
+        self.annotations = p("annotations", "auto").value
         self.mission_dir = p("mission_dir", str(Path.home() / "missions")).value
         self.gps_fix_topic = p("gps_fix_topic", "/fixposition/odometry_llh").value
         self.goal_topic = p("goal_topic", "~/goal").value
@@ -115,7 +118,8 @@ class RoutePlanner(Node):
         self._fix: NavSatFix | None = None
         self._fix_time = 0.0
         self._lock = threading.Lock()  # one plan at a time
-        self._map_cache: tuple[str, float, object] | None = None  # (path, mtime, MapData)
+        # (key, mtime, MapData)
+        self._map_cache: tuple[tuple[str, str], float, object] | None = None
 
         latched = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self.pub_route = self.create_publisher(GeoPath, self.route_topic, latched)
@@ -205,11 +209,29 @@ class RoutePlanner(Node):
         return p if p.is_file() else None
 
     def _load_map(self, path: Path):
+        ann = None if self.annotations in ("", "auto") else self.annotations
+        ann_path = None if ann in (None, NO_ANNOTATIONS) else Path(ann).expanduser()
+        if ann is None:
+            ann_path = annotation_path_for(path)
         mtime = path.stat().st_mtime
-        if self._map_cache and self._map_cache[0] == str(path) and self._map_cache[1] == mtime:
+        if ann_path is not None and ann_path.is_file():
+            mtime += ann_path.stat().st_mtime
+        key = (str(path), str(ann))
+        if self._map_cache and self._map_cache[0] == key and self._map_cache[1] == mtime:
             return self._map_cache[2]
-        md, _ = load_mapdata_with_annotations(path)
-        self._map_cache = (str(path), mtime, md)
+        md, store = load_mapdata_with_annotations(path, ann)
+        if ann == NO_ANNOTATIONS:
+            store_name = "none"
+        elif ann_path is not None and ann_path.is_file():
+            store_name = ann_path.name
+        else:
+            store_name = "no store"
+        self.get_logger().info(
+            f"loaded {path.name}: {len(md.footways_list)} footways, {len(md.roads_list)} roads, "
+            f"annotations={store_name} ({len(store.get('deleted_ways', []))} deleted ways, "
+            f"{len(store.get('annotations', []))} drawn)"
+        )
+        self._map_cache = (key, mtime, md)
         return md
 
     def _plan(self, goal: PlanRoute.Goal, feedback) -> PlanRoute.Result:

@@ -46,6 +46,8 @@ _CAT_FOR_LIST = {
 
 #: Default width (m) of an annotated path without a ``width`` property.
 DEFAULT_ANNOTATION_WIDTH_M = 1.5
+#: Pass as ``annotations_path`` to load the map without any annotation store.
+NO_ANNOTATIONS = "none"
 
 
 def annotation_path_for(mapdata_path: str | Path) -> Path:
@@ -241,10 +243,14 @@ def load_mapdata_with_annotations(
     Load a ``.mapdata`` file and merge its annotation store.
 
     ``annotations_path`` defaults to :func:`annotation_path_for`; a missing
-    store simply yields the unedited map. Returns ``(map_data, store)``.
+    store simply yields the unedited map, and :data:`NO_ANNOTATIONS` (``"none"``)
+    skips the store on purpose. Returns ``(map_data, store)``.
     """
     mapdata_path = Path(mapdata_path)
-    store = load_annotations(str(annotations_path or annotation_path_for(mapdata_path)))
+    if annotations_path == NO_ANNOTATIONS:
+        store = {"version": 1, "annotations": []}
+    else:
+        store = load_annotations(str(annotations_path or annotation_path_for(mapdata_path)))
     md = MapData.load(str(mapdata_path))
     n_ann = len(store.get("annotations", []))
     if n_ann or store.get("deleted_ways") or store.get("split_ways") or store.get("tag_overrides"):
