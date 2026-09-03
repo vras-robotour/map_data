@@ -1849,6 +1849,14 @@
 <h2 id="unreleased">[Unreleased]</h2>
 <h3 id="added">Added</h3>
 <ul>
+<li>Offline route planning: <code>map_data.pathsolver.route.plan_route</code> (the Planner
+  screen's graph/grid planning as a library call, with <code>densify</code>, failure reasons
+  and snap distances), <code>map_data.annotations</code> (annotation-store merge without the
+  web app, <code>load_mapdata_with_annotations</code>), the <code>map_data_plan</code> CLI, the
+  <code>route_planner</code> ROS 2 action server with the new <code>map_data_interfaces</code>
+  package (<code>PlanRoute.action</code>), <code>route_planner.launch.py</code>, <code>GraphPlanner.snap_distance</code>
+  and <code>gpx.create_gpx_track</code>. The viewer's <code>/api/create_replan</code> now delegates to
+  <code>plan_route</code> and reports a <code>reason</code> on failure</li>
 <li>Viewer tracker for the Helhest field stack: poses in any TF frame are converted
   to lat/lon through <code>earth_frame</code> (ECEF) instead of requiring a <code>utm</code> frame; new
   inputs <code>BatteryState</code>, <code>Temperature</code>, e-stop <code>Bool</code>, <code>DiagnosticArray</code>, <code>Joy</code>,
@@ -2131,7 +2139,12 @@
 <li>Thread-safe cancellation in the replanning module</li>
 <li><code>create_mapdata</code> node: existing file load was missing the <code>.mapdata</code> suffix, causing <code>MapData.load</code> to receive an incorrect path</li>
 <li><code>create_mapdata</code> node: <code>--download</code> flag was passed as a positional argument to <code>process_map_data</code>, now correctly passed as a keyword argument</li>
-<li>Multi-zone UTM boundary warning when loaded area spans two UTM zones</li>
+<li>
+<p>Multi-zone UTM boundary warning when loaded area spans two UTM zones</p>
+</li>
+<li>
+<p><code>route_planner</code> preloads its map and caches one <code>GraphPlanner</code> per map / way set / snap distance (<code>plan_route(planner=...)</code>); a request plans in milliseconds instead of rebuilding the graph.</p>
+</li>
 </ul>
 
 
