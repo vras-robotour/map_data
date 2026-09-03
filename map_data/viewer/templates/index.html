@@ -345,12 +345,17 @@
         <div class="ms-auto d-flex gap-2 align-items-center">
           <label class="small mb-0">Size <input type="range" id="qr-modal-size" min="20" max="100" value="70" style="width:120px;vertical-align:middle;"></label>
           <button type="button" class="btn btn-sm btn-outline-secondary" id="qr-modal-copy">Copy geo text</button>
-          <a class="btn btn-sm btn-outline-primary" id="qr-modal-download" href="#" download>Download PNG</a>
+          <a class="btn btn-sm btn-outline-primary" id="qr-modal-download-svg" href="#" download>Download SVG</a>
+          <a class="btn btn-sm btn-outline-secondary" id="qr-modal-download" href="#" download>PNG</a>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
       </div>
-      <div class="modal-body d-flex align-items-center justify-content-center p-2">
-        <img id="qr-modal-img" alt="QR code" style="height:70vh; max-width:95vw; image-rendering:pixelated;">
+      <!-- The code is an SVG (sharp at any size); the caption is real text
+           underneath rather than pixels baked into the image, which went
+           blocky once the code was scaled up to fill the screen. -->
+      <div class="modal-body d-flex flex-column align-items-center justify-content-center p-2 gap-3">
+        <img id="qr-modal-img" alt="QR code" style="height:70vh; max-width:95vw;">
+        <div id="qr-modal-caption" class="font-monospace text-nowrap" style="font-size:3.5vh;"></div>
       </div>
     </div>
   </div>

@@ -305,3 +305,5 @@
 - `route_planner` preloads its map and caches one `GraphPlanner` per map / way set / snap distance (`plan_route(planner=...)`); a request plans in milliseconds instead of rebuilding the graph.
 
 - Planner screen: Robotour goal QR codes per waypoint (`/api/qr`, `map_data.utils.qr`) shown full screen for the robot camera or downloaded as PNG.
+
+- Goal QR codes are vector art (`/api/qr.svg`, `qr_svg`): the caption used to be rasterised into the PNG, so it went blocky when the viewer scaled the code up to fill the screen. The modal now shows an SVG with the caption as HTML text beside it, and offers an SVG download for printing.

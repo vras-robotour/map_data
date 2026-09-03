@@ -50,9 +50,12 @@ footway count and the number of deleted ways it applied).
 Robotour hands goals over as QR codes with a `geo:lat,lon` payload. In the Planner screen,
 right-click any waypoint and choose *QR code*, or press *QR goal* for the last waypoint:
 the code opens full screen on a white background (size slider) so a laptop or tablet can be
-held to the robot camera, with *Download PNG* for printing and *Copy geo text* for typing the
-goal in with `qr_goal_send`. The image comes from `GET /api/qr?lat=…&lon=…[&scale=12]
-[&download=1]` (OpenCV `QRCodeEncoder`, `map_data.utils.qr`).
+held to the robot camera, with *Download SVG* (or *PNG*) for printing and *Copy geo text* for typing the
+goal in with `qr_goal_send`. The code comes from `GET /api/qr.svg?lat=…&lon=…[&scale=12]
+[&download=1][&caption=]` as vector art, so it stays sharp at any size and the caption under it
+is real text rather than pixels; `GET /api/qr?…` serves the same code as a PNG for anything that
+needs a bitmap (OpenCV `QRCodeEncoder`, `map_data.utils.qr`). An empty `caption=` leaves the
+caption off - the viewer draws its own as HTML text under the code.
 
 ### Command line
 

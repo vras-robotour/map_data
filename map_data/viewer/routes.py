@@ -99,7 +99,7 @@ from map_data.pathsolver.route import (
     plan_route,
 )
 from map_data.utils.parsing import ways_to_shapely
-from map_data.utils.qr import geo_uri, qr_png
+from map_data.utils.qr import geo_uri, qr_png, qr_svg
 from map_data.utils.serialization import map_data_to_dict
 from map_data.utils.way import FOOTWAY_VALUES
 
@@ -126,28 +126,61 @@ logger = logging.getLogger(__name__)
 bp = Blueprint("viewer", __name__)
 
 
+def _qr_request() -> tuple[str, int, str | None]:
+    """``(geo URI, scale, caption)`` from the query string; raises on bad input.
+
+    ``caption`` is the text printed under the code - absent means the payload
+    itself, an empty ``?caption=`` means none (the viewer draws its own, as
+    real text rather than pixels).
+    """
+    lat, lon = float(request.args["lat"]), float(request.args["lon"])
+    return geo_uri(lat, lon), int(request.args.get("scale", 12)), request.args.get("caption")
+
+
+def _qr_response(body: bytes | str, mimetype: str, text: str, suffix: str) -> Response:
+    """Wrap a rendered code, adding the download file name when asked for."""
+    resp = Response(body, mimetype=mimetype)
+    resp.headers["X-Geo-URI"] = text
+    if request.args.get("download") == "1":
+        name = text[4:].replace(",", "_") + suffix
+        resp.headers["Content-Disposition"] = f'attachment; filename="qr_{name}"'
+    return resp
+
+
 @bp.route("/api/qr")
 def get_qr() -> ResponseReturnValue:
     """
-    PNG QR code of a Robotour goal: ``/api/qr?lat=50.11&lon=14.41[&scale=12][&download=1]``.
+    PNG QR code of a Robotour goal:
+    ``/api/qr?lat=50.11&lon=14.41[&scale=12][&download=1][&caption=]``.
 
     The payload is the geo URI the robot's ``qr_goal`` node parses
     (``geo:lat,lon``); ``scale`` is pixels per module (1-40); ``download=1``
-    sets a file name so the browser saves it. 400 on bad coordinates.
+    sets a file name so the browser saves it. 400 on bad coordinates. The
+    caption is baked into the pixels here - prefer :func:`get_qr_svg` for
+    anything that gets scaled.
     """
     try:
-        lat, lon = float(request.args["lat"]), float(request.args["lon"])
-        text = geo_uri(lat, lon)
-        scale = int(request.args.get("scale", 12))
+        text, scale, caption = _qr_request()
     except (KeyError, ValueError) as e:
         return jsonify({"error": f"lat/lon required: {e}"}), 400
-    png = qr_png(text, scale=scale)
-    resp = Response(png, mimetype="image/png")
-    resp.headers["X-Geo-URI"] = text
-    if request.args.get("download") == "1":
-        name = text[4:].replace(",", "_") + ".png"
-        resp.headers["Content-Disposition"] = f'attachment; filename="qr_{name}"'
-    return resp
+    return _qr_response(qr_png(text, scale=scale, caption=caption), "image/png", text, ".png")
+
+
+@bp.route("/api/qr.svg")
+def get_qr_svg() -> ResponseReturnValue:
+    """
+    The same code as vector art:
+    ``/api/qr.svg?lat=50.11&lon=14.41[&scale=12][&download=1][&caption=]``.
+
+    Sharp at any size and the caption is real text, so this is what to show on
+    a screen or send to a printer; ``scale`` only sets the default pixel size.
+    """
+    try:
+        text, scale, caption = _qr_request()
+    except (KeyError, ValueError) as e:
+        return jsonify({"error": f"lat/lon required: {e}"}), 400
+    svg = qr_svg(text, scale=scale, caption=caption)
+    return _qr_response(svg, "image/svg+xml", text, ".svg")
 
 
 @bp.route("/api/planner_defaults")

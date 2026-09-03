@@ -106,6 +106,8 @@ class PlannerMode {
     });
     document.getElementById('qr-modal-size').addEventListener('input', (e) => {
       document.getElementById('qr-modal-img').style.height = `${e.target.value}vh`;
+      // Keep the caption in proportion with the code as the slider moves.
+      document.getElementById('qr-modal-caption').style.fontSize = `${e.target.value / 20}vh`;
     });
     document.getElementById('qr-modal-copy').addEventListener('click', async () => {
       const text = document.getElementById('qr-modal-text').textContent;
@@ -878,8 +880,13 @@ ${pts}
   /** Robotour goal QR (geo:lat,lon) for one waypoint, full screen for the robot camera. */
   showQr(point) {
     const q = `lat=${point.lat.toFixed(7)}&lon=${point.lon.toFixed(7)}`;
-    document.getElementById('qr-modal-text').textContent = `geo:${point.lat.toFixed(7)},${point.lon.toFixed(7)}`;
-    document.getElementById('qr-modal-img').src = `/api/qr?${q}&scale=12`;
+    const text = `geo:${point.lat.toFixed(7)},${point.lon.toFixed(7)}`;
+    document.getElementById('qr-modal-text').textContent = text;
+    // `caption=` empty: the code alone, so the caption below is real text and
+    // stays sharp however far the code is scaled up.
+    document.getElementById('qr-modal-img').src = `/api/qr.svg?${q}&caption=`;
+    document.getElementById('qr-modal-caption').textContent = text;
+    document.getElementById('qr-modal-download-svg').href = `/api/qr.svg?${q}&download=1`;
     document.getElementById('qr-modal-download').href = `/api/qr?${q}&scale=20&download=1`;
     bootstrap.Modal.getOrCreateInstance(document.getElementById('qr-modal')).show();
   }
