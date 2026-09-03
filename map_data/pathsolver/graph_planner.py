@@ -228,6 +228,15 @@ class GraphPlanner:
         projected_point = np.array(line.interpolate(proj_dist).coords[0])
         return (n1, n2, projected_point), min_dist
 
+    def snap_distance(self, point_utm: np.ndarray) -> float:
+        """
+        Distance (m) from ``point_utm`` (``[easting, northing]``) to the nearest
+        graph edge, or ``inf`` when the graph has no edges. This is the distance
+        :meth:`plan` compares against ``max_snap_distance``.
+        """
+        _, dist = self._find_closest_edge(np.asarray(point_utm, dtype=float)[:2])
+        return float(dist)
+
     def a_star(
         self,
         start_node: int | str,
