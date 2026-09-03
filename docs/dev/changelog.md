@@ -303,3 +303,5 @@
 - Multi-zone UTM boundary warning when loaded area spans two UTM zones
 
 - `route_planner` preloads its map and caches one `GraphPlanner` per map / way set / snap distance (`plan_route(planner=...)`); a request plans in milliseconds instead of rebuilding the graph.
+
+- Planner screen: Robotour goal QR codes per waypoint (`/api/qr`, `map_data.utils.qr`) shown full screen for the robot camera or downloaded as PNG.

@@ -45,6 +45,15 @@ the right choice when the store was pruned for a different area than the one you
 planning in (a heavily edited store can delete the very paths you need; the node logs the
 footway count and the number of deleted ways it applied).
 
+### Goal QR codes (Planner screen)
+
+Robotour hands goals over as QR codes with a `geo:lat,lon` payload. In the Planner screen,
+right-click any waypoint and choose *QR code*, or press *QR goal* for the last waypoint:
+the code opens full screen on a white background (size slider) so a laptop or tablet can be
+held to the robot camera, with *Download PNG* for printing and *Copy geo text* for typing the
+goal in with `qr_goal_send`. The image comes from `GET /api/qr?lat=…&lon=…[&scale=12]
+[&download=1]` (OpenCV `QRCodeEncoder`, `map_data.utils.qr`).
+
 ### Command line
 
 ```bash
