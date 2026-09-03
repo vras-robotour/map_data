@@ -59,7 +59,8 @@ from rclpy.qos import QoSDurabilityPolicy, QoSProfile, qos_profile_sensor_data
 from ros2_numpy import numpify
 from sensor_msgs.msg import NavSatFix
 from std_msgs.msg import String
-from tf2_ros import Buffer, TransformException, TransformListener
+from tf2_msgs.msg import TFMessage
+from tf2_ros import Buffer, TransformException
 
 from map_data.annotations import NO_ANNOTATIONS, annotation_path_for, load_mapdata_with_annotations
 from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE
@@ -126,8 +127,11 @@ class RoutePlanner(Node):
         self.pub_route_path = self.create_publisher(PathMsg, self.route_path_topic, latched)
         self.pub_status = self.create_publisher(String, self.status_topic, latched)
 
+        # Only the static earth->local transform is needed; a full TransformListener would
+        # also digest the /tf firehose (hundreds of Hz on Helhest) and starve the planner.
         self.tf = Buffer()
-        self.tf_listener = TransformListener(self.tf, self, spin_thread=True)
+        static_qos = QoSProfile(depth=100, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+        self.create_subscription(TFMessage, "/tf_static", self._tf_static_cb, static_qos)
 
         cbg = ReentrantCallbackGroup()
         self.create_subscription(
@@ -197,6 +201,10 @@ class RoutePlanner(Node):
         else:
             handle.abort()
         return result
+
+    def _tf_static_cb(self, msg: TFMessage) -> None:
+        for t in msg.transforms:
+            self.tf.set_transform_static(t, "route_planner")
 
     # ------------------------------------------------------------------ planning
     def _resolve_mapdata(self, name: str) -> Path | None:
@@ -348,9 +356,11 @@ class RoutePlanner(Node):
             )
             return msg
         m = numpify(tf_msg.transform)
-        for lat, lon in route.latlon:
-            ecef = np.array([*latlon_to_ecef(lat, lon, 0.0), 1.0])
-            x, y, _z = (m @ ecef)[:3]
+        lats = [lat for lat, _ in route.latlon]
+        lons = [lon for _, lon in route.latlon]
+        ecef = latlon_to_ecef(lats, lons, 0.0)  # (N, 3)
+        local = (m[:3, :3] @ ecef.T).T + m[:3, 3]
+        for x, y, _z in local:
             pose = PoseStamped()
             pose.header = msg.header
             pose.pose.position.x = float(x)
