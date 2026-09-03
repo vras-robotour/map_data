@@ -99,6 +99,7 @@ from map_data.pathsolver.route import (
     plan_route,
 )
 from map_data.utils.parsing import ways_to_shapely
+from map_data.utils.qr import geo_uri, qr_png
 from map_data.utils.serialization import map_data_to_dict
 from map_data.utils.way import FOOTWAY_VALUES
 
@@ -123,6 +124,30 @@ SIGNIFICANT_CHANGE_TOLERANCE = 0.1
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("viewer", __name__)
+
+
+@bp.route("/api/qr")
+def get_qr() -> ResponseReturnValue:
+    """
+    PNG QR code of a Robotour goal: ``/api/qr?lat=50.11&lon=14.41[&scale=12][&download=1]``.
+
+    The payload is the geo URI the robot's ``qr_goal`` node parses
+    (``geo:lat,lon``); ``scale`` is pixels per module (1-40); ``download=1``
+    sets a file name so the browser saves it. 400 on bad coordinates.
+    """
+    try:
+        lat, lon = float(request.args["lat"]), float(request.args["lon"])
+        text = geo_uri(lat, lon)
+        scale = int(request.args.get("scale", 12))
+    except (KeyError, ValueError) as e:
+        return jsonify({"error": f"lat/lon required: {e}"}), 400
+    png = qr_png(text, scale=scale)
+    resp = Response(png, mimetype="image/png")
+    resp.headers["X-Geo-URI"] = text
+    if request.args.get("download") == "1":
+        name = text[4:].replace(",", "_") + ".png"
+        resp.headers["Content-Disposition"] = f'attachment; filename="qr_{name}"'
+    return resp
 
 
 @bp.route("/api/planner_defaults")

@@ -101,6 +101,16 @@ class PlannerMode {
     document.getElementById('import-gpx-btn').addEventListener('click', () => document.getElementById('gpx-input').click());
     document.getElementById('gpx-input').addEventListener('change', (e) => this.handleGpxImport(e));
     document.getElementById('replan-btn').addEventListener('click', () => this.replanPath());
+    document.getElementById('planner-qr-btn').addEventListener('click', () => {
+      if (this.points.length) this.showQr(this.points[this.points.length - 1]);
+    });
+    document.getElementById('qr-modal-size').addEventListener('input', (e) => {
+      document.getElementById('qr-modal-img').style.height = `${e.target.value}vh`;
+    });
+    document.getElementById('qr-modal-copy').addEventListener('click', async () => {
+      const text = document.getElementById('qr-modal-text').textContent;
+      try { await navigator.clipboard.writeText(text); } catch (_) { window.prompt('Copy the goal text:', text); }
+    });
 
     document.getElementById('export-gpx-path-btn').addEventListener('click', () => this.exportToGPX());
     document.getElementById('export-wormhole-path-btn').addEventListener('click', () => this.shareViaWormhole());
@@ -536,6 +546,7 @@ class PlannerMode {
       const distLabel = this.hasPlannedPath ? 'planned path' : 'straight-line';
       countEl.textContent = `${this.points.length} points | ${distStr} (${distLabel})`;
     }
+    document.getElementById('planner-qr-btn').disabled = this.points.length < 1;
     document.getElementById('export-gpx-path-btn').disabled = this.points.length < 2;
     document.getElementById('export-wormhole-path-btn').disabled = this.points.length < 2;
     document.getElementById('planner-clear-btn').disabled = this.points.length === 0;
@@ -864,6 +875,15 @@ ${pts}
     };
   }
 
+  /** Robotour goal QR (geo:lat,lon) for one waypoint, full screen for the robot camera. */
+  showQr(point) {
+    const q = `lat=${point.lat.toFixed(7)}&lon=${point.lon.toFixed(7)}`;
+    document.getElementById('qr-modal-text').textContent = `geo:${point.lat.toFixed(7)},${point.lon.toFixed(7)}`;
+    document.getElementById('qr-modal-img').src = `/api/qr?${q}&scale=12`;
+    document.getElementById('qr-modal-download').href = `/api/qr?${q}&scale=20&download=1`;
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('qr-modal')).show();
+  }
+
   showContextMenu(point, latlng) {
     const container = document.createElement('div');
     container.className = 'context-menu';
@@ -876,6 +896,10 @@ ${pts}
       map.closePopup();
     };
     container.appendChild(delBtn);
+    const qrBtn = document.createElement('button');
+    qrBtn.textContent = '🔳 QR code';
+    qrBtn.onclick = () => { map.closePopup(); this.showQr(point); };
+    container.appendChild(qrBtn);
 
     L.popup({ minWidth: 120, className: 'planner-popup', offset: [0, -5], closeButton: false })
       .setLatLng(latlng)
