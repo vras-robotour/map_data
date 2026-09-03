@@ -22,7 +22,11 @@ setup(
         ),
         (
             str(Path("share") / package_name / "data"),
-            [str(p) for p in Path("data").glob("*.gpx")],
+            [
+                str(p)
+                for pat in ("*.gpx", "*.mapdata", "*.annotations.json")
+                for p in Path("data").glob(pat)
+            ],
         ),
         (
             str(Path("share") / package_name / "parameters"),
