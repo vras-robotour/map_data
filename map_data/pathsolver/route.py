@@ -173,6 +173,7 @@ def plan_route(
     surface_costs: dict[str, float] | None = None,
     transfer_id: str | None = None,
     max_grid_cells: float = MAX_GRID_CELLS,
+    planner: GraphPlanner | None = None,
 ) -> RouteResult:
     """
     Plan a route through ``points_latlon`` (``[(lat, lon), ...]``, at least two).
@@ -187,6 +188,10 @@ def plan_route(
     apart (a waypoint follower wants a few metres). ``changed`` and
     ``snap_distances`` are computed before resampling.
 
+    ``planner`` lets a caller reuse a prebuilt :class:`GraphPlanner` for ``md``
+    (building the graph costs ~0.3 s, planning on it ~1 ms); it must have been
+    built for the same ``highway_types`` and ``max_snap_distance``.
+
     Raises :class:`RoutePlanningError` on failure.
     """
     highway_types = list(highway_types) if highway_types else ["footway"]
@@ -197,7 +202,10 @@ def plan_route(
     utm_path = latlon_to_utm_path(points_latlon, zn, zl)
 
     if algorithm == GRAPH_ALGORITHM:
-        planner = GraphPlanner(md, highway_types=highway_types, max_snap_distance=max_snap_distance)
+        if planner is None:
+            planner = GraphPlanner(
+                md, highway_types=highway_types, max_snap_distance=max_snap_distance
+            )
         snap = [planner.snap_distance(p) for p in utm_path]
         too_far = [i for i, d in enumerate(snap) if d > max_snap_distance]
         if too_far:

@@ -146,3 +146,18 @@ def test_gpx_track_roundtrip(tmp_path):
     back = [utm.to_latlon(p[0], p[1], zn, zl) for p in parsed]
     for (lat, lon), (blat, blon) in zip(pts, back, strict=True):
         assert (lat, lon) == pytest.approx((blat, blon), abs=1e-7)
+
+
+def test_plan_route_reuses_a_prebuilt_planner(footway_network_mapdata):
+    from map_data.pathsolver.graph_planner import GraphPlanner
+
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    planner = GraphPlanner(md, highway_types=["footway"])
+    pts = [_latlon(lat0, lon0, 5.0, 3.0), _latlon(lat0, lon0, 100.0, 95.0)]
+    fresh = plan_route(md, pts)
+    reused = plan_route(md, pts, planner=planner)
+    again = plan_route(md, pts, planner=planner)  # the planner keeps no per-request state
+    assert reused.length_m == pytest.approx(fresh.length_m)
+    assert again.latlon == reused.latlon
+    assert reused.snap_distances == pytest.approx(fresh.snap_distances)
