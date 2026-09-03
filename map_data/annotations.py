@@ -247,6 +247,7 @@ def load_mapdata_with_annotations(
     skips the store on purpose. Returns ``(map_data, store)``.
     """
     mapdata_path = Path(mapdata_path)
+    store: dict[str, Any]
     if annotations_path == NO_ANNOTATIONS:
         store = {"version": 1, "annotations": []}
     else:

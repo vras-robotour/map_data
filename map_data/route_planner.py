@@ -232,7 +232,10 @@ class RoutePlanner(Node):
 
     def _graph_planner(self, path: Path, md, highway_types, max_snap: float) -> GraphPlanner:
         """Cached GraphPlanner for (map file, mtime, way set, snap distance)."""
-        key = (self._map_cache[0], self._map_cache[1], tuple(highway_types), float(max_snap))
+        cache = self._map_cache
+        if cache is None:  # every caller runs _load_map first, which fills the cache
+            raise RuntimeError("_graph_planner called before the map was loaded")
+        key = (cache[0], cache[1], tuple(highway_types), float(max_snap))
         planner = self._planner_cache.get(key)
         if planner is not None and planner.map_data is md:
             self._planner_cache.move_to_end(key)

@@ -13,6 +13,7 @@ All functions are vectorised over NumPy arrays and have no ROS dependency.
 from __future__ import annotations
 
 import numpy as np
+import numpy.typing as npt
 import utm
 
 # WGS84 ellipsoid
@@ -24,9 +25,9 @@ _EP2 = (WGS84_A**2 - WGS84_B**2) / WGS84_B**2
 
 
 def latlon_to_ecef(
-    lat_deg: np.ndarray | float,
-    lon_deg: np.ndarray | float,
-    alt_m: np.ndarray | float = 0.0,
+    lat_deg: npt.ArrayLike,
+    lon_deg: npt.ArrayLike,
+    alt_m: npt.ArrayLike = 0.0,
 ) -> np.ndarray:
     """
     Convert WGS84 geodetic coordinates to ECEF.
