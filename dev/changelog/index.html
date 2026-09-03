@@ -2148,6 +2148,9 @@
 <li>
 <p>Planner screen: Robotour goal QR codes per waypoint (<code>/api/qr</code>, <code>map_data.utils.qr</code>) shown full screen for the robot camera or downloaded as PNG.</p>
 </li>
+<li>
+<p>Goal QR codes are vector art (<code>/api/qr.svg</code>, <code>qr_svg</code>): the caption used to be rasterised into the PNG, so it went blocky when the viewer scaled the code up to fill the screen. The modal now shows an SVG with the caption as HTML text beside it, and offers an SVG download for printing.</p>
+</li>
 </ul>
 
 
