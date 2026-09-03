@@ -783,6 +783,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#goal-qr-codes-planner-screen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Goal QR codes (Planner screen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#command-line" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1587,6 +1598,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#goal-qr-codes-planner-screen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Goal QR codes (Planner screen)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#command-line" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1898,6 +1920,13 @@ parameter (launch argument) on the node. <code>none</code> plans on the unedited
 the right choice when the store was pruned for a different area than the one you are
 planning in (a heavily edited store can delete the very paths you need; the node logs the
 footway count and the number of deleted ways it applied).</p>
+<h3 id="goal-qr-codes-planner-screen">Goal QR codes (Planner screen)</h3>
+<p>Robotour hands goals over as QR codes with a <code>geo:lat,lon</code> payload. In the Planner screen,
+right-click any waypoint and choose <em>QR code</em>, or press <em>QR goal</em> for the last waypoint:
+the code opens full screen on a white background (size slider) so a laptop or tablet can be
+held to the robot camera, with <em>Download PNG</em> for printing and <em>Copy geo text</em> for typing the
+goal in with <code>qr_goal_send</code>. The image comes from <code>GET /api/qr?lat=…&amp;lon=…[&amp;scale=12]
+[&amp;download=1]</code> (OpenCV <code>QRCodeEncoder</code>, <code>map_data.utils.qr</code>).</p>
 <h3 id="command-line">Command line</h3>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Paths only (graph planner on footways), 3 m waypoint spacing, saved as a GPX track</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>map_data_plan<span class="w"> </span>-f<span class="w"> </span>stromovka.mapdata<span class="w"> </span>--start<span class="w"> </span><span class="m">50</span>.1038,14.4294<span class="w"> </span>--goal<span class="w"> </span>geo:50.1067,14.4193<span class="w"> </span><span class="se">\</span>
