@@ -301,3 +301,5 @@
 - `create_mapdata` node: existing file load was missing the `.mapdata` suffix, causing `MapData.load` to receive an incorrect path
 - `create_mapdata` node: `--download` flag was passed as a positional argument to `process_map_data`, now correctly passed as a keyword argument
 - Multi-zone UTM boundary warning when loaded area spans two UTM zones
+
+- `route_planner` preloads its map and caches one `GraphPlanner` per map / way set / snap distance (`plan_route(planner=...)`); a request plans in milliseconds instead of rebuilding the graph.

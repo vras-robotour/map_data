@@ -50,6 +50,9 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "spacing", default_value="3.0", description="m between output waypoints (0 = raw)"
         ),
+        DeclareLaunchArgument(
+            "preload", default_value="true", description="load the map and its graph at startup"
+        ),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
     ]
     node = Node(
@@ -67,6 +70,7 @@ def generate_launch_description():
                 "earth_frame": LaunchConfiguration("earth_frame"),
                 "local_frame": LaunchConfiguration("local_frame"),
                 "algorithm": LaunchConfiguration("algorithm"),
+                "preload": LaunchConfiguration("preload"),
                 "spacing": LaunchConfiguration("spacing"),
                 "use_sim_time": LaunchConfiguration("use_sim_time"),
             }

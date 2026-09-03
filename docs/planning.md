@@ -71,6 +71,10 @@ ros2 action send_goal /route_planner/plan_route map_data_interfaces/action/PlanR
     "{waypoints: [{latitude: 50.1067, longitude: 14.4193}], start_from_robot: true}"
 ```
 
+The node preloads its `mapdata_file` and keeps one graph planner per map, allowed-way set and
+snap distance (a few MB each, four at most), so a request plans in milliseconds; set
+`preload:=false` to load lazily.
+
 `map_data_interfaces/action/PlanRoute` takes the file, the ordered waypoints and the
 planner parameters (empty/zero fields use the node's defaults). With
 `start_from_robot` the latest fix on `gps_fix_topic` becomes the first waypoint, so a

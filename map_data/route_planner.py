@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
@@ -63,7 +64,7 @@ from tf2_msgs.msg import TFMessage
 from tf2_ros import Buffer, TransformException
 
 from map_data.annotations import NO_ANNOTATIONS, annotation_path_for, load_mapdata_with_annotations
-from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE
+from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE, GraphPlanner
 from map_data.pathsolver.route import (
     GRAPH_ALGORITHM,
     RoutePlanningError,
@@ -96,6 +97,9 @@ class RoutePlanner(Node):
         # "auto" = <mapdata>.annotations.json next to the map, "none" = the unedited map,
         # or an explicit store file.
         self.annotations = p("annotations", "auto").value
+        # Load mapdata_file and build its footway graph at startup (~20 MB) so the first
+        # goal does not pay for it; graph planners are cached per map / way set anyway.
+        self.preload = bool(p("preload", True).value)
         self.mission_dir = p("mission_dir", str(Path.home() / "missions")).value
         self.gps_fix_topic = p("gps_fix_topic", "/fixposition/odometry_llh").value
         self.goal_topic = p("goal_topic", "~/goal").value
@@ -121,6 +125,9 @@ class RoutePlanner(Node):
         self._lock = threading.Lock()  # one plan at a time
         # (key, mtime, MapData)
         self._map_cache: tuple[tuple[str, str], float, object] | None = None
+        # (map key, mtime, highway types, snap distance) -> GraphPlanner; small LRU
+        self._planner_cache: OrderedDict[tuple, GraphPlanner] = OrderedDict()
+        self._planner_cache_size = 4
 
         latched = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self.pub_route = self.create_publisher(GeoPath, self.route_topic, latched)
@@ -140,6 +147,8 @@ class RoutePlanner(Node):
         self.create_subscription(
             GeoPointStamped, self.goal_topic, self._goal_topic_cb, latched, callback_group=cbg
         )
+        if self.preload and self.mapdata_file:
+            self._preload_timer = self.create_timer(0.1, self._preload_once)
         self._server = ActionServer(
             self,
             PlanRoute,
@@ -201,6 +210,43 @@ class RoutePlanner(Node):
         else:
             handle.abort()
         return result
+
+    def _preload_once(self) -> None:
+        """One-shot timer: load the default map and build its default graph planner."""
+        self._preload_timer.cancel()
+        path = self._resolve_mapdata("")
+        if path is None:
+            self.get_logger().warn(f"preload: '{self.mapdata_file}' not found in {self.data_dir}")
+            return
+        t0 = time.monotonic()
+        try:
+            with self._lock:
+                md = self._load_map(path)
+                self._graph_planner(path, md, self.default_highway_types, self.default_max_snap)
+        except Exception as e:  # noqa: BLE001
+            self.get_logger().error(f"preload of {path.name} failed: {e}")
+            return
+        self.get_logger().info(
+            f"preloaded {path.name} and its graph in {time.monotonic() - t0:.2f} s"
+        )
+
+    def _graph_planner(self, path: Path, md, highway_types, max_snap: float) -> GraphPlanner:
+        """Cached GraphPlanner for (map file, mtime, way set, snap distance)."""
+        key = (self._map_cache[0], self._map_cache[1], tuple(highway_types), float(max_snap))
+        planner = self._planner_cache.get(key)
+        if planner is not None and planner.map_data is md:
+            self._planner_cache.move_to_end(key)
+            return planner
+        t0 = time.monotonic()
+        planner = GraphPlanner(md, highway_types=list(highway_types), max_snap_distance=max_snap)
+        self._planner_cache[key] = planner
+        while len(self._planner_cache) > self._planner_cache_size:
+            self._planner_cache.popitem(last=False)
+        self.get_logger().info(
+            f"built graph planner for {path.name} ({'/'.join(highway_types)}) in "
+            f"{time.monotonic() - t0:.2f} s; {len(self._planner_cache)} cached"
+        )
+        return planner
 
     def _tf_static_cb(self, msg: TFMessage) -> None:
         for t in msg.transforms:
@@ -284,6 +330,10 @@ class RoutePlanner(Node):
             algorithm = goal.algorithm or self.default_algorithm
             highway_types = list(goal.highway_types) or self.default_highway_types
             spacing = self.default_spacing if goal.spacing == 0.0 else max(goal.spacing, 0.0)
+            max_snap = goal.max_snap_distance or self.default_max_snap
+            planner = None
+            if algorithm == GRAPH_ALGORITHM:
+                planner = self._graph_planner(path, md, highway_types, max_snap)
             if feedback:
                 feedback(f"planning ({algorithm}, {'/'.join(highway_types)})")
             t0 = time.monotonic()
@@ -294,7 +344,8 @@ class RoutePlanner(Node):
                     algorithm=algorithm,
                     highway_types=highway_types,
                     spacing=spacing,
-                    max_snap_distance=goal.max_snap_distance or self.default_max_snap,
+                    max_snap_distance=max_snap,
+                    planner=planner,
                     cell_size=goal.cell_size or self.default_cell_size,
                     inflate_obstacles=goal.inflate_obstacles or self.default_inflate,
                     simplify_path=goal.simplify_path or self.default_simplify,
