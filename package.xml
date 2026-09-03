@@ -17,6 +17,8 @@
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>tf2_geometry_msgs</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>
+  <exec_depend>geographic_msgs</exec_depend>
+  <exec_depend>map_data_interfaces</exec_depend>
 
   <exec_depend>python3-flask</exec_depend>
   <exec_depend>python3-flask-socketio</exec_depend>

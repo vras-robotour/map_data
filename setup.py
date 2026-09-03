@@ -49,6 +49,7 @@ setup(
             "map_data_viewer = map_data.viewer.app:main",
             "map_data_info = map_data.info:main",
             "map_data_plan = map_data.plan_route_cli:main",
+            "route_planner = map_data.route_planner:main",
         ],
     },
 )
