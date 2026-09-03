@@ -5,7 +5,7 @@
 #                                               section below only renames topics)
 #
 # Every *_topic can be set to "" to disable the feature and hide its UI row.
-# Topic names and types were verified against the Stromovka bags (2026-08-21).
+# Topic names and types were verified against the Stromovka bags (2026-08-21, 2026-09-02).
 
 map_data_tracker:
   ros__parameters:
@@ -39,7 +39,7 @@ map_data_tracker:
     diagnostics_topic: "/diagnostics"
 
     # --- navigation state
-    commander_state_topic: "/commander/state"        # crl_commander mode (STOP/GOTO/SEQUENCE/...)
+    commander_state_topic: "/crl_commander/state"    # crl_commander mode (STOP/GOTO/SEQUENCE/STUCK/...); the node publishes ~/state
     follower_state_topic: "/road_follower/state"     # robot_mission_planner road_follower (ROAD/GPS)
     bt_log_topic: ""
     speed_limit_topic: ""
@@ -53,8 +53,8 @@ map_data_tracker:
 
     # --- geometry drawn on the map
     path_topic: "/crl_commander/plan"                # planner path (FP_ENU0), green dashed
-    goal_topic: "/commander/goal"                    # current commander goal (FP_ENU0)
-    sequence_path_topic: "/commander/sequence_waypoints"   # loaded sequence (FP_ECEF), blue
+    goal_topic: "/crl_commander/goal"                # current commander goal (FP_ENU0)
+    sequence_path_topic: "/crl_commander/goal_sequence"    # loaded sequence (nav_msgs/Path, FP_ECEF), blue
     sequence_poses_topic: "/goal_sequence"           # road_follower's current waypoint window, light blue
     road_path_topic: "/predicted_path_ls"            # path_centerline output (odom_odin), cyan
     intersections_topic: "/intersections"            # osm_cloud crossroads (FP_ENU0), magenta rings
