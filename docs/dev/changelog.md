@@ -4,6 +4,14 @@
 
 ### Added
 
+- Offline route planning: `map_data.pathsolver.route.plan_route` (the Planner
+  screen's graph/grid planning as a library call, with `densify`, failure reasons
+  and snap distances), `map_data.annotations` (annotation-store merge without the
+  web app, `load_mapdata_with_annotations`), the `map_data_plan` CLI, the
+  `route_planner` ROS 2 action server with the new `map_data_interfaces`
+  package (`PlanRoute.action`), `route_planner.launch.py`, `GraphPlanner.snap_distance`
+  and `gpx.create_gpx_track`. The viewer's `/api/create_replan` now delegates to
+  `plan_route` and reports a `reason` on failure
 - Viewer tracker for the Helhest field stack: poses in any TF frame are converted
   to lat/lon through `earth_frame` (ECEF) instead of requiring a `utm` frame; new
   inputs `BatteryState`, `Temperature`, e-stop `Bool`, `DiagnosticArray`, `Joy`,

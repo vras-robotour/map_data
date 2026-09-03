@@ -31,6 +31,82 @@ python3 -m map_data.pathsolver.replan \
 | `--visualize` | `false` | Show a matplotlib plot of the planned path and obstacles |
 | `--save <file>` | — | Save the resulting path as a GPX file |
 
+## Offline route planning: `map_data_plan` and the `route_planner` action
+
+The viewer's *Planner* screen (`POST /api/create_replan`), the `map_data_plan`
+command line tool and the `route_planner` ROS 2 action server all call the same
+function, `map_data.pathsolver.route.plan_route`, on the same map: the `.mapdata`
+file with its `<stem>.annotations.json` merged in
+(`map_data.annotations.load_mapdata_with_annotations`). Whatever is drawn, deleted or
+split in the viewer is therefore what the robot plans on.
+
+### Command line
+
+```bash
+# Paths only (graph planner on footways), 3 m waypoint spacing, saved as a GPX track
+map_data_plan -f stromovka.mapdata --start 50.1038,14.4294 --goal geo:50.1067,14.4193 \
+    --spacing 3 --save route.gpx
+
+# All terrain (grid A*) through several points, printed as JSON
+map_data_plan -f stromovka.mapdata -p 50.1038,14.4294 -p 50.1050,14.4250 -p 50.1067,14.4193 \
+    --algorithm astar --cell-size 0.5 --json
+```
+
+`--goal` accepts the `geo:lat,lon` URI printed on a Robotour QR code. Failures are
+reported with a reason: `snap_too_far` (a point is farther than `--max-snap-distance`
+from every allowed way), `unreachable` (disconnected network), `no_path`,
+`grid_too_large`, `too_few_points`.
+
+### ROS 2 action server
+
+```bash
+ros2 launch map_data route_planner.launch.py mapdata_file:=stromovka.mapdata
+
+ros2 action send_goal /route_planner/plan_route map_data_interfaces/action/PlanRoute \
+    "{waypoints: [{latitude: 50.1067, longitude: 14.4193}], start_from_robot: true}"
+```
+
+`map_data_interfaces/action/PlanRoute` takes the file, the ordered waypoints and the
+planner parameters (empty/zero fields use the node's defaults). With
+`start_from_robot` the latest fix on `gps_fix_topic` becomes the first waypoint, so a
+single goal is enough. The result carries the route as `geographic_msgs/GeoPath`, the
+same route as `nav_msgs/Path` in `local_frame` (through the `earth_frame -> local_frame`
+transform, exactly as `osm_cloud` places the map), the length, the snap distances and the
+path of the GPX track written to `mission_dir`. The route is also published latched on
+`~/route` (GeoPath) and `~/route_path` (Path) and a status string on `~/status`. A
+`geographic_msgs/GeoPointStamped` published on `~/goal` triggers the same planning from the
+robot's position with the default parameters.
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `mapdata_file` | `""` | default `.mapdata` (name in `data_dir` or absolute path) |
+| `data_dir` | package `share/map_data/data` | where file names are resolved |
+| `mission_dir` | `~/missions` | GPX output directory |
+| `gps_fix_topic` | `/fixposition/odometry_llh` | `NavSatFix` for `start_from_robot` |
+| `earth_frame`, `local_frame` | `FP_ECEF`, `FP_ENU0` | frames of `route_local` |
+| `algorithm` | `graph` | `graph`, `astar` or `rrt` |
+| `highway_types` | `["footway"]` | allowed way types |
+| `spacing` | `3.0` | max metres between output waypoints (0 = planner vertices) |
+| `max_snap_distance` | `100.0` | graph: waypoint-to-way limit (m) |
+| `cell_size`, `inflate_obstacles` | `0.25`, `0.25` | grid planners |
+| `fix_max_age` | `10.0` | s after which the last fix is stale |
+
+### Library
+
+```python
+from map_data.annotations import load_mapdata_with_annotations
+from map_data.pathsolver.route import RoutePlanningError, plan_route
+from map_data.utils.gpx import create_gpx_track
+
+md, _ = load_mapdata_with_annotations("data/stromovka.mapdata")
+try:
+    route = plan_route(md, [(50.1038, 14.4294), (50.1067, 14.4193)], spacing=3.0)
+except RoutePlanningError as e:
+    print(e.reason, e.message)
+else:
+    open("route.gpx", "w").write(create_gpx_track(route.latlon))
+```
+
 ## Python Library
 
 All planners work standalone — no ROS2 context required.

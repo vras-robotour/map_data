@@ -67,6 +67,13 @@ map_data_info coords.mapdata
 map_data_info coords.mapdata --validate
 ```
 
+Plan a route on a `.mapdata` file without the viewer (annotations merged), as a CLI or a ROS 2 action:
+
+```bash
+map_data_plan -f coords.mapdata --start 50.1038,14.4294 --goal geo:50.1067,14.4193 --spacing 3 --save route.gpx
+ros2 launch map_data route_planner.launch.py mapdata_file:=coords.mapdata   # PlanRoute action on /route_planner/plan_route
+```
+
 Launch the interactive viewer:
 
 ```bash
