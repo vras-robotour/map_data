@@ -4,6 +4,12 @@
 
 ### Added
 
+- `config/route_planner.yaml`: every `route_planner` parameter in one documented
+  file, loaded by `route_planner.launch.py` (`params_file:=` takes an absolute
+  path or a name in `config/`). The launch arguments now default to empty and are
+  applied on top of the file, so an argument left unset keeps the file's value;
+  `highway_types:=footway,road` lets the graph planner use roads as well as
+  footways. `map_data.utils.launch` holds the argument helpers
 - Offline route planning: `map_data.pathsolver.route.plan_route` (the Planner
   screen's graph/grid planning as a library call, with `densify`, failure reasons
   and snap distances), `map_data.annotations` (annotation-store merge without the

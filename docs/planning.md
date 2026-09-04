@@ -90,6 +90,15 @@ snap distance (a few MB each, four at most), so a request plans in milliseconds;
 space-separated string (`footway`, `road` or `footway,road`); a map with roads only plans
 nothing until roads are allowed.
 
+Every parameter below lives in `config/route_planner.yaml`,
+which the launch file loads by default; `params_file:=` takes an absolute path or another
+file name in `config/`. The launch arguments (`mapdata_file`, `mapdata_path`, `annotations`,
+`preload`, `algorithm`, `highway_types`, `spacing`, `mission_dir`, `gps_fix_topic`,
+`earth_frame`, `local_frame`) are applied on top of that file, so an argument left unset
+keeps the file's value and the rest of the parameters are only reachable through the file.
+Not to be confused with `config/planner_defaults.yaml`, which holds the routing cost tables
+used by the planners themselves.
+
 `map_data_interfaces/action/PlanRoute` takes the file, the ordered waypoints and the
 planner parameters (empty/zero fields use the node's defaults). With
 `start_from_robot` the latest fix on `gps_fix_topic` becomes the first waypoint, so a
