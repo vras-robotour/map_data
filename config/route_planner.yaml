@@ -1,0 +1,59 @@
+# Parameters of the route_planner node (ROS 2).
+#
+#   ros2 launch map_data route_planner.launch.py                       # this file
+#   ros2 launch map_data route_planner.launch.py params_file:=/home/robot/kn_planner.yaml
+#   ros2 launch map_data route_planner.launch.py mapdata_file:=KN.mapdata \
+#       highway_types:=footway,road
+#
+# params_file takes an absolute path or a name in the package's config/ directory.
+# The launch arguments (mapdata_file, mapdata_path, annotations, preload, algorithm,
+# highway_types, spacing, mission_dir, gps_fix_topic, earth_frame, local_frame) are applied
+# on top of this file; every argument left unset keeps the value below.
+#
+# Not to be confused with planner_defaults.yaml, which holds the routing cost tables
+# (highway/surface costs, buffer widths) read by the pathsolver library itself.
+
+route_planner:
+  ros__parameters:
+
+    # --- map -------------------------------------------------------------------------
+    # Name in data_dir or an absolute path. Empty = every PlanRoute goal must name its map.
+    mapdata_file: ""
+    # Directory bare .mapdata names are resolved against.
+    # Default: the package's share/map_data/data, which is where installed maps live.
+    # data_dir: "~/maps"
+    # Annotation store merged into the map: "auto" = <map>.annotations.json next to it,
+    # "none" = the unedited map, or a path to a store file. Note stromovka.annotations.json
+    # deletes 838 ways, so use "none" with that map unless you want the edited version.
+    annotations: "auto"
+    # Load the map and build its graph at startup (~0.3 s) instead of on the first goal.
+    preload: true
+
+    # --- planning defaults -----------------------------------------------------------
+    # A PlanRoute goal field left empty/zero falls back to these.
+    # graph = follow the mapped ways (Robotour); astar / rrt = all-terrain grid planners.
+    algorithm: "graph"
+    # Way types the graph planner may route over: footway and/or road.
+    highway_types: ["footway"]
+    # Metres between output waypoints; 0 = the planner's own vertices.
+    spacing: 3.0
+    # Reject a waypoint farther than this (m) from every allowed way (snap_too_far).
+    max_snap_distance: 100.0
+    # astar / rrt only: grid resolution and obstacle inflation, both in metres.
+    cell_size: 0.25
+    inflate_obstacles: 0.25
+    # Drop collinear vertices; smooth the grid path (grid planners).
+    simplify_path: true
+    smooth_path: false
+
+    # --- interfaces ------------------------------------------------------------------
+    # NavSatFix used by goals with start_from_robot and by the ~/goal shortcut.
+    gps_fix_topic: "/fixposition/odometry_llh"
+    fix_max_age: 10.0                     # s after which the last fix counts as stale
+    goal_topic: "~/goal"                  # GeoPointStamped -> plan from the robot's fix
+    route_topic: "~/route"                # latched GeoPath (wgs84)
+    route_path_topic: "~/route_path"      # latched nav_msgs/Path in local_frame
+    status_topic: "~/status"              # latched String
+    mission_dir: "~/missions"             # planned routes are written here as GPX
+    earth_frame: "FP_ECEF"                # the ECEF -> local transform places route_local
+    local_frame: "FP_ENU0"

@@ -216,7 +216,9 @@ class RoutePlanner(Node):
         self._preload_timer.cancel()
         path = self._resolve_mapdata("")
         if path is None:
-            self.get_logger().warning(f"preload: '{self.mapdata_file}' not found in {self.data_dir}")
+            self.get_logger().warning(
+                f"preload: '{self.mapdata_file}' not found in {self.data_dir}"
+            )
             return
         t0 = time.monotonic()
         try:
@@ -262,7 +264,7 @@ class RoutePlanner(Node):
             return None
         p = Path(name).expanduser()
         if not p.is_absolute():
-            p = Path(self.data_dir) / name
+            p = Path(self.data_dir).expanduser() / name
         return p if p.is_file() else None
 
     def _load_map(self, path: Path):
