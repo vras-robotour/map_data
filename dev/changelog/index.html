@@ -1849,6 +1849,12 @@
 <h2 id="unreleased">[Unreleased]</h2>
 <h3 id="added">Added</h3>
 <ul>
+<li><code>config/route_planner.yaml</code>: every <code>route_planner</code> parameter in one documented
+  file, loaded by <code>route_planner.launch.py</code> (<code>params_file:=</code> takes an absolute
+  path or a name in <code>config/</code>). The launch arguments now default to empty and are
+  applied on top of the file, so an argument left unset keeps the file's value;
+  <code>highway_types:=footway,road</code> lets the graph planner use roads as well as
+  footways. <code>map_data.utils.launch</code> holds the argument helpers</li>
 <li>Offline route planning: <code>map_data.pathsolver.route.plan_route</code> (the Planner
   screen's graph/grid planning as a library call, with <code>densify</code>, failure reasons
   and snap distances), <code>map_data.annotations</code> (annotation-store merge without the

@@ -1955,6 +1955,14 @@ snap distance (a few MB each, four at most), so a request plans in milliseconds;
 <code>preload:=false</code> to load lazily. <code>highway_types:=</code> takes the way types as one comma- or
 space-separated string (<code>footway</code>, <code>road</code> or <code>footway,road</code>); a map with roads only plans
 nothing until roads are allowed.</p>
+<p>Every parameter below lives in <code>config/route_planner.yaml</code>,
+which the launch file loads by default; <code>params_file:=</code> takes an absolute path or another
+file name in <code>config/</code>. The launch arguments (<code>mapdata_file</code>, <code>mapdata_path</code>, <code>annotations</code>,
+<code>preload</code>, <code>algorithm</code>, <code>highway_types</code>, <code>spacing</code>, <code>mission_dir</code>, <code>gps_fix_topic</code>,
+<code>earth_frame</code>, <code>local_frame</code>) are applied on top of that file, so an argument left unset
+keeps the file's value and the rest of the parameters are only reachable through the file.
+Not to be confused with <code>config/planner_defaults.yaml</code>, which holds the routing cost tables
+used by the planners themselves.</p>
 <p><code>map_data_interfaces/action/PlanRoute</code> takes the file, the ordered waypoints and the
 planner parameters (empty/zero fields use the node's defaults). With
 <code>start_from_robot</code> the latest fix on <code>gps_fix_topic</code> becomes the first waypoint, so a
