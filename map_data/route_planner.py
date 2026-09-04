@@ -216,7 +216,7 @@ class RoutePlanner(Node):
         self._preload_timer.cancel()
         path = self._resolve_mapdata("")
         if path is None:
-            self.get_logger().warn(f"preload: '{self.mapdata_file}' not found in {self.data_dir}")
+            self.get_logger().warning(f"preload: '{self.mapdata_file}' not found in {self.data_dir}")
             return
         t0 = time.monotonic()
         try:

@@ -125,7 +125,7 @@ class OSMCloud(Node):
         self.get_logger().info(str(self.map_data))
 
         if self.transform_mode not in TRANSFORM_MODES:
-            self.get_logger().warn(
+            self.get_logger().warning(
                 f"Unknown transform_mode '{self.transform_mode}', falling back to 'tf'"
             )
             self.transform_mode = "tf"
@@ -383,7 +383,7 @@ class OSMCloud(Node):
             grid[:, 3] = grid[:, 3] ** 2
         else:
             if self.neighbor_cost != "zero" and self.neighbor_cost != "linear":
-                self.get_logger().warn(f"Unknown neighbor cost: {self.neighbor_cost}")
+                self.get_logger().warning(f"Unknown neighbor cost: {self.neighbor_cost}")
             grid[:, 3] = 0.0
         cloud = create_cloud(grid)
         self.get_logger().info(str(grid.shape))
