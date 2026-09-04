@@ -1945,13 +1945,16 @@ from every allowed way), <code>unreachable</code> (disconnected network), <code>
 <code>grid_too_large</code>, <code>too_few_points</code>.</p>
 <h3 id="ros-2-action-server">ROS 2 action server</h3>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>ros2<span class="w"> </span>launch<span class="w"> </span>map_data<span class="w"> </span>route_planner.launch.py<span class="w"> </span>mapdata_file:<span class="o">=</span>stromovka.mapdata
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>ros2<span class="w"> </span>action<span class="w"> </span>send_goal<span class="w"> </span>/route_planner/plan_route<span class="w"> </span>map_data_interfaces/action/PlanRoute<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="s2">"{waypoints: [{latitude: 50.1067, longitude: 14.4193}], start_from_robot: true}"</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>ros2<span class="w"> </span>launch<span class="w"> </span>map_data<span class="w"> </span>route_planner.launch.py<span class="w"> </span>mapdata_file:<span class="o">=</span>KN.mapdata<span class="w"> </span>highway_types:<span class="o">=</span>footway,road
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>ros2<span class="w"> </span>action<span class="w"> </span>send_goal<span class="w"> </span>/route_planner/plan_route<span class="w"> </span>map_data_interfaces/action/PlanRoute<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="s2">"{waypoints: [{latitude: 50.1067, longitude: 14.4193}], start_from_robot: true}"</span>
 </span></code></pre></div>
 <p>The node preloads its <code>mapdata_file</code> and keeps one graph planner per map, allowed-way set and
 snap distance (a few MB each, four at most), so a request plans in milliseconds; set
-<code>preload:=false</code> to load lazily.</p>
+<code>preload:=false</code> to load lazily. <code>highway_types:=</code> takes the way types as one comma- or
+space-separated string (<code>footway</code>, <code>road</code> or <code>footway,road</code>); a map with roads only plans
+nothing until roads are allowed.</p>
 <p><code>map_data_interfaces/action/PlanRoute</code> takes the file, the ordered waypoints and the
 planner parameters (empty/zero fields use the node's defaults). With
 <code>start_from_robot</code> the latest fix on <code>gps_fix_topic</code> becomes the first waypoint, so a
@@ -2004,7 +2007,7 @@ robot's position with the default parameters.</p>
 <tr>
 <td><code>highway_types</code></td>
 <td><code>["footway"]</code></td>
-<td>allowed way types</td>
+<td>allowed way types: <code>footway</code>, <code>road</code> or both</td>
 </tr>
 <tr>
 <td><code>spacing</code></td>
