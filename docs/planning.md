@@ -78,6 +78,7 @@ from every allowed way), `unreachable` (disconnected network), `no_path`,
 
 ```bash
 ros2 launch map_data route_planner.launch.py mapdata_file:=stromovka.mapdata
+ros2 launch map_data route_planner.launch.py mapdata_file:=KN.mapdata highway_types:=footway,road
 
 ros2 action send_goal /route_planner/plan_route map_data_interfaces/action/PlanRoute \
     "{waypoints: [{latitude: 50.1067, longitude: 14.4193}], start_from_robot: true}"
@@ -85,7 +86,9 @@ ros2 action send_goal /route_planner/plan_route map_data_interfaces/action/PlanR
 
 The node preloads its `mapdata_file` and keeps one graph planner per map, allowed-way set and
 snap distance (a few MB each, four at most), so a request plans in milliseconds; set
-`preload:=false` to load lazily.
+`preload:=false` to load lazily. `highway_types:=` takes the way types as one comma- or
+space-separated string (`footway`, `road` or `footway,road`); a map with roads only plans
+nothing until roads are allowed.
 
 `map_data_interfaces/action/PlanRoute` takes the file, the ordered waypoints and the
 planner parameters (empty/zero fields use the node's defaults). With
@@ -106,7 +109,7 @@ robot's position with the default parameters.
 | `gps_fix_topic` | `/fixposition/odometry_llh` | `NavSatFix` for `start_from_robot` |
 | `earth_frame`, `local_frame` | `FP_ECEF`, `FP_ENU0` | frames of `route_local` |
 | `algorithm` | `graph` | `graph`, `astar` or `rrt` |
-| `highway_types` | `["footway"]` | allowed way types |
+| `highway_types` | `["footway"]` | allowed way types: `footway`, `road` or both |
 | `spacing` | `3.0` | max metres between output waypoints (0 = planner vertices) |
 | `max_snap_distance` | `100.0` | graph: waypoint-to-way limit (m) |
 | `cell_size`, `inflate_obstacles` | `0.25`, `0.25` | grid planners |

@@ -3,6 +3,7 @@
 Launch the ``route_planner`` action server (PlanRoute on /route_planner/plan_route).
 
     ros2 launch map_data route_planner.launch.py mapdata_file:=stromovka.mapdata
+    ros2 launch map_data route_planner.launch.py mapdata_file:=KN.mapdata highway_types:=footway,road
 
 Then, for example:
 
@@ -10,7 +11,9 @@ Then, for example:
         "{waypoints: [{latitude: 50.1067, longitude: 14.4193}], start_from_robot: true}"
 """
 
-from launch.actions import DeclareLaunchArgument
+import re
+
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -18,8 +21,8 @@ from launch_ros.substitutions import FindPackageShare
 from launch import LaunchDescription
 
 
-def generate_launch_description():
-    args = [
+def _arguments():
+    return [
         DeclareLaunchArgument(
             "mapdata_file",
             default_value="",
@@ -48,12 +51,25 @@ def generate_launch_description():
             "algorithm", default_value="graph", description="graph (paths only) | astar | rrt"
         ),
         DeclareLaunchArgument(
+            "highway_types",
+            default_value="footway",
+            description="Way types the graph planner may route over: footway, road, or both "
+            '("footway,road"). A PlanRoute goal can override it per request.',
+        ),
+        DeclareLaunchArgument(
             "spacing", default_value="3.0", description="m between output waypoints (0 = raw)"
         ),
         DeclareLaunchArgument(
             "preload", default_value="true", description="load the map and its graph at startup"
         ),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
+    ]
+
+
+def launch_setup(context, *args, **kwargs):
+    # A launch argument is a string; the parameter is a list of way types.
+    highway_types = [
+        w for w in re.split(r"[,\s]+", LaunchConfiguration("highway_types").perform(context)) if w
     ]
     node = Node(
         package="map_data",
@@ -70,10 +86,15 @@ def generate_launch_description():
                 "earth_frame": LaunchConfiguration("earth_frame"),
                 "local_frame": LaunchConfiguration("local_frame"),
                 "algorithm": LaunchConfiguration("algorithm"),
+                "highway_types": highway_types,
                 "preload": LaunchConfiguration("preload"),
                 "spacing": LaunchConfiguration("spacing"),
                 "use_sim_time": LaunchConfiguration("use_sim_time"),
             }
         ],
     )
-    return LaunchDescription([*args, node])
+    return [node]
+
+
+def generate_launch_description():
+    return LaunchDescription([*_arguments(), OpaqueFunction(function=launch_setup)])
