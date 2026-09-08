@@ -59,7 +59,7 @@ map_data_tracker:
     road_path_topic: "/predicted_path_ls"            # path_centerline output (odom_odin), cyan
     intersections_topic: "/intersections"            # osm_cloud crossroads (FP_ENU0), magenta rings
     active_intersection_topic: "/road_follower/active_intersection"   # enter/exit circles
-    intersection_enter_threshold: 5.0                # keep equal to road_and_gps_follower.launch
+    intersection_enter_threshold: 5.0                # keep equal to road_and_gps_follower.yaml
     intersection_exit_threshold: 6.0
     nav_through_poses_feedback_topic: ""
     follow_gps_waypoints_feedback_topic: ""
