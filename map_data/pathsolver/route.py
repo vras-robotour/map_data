@@ -174,6 +174,7 @@ def plan_route(
     transfer_id: str | None = None,
     max_grid_cells: float = MAX_GRID_CELLS,
     planner: GraphPlanner | None = None,
+    keep_start: bool = False,
 ) -> RouteResult:
     """
     Plan a route through ``points_latlon`` (``[(lat, lon), ...]``, at least two).
@@ -191,6 +192,11 @@ def plan_route(
     ``planner`` lets a caller reuse a prebuilt :class:`GraphPlanner` for ``md``
     (building the graph costs ~0.3 s, planning on it ~1 ms); it must have been
     built for the same ``highway_types`` and ``max_snap_distance``.
+
+    ``keep_start`` makes the graph route begin at the first waypoint verbatim
+    rather than at its projection onto the network — for planning from the
+    robot's own position, which is off the network by definition. It has no
+    effect on the grid planners, which already start at the requested point.
 
     Raises :class:`RoutePlanningError` on failure.
     """
@@ -215,7 +221,7 @@ def plan_route(
                 f"waypoint {i} is {snap[i]:.1f} m from the nearest "
                 f"{'/'.join(highway_types)} (limit {max_snap_distance:.0f} m)",
             )
-        res = planner.plan(utm_path)
+        res = planner.plan(utm_path, keep_start=keep_start)
         if res is None:
             raise RoutePlanningError(
                 "unreachable",

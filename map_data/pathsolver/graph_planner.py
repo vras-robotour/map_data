@@ -16,7 +16,21 @@ from map_data.pathsolver.astar import astar_search
 
 logger = logging.getLogger(__name__)
 
-TOLERANCE = 1e-3
+#: Two consecutive route vertices closer than this (metres) are considered the
+#: same point and only the first is kept. Deliberately coarse: projections of a
+#: waypoint onto an edge and the edge's own nodes routinely land a few
+#: centimetres apart, which would otherwise show up as a cluster of stacked
+#: points in the exported route.
+TOLERANCE = 0.05
+
+#: Longest out-and-back excursion (metres) that :func:`_drop_stacked_points`
+#: collapses. A waypoint snapping just past a junction makes the route leave
+#: that junction, touch the projection and come straight back; such spurs are
+#: sub-metre artefacts, while a genuine visit to a dead end is far longer and
+#: must be preserved. Real routes show a wide gap either side of this value
+#: (a 900 m park loop had spurs of 0.07-0.65 m and no other step below 7 m),
+#: so the exact figure is not delicate.
+MAX_SPUR_LENGTH = 1.0
 
 #: Default maximum distance (in metres) between a waypoint and the nearest
 #: graph edge for the waypoint to be snapped onto the network. Deliberately
@@ -298,13 +312,16 @@ class GraphPlanner:
         # id used against self.nodes (int-keyed) is "temp_"-prefixed and handled above.
         return self.nodes[node_id].ravel()[:2]  # type: ignore[index]
 
-    def plan(self, path_utm: np.ndarray) -> np.ndarray | None:
+    def plan(self, path_utm: np.ndarray, keep_start: bool = False) -> np.ndarray | None:
         """
         Plan a path through a sequence of UTM waypoints along the graph.
 
         Each consecutive pair of waypoints is routed independently. The
         waypoints are snapped to the nearest graph edge before planning,
-        so they do not need to lie exactly on the network.
+        so they do not need to lie exactly on the network; the returned
+        route consists of on-network points only, the requested waypoints
+        being represented by their projections rather than repeated
+        verbatim (see :func:`_drop_stacked_points`).
 
         Parameters
         ----------
@@ -312,11 +329,19 @@ class GraphPlanner:
             Array of shape ``(N, 2)`` containing ``[x, y]`` UTM coordinates
             of the desired waypoints, in order. At least two waypoints are
             required.
+        keep_start : bool
+            Prepend the first waypoint verbatim instead of starting the route
+            at its projection. For planning from the robot's own pose, where
+            the route has to begin where the robot actually is; the leading
+            off-network leg is then the robot's way onto the network. Only the
+            first waypoint is treated this way — doing it for a waypoint in
+            the middle of the route would produce a spur out to it and back.
 
         Returns
         -------
         np.ndarray or None
-            Concatenated path as an ``(M, 2)`` UTM coordinate array, or
+            Concatenated path as an ``(M, 2)`` UTM coordinate array with
+            coincident vertices and sub-metre spurs removed, or
             ``None`` if fewer than two waypoints were given, a waypoint is
             farther than :attr:`max_snap_distance` from the network, or any
             segment could not be routed.
@@ -329,7 +354,7 @@ class GraphPlanner:
             )
             return None
 
-        full_path = []
+        full_path: list[np.ndarray] = []
 
         for i in range(len(path_utm) - 1):
             p_start = path_utm[i]
@@ -389,22 +414,45 @@ class GraphPlanner:
             if not segment:
                 return None
 
-            # Combine: clicked point -> projection -> graph path -> projection -> clicked point
-            # segment already contains [p_proj_s, ..., p_proj_g]
+            # segment is [p_proj_s, ..., p_proj_g] — entirely on the network. The
+            # clicked waypoints themselves are deliberately left out: re-inserting
+            # an off-network click between its own projections turns every via
+            # point into a degenerate out-and-back spur of stacked points.
+            full_path.extend(segment)
 
-            final_segment = []
-            final_segment.append(p_start)
+        if keep_start:
+            full_path.insert(0, np.asarray(path_utm[0], dtype=float)[:2])
 
-            for p in segment:
-                if np.linalg.norm(p - final_segment[-1]) > TOLERANCE:
-                    final_segment.append(p)
+        return _drop_stacked_points(full_path)
 
-            if np.linalg.norm(p_goal - final_segment[-1]) > TOLERANCE:
-                final_segment.append(p_goal)
 
-            if i > 0:
-                full_path.extend(final_segment[1:])
-            else:
-                full_path.extend(final_segment)
+def _drop_stacked_points(points: list[np.ndarray]) -> np.ndarray:
+    """
+    Remove coincident vertices and sub-metre out-and-back spurs from a route.
 
-        return np.array(full_path)
+    Routing each waypoint pair separately makes consecutive segments meet at the
+    same projected point, and a waypoint snapping just past a junction makes the
+    route step off that junction and back again. Both show up in the exported
+    route as several points stacked on top of each other.
+
+    Vertices closer than :data:`TOLERANCE` to their predecessor are dropped, and
+    an excursion shorter than :data:`MAX_SPUR_LENGTH` that returns to the vertex
+    it started from is collapsed to that vertex. Longer detours are kept: they
+    are genuine, e.g. a waypoint on a dead end that has to be visited and left
+    the same way.
+    """
+    out: list[np.ndarray] = []
+    for p in points:
+        if out and np.linalg.norm(p - out[-1]) <= TOLERANCE:
+            continue
+        # p returns to out[-2] after a short hop out to out[-1]: drop the hop,
+        # which also makes p coincident with the new last point.
+        if (
+            len(out) >= 2
+            and np.linalg.norm(p - out[-2]) <= TOLERANCE
+            and np.linalg.norm(out[-1] - out[-2]) <= MAX_SPUR_LENGTH
+        ):
+            out.pop()
+            continue
+        out.append(p)
+    return np.array(out)

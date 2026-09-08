@@ -74,6 +74,11 @@ reported with a reason: `snap_too_far` (a point is farther than `--max-snap-dist
 from every allowed way), `unreachable` (disconnected network), `no_path`,
 `grid_too_large`, `too_few_points`.
 
+The graph planner returns on-network vertices only: a requested point that sits
+beside a path appears in the route as its projection onto that path, not as an
+extra vertex off to the side. (`start_from_robot` is the one exception, below.)
+The reported `snap_distances` say how far each request was moved.
+
 ### ROS 2 action server
 
 ```bash
@@ -102,7 +107,9 @@ used by the planners themselves.
 `map_data_interfaces/action/PlanRoute` takes the file, the ordered waypoints and the
 planner parameters (empty/zero fields use the node's defaults). With
 `start_from_robot` the latest fix on `gps_fix_topic` becomes the first waypoint, so a
-single goal is enough. The result carries the route as `geographic_msgs/GeoPath`, the
+single goal is enough; that fix is kept verbatim as the route's first point (the robot
+is where it is), and the leading leg is its way onto the network. The result carries
+the route as `geographic_msgs/GeoPath`, the
 same route as `nav_msgs/Path` in `local_frame` (through the `earth_frame -> local_frame`
 transform, exactly as `osm_cloud` places the map), the length, the snap distances and the
 path of the GPX track written to `mission_dir`. The route is also published latched on

@@ -63,11 +63,33 @@ def test_plan_route_graph_follows_the_network(footway_network_mapdata):
     steps = np.hypot(*np.diff(res.utm, axis=0).T)
     assert steps.max() <= 3.0 + 1e-6
     assert len(res.snap_distances) == 2 and max(res.snap_distances) < 5.0
-    assert res.latlon[0] == pytest.approx(start, abs=1e-6)
+    # Endpoints are the waypoints snapped onto the network, not the raw requests:
+    # the start sits 3 m off way 1 and is routed from its projection at (5, 0).
+    snapped_start = _latlon(lat0, lon0, 5.0, 0.0)
+    assert res.latlon[0] == pytest.approx(snapped_start, abs=1e-6)
     assert res.latlon[-1] == pytest.approx(goal, abs=1e-6)
     assert res.changed
     dicts = route_to_dicts(res)
-    assert dicts[0]["latitude"] == pytest.approx(start[0])
+    assert dicts[0]["latitude"] == pytest.approx(snapped_start[0])
+
+
+def test_plan_route_graph_keep_start(footway_network_mapdata):
+    """
+    ``keep_start`` (the action server's ``start_from_robot``) begins the route
+    at the robot's own fix rather than at its projection onto the network.
+    """
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    start = _latlon(lat0, lon0, 5.0, 3.0)  # 3 m off way 1
+    goal = _latlon(lat0, lon0, 100.0, 95.0)
+
+    res = plan_route(md, [start, goal], algorithm="graph", keep_start=True)
+    assert res.latlon[0] == pytest.approx(start, abs=1e-6)
+    assert res.latlon[1] == pytest.approx(_latlon(lat0, lon0, 5.0, 0.0), abs=1e-6)
+
+    # Default stays snapped
+    snapped = plan_route(md, [start, goal], algorithm="graph")
+    assert snapped.latlon[0] == pytest.approx(_latlon(lat0, lon0, 5.0, 0.0), abs=1e-6)
 
 
 def test_plan_route_graph_without_spacing_keeps_vertices(footway_network_mapdata):

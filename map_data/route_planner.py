@@ -355,6 +355,9 @@ class RoutePlanner(Node):
                     inflate_obstacles=goal.inflate_obstacles or self.default_inflate,
                     simplify_path=goal.simplify_path or self.default_simplify,
                     smooth_path=goal.smooth_path or self.default_smooth,
+                    # The robot is where it is: keep its GNSS fix as the first
+                    # route point instead of jumping to the nearest path.
+                    keep_start=goal.start_from_robot,
                 )
             except RoutePlanningError as e:
                 return fail(e.reason, e.message)

@@ -229,10 +229,11 @@ def test_graph_planner_custom_snap_distance_allows_far_waypoint():
 
     assert result is not None
     assert len(result) >= 2
-    # Path starts at the first waypoint and ends at the far (unsnappable-by-
-    # default) waypoint, routed via the network end at x=10
+    # The route stays on the network: the far (unsnappable-by-default) waypoint
+    # is represented by its projection, the network end at x=10, not repeated
+    # verbatim 490 m off the path.
     assert np.allclose(result[0], [0.0, 0.0])
-    assert np.allclose(result[-1], [500.0, 0.0])
+    assert np.allclose(result[-1], [10.0, 0.0])
 
 
 def test_graph_planner_waypoint_within_snap_distance_still_plans():
@@ -263,3 +264,139 @@ def test_graph_planner_l_shaped():
     # Must reach the far corner
     assert max(xs) == pytest.approx(10.0, abs=1.5)
     assert max(ys) == pytest.approx(10.0, abs=1.5)
+
+
+def test_graph_planner_via_waypoint_makes_no_spur():
+    """
+    A via waypoint clicked beside the path used to be re-inserted between its
+    own two projections, producing a "projection, click, projection" spur of
+    stacked points. The route must pass the waypoint once, on the network.
+    """
+    nodes_coords = {100 + i: (10.0 * i, 0.0) for i in range(6)}
+    way = _make_footway(1, list(nodes_coords), nodes_coords)
+    md = MockMapData([way], nodes_coords)
+    planner = GraphPlanner(md)
+
+    result = planner.plan(np.array([[0.0, 0.0], [20.4, 0.3], [50.0, 0.0]]))
+
+    assert result is not None
+    # Every vertex lies on the way, and the projection of the via point appears once
+    assert np.allclose(result[:, 1], 0.0)
+    assert sum(1 for p in result if p[0] == pytest.approx(20.4)) == 1
+    _assert_no_stacked_points(result)
+
+
+def test_graph_planner_via_waypoint_at_junction_makes_no_spur():
+    """
+    A via waypoint snapping just onto a side branch made the route step off the
+    junction onto the branch and immediately back, leaving five points within
+    0.3 m of each other.
+    """
+    nodes_coords = {
+        100: (0.0, 0.0),
+        101: (10.0, 0.0),
+        102: (20.0, 0.0),
+        103: (30.0, 0.0),
+        104: (40.0, 0.0),
+        200: (20.0, 10.0),
+    }
+    md = MockMapData(
+        [
+            _make_footway(1, [100, 101, 102, 103, 104], nodes_coords),
+            _make_footway(2, [102, 200], nodes_coords),
+        ],
+        nodes_coords,
+    )
+    planner = GraphPlanner(md)
+
+    result = planner.plan(np.array([[0.0, 0.0], [20.1, 0.3], [40.0, 0.0]]))
+
+    assert result is not None
+    _assert_no_stacked_points(result)
+
+
+def test_graph_planner_keeps_genuine_dead_end_detour():
+    """
+    Spur collapsing must not swallow a real out-and-back: a waypoint on a long
+    dead-end branch has to be visited and left the same way.
+    """
+    nodes_coords = {
+        100: (0.0, 0.0),
+        101: (20.0, 0.0),
+        102: (40.0, 0.0),
+        200: (20.0, 30.0),
+    }
+    md = MockMapData(
+        [
+            _make_footway(1, [100, 101, 102], nodes_coords),
+            _make_footway(2, [101, 200], nodes_coords),
+        ],
+        nodes_coords,
+    )
+    planner = GraphPlanner(md)
+
+    result = planner.plan(np.array([[0.0, 0.0], [20.0, 30.0], [40.0, 0.0]]))
+
+    assert result is not None
+    # The dead end is reached and the route comes back through the junction
+    assert max(p[1] for p in result) == pytest.approx(30.0)
+    assert sum(1 for p in result if np.allclose(p, [20.0, 0.0])) == 2
+
+
+def _assert_no_stacked_points(path, tol=0.05):
+    """
+    No vertex coincides with its predecessor, and no vertex returns to where it
+    was two steps ago — the two shapes a degenerate spur takes. Short forward
+    steps are fine; a projection legitimately lands centimetres past a node.
+    """
+    duplicates = [i for i in range(1, len(path)) if np.linalg.norm(path[i] - path[i - 1]) <= tol]
+    assert not duplicates, f"duplicate vertices at {duplicates}: {path}"
+    spurs = [i for i in range(2, len(path)) if np.linalg.norm(path[i] - path[i - 2]) <= tol]
+    assert not spurs, f"out-and-back spur ending at {spurs}: {path}"
+
+
+def test_graph_planner_keep_start_keeps_the_raw_first_waypoint():
+    """
+    ``keep_start`` (planning from the robot's own pose) begins the route at the
+    requested point itself, followed by its projection onto the network.
+    """
+    planner = _simple_planner()  # straight footway (0,0) -> (10,0)
+
+    result = planner.plan(np.array([[2.0, 4.0], [10.0, 0.0]]), keep_start=True)
+
+    assert result is not None
+    assert np.allclose(result[0], [2.0, 4.0])
+    assert np.allclose(result[1], [2.0, 0.0])
+    # Only the first waypoint is kept verbatim; the goal is still its projection
+    assert np.allclose(result[-1], [10.0, 0.0])
+
+
+def test_graph_planner_keep_start_does_not_duplicate_on_network_start():
+    """
+    A robot already standing on the path must not produce two stacked points.
+    """
+    planner = _simple_planner()
+
+    result = planner.plan(np.array([[2.0, 0.0], [10.0, 0.0]]), keep_start=True)
+
+    assert result is not None
+    assert np.allclose(result[0], [2.0, 0.0])
+    _assert_no_stacked_points(result)
+
+
+def test_graph_planner_keep_start_leaves_via_points_snapped():
+    """
+    ``keep_start`` must not resurrect the via-point spurs: only waypoint 0 is
+    kept verbatim.
+    """
+    nodes_coords = {100 + i: (10.0 * i, 0.0) for i in range(6)}
+    md = MockMapData([_make_footway(1, list(nodes_coords), nodes_coords)], nodes_coords)
+    planner = GraphPlanner(md)
+
+    result = planner.plan(np.array([[0.0, 5.0], [20.4, 0.3], [50.0, 0.0]]), keep_start=True)
+
+    assert result is not None
+    assert np.allclose(result[0], [0.0, 5.0])
+    # The via point is not repeated off the network
+    assert not any(p[1] == pytest.approx(0.3) for p in result)
+    _assert_no_stacked_points(result)
