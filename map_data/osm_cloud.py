@@ -70,6 +70,10 @@ class OSMCloud(Node):
         self.grid_res: float = self.declare_parameter("grid_res", 0.25).value
         self.grid_max: list[float] = self.declare_parameter("grid_max", [0.0, 0.0]).value
         self.grid_min: list[float] = self.declare_parameter("grid_min", [0.0, 0.0]).value
+        # True once the bounds are auto-calculated from the map's query bbox. Ways that
+        # cross the bbox are downloaded whole, so the network (and the crossroads on it)
+        # reaches past those bounds: only *explicit* bounds may clip the intersections.
+        self.grid_bounds_auto: bool = False
         self.auto_utm: bool = self.declare_parameter("auto_utm", False).value
         self.publish_intersections: bool = self.declare_parameter(
             "publish_intersections",
@@ -170,6 +174,7 @@ class OSMCloud(Node):
 
         if all(v == 0.0 for v in self.grid_min) and all(v == 0.0 for v in self.grid_max):
             self.get_logger().info("Auto-calculating grid bounds from map data")
+            self.grid_bounds_auto = True
             # Transform all four corners of the UTM bounding box to the local frame
             # (the local frame may be rotated relative to UTM).
             xs = (self.map_data.min_x, self.map_data.max_x)
@@ -217,10 +222,12 @@ class OSMCloud(Node):
                 rebuild_cloud = True
             elif param.name == "grid_max":
                 self.grid_max = param.value
+                self.grid_bounds_auto = False
                 rebuild_cloud = True
                 rebuild_intersections = True
             elif param.name == "grid_min":
                 self.grid_min = param.value
+                self.grid_bounds_auto = False
                 rebuild_cloud = True
                 rebuild_intersections = True
             elif param.name == "publish_intersections":
@@ -417,8 +424,11 @@ class OSMCloud(Node):
         for point in transformed_points.values():
             p = point.ravel()
 
-            # Spatial filtering based on local frame coordinates
-            if not (
+            # Spatial filtering based on local frame coordinates. Skipped for
+            # auto-calculated bounds: they come from the map's query bbox, while the
+            # footway network the route is planned on extends past it, so clipping
+            # here silently hides the crossroads the road follower switches at.
+            if not self.grid_bounds_auto and not (
                 self.grid_min[0] <= p[0] <= self.grid_max[0]
                 and self.grid_min[1] <= p[1] <= self.grid_max[1]
             ):
