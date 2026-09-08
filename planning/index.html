@@ -1943,6 +1943,10 @@ caption off - the viewer draws its own as HTML text under the code.</p>
 reported with a reason: <code>snap_too_far</code> (a point is farther than <code>--max-snap-distance</code>
 from every allowed way), <code>unreachable</code> (disconnected network), <code>no_path</code>,
 <code>grid_too_large</code>, <code>too_few_points</code>.</p>
+<p>The graph planner returns on-network vertices only: a requested point that sits
+beside a path appears in the route as its projection onto that path, not as an
+extra vertex off to the side. (<code>start_from_robot</code> is the one exception, below.)
+The reported <code>snap_distances</code> say how far each request was moved.</p>
 <h3 id="ros-2-action-server">ROS 2 action server</h3>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>ros2<span class="w"> </span>launch<span class="w"> </span>map_data<span class="w"> </span>route_planner.launch.py<span class="w"> </span>mapdata_file:<span class="o">=</span>stromovka.mapdata
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>ros2<span class="w"> </span>launch<span class="w"> </span>map_data<span class="w"> </span>route_planner.launch.py<span class="w"> </span>mapdata_file:<span class="o">=</span>KN.mapdata<span class="w"> </span>highway_types:<span class="o">=</span>footway,road
@@ -1966,7 +1970,9 @@ used by the planners themselves.</p>
 <p><code>map_data_interfaces/action/PlanRoute</code> takes the file, the ordered waypoints and the
 planner parameters (empty/zero fields use the node's defaults). With
 <code>start_from_robot</code> the latest fix on <code>gps_fix_topic</code> becomes the first waypoint, so a
-single goal is enough. The result carries the route as <code>geographic_msgs/GeoPath</code>, the
+single goal is enough; that fix is kept verbatim as the route's first point (the robot
+is where it is), and the leading leg is its way onto the network. The result carries
+the route as <code>geographic_msgs/GeoPath</code>, the
 same route as <code>nav_msgs/Path</code> in <code>local_frame</code> (through the <code>earth_frame -&gt; local_frame</code>
 transform, exactly as <code>osm_cloud</code> places the map), the length, the snap distances and the
 path of the GPX track written to <code>mission_dir</code>. The route is also published latched on
