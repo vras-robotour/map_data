@@ -108,7 +108,10 @@ used by the planners themselves.
 planner parameters (empty/zero fields use the node's defaults). With
 `start_from_robot` the latest fix on `gps_fix_topic` becomes the first waypoint, so a
 single goal is enough; that fix is kept verbatim as the route's first point (the robot
-is where it is), and the leading leg is its way onto the network. The result carries
+is where it is), and the leading leg is its way onto the network. The goal is kept
+verbatim too (`keep_goal`), so the route ends at the requested coordinate and its last
+leg leaves the network; a goal farther than `goal_max_snap_distance` from every allowed
+way fails with `snap_too_far` rather than being planned to somewhere else. The result carries
 the route as `geographic_msgs/GeoPath`, the
 same route as `nav_msgs/Path` in `local_frame` (through the `earth_frame -> local_frame`
 transform, exactly as `osm_cloud` places the map), the length, the snap distances and the
@@ -127,7 +130,9 @@ robot's position with the default parameters.
 | `algorithm` | `graph` | `graph`, `astar` or `rrt` |
 | `highway_types` | `["footway"]` | allowed way types: `footway`, `road` or both |
 | `spacing` | `3.0` | max metres between output waypoints (0 = planner vertices) |
-| `max_snap_distance` | `100.0` | graph: waypoint-to-way limit (m) |
+| `max_snap_distance` | `100.0` | graph: waypoint-to-way limit (m), the start's own |
+| `goal_max_snap_distance` | `30.0` | graph: the goal's limit (m); farther fails with `snap_too_far` |
+| `keep_goal` | `true` | end the route at the goal coordinate, not at its projection |
 | `exclude_highway` | `["steps"]` | `highway=` values never routed over (stairs) |
 | `cell_size`, `inflate_obstacles` | `0.25`, `0.25` | grid planners |
 | `fix_max_age` | `10.0` | s after which the last fix is stale |

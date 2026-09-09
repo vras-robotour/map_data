@@ -29,6 +29,10 @@ def test_config_defaults_match_the_node():
     assert params["highway_types"] == ["footway"]
     assert params["annotations"] == "auto"
     assert params["spacing"] == 3.0
+    assert params["exclude_highway"] == ["steps"]  # stairs are not routable
+    assert params["max_snap_distance"] == 100.0  # the start (the robot's own fix)
+    assert params["goal_max_snap_distance"] == 30.0  # the goal, failing with snap_too_far
+    assert params["keep_goal"] is True
 
 
 def test_way_types_accepts_commas_and_spaces():
@@ -46,3 +50,11 @@ def testflag():
 def test_params_file_lookup():
     assert resolve_config_file("route_planner.yaml").endswith("config/route_planner.yaml")
     assert resolve_config_file("/tmp/other.yaml") == "/tmp/other.yaml"
+
+
+def test_node_declares_the_same_defaults_as_the_config():
+    """The yaml must not silently disagree with the node's own defaults."""
+    src = (PKG / "map_data" / "route_planner.py").read_text()
+    assert 'p("keep_goal", True)' in src
+    assert 'p("goal_max_snap_distance", 30.0)' in src
+    assert 'p("exclude_highway", sorted(NON_ROUTABLE_HIGHWAY_VALUES))' in src

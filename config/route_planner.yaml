@@ -42,7 +42,14 @@ route_planner:
     # Metres between output waypoints; 0 = the planner's own vertices.
     spacing: 3.0
     # Reject a waypoint farther than this (m) from every allowed way (snap_too_far).
+    # This is the start's limit: with start_from_robot it is the robot's own fix.
     max_snap_distance: 100.0
+    # The goal's own limit (m): a goal farther than this from every allowed way fails
+    # with snap_too_far instead of being snapped somewhere else entirely.
+    goal_max_snap_distance: 30.0
+    # End the route at the goal coordinate itself, appended after its projection, so a
+    # goal off the mapped network is reached instead of missed by the snap distance.
+    keep_goal: true
     # astar / rrt only: grid resolution and obstacle inflation, both in metres.
     cell_size: 0.25
     inflate_obstacles: 0.25

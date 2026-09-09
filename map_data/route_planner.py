@@ -38,6 +38,12 @@ inflate_obstacles, simplify_path, smooth_path
 exclude_highway : str[]
     ``highway`` tag values never routed over (default ``["steps"]``: a wheeled
     robot cannot take stairs).
+keep_goal : bool
+    End the route at the requested goal coordinate rather than at its projection
+    onto the network (default ``True``).
+goal_max_snap_distance : float
+    Reject a goal farther than this (m) from every allowed way with
+    ``snap_too_far`` (default 30 m). The start keeps ``max_snap_distance``.
 fix_max_age : float
     Seconds after which the last fix is considered stale (0 = never).
 """
@@ -72,6 +78,7 @@ from map_data.pathsolver.route import (
     GRAPH_ALGORITHM,
     RoutePlanningError,
     RouteResult,
+    latlon_to_utm_path,
     plan_route,
 )
 from map_data.utils.geodesy import latlon_to_ecef
@@ -122,6 +129,11 @@ class RoutePlanner(Node):
         self.default_highway_types = list(p("highway_types", ["footway"]).value)
         self.default_spacing = float(p("spacing", 3.0).value)
         self.default_max_snap = float(p("max_snap_distance", DEFAULT_MAX_SNAP_DISTANCE).value)
+        # The start is the robot's own fix and may be far from any way; the goal is a
+        # place someone wants to reach, and a goal snapped 50 m away is a typo, not a
+        # route. Off-network goals are driven as a final straight leg (keep_goal).
+        self.default_keep_goal = bool(p("keep_goal", True).value)
+        self.default_goal_max_snap = float(p("goal_max_snap_distance", 30.0).value)
         self.default_cell_size = float(p("cell_size", 0.25).value)
         self.default_inflate = float(p("inflate_obstacles", 0.25).value)
         self.default_simplify = bool(p("simplify_path", True).value)
@@ -358,6 +370,15 @@ class RoutePlanner(Node):
             planner = None
             if algorithm == GRAPH_ALGORITHM:
                 planner = self._graph_planner(path, md, highway_types, max_snap)
+                goal_utm = latlon_to_utm_path(points[-1:], md.zone_number, md.zone_letter)[0]
+                goal_snap = planner.snap_distance(goal_utm)
+                if goal_snap > self.default_goal_max_snap:
+                    return fail(
+                        "snap_too_far",
+                        f"the goal is {goal_snap:.1f} m from the nearest "
+                        f"{'/'.join(highway_types)} (goal limit "
+                        f"{self.default_goal_max_snap:.0f} m); pick a point nearer a path",
+                    )
             if feedback:
                 feedback(f"planning ({algorithm}, {'/'.join(highway_types)})")
             t0 = time.monotonic()
@@ -377,6 +398,9 @@ class RoutePlanner(Node):
                     # The robot is where it is: keep its GNSS fix as the first
                     # route point instead of jumping to the nearest path.
                     keep_start=goal.start_from_robot,
+                    # ... and end at the goal itself: its projection can be tens of
+                    # metres short of the coordinate the mission asks for.
+                    keep_goal=self.default_keep_goal,
                 )
             except RoutePlanningError as e:
                 return fail(e.reason, e.message)
