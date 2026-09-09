@@ -92,6 +92,28 @@ def test_plan_route_graph_keep_start(footway_network_mapdata):
     assert snapped.latlon[0] == pytest.approx(_latlon(lat0, lon0, 5.0, 0.0), abs=1e-6)
 
 
+def test_plan_route_graph_keep_goal_densifies_the_final_leg(footway_network_mapdata):
+    """
+    ``keep_goal`` ends the route at the requested coordinate; the off-network
+    leg to it is resampled at ``spacing`` like the rest of the route.
+    """
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    start = _latlon(lat0, lon0, 5.0, 0.0)
+    goal = _latlon(lat0, lon0, 150.0, 20.0)  # 20 m off way 1
+
+    res = plan_route(md, [start, goal], algorithm="graph", spacing=3.0, keep_goal=True)
+
+    assert res.latlon[-1] == pytest.approx(goal, abs=1e-6)
+    steps = np.hypot(*np.diff(res.utm, axis=0).T)
+    assert steps.max() <= 3.0 + 1e-6
+    # The last 20 m are the off-network leg: straight north from the projection.
+    assert res.utm[-8][0] == pytest.approx(res.utm[-1][0], abs=1e-6)
+
+    snapped = plan_route(md, [start, goal], algorithm="graph", spacing=3.0)
+    assert snapped.latlon[-1] == pytest.approx(_latlon(lat0, lon0, 150.0, 0.0), abs=1e-6)
+
+
 def test_plan_route_graph_without_spacing_keeps_vertices(footway_network_mapdata):
     path, lat0, lon0 = footway_network_mapdata
     md, _ = load_mapdata_with_annotations(path)

@@ -176,6 +176,7 @@ def plan_route(
     max_grid_cells: float = MAX_GRID_CELLS,
     planner: GraphPlanner | None = None,
     keep_start: bool = False,
+    keep_goal: bool = False,
     exclude_highway: Iterable[str] = NON_ROUTABLE_HIGHWAY_VALUES,
 ) -> RouteResult:
     """
@@ -199,6 +200,11 @@ def plan_route(
     rather than at its projection onto the network — for planning from the
     robot's own position, which is off the network by definition. It has no
     effect on the grid planners, which already start at the requested point.
+
+    ``keep_goal`` does the same at the other end: the route ends at the last
+    requested coordinate instead of at its projection, so a goal off the mapped
+    network is actually reached. The off-network leg is resampled by ``spacing``
+    like the rest of the route.
 
     ``exclude_highway`` is the ``highway`` tag values the graph planner never
     routes over (stairs by default); it is ignored when ``planner`` is given,
@@ -230,7 +236,7 @@ def plan_route(
                 f"waypoint {i} is {snap[i]:.1f} m from the nearest "
                 f"{'/'.join(highway_types)} (limit {max_snap_distance:.0f} m)",
             )
-        res = planner.plan(utm_path, keep_start=keep_start)
+        res = planner.plan(utm_path, keep_start=keep_start, keep_goal=keep_goal)
         if res is None:
             raise RoutePlanningError(
                 "unreachable",

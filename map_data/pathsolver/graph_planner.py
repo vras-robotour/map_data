@@ -34,6 +34,12 @@ TOLERANCE = 0.05
 #: so the exact figure is not delicate.
 MAX_SPUR_LENGTH = 1.0
 
+#: Shortest final leg (metres) worth keeping for ``keep_goal``. A goal closer
+#: than this to its projection onto the network is already on the path as far
+#: as a waypoint follower is concerned, and appending it would only add a
+#: stacked point (see :func:`_drop_stacked_points`).
+MIN_GOAL_LEG_LENGTH = 1.0
+
 #: Default maximum distance (in metres) between a waypoint and the nearest
 #: graph edge for the waypoint to be snapped onto the network. Deliberately
 #: generous — unlike annotation splicing (5 m), waypoints come from user
@@ -329,7 +335,12 @@ class GraphPlanner:
         # id used against self.nodes (int-keyed) is "temp_"-prefixed and handled above.
         return self.nodes[node_id].ravel()[:2]  # type: ignore[index]
 
-    def plan(self, path_utm: np.ndarray, keep_start: bool = False) -> np.ndarray | None:
+    def plan(
+        self,
+        path_utm: np.ndarray,
+        keep_start: bool = False,
+        keep_goal: bool = False,
+    ) -> np.ndarray | None:
         """
         Plan a path through a sequence of UTM waypoints along the graph.
 
@@ -353,6 +364,12 @@ class GraphPlanner:
             off-network leg is then the robot's way onto the network. Only the
             first waypoint is treated this way — doing it for a waypoint in
             the middle of the route would produce a spur out to it and back.
+        keep_goal : bool
+            Append the last waypoint verbatim after its projection, so the
+            route ends at the requested coordinate rather than
+            :attr:`max_snap_distance` metres short of it. The final,
+            off-network leg is skipped when the projection is already within
+            :data:`MIN_GOAL_LEG_LENGTH` of the goal.
 
         Returns
         -------
@@ -439,6 +456,10 @@ class GraphPlanner:
 
         if keep_start:
             full_path.insert(0, np.asarray(path_utm[0], dtype=float)[:2])
+        if keep_goal:
+            goal = np.asarray(path_utm[-1], dtype=float)[:2]
+            if not full_path or float(np.linalg.norm(goal - full_path[-1])) > MIN_GOAL_LEG_LENGTH:
+                full_path.append(goal)
 
         return _drop_stacked_points(full_path)
 

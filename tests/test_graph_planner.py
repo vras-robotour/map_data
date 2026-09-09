@@ -464,3 +464,38 @@ def test_graph_planner_excluded_stairs_can_make_a_goal_unreachable():
     waypoints = np.array([[0.0, 0.0], [0.0, 10.0]])
     assert GraphPlanner(md).plan(waypoints) is None
     assert GraphPlanner(md, exclude_highway=()).plan(waypoints) is not None
+
+
+def test_graph_planner_keep_goal_ends_at_the_requested_point():
+    """
+    ``keep_goal``: a goal 20 m off the footway is reached, the projection being
+    the vertex before it (the final leg leaves the network).
+    """
+    planner = _simple_planner()  # straight footway (0,0) -> (10,0)
+
+    result = planner.plan(np.array([[0.0, 0.0], [8.0, 20.0]]), keep_goal=True)
+
+    assert result is not None
+    assert np.allclose(result[-1], [8.0, 20.0])
+    assert np.allclose(result[-2], [8.0, 0.0])
+    _assert_no_stacked_points(result)
+
+
+def test_graph_planner_without_keep_goal_ends_at_the_projection():
+    planner = _simple_planner()
+
+    result = planner.plan(np.array([[0.0, 0.0], [8.0, 20.0]]))
+
+    assert result is not None
+    assert np.allclose(result[-1], [8.0, 0.0])
+
+
+def test_graph_planner_keep_goal_does_not_stack_an_on_network_goal():
+    """A goal already on the path is not appended a second time."""
+    planner = _simple_planner()
+
+    result = planner.plan(np.array([[0.0, 0.0], [8.0, 0.3]]), keep_goal=True)
+
+    assert result is not None
+    assert np.allclose(result[-1], [8.0, 0.0])
+    _assert_no_stacked_points(result)
