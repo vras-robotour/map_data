@@ -95,6 +95,9 @@ def launch_setup(context, *args, **kwargs):
                 "gpx_file": gpx_file,
                 "auto_utm": publish_static_tf,
                 "grid_topic": LaunchConfiguration("grid_topic"),
+                # Always forwarded (default "auto"), so it wins over the yaml files:
+                # set it on the launch line to plan and publish on the unedited map.
+                "annotations": LaunchConfiguration("annotations"),
                 **frame_overrides,
             },
         ],
@@ -154,6 +157,13 @@ def generate_launch_description():
         description="How map data is placed in local_frame: 'tf', 'auto' or 'geodetic' "
         "(empty = from yaml).",
     )
+    annotations_arg = DeclareLaunchArgument(
+        "annotations",
+        default_value="auto",
+        description="Annotation store merged into the map, as in route_planner: "
+        "'auto' = <map>.annotations.json next to it, 'none' = the unedited map, or a "
+        "path to a store file. The planner and this node must see the same map.",
+    )
     config_file_arg = DeclareLaunchArgument(
         "config_file",
         default_value="helhest.yaml",
@@ -176,6 +186,7 @@ def generate_launch_description():
             utm_frame_arg,
             earth_frame_arg,
             transform_mode_arg,
+            annotations_arg,
             config_file_arg,
             osm_grid_params_arg,
             OpaqueFunction(function=launch_setup),

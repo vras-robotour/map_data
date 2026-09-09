@@ -134,6 +134,8 @@ topic (cost-aware footway grid) and optionally publishes intersections as a
 | `transform_mode` | `"tf"` | `tf`: look up `utm_frame → local_frame` in TF; `auto`: local frame at the map centre; `geodetic`: UTM → lat/lon → ECEF, then the `earth_frame → local_frame` TF (exact for GNSS/INS stacks; `osm_grid.yaml` sets this) |
 | `utm_to_local` | `None` | 4×4 transform matrix; overrides `transform_mode` if set |
 | `mapdata_file` | `None` | Absolute path to a `.mapdata` file |
+| `annotations` | `"auto"` | Annotation store merged into `mapdata_file`, as in `route_planner`: `auto` = `<map>.annotations.json` next to it, `none` = the unedited map, or a path |
+| `exclude_highway` | `["steps"]` | `highway=` values dropped from the map (stairs are not routable, so they get no rings) |
 | `gpx_file` | `None` | Absolute path to a `.gpx` file (used if no `.mapdata`) |
 | `save_mapdata` | `false` | Save generated mapdata when loading from a `.gpx` |
 | `max_path_dist` | `1.0` | Max distance (m) at which a grid point receives a cost |
@@ -167,3 +169,4 @@ ros2 launch map_data osm_cloud.launch.py \
 | `utm_frame` | from yaml | Override the UTM frame name |
 | `earth_frame` | from yaml | Override the ECEF frame name (`geodetic` mode) |
 | `transform_mode` | from yaml | Override the placement mode (`tf` / `auto` / `geodetic`) |
+| `annotations` | `auto` | Annotation store merged into the map (`auto` / `none` / path); always forwarded, so it wins over the yaml files |

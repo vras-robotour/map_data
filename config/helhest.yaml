@@ -68,5 +68,11 @@ map_data_tracker:
 osm_cloud:
   ros__parameters:
     grid_topic: "grid"
+    # Same map as route_planner: the annotation store is merged and stairs are dropped,
+    # so the rings on /intersections sit on ways the planner actually routes over.
+    # osm_cloud.launch.py forwards its annotations:= argument (default "auto") on top of
+    # this file, so override it there rather than here when using the launch file.
+    annotations: "auto"
+    exclude_highway: ["steps"]
     intersections_topic: "intersections"
     intersection_markers_topic: "intersection_markers"

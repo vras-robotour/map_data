@@ -7,6 +7,7 @@ into ROS2 PointCloud2 and MarkerArray messages for visualization.
 """
 
 import sys
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -28,7 +29,13 @@ from tf2_ros import (
 from visualization_msgs.msg import Marker, MarkerArray
 
 import map_data.map_data as md
+from map_data.annotations import (
+    NO_ANNOTATIONS,
+    annotation_path_for,
+    load_mapdata_with_annotations,
+)
 from map_data.utils.geodesy import ecef_to_latlon, utm_to_local_via_ecef
+from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 
 CLOUD_COLS = 4
 TOLERANCE = 1e-3
@@ -64,6 +71,16 @@ class OSMCloud(Node):
             "gpx_file",
             rclpy.Parameter.Type.STRING,
         ).value
+        # Annotation store merged into mapdata_file, with route_planner's semantics:
+        # "auto" = <map>.annotations.json next to the map, "none" = the unedited map,
+        # or a path to a store file. The planner and this node must see the same map,
+        # or a junction on a retagged/deleted way publishes a ring nothing routes over.
+        self.annotations: str = self.declare_parameter("annotations", "auto").value
+        # highway= values dropped from the map: stairs are footways in OSM, but the
+        # planner does not route over them, so they get no rings and no road cost.
+        self.exclude_highway: list[str] = list(
+            self.declare_parameter("exclude_highway", sorted(NON_ROUTABLE_HIGHWAY_VALUES)).value
+        )
         self.save_mapdata: bool = self.declare_parameter("save_mapdata", False).value
         self.max_path_dist: float = self.declare_parameter("max_path_dist", 1.0).value
         self.neighbor_cost: str = self.declare_parameter("neighbor_cost", "linear").value
@@ -119,7 +136,7 @@ class OSMCloud(Node):
         self.markers: MarkerArray | None = None
 
         if self.mapdata_file:
-            self.map_data = md.MapData.load(self.mapdata_file)
+            self.map_data = self.load_map_data(self.mapdata_file)
         elif self.gpx_file:
             self.map_data = md.MapData(self.gpx_file)
             self.map_data.run_all(save=self.save_mapdata)
@@ -206,6 +223,34 @@ class OSMCloud(Node):
         if self.republish_period > 0:
             self.create_timer(self.republish_period, self.publish_cb)
         self.get_logger().info("Initialized OSM cloud")
+
+    def load_map_data(self, path: str) -> "md.MapData":
+        """
+        Load ``path`` with the same merge the planner uses.
+
+        The annotation store selected by the ``annotations`` parameter is merged
+        in and the ``exclude_highway`` way types are dropped, so the rings and the
+        cost grid published here describe the network ``route_planner`` routes on.
+        """
+        ann = None if self.annotations in ("", "auto") else self.annotations
+        map_data, store = load_mapdata_with_annotations(
+            path,
+            ann,
+            exclude_highway=self.exclude_highway,
+        )
+        if ann == NO_ANNOTATIONS:
+            store_name = "none"
+        else:
+            ann_path = Path(ann).expanduser() if ann else annotation_path_for(path)
+            store_name = ann_path.name if ann_path.is_file() else "no store"
+        self.get_logger().info(
+            f"loaded {Path(path).name}: {len(map_data.footways_list)} footways, "
+            f"{len(map_data.roads_list)} roads, {len(map_data.crossroads_list)} crossroads; "
+            f"annotations={store_name} ({len(store.get('deleted_ways', []))} deleted ways, "
+            f"{len(store.get('annotations', []))} drawn), "
+            f"excluded highway={','.join(self.exclude_highway) or 'none'}"
+        )
+        return map_data
 
     def parameter_callback(self, params: list[rclpy.Parameter]) -> SetParametersResult:
         rebuild_cloud = False

@@ -76,10 +76,15 @@ class _FakeNode:
 
 sys.modules["rclpy.node"].Node = _FakeNode
 
+import json  # noqa: E402
+
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
+from conftest import build_footway_network_mapdata  # noqa: E402
 from shapely.geometry import LineString  # noqa: E402
 
+from map_data.annotations import annotation_path_for  # noqa: E402
+from map_data.map_data import MapData  # noqa: E402
 from map_data.osm_cloud import (  # noqa: E402
     OSMCloud,
     create_grid,
@@ -202,6 +207,9 @@ class _FakeMapData:
     """Minimal stand-in for map_data.map_data.MapData."""
 
     min_x, max_x, min_y, max_y = 0.0, 10.0, 0.0, 10.0
+    footways_list: list = []
+    roads_list: list = []
+    crossroads_list: list = []
 
     def get_points(self, z: float = 0.0):
         return {
@@ -222,17 +230,19 @@ class _FakeMapData:
         return "FakeMapData"
 
 
-def _build_osm_cloud(overrides: dict) -> OSMCloud:
+def _build_osm_cloud(overrides: dict, loader: MagicMock | None = None) -> OSMCloud:
     """
     Construct a real OSMCloud instance against the fake Node/MapData.
 
     ``overrides`` simulates ROS parameter overrides (e.g. from a launch
     file); anything not listed falls back to the parameter's declared
-    default.
+    default. ``loader`` replaces the annotation-merging map loader, so a test
+    can inspect the arguments the node passes to it.
     """
     _PENDING_PARAM_OVERRIDES.clear()
     _PENDING_PARAM_OVERRIDES.update(overrides)
-    with patch("map_data.osm_cloud.md.MapData.load", return_value=_FakeMapData()):
+    loader = loader or MagicMock(return_value=(_FakeMapData(), {}))
+    with patch("map_data.osm_cloud.load_mapdata_with_annotations", loader):
         return OSMCloud()
 
 
@@ -309,3 +319,52 @@ class TestOSMCloudInit:
     def test_construction_exits_without_mapdata_or_gpx_file(self):
         with pytest.raises(SystemExit):
             _build_osm_cloud({})
+
+
+class TestOSMCloudMapLoading:
+    """The node must load the same map the planner does (annotations + exclusions)."""
+
+    def test_defaults_are_auto_annotations_and_no_stairs(self):
+        loader = MagicMock(return_value=(_FakeMapData(), {}))
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "auto_utm": True}, loader)
+
+        assert node.annotations == "auto"
+        assert node.exclude_highway == ["steps"]
+        loader.assert_called_once_with("fake.mapdata", None, exclude_highway=["steps"])
+
+    def test_annotations_parameter_is_passed_through(self):
+        loader = MagicMock(return_value=(_FakeMapData(), {}))
+        _build_osm_cloud(
+            {
+                "mapdata_file": "fake.mapdata",
+                "auto_utm": True,
+                "annotations": "/tmp/store.json",
+                "exclude_highway": [],
+            },
+            loader,
+        )
+
+        loader.assert_called_once_with("fake.mapdata", "/tmp/store.json", exclude_highway=[])
+
+    def test_annotations_none_loads_the_unedited_map(self):
+        loader = MagicMock(return_value=(_FakeMapData(), {}))
+        _build_osm_cloud(
+            {"mapdata_file": "fake.mapdata", "auto_utm": True, "annotations": "none"}, loader
+        )
+
+        loader.assert_called_once_with("fake.mapdata", "none", exclude_highway=["steps"])
+
+    def test_deleted_way_is_missing_from_the_loaded_map(self, tmp_path):
+        """A real (small) map plus a store that deletes way 2: the node sees two ways."""
+        path = tmp_path / "network.mapdata"
+        build_footway_network_mapdata(path)
+        annotation_path_for(path).write_text(
+            json.dumps({"version": 1, "annotations": [], "deleted_ways": [2]})
+        )
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "auto_utm": True})
+
+        plain = MapData.load(str(path))
+        merged = node.load_map_data(str(path))
+
+        assert len(plain.footways_list) == 3
+        assert [w.id for w in merged.footways_list] == [1, 3]
