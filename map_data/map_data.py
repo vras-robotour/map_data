@@ -10,7 +10,7 @@ import json
 import logging
 import os
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -467,6 +467,49 @@ class MapData:
 
         logger.info("Parsing finished.")
         return 0
+
+    def exclude_ways(self, highway_values: Iterable[str]) -> int:
+        """
+        Drop every road/footway whose ``highway`` tag is in *highway_values*.
+
+        The classification is stored in the ``.mapdata`` file, so a way type
+        that must not be routed over (stairs, see
+        :data:`~map_data.utils.way.NON_ROUTABLE_HIGHWAY_VALUES`) has to be
+        removed at use time rather than at parse time. The crossroads are
+        recomputed from the remaining footways, so junctions that only existed
+        because of an excluded way disappear with it.
+
+        Parameters
+        ----------
+        highway_values : iterable of str
+            ``highway`` tag values to remove. An empty iterable is a no-op.
+
+        Returns
+        -------
+        int
+            Number of ways removed.
+
+        """
+        values = frozenset(highway_values)
+        if not values:
+            return 0
+        removed = 0
+        for lst_name in ("footways_list", "roads_list"):
+            ways = getattr(self, lst_name)
+            kept = [w for w in ways if (w.tags or {}).get("highway") not in values]
+            removed += len(ways) - len(kept)
+            setattr(self, lst_name, kept)
+        if removed:
+            self.crossroads_list = self.parse_intersections(
+                {w.id: w for w in self.footways_list},
+            )
+            logger.info(
+                "Excluded %d way(s) tagged highway=%s; %d crossroads remain",
+                removed,
+                "/".join(sorted(values)),
+                len(self.crossroads_list),
+            )
+        return removed
 
     def parse_intersections(self, ways_dict: dict[int, Way]) -> list[Way]:
         """

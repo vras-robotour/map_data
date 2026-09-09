@@ -6,6 +6,7 @@ OpenStreetMap ways and finds paths using Dijkstra or A*.
 """
 
 import logging
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -13,6 +14,7 @@ from shapely.geometry import LineString, Point
 from shapely.strtree import STRtree
 
 from map_data.pathsolver.astar import astar_search
+from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +65,7 @@ class GraphPlanner:
         map_data: "MapData",
         highway_types: list[str] | None = None,
         max_snap_distance: float = DEFAULT_MAX_SNAP_DISTANCE,
+        exclude_highway: Iterable[str] = NON_ROUTABLE_HIGHWAY_VALUES,
     ) -> None:
         """
         Initialize the graph planner.
@@ -80,11 +83,19 @@ class GraphPlanner:
             farther than this fail the plan instead of snapping to an
             arbitrarily distant edge
             (default :data:`DEFAULT_MAX_SNAP_DISTANCE`).
+        exclude_highway : iterable of str
+            ``highway`` tag values never routed over, whatever their category
+            (default :data:`~map_data.utils.way.NON_ROUTABLE_HIGHWAY_VALUES`,
+            i.e. stairs). A map loaded through
+            :func:`~map_data.annotations.load_mapdata_with_annotations` has
+            them removed already; this filter also covers callers that pass a
+            raw :meth:`MapData.load` map.
 
         """
         self.map_data = map_data
         self.highway_types = highway_types or ["footway"]
         self.max_snap_distance = max_snap_distance
+        self.exclude_highway = frozenset(exclude_highway)
         self.nodes: dict[int, np.ndarray] = self.map_data.get_points()
         self.graph: dict[int, list[tuple[int, float]]] = {}
         self._build_graph()
@@ -103,6 +114,12 @@ class GraphPlanner:
             self._allowed_ways.extend(self.map_data.footways_list)
         if "road" in self.highway_types:
             self._allowed_ways.extend(self.map_data.roads_list)
+        if self.exclude_highway:
+            self._allowed_ways = [
+                w
+                for w in self._allowed_ways
+                if (w.tags or {}).get("highway") not in self.exclude_highway
+            ]
 
         # Per-planner copies of the node lists. Splits are spliced into these
         # copies so the shared Way objects owned by map_data stay untouched

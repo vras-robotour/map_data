@@ -17,13 +17,14 @@ from __future__ import annotations
 
 import copy
 import logging
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
 import utm
 
 from map_data.map_data import MapData
-from map_data.utils.way import Way
+from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES, Way
 from map_data.viewer.helpers import (
     apply_node_position_overrides,
     geojson_geom_to_utm,
@@ -238,13 +239,24 @@ def apply_store(md: MapData, store: dict[str, Any]) -> MapData:
 def load_mapdata_with_annotations(
     mapdata_path: str | Path,
     annotations_path: str | Path | None = None,
+    exclude_highway: Iterable[str] = NON_ROUTABLE_HIGHWAY_VALUES,
 ) -> tuple[MapData, dict[str, Any]]:
     """
     Load a ``.mapdata`` file and merge its annotation store.
 
     ``annotations_path`` defaults to :func:`annotation_path_for`; a missing
     store simply yields the unedited map, and :data:`NO_ANNOTATIONS` (``"none"``)
-    skips the store on purpose. Returns ``(map_data, store)``.
+    skips the store on purpose.
+
+    ``exclude_highway`` removes way types a robot must not drive over (stairs by
+    default, see :data:`~map_data.utils.way.NON_ROUTABLE_HIGHWAY_VALUES`) through
+    :meth:`~map_data.map_data.MapData.exclude_ways`, before the store is applied:
+    drawn annotations may append geometric crossroads, which the crossroad
+    recompute inside ``exclude_ways`` would otherwise drop. Pass an empty
+    iterable to keep every way, as :meth:`MapData.load` itself does — the viewer
+    must still show the stairs it excludes.
+
+    Returns ``(map_data, store)``.
     """
     mapdata_path = Path(mapdata_path)
     store: dict[str, Any]
@@ -253,6 +265,7 @@ def load_mapdata_with_annotations(
     else:
         store = load_annotations(str(annotations_path or annotation_path_for(mapdata_path)))
     md = MapData.load(str(mapdata_path))
+    md.exclude_ways(exclude_highway)
     n_ann = len(store.get("annotations", []))
     if n_ann or store.get("deleted_ways") or store.get("split_ways") or store.get("tag_overrides"):
         logger.info("Applying annotation store to %s (%d annotations)", mapdata_path.name, n_ann)

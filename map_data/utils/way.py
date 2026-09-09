@@ -22,6 +22,13 @@ FOOTWAY_VALUES = frozenset(
     ],
 )
 
+#: ``highway`` values that are classified as footways but must not be routed
+#: over by a wheeled robot. Stairways are mapped as ``highway=steps`` and are
+#: part of :data:`FOOTWAY_VALUES` (the viewer and the cost grid still show
+#: them), so the planner and ``osm_cloud`` exclude them at use time through
+#: :meth:`map_data.map_data.MapData.exclude_ways`.
+NON_ROUTABLE_HIGHWAY_VALUES = frozenset({"steps"})
+
 
 @dataclass
 class Way:

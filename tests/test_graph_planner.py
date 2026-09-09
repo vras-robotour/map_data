@@ -20,14 +20,36 @@ class MockMapData:
         return {nid: _make_node(x, y) for nid, (x, y) in self._nodes_coords.items()}
 
 
-def _make_footway(way_id, node_ids, nodes_coords):
+def _make_footway(way_id, node_ids, nodes_coords, highway="footway"):
     coords = [nodes_coords[nid] for nid in node_ids]
     return Way(
         id=way_id,
         nodes=list(node_ids),
-        tags={"highway": "footway"},
+        tags={"highway": highway},
         line=LineString(coords),
     )
+
+
+def _stairs_shortcut_map():
+    """
+    Two parallel footways joined by a 10 m ``highway=steps`` way and by a 61 m
+    footway detour. The stairs make the shortest route (50 m); avoiding them
+    costs the detour.
+    """
+    nodes_coords = {
+        100: (0.0, 0.0),
+        101: (20.0, 0.0),
+        200: (0.0, 10.0),
+        201: (20.0, 10.0),
+        300: (-30.0, 5.0),
+    }
+    ways = [
+        _make_footway(1, [100, 101], nodes_coords),
+        _make_footway(2, [200, 201], nodes_coords),
+        _make_footway(3, [101, 201], nodes_coords, highway="steps"),
+        _make_footway(4, [100, 300, 200], nodes_coords),
+    ]
+    return MockMapData(ways, nodes_coords)
 
 
 def test_graph_planner_simple_path():
@@ -400,3 +422,45 @@ def test_graph_planner_keep_start_leaves_via_points_snapped():
     # The via point is not repeated off the network
     assert not any(p[1] == pytest.approx(0.3) for p in result)
     _assert_no_stacked_points(result)
+
+
+def test_graph_planner_excludes_stairs_by_default():
+    """
+    ``highway=steps`` is a footway in OSM but a wheeled robot cannot take it:
+    the default route detours instead of using the 10 m stairway shortcut.
+    """
+    planner = GraphPlanner(_stairs_shortcut_map())
+
+    result = planner.plan(np.array([[0.0, 0.0], [0.0, 10.0]]))
+
+    assert result is not None
+    assert any(np.allclose(p, [-30.0, 5.0]) for p in result), "expected the footway detour"
+    assert not any(p[0] == pytest.approx(20.0) for p in result), "the stairs were used"
+
+
+def test_graph_planner_uses_stairs_when_nothing_is_excluded():
+    planner = GraphPlanner(_stairs_shortcut_map(), exclude_highway=())
+
+    result = planner.plan(np.array([[0.0, 0.0], [0.0, 10.0]]))
+
+    assert result is not None
+    assert any(np.allclose(p, [20.0, 0.0]) for p in result)
+    assert any(np.allclose(p, [20.0, 10.0]) for p in result)
+    assert not any(p[0] == pytest.approx(-30.0) for p in result)
+
+
+def test_graph_planner_excluded_stairs_can_make_a_goal_unreachable():
+    """The stairway is the only link: with it excluded there is no route."""
+    nodes_coords = {100: (0.0, 0.0), 101: (20.0, 0.0), 201: (20.0, 10.0), 202: (0.0, 10.0)}
+    md = MockMapData(
+        [
+            _make_footway(1, [100, 101], nodes_coords),
+            _make_footway(2, [101, 201], nodes_coords, highway="steps"),
+            _make_footway(3, [201, 202], nodes_coords),
+        ],
+        nodes_coords,
+    )
+
+    waypoints = np.array([[0.0, 0.0], [0.0, 10.0]])
+    assert GraphPlanner(md).plan(waypoints) is None
+    assert GraphPlanner(md, exclude_highway=()).plan(waypoints) is not None

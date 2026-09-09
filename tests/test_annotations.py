@@ -1,9 +1,11 @@
 """Tests for the headless annotation merge (``map_data.annotations``)."""
 
 import json
+from pathlib import Path
 
 import pytest
 import utm
+from shapely.geometry import LineString
 
 from map_data.annotations import (
     annotation_path_for,
@@ -11,6 +13,7 @@ from map_data.annotations import (
 )
 from map_data.map_data import MapData
 from map_data.pathsolver.route import RoutePlanningError, plan_route
+from map_data.utils.way import Way
 
 
 def _latlon(lat0, lon0, dx, dy):
@@ -92,3 +95,79 @@ def test_tag_override_moves_a_footway_to_roads(footway_network_mapdata):
     md, _ = load_mapdata_with_annotations(path)
     assert [w.id for w in md.footways_list] == [1, 2]
     assert [w.id for w in md.roads_list] == [3]
+
+
+# ── excluded way types ─────────────────────────────────────────────────────
+
+#: The Stromovka map used on the robot; not committed (data/*.mapdata is ignored).
+KRALOVSKA = Path(__file__).resolve().parents[1] / "data" / "kralovska_obora.mapdata"
+
+
+def _add_stairway(md, lat0, lon0):
+    """
+    A ``highway=steps`` way (105 -> 101 -> 106) crossing way 1 at its end node
+    101, which turns that node into a crossroad.
+    """
+    e0, n0, zn, zl = utm.from_latlon(lat0, lon0)
+    for nid, dy in ((105, -50.0), (106, 50.0)):
+        lat, lon = utm.to_latlon(e0, n0 + dy, zn, zl)
+        md.nodes_cache[nid] = {"lat": lat, "lon": lon, "tags": {}}
+    md.footways_list.append(
+        Way(
+            id=4,
+            nodes=[105, 101, 106],
+            tags={"highway": "steps"},
+            line=LineString([(e0, n0 - 50.0), (e0, n0), (e0, n0 + 50.0)]).buffer(1.0),
+        )
+    )
+    md.crossroads_list = md.parse_intersections({w.id: w for w in md.footways_list})
+
+
+def test_exclude_ways_removes_stairs_and_their_crossroads(footway_network_mapdata, tmp_path):
+    path, lat0, lon0 = footway_network_mapdata
+    md = MapData.load(str(path))
+    _add_stairway(md, lat0, lon0)
+    n_crossroads = len(md.crossroads_list)
+
+    removed = md.exclude_ways({"steps"})
+
+    assert removed == 1
+    assert [w.id for w in md.footways_list] == [1, 2, 3]
+    # node 103 was a junction only because the stairway ended on it
+    assert len(md.crossroads_list) < n_crossroads
+
+
+def test_exclude_ways_empty_set_is_a_noop(footway_network_mapdata):
+    path, lat0, lon0 = footway_network_mapdata
+    md = MapData.load(str(path))
+    _add_stairway(md, lat0, lon0)
+
+    assert md.exclude_ways(()) == 0
+    assert len(md.footways_list) == 4
+
+
+def test_loader_excludes_stairs_by_default(footway_network_mapdata):
+    """
+    ``MapData.load`` stays raw (the viewer must still show the stairs); the
+    planner's loader drops them.
+    """
+    path, lat0, lon0 = footway_network_mapdata
+    md = MapData.load(str(path))
+    _add_stairway(md, lat0, lon0)
+    md.save(str(path))
+
+    assert len(MapData.load(str(path)).footways_list) == 4
+    assert len(load_mapdata_with_annotations(path)[0].footways_list) == 3
+    assert len(load_mapdata_with_annotations(path, exclude_highway=())[0].footways_list) == 4
+
+
+@pytest.mark.skipif(not KRALOVSKA.is_file(), reason="kralovska_obora.mapdata is not in the repo")
+def test_exclude_ways_on_the_stromovka_map():
+    md = MapData.load(str(KRALOVSKA))
+    n_crossroads = len(md.crossroads_list)
+
+    removed = md.exclude_ways({"steps"})
+
+    assert removed == 15  # the 15 stairways of the Královská obora map
+    assert not any(w.tags.get("highway") == "steps" for w in md.footways_list)
+    assert len(md.crossroads_list) < n_crossroads

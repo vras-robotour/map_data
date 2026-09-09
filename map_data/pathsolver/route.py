@@ -28,7 +28,7 @@ readable ``reason`` instead of a bare ``None``:
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -39,6 +39,7 @@ from shapely import geometry
 from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE, GraphPlanner
 from map_data.pathsolver.replan import ReplanPath, parse_args
 from map_data.utils.parsing import ways_to_shapely
+from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 
 if TYPE_CHECKING:
     from map_data.map_data import MapData
@@ -175,6 +176,7 @@ def plan_route(
     max_grid_cells: float = MAX_GRID_CELLS,
     planner: GraphPlanner | None = None,
     keep_start: bool = False,
+    exclude_highway: Iterable[str] = NON_ROUTABLE_HIGHWAY_VALUES,
 ) -> RouteResult:
     """
     Plan a route through ``points_latlon`` (``[(lat, lon), ...]``, at least two).
@@ -198,6 +200,10 @@ def plan_route(
     robot's own position, which is off the network by definition. It has no
     effect on the grid planners, which already start at the requested point.
 
+    ``exclude_highway`` is the ``highway`` tag values the graph planner never
+    routes over (stairs by default); it is ignored when ``planner`` is given,
+    which brings its own.
+
     Raises :class:`RoutePlanningError` on failure.
     """
     highway_types = list(highway_types) if highway_types else ["footway"]
@@ -210,7 +216,10 @@ def plan_route(
     if algorithm == GRAPH_ALGORITHM:
         if planner is None:
             planner = GraphPlanner(
-                md, highway_types=highway_types, max_snap_distance=max_snap_distance
+                md,
+                highway_types=highway_types,
+                max_snap_distance=max_snap_distance,
+                exclude_highway=exclude_highway,
             )
         snap = [planner.snap_distance(p) for p in utm_path]
         too_far = [i for i, d in enumerate(snap) if d > max_snap_distance]
