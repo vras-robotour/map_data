@@ -35,6 +35,9 @@ earth_frame, local_frame : str
 algorithm, highway_types, spacing, max_snap_distance, cell_size,
 inflate_obstacles, simplify_path, smooth_path
     Planner defaults applied to goals that leave the field empty/zero.
+exclude_highway : str[]
+    ``highway`` tag values never routed over (default ``["steps"]``: a wheeled
+    robot cannot take stairs).
 fix_max_age : float
     Seconds after which the last fix is considered stale (0 = never).
 """
@@ -73,6 +76,7 @@ from map_data.pathsolver.route import (
 )
 from map_data.utils.geodesy import latlon_to_ecef
 from map_data.utils.gpx import create_gpx_track
+from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 from map_data_interfaces.action import PlanRoute
 
 WGS84_FRAME = "wgs84"
@@ -97,6 +101,9 @@ class RoutePlanner(Node):
         # "auto" = <mapdata>.annotations.json next to the map, "none" = the unedited map,
         # or an explicit store file.
         self.annotations = p("annotations", "auto").value
+        # highway= values dropped from the map and from the graph: stairs are footways
+        # in OSM and in the saved .mapdata, but a wheeled robot cannot take them.
+        self.exclude_highway = list(p("exclude_highway", sorted(NON_ROUTABLE_HIGHWAY_VALUES)).value)
         # Load mapdata_file and build its footway graph at startup (~20 MB) so the first
         # goal does not pay for it; graph planners are cached per map / way set anyway.
         self.preload = bool(p("preload", True).value)
@@ -237,13 +244,24 @@ class RoutePlanner(Node):
         cache = self._map_cache
         if cache is None:  # every caller runs _load_map first, which fills the cache
             raise RuntimeError("_graph_planner called before the map was loaded")
-        key = (cache[0], cache[1], tuple(highway_types), float(max_snap))
+        key = (
+            cache[0],
+            cache[1],
+            tuple(highway_types),
+            float(max_snap),
+            tuple(sorted(self.exclude_highway)),
+        )
         planner = self._planner_cache.get(key)
         if planner is not None and planner.map_data is md:
             self._planner_cache.move_to_end(key)
             return planner
         t0 = time.monotonic()
-        planner = GraphPlanner(md, highway_types=list(highway_types), max_snap_distance=max_snap)
+        planner = GraphPlanner(
+            md,
+            highway_types=list(highway_types),
+            max_snap_distance=max_snap,
+            exclude_highway=self.exclude_highway,
+        )
         self._planner_cache[key] = planner
         while len(self._planner_cache) > self._planner_cache_size:
             self._planner_cache.popitem(last=False)
@@ -278,7 +296,7 @@ class RoutePlanner(Node):
         key = (str(path), str(ann))
         if self._map_cache and self._map_cache[0] == key and self._map_cache[1] == mtime:
             return self._map_cache[2]
-        md, store = load_mapdata_with_annotations(path, ann)
+        md, store = load_mapdata_with_annotations(path, ann, exclude_highway=self.exclude_highway)
         if ann == NO_ANNOTATIONS:
             store_name = "none"
         elif ann_path is not None and ann_path.is_file():
@@ -288,7 +306,8 @@ class RoutePlanner(Node):
         self.get_logger().info(
             f"loaded {path.name}: {len(md.footways_list)} footways, {len(md.roads_list)} roads, "
             f"annotations={store_name} ({len(store.get('deleted_ways', []))} deleted ways, "
-            f"{len(store.get('annotations', []))} drawn)"
+            f"{len(store.get('annotations', []))} drawn), "
+            f"excluded highway={','.join(self.exclude_highway) or 'none'}"
         )
         self._map_cache = (key, mtime, md)
         return md

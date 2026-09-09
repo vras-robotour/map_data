@@ -128,6 +128,7 @@ robot's position with the default parameters.
 | `highway_types` | `["footway"]` | allowed way types: `footway`, `road` or both |
 | `spacing` | `3.0` | max metres between output waypoints (0 = planner vertices) |
 | `max_snap_distance` | `100.0` | graph: waypoint-to-way limit (m) |
+| `exclude_highway` | `["steps"]` | `highway=` values never routed over (stairs) |
 | `cell_size`, `inflate_obstacles` | `0.25`, `0.25` | grid planners |
 | `fix_max_age` | `10.0` | s after which the last fix is stale |
 

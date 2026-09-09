@@ -26,6 +26,10 @@ route_planner:
     # "none" = the unedited map, or a path to a store file. Note stromovka.annotations.json
     # deletes 838 ways, so use "none" with that map unless you want the edited version.
     annotations: "auto"
+    # highway= values never routed over, removed from the map and from the graph.
+    # Stairs are footways in OSM and in the saved .mapdata; a wheeled robot cannot
+    # take them. Set to [] to route over everything the map has.
+    exclude_highway: ["steps"]
     # Load the map and build its graph at startup (~0.3 s) instead of on the first goal.
     preload: true
 
