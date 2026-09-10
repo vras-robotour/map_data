@@ -24,6 +24,7 @@ from typing import Any
 import utm
 
 from map_data.map_data import MapData
+from map_data.traversability import TraversabilityRules, load_traversability
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES, Way
 from map_data.viewer.helpers import (
     apply_node_position_overrides,
@@ -240,6 +241,7 @@ def load_mapdata_with_annotations(
     mapdata_path: str | Path,
     annotations_path: str | Path | None = None,
     exclude_highway: Iterable[str] = NON_ROUTABLE_HIGHWAY_VALUES,
+    traversability: TraversabilityRules | str | Path | None = None,
 ) -> tuple[MapData, dict[str, Any]]:
     """
     Load a ``.mapdata`` file and merge its annotation store.
@@ -248,13 +250,22 @@ def load_mapdata_with_annotations(
     store simply yields the unedited map, and :data:`NO_ANNOTATIONS` (``"none"``)
     skips the store on purpose.
 
-    ``exclude_highway`` removes way types a robot must not drive over (stairs by
-    default, see :data:`~map_data.utils.way.NON_ROUTABLE_HIGHWAY_VALUES`) through
-    :meth:`~map_data.map_data.MapData.exclude_ways`, before the store is applied:
-    drawn annotations may append geometric crossroads, which the crossroad
-    recompute inside ``exclude_ways`` would otherwise drop. Pass an empty
-    iterable to keep every way, as :meth:`MapData.load` itself does — the viewer
-    must still show the stairs it excludes.
+    ``traversability`` decides from the OSM tags which ways the robot may drive
+    on (stairs, grass, tunnels, ...): a
+    :class:`~map_data.traversability.TraversabilityRules`, a path to a rule
+    file, or ``None`` for the package's ``config/traversability.yaml``. The
+    non-traversable ways are removed through
+    :meth:`~map_data.map_data.MapData.apply_traversability` before the store is
+    applied: drawn annotations may append geometric crossroads, which the
+    crossroad recompute inside it would otherwise drop.
+
+    ``exclude_highway`` is the older, tag-free shortcut for the same thing
+    (stairs by default, see
+    :data:`~map_data.utils.way.NON_ROUTABLE_HIGHWAY_VALUES`); its values are
+    added to the rules as one leading deny rule. Pass an empty iterable *and*
+    empty rules (``TraversabilityRules()``) to keep every way, as
+    :meth:`MapData.load` itself does — the viewer must still show what the
+    planner refuses.
 
     Returns ``(map_data, store)``.
     """
@@ -265,7 +276,7 @@ def load_mapdata_with_annotations(
     else:
         store = load_annotations(str(annotations_path or annotation_path_for(mapdata_path)))
     md = MapData.load(str(mapdata_path))
-    md.exclude_ways(exclude_highway)
+    md.apply_traversability(load_traversability(traversability).extend(exclude_highway))
     n_ann = len(store.get("annotations", []))
     if n_ann or store.get("deleted_ways") or store.get("split_ways") or store.get("tag_overrides"):
         logger.info("Applying annotation store to %s (%d annotations)", mapdata_path.name, n_ann)

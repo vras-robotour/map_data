@@ -20,6 +20,7 @@ import utm
 from gpxpy import parse as gpxparse
 from shapely import geometry
 
+from map_data.traversability import TraversabilityRules
 from map_data.utils.config import load_config
 from map_data.utils.overpass import REQUEST_TIMEOUT, OverpassClient
 from map_data.utils.parsing import (
@@ -216,6 +217,8 @@ class MapData:
         self.footways_list: list[Way] = []
         self.barriers_list: list[Way] = []
         self.crossroads_list: list[Way] = []
+        #: ``{reason: count}`` of the last :meth:`apply_traversability` call.
+        self.traversability_removed: dict[str, int] = {}
 
         # Raw data stored temporarily during parsing
         self.osm_ways_data: overpy.Result | None = None
@@ -472,12 +475,11 @@ class MapData:
         """
         Drop every road/footway whose ``highway`` tag is in *highway_values*.
 
-        The classification is stored in the ``.mapdata`` file, so a way type
-        that must not be routed over (stairs, see
-        :data:`~map_data.utils.way.NON_ROUTABLE_HIGHWAY_VALUES`) has to be
-        removed at use time rather than at parse time. The crossroads are
-        recomputed from the remaining footways, so junctions that only existed
-        because of an excluded way disappear with it.
+        A shortcut for :meth:`apply_traversability` with rules that only deny
+        those ``highway`` values (see
+        :meth:`~map_data.traversability.TraversabilityRules.extend`), kept
+        because the ``exclude_highway`` parameter of the nodes, the loader and
+        the graph planner is written in those terms.
 
         Parameters
         ----------
@@ -490,23 +492,60 @@ class MapData:
             Number of ways removed.
 
         """
-        values = frozenset(highway_values)
-        if not values:
+        return self.apply_traversability(TraversabilityRules().extend(highway_values))
+
+    def apply_traversability(self, rules: "TraversabilityRules") -> int:
+        """
+        Remove every road/footway *rules* declares non-traversable.
+
+        The classification is stored in the ``.mapdata`` file as OSM tagged it,
+        so ways a robot must not drive on (stairs, muddy shortcuts, bridges on
+        some maps) have to be removed at use time rather than at parse time —
+        the viewer must still show them. The crossroads are recomputed from the
+        remaining footways, so junctions that only existed because of a removed
+        way disappear with it.
+
+        The per-reason counts are logged and also kept in
+        :attr:`traversability_removed` for callers that report them (the ROS
+        nodes log them through their own logger).
+
+        Parameters
+        ----------
+        rules : TraversabilityRules
+            The rule set; one with no rules is a no-op.
+
+        Returns
+        -------
+        int
+            Number of ways removed.
+
+        """
+        if not rules.rules and rules.default.traversable:
+            self.traversability_removed = {}
             return 0
+        counts: dict[str, int] = {}
         removed = 0
         for lst_name in ("footways_list", "roads_list"):
             ways = getattr(self, lst_name)
-            kept = [w for w in ways if (w.tags or {}).get("highway") not in values]
-            removed += len(ways) - len(kept)
+            kept = []
+            for way in ways:
+                verdict = rules.evaluate(way.tags)
+                if verdict.traversable:
+                    kept.append(way)
+                else:
+                    counts[verdict.reason] = counts.get(verdict.reason, 0) + 1
+                    removed += 1
             setattr(self, lst_name, kept)
+        self.traversability_removed = counts
         if removed:
             self.crossroads_list = self.parse_intersections(
                 {w.id: w for w in self.footways_list},
             )
+            for reason, count in counts.items():
+                logger.info("Removed %d way(s): %s", count, reason)
             logger.info(
-                "Excluded %d way(s) tagged highway=%s; %d crossroads remain",
+                "Traversability rules removed %d way(s); %d crossroads remain",
                 removed,
-                "/".join(sorted(values)),
                 len(self.crossroads_list),
             )
         return removed

@@ -13,6 +13,7 @@ from map_data.annotations import (
 )
 from map_data.map_data import MapData
 from map_data.pathsolver.route import RoutePlanningError, plan_route
+from map_data.traversability import TraversabilityRules, load_traversability
 from map_data.utils.way import Way
 
 
@@ -158,7 +159,11 @@ def test_loader_excludes_stairs_by_default(footway_network_mapdata):
 
     assert len(MapData.load(str(path)).footways_list) == 4
     assert len(load_mapdata_with_annotations(path)[0].footways_list) == 3
-    assert len(load_mapdata_with_annotations(path, exclude_highway=())[0].footways_list) == 4
+    # The default rule file also refuses stairs, so both switches have to be off.
+    kept = load_mapdata_with_annotations(
+        path, exclude_highway=(), traversability=TraversabilityRules()
+    )[0]
+    assert len(kept.footways_list) == 4
 
 
 @pytest.mark.skipif(not KRALOVSKA.is_file(), reason="kralovska_obora.mapdata is not in the repo")
@@ -171,3 +176,126 @@ def test_exclude_ways_on_the_stromovka_map():
     assert removed == 15  # the 15 stairways of the Královská obora map
     assert not any(w.tags.get("highway") == "steps" for w in md.footways_list)
     assert len(md.crossroads_list) < n_crossroads
+
+
+# ── traversability rules ───────────────────────────────────────────────────
+
+
+def _add_grass_way(md, lat0, lon0):
+    """
+    A ``surface=grass`` footway (107 -> 103 -> 108) crossing way 1 at its end
+    node 103, which turns that node into a crossroad.
+    """
+    e0, n0, zn, zl = utm.from_latlon(lat0, lon0)
+    for nid, dy in ((107, -60.0), (108, 60.0)):
+        lat, lon = utm.to_latlon(e0 + 200.0, n0 + dy, zn, zl)
+        md.nodes_cache[nid] = {"lat": lat, "lon": lon, "tags": {}}
+    md.footways_list.append(
+        Way(
+            id=5,
+            nodes=[107, 103, 108],
+            tags={"highway": "footway", "surface": "grass"},
+            line=LineString(
+                [(e0 + 200.0, n0 - 60.0), (e0 + 200.0, n0), (e0 + 200.0, n0 + 60.0)]
+            ).buffer(1.0),
+        )
+    )
+    md.crossroads_list = md.parse_intersections({w.id: w for w in md.footways_list})
+
+
+def _grass_rules():
+    return TraversabilityRules.from_dict(
+        {"rules": [{"match": {"surface": "grass"}, "traversable": False, "reason": "soft"}]},
+        source="test",
+    )
+
+
+def test_apply_traversability_removes_a_grass_way(footway_network_mapdata):
+    path, lat0, lon0 = footway_network_mapdata
+    md = MapData.load(str(path))
+    _add_grass_way(md, lat0, lon0)
+
+    removed = md.apply_traversability(_grass_rules())
+
+    assert removed == 1
+    assert [w.id for w in md.footways_list] == [1, 2, 3]
+    assert md.traversability_removed == {"soft": 1}
+
+
+def test_apply_traversability_recomputes_the_crossroads(footway_network_mapdata):
+    path, lat0, lon0 = footway_network_mapdata
+    md = MapData.load(str(path))
+    plain_crossroads = len(md.crossroads_list)
+    _add_grass_way(md, lat0, lon0)
+    assert len(md.crossroads_list) > plain_crossroads  # node 103 became a junction
+
+    md.apply_traversability(_grass_rules())
+
+    assert len(md.crossroads_list) == plain_crossroads
+
+
+def test_apply_traversability_without_rules_is_a_noop(footway_network_mapdata):
+    path, lat0, lon0 = footway_network_mapdata
+    md = MapData.load(str(path))
+    _add_grass_way(md, lat0, lon0)
+
+    assert md.apply_traversability(TraversabilityRules()) == 0
+    assert len(md.footways_list) == 4
+
+
+def test_loader_applies_the_rules_it_is_given(footway_network_mapdata):
+    path, lat0, lon0 = footway_network_mapdata
+    md = MapData.load(str(path))
+    _add_grass_way(md, lat0, lon0)
+    md.save(str(path))
+
+    kept = load_mapdata_with_annotations(path, traversability=TraversabilityRules())[0]
+    filtered = load_mapdata_with_annotations(path, traversability=_grass_rules())[0]
+
+    assert len(kept.footways_list) == 4
+    assert [w.id for w in filtered.footways_list] == [1, 2, 3]
+
+
+def test_loader_reads_a_rule_file(footway_network_mapdata, tmp_path):
+    path, lat0, lon0 = footway_network_mapdata
+    md = MapData.load(str(path))
+    _add_grass_way(md, lat0, lon0)
+    md.save(str(path))
+    rules_file = tmp_path / "rules.yaml"
+    rules_file.write_text(
+        "rules:\n  - match: {surface: grass}\n    traversable: false\n    reason: soft\n"
+    )
+
+    md, _ = load_mapdata_with_annotations(path, traversability=rules_file)
+
+    assert [w.id for w in md.footways_list] == [1, 2, 3]
+
+
+def test_loader_folds_exclude_highway_into_the_rules(footway_network_mapdata):
+    """Both switches are applied at once, whichever way the caller uses."""
+    path, lat0, lon0 = footway_network_mapdata
+    md = MapData.load(str(path))
+    _add_stairway(md, lat0, lon0)
+    _add_grass_way(md, lat0, lon0)
+    md.save(str(path))
+
+    md, _ = load_mapdata_with_annotations(
+        path, exclude_highway=("steps",), traversability=_grass_rules()
+    )
+
+    assert [w.id for w in md.footways_list] == [1, 2, 3]
+
+
+@pytest.mark.skipif(not KRALOVSKA.is_file(), reason="kralovska_obora.mapdata is not in the repo")
+def test_shipped_rules_on_the_stromovka_map():
+    """
+    The counts the comments in ``config/traversability.yaml`` quote. They are
+    what the operator sees in the node log, so a rule that silently stops
+    matching (an OSM retag, a typo) shows up here.
+    """
+    md = MapData.load(str(KRALOVSKA))
+    rules = load_traversability()
+
+    summary = rules.summary(md.footways_list + md.roads_list)
+
+    assert summary == {"stairs": 15, "soft surface": 6, "bridge": 13, "rough surface": 1}
