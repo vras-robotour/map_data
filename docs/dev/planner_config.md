@@ -45,6 +45,8 @@ path_cost_cap: 0.85
 
 Assigns a base traversal cost to each OSM `highway=*` value. The cost scale runs from `0.0` (freely preferred) to `1.0` (equivalent to an obstacle). Costs are capped at `path_cost_cap` so that even the most expensive way type remains cheaper than off-path terrain.
 
+Both planners charge the same price, through `map_data.pathsolver.way_cost`: the grid planner blends it into the cell costs, and the graph planner weighs a way's edges `length × (1 + min(path_cost_cap, highway_cost + surface_cost))`. Whether a way may be driven on *at all* is a separate question, answered by [the traversability rules](../planning.md#traversability-rules).
+
 | OSM highway type | Default cost | Interpretation |
 |-----------------|-------------|----------------|
 | `pedestrian` | 0.0 | Pedestrian-only street or square |

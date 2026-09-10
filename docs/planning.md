@@ -69,6 +69,10 @@ map_data_plan -f stromovka.mapdata -p 50.1038,14.4294 -p 50.1050,14.4250 -p 50.1
     --algorithm astar --cell-size 0.5 --json
 ```
 
+`--traversability FILE` plans with another rule file than the package's
+`config/traversability.yaml` and `--no-traversability` with none at all (stairs are still
+excluded); see [Traversability rules](#traversability-rules).
+
 `--goal` accepts the `geo:lat,lon` URI printed on a Robotour QR code. Failures are
 reported with a reason: `snap_too_far` (a point is farther than `--max-snap-distance`
 from every allowed way), `unreachable` (disconnected network), `no_path`,
@@ -98,8 +102,8 @@ nothing until roads are allowed.
 Every parameter below lives in `config/route_planner.yaml`,
 which the launch file loads by default; `params_file:=` takes an absolute path or another
 file name in `config/`. The launch arguments (`mapdata_file`, `mapdata_path`, `annotations`,
-`preload`, `algorithm`, `highway_types`, `spacing`, `mission_dir`, `gps_fix_topic`,
-`earth_frame`, `local_frame`) are applied on top of that file, so an argument left unset
+`traversability`, `preload`, `algorithm`, `highway_types`, `spacing`, `mission_dir`,
+`gps_fix_topic`, `earth_frame`, `local_frame`) are applied on top of that file, so an argument left unset
 keeps the file's value and the rest of the parameters are only reachable through the file.
 Not to be confused with `config/planner_defaults.yaml`, which holds the routing cost tables
 used by the planners themselves.
@@ -134,6 +138,7 @@ robot's position with the default parameters.
 | `goal_max_snap_distance` | `30.0` | graph: the goal's limit (m); farther fails with `snap_too_far` |
 | `keep_goal` | `true` | end the route at the goal coordinate, not at its projection |
 | `exclude_highway` | `["steps"]` | `highway=` values never routed over (stairs) |
+| `traversability_file` | `""` | tag rule file deciding what may be driven on (`""` = the package's `config/traversability.yaml`, see [Traversability rules](#traversability-rules)); launch argument `traversability:=` |
 | `cell_size`, `inflate_obstacles` | `0.25`, `0.25` | grid planners |
 | `fix_max_age` | `10.0` | s after which the last fix is stale |
 
@@ -152,6 +157,70 @@ except RoutePlanningError as e:
 else:
     open("route.gpx", "w").write(create_gpx_track(route.latlon))
 ```
+
+## Traversability rules
+
+Which OSM ways the robot may drive on is decided from their tags by
+`config/traversability.yaml`, the one file to edit when the answer changes. The rules are
+applied when a map is loaded for planning (`load_mapdata_with_annotations`), so the route
+planner, the `osm_cloud` cost cloud and the intersection rings all describe the same
+network; the saved `.mapdata` and the viewer keep showing everything.
+
+```yaml
+default:
+  traversable: true
+  cost: 0.0
+rules:
+  - match: {highway: steps}          # exact value
+    traversable: false
+    reason: stairs
+  - match: {surface: [grass, mud]}   # any of these values
+    traversable: false
+    reason: soft surface
+  - match: {bridge: "*"}             # the tag is present, whatever its value
+    traversable: false
+    reason: bridge
+  - match: {highway: path, informal: yes}   # several keys: all must match (AND)
+    cost: 1.0
+    reason: informal path
+```
+
+* Rules are tried in order and the **first match wins**, so an allow rule placed before a
+  deny rule is the way to make an exception (`{bridge: boardwalk} traversable: true` above
+  `{bridge: "*"} traversable: false`). A way no rule matches gets `default`.
+* `traversable: false` removes the way: it is never routed over, its junctions get no
+  intersection ring, and it is off-road in the `osm_cloud` cost cloud.
+* `cost:` is optional and **additive on top of** the `highway`/`surface` cost from
+  `config/planner_defaults.yaml`: the graph planner weighs the way's edges
+  `(1 + way cost + rule cost) × length`. Surfaces and way types are already priced by
+  those tables, so use it only for tags they know nothing about (`informal=yes`). The
+  reported route length is always the geometric one.
+* `reason:` is what the load log prints next to the count of removed ways.
+* YAML parses a bare `yes`/`no` as a boolean, but rule and tag values are compared as the
+  strings OSM uses, so `informal: yes` and `informal: "yes"` are the same rule — quoting is
+  never needed.
+* The file is validated on load: an unknown key, a negative `cost` or a non-boolean
+  `traversable` is an error naming the file and the rule.
+
+The shipped defaults refuse stairs, grass/mud/sand surfaces, bridges, `smoothness=bad` or
+worse and `access=no|private`. Measured on the Stromovka map (`kralovska_obora.mapdata`,
+289 ways) they remove 15 stairways, 6 soft-surface ways, 13 bridges and 1 rough way, and
+leave both routes driven there on 2026-09-08 exactly as they were. A `tunnel` rule is
+shipped **commented out**: the covered alley at Šlechtova is the only short way west, and
+removing the two tunnels turned a 751 m route into 2495 m.
+
+Where the file is chosen:
+
+| | |
+|---|---|
+| `route_planner`, `osm_cloud` | parameter `traversability_file` (`""` = the package file) |
+| launch files | `traversability:=<file>` (forwarded only when non-empty) |
+| `map_data_plan` | `--traversability FILE`, `--no-traversability` |
+| library | `load_mapdata_with_annotations(..., traversability=...)`, `plan_route(..., traversability=...)`, `GraphPlanner(..., traversability=...)` — a `TraversabilityRules`, a path, or `None` for the package file |
+
+The nodes read the file once at startup and include it (with its mtime) in their map and
+planner caches: edit the file, restart the node. Both nodes must be given the same file,
+or `osm_cloud` publishes rings on ways the planner refuses.
 
 ## Python Library
 
@@ -212,7 +281,11 @@ with open("planned.gpx", "w") as f:
 Plans a path by searching the OSM road and footway network using A\*. The route is constrained
 to follow existing ways, making it suitable for on-road or on-path navigation where staying on
 designated routes is required. This algorithm is fast and produces geometrically clean results,
-but cannot leave the road network to avoid obstacles.
+but cannot leave the road network to avoid obstacles. Its edge weights are
+`length × (1 + way cost)` with the same `highway_costs`/`surface_costs` tables the cost
+grid uses, plus any extra cost from the [traversability rules](#traversability-rules), so
+a gravel shortcut loses to a slightly longer paved way; the reported route length stays
+geometric.
 
 ### Grid A\*
 

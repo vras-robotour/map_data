@@ -136,6 +136,7 @@ topic (cost-aware footway grid) and optionally publishes intersections as a
 | `mapdata_file` | `None` | Absolute path to a `.mapdata` file |
 | `annotations` | `"auto"` | Annotation store merged into `mapdata_file`, as in `route_planner`: `auto` = `<map>.annotations.json` next to it, `none` = the unedited map, or a path |
 | `exclude_highway` | `["steps"]` | `highway=` values dropped from the map (stairs are not routable, so they get no rings) |
+| `traversability_file` | `""` | Tag rule file deciding which ways the robot may drive on (`""` = the package's `config/traversability.yaml`; see [Traversability rules](planning.md#traversability-rules)). Must be the same file `route_planner` uses. Launch argument: `traversability:=<file>` |
 | `gpx_file` | `None` | Absolute path to a `.gpx` file (used if no `.mapdata`) |
 | `save_mapdata` | `false` | Save generated mapdata when loading from a `.gpx` |
 | `max_path_dist` | `1.0` | Max distance (m) at which a grid point receives a cost |
