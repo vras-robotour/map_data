@@ -1539,6 +1539,7 @@
 <hr />
 <h2 id="highway_costs"><code>highway_costs</code></h2>
 <p>Assigns a base traversal cost to each OSM <code>highway=*</code> value. The cost scale runs from <code>0.0</code> (freely preferred) to <code>1.0</code> (equivalent to an obstacle). Costs are capped at <code>path_cost_cap</code> so that even the most expensive way type remains cheaper than off-path terrain.</p>
+<p>Both planners charge the same price, through <code>map_data.pathsolver.way_cost</code>: the grid planner blends it into the cell costs, and the graph planner weighs a way's edges <code>length × (1 + min(path_cost_cap, highway_cost + surface_cost))</code>. Whether a way may be driven on <em>at all</em> is a separate question, answered by <a href="../../planning/#traversability-rules">the traversability rules</a>.</p>
 <table>
 <thead>
 <tr>

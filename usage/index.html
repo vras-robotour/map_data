@@ -1675,6 +1675,21 @@ topic (cost-aware footway grid) and optionally publishes intersections as a
 <td>Absolute path to a <code>.mapdata</code> file</td>
 </tr>
 <tr>
+<td><code>annotations</code></td>
+<td><code>"auto"</code></td>
+<td>Annotation store merged into <code>mapdata_file</code>, as in <code>route_planner</code>: <code>auto</code> = <code>&lt;map&gt;.annotations.json</code> next to it, <code>none</code> = the unedited map, or a path</td>
+</tr>
+<tr>
+<td><code>exclude_highway</code></td>
+<td><code>["steps"]</code></td>
+<td><code>highway=</code> values dropped from the map (stairs are not routable, so they get no rings)</td>
+</tr>
+<tr>
+<td><code>traversability_file</code></td>
+<td><code>""</code></td>
+<td>Tag rule file deciding which ways the robot may drive on (<code>""</code> = the package's <code>config/traversability.yaml</code>; see <a href="../planning/#traversability-rules">Traversability rules</a>). Must be the same file <code>route_planner</code> uses. Launch argument: <code>traversability:=&lt;file&gt;</code></td>
+</tr>
+<tr>
 <td><code>gpx_file</code></td>
 <td><code>None</code></td>
 <td>Absolute path to a <code>.gpx</code> file (used if no <code>.mapdata</code>)</td>
@@ -1786,6 +1801,11 @@ up the required static transforms and enables intersection publishing by default
 <td><code>transform_mode</code></td>
 <td>from yaml</td>
 <td>Override the placement mode (<code>tf</code> / <code>auto</code> / <code>geodetic</code>)</td>
+</tr>
+<tr>
+<td><code>annotations</code></td>
+<td><code>auto</code></td>
+<td>Annotation store merged into the map (<code>auto</code> / <code>none</code> / path); always forwarded, so it wins over the yaml files</td>
 </tr>
 </tbody>
 </table>

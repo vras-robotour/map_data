@@ -832,6 +832,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#traversability-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Traversability rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#python-library" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1647,6 +1658,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#traversability-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Traversability rules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#python-library" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1939,6 +1961,9 @@ caption off - the viewer draws its own as HTML text under the code.</p>
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>map_data_plan<span class="w"> </span>-f<span class="w"> </span>stromovka.mapdata<span class="w"> </span>-p<span class="w"> </span><span class="m">50</span>.1038,14.4294<span class="w"> </span>-p<span class="w"> </span><span class="m">50</span>.1050,14.4250<span class="w"> </span>-p<span class="w"> </span><span class="m">50</span>.1067,14.4193<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">    </span>--algorithm<span class="w"> </span>astar<span class="w"> </span>--cell-size<span class="w"> </span><span class="m">0</span>.5<span class="w"> </span>--json
 </span></code></pre></div>
+<p><code>--traversability FILE</code> plans with another rule file than the package's
+<code>config/traversability.yaml</code> and <code>--no-traversability</code> with none at all (stairs are still
+excluded); see <a href="#traversability-rules">Traversability rules</a>.</p>
 <p><code>--goal</code> accepts the <code>geo:lat,lon</code> URI printed on a Robotour QR code. Failures are
 reported with a reason: <code>snap_too_far</code> (a point is farther than <code>--max-snap-distance</code>
 from every allowed way), <code>unreachable</code> (disconnected network), <code>no_path</code>,
@@ -1962,8 +1987,8 @@ nothing until roads are allowed.</p>
 <p>Every parameter below lives in <code>config/route_planner.yaml</code>,
 which the launch file loads by default; <code>params_file:=</code> takes an absolute path or another
 file name in <code>config/</code>. The launch arguments (<code>mapdata_file</code>, <code>mapdata_path</code>, <code>annotations</code>,
-<code>preload</code>, <code>algorithm</code>, <code>highway_types</code>, <code>spacing</code>, <code>mission_dir</code>, <code>gps_fix_topic</code>,
-<code>earth_frame</code>, <code>local_frame</code>) are applied on top of that file, so an argument left unset
+<code>traversability</code>, <code>preload</code>, <code>algorithm</code>, <code>highway_types</code>, <code>spacing</code>, <code>mission_dir</code>,
+<code>gps_fix_topic</code>, <code>earth_frame</code>, <code>local_frame</code>) are applied on top of that file, so an argument left unset
 keeps the file's value and the rest of the parameters are only reachable through the file.
 Not to be confused with <code>config/planner_defaults.yaml</code>, which holds the routing cost tables
 used by the planners themselves.</p>
@@ -1971,7 +1996,10 @@ used by the planners themselves.</p>
 planner parameters (empty/zero fields use the node's defaults). With
 <code>start_from_robot</code> the latest fix on <code>gps_fix_topic</code> becomes the first waypoint, so a
 single goal is enough; that fix is kept verbatim as the route's first point (the robot
-is where it is), and the leading leg is its way onto the network. The result carries
+is where it is), and the leading leg is its way onto the network. The goal is kept
+verbatim too (<code>keep_goal</code>), so the route ends at the requested coordinate and its last
+leg leaves the network; a goal farther than <code>goal_max_snap_distance</code> from every allowed
+way fails with <code>snap_too_far</code> rather than being planned to somewhere else. The result carries
 the route as <code>geographic_msgs/GeoPath</code>, the
 same route as <code>nav_msgs/Path</code> in <code>local_frame</code> (through the <code>earth_frame -&gt; local_frame</code>
 transform, exactly as <code>osm_cloud</code> places the map), the length, the snap distances and the
@@ -2031,7 +2059,27 @@ robot's position with the default parameters.</p>
 <tr>
 <td><code>max_snap_distance</code></td>
 <td><code>100.0</code></td>
-<td>graph: waypoint-to-way limit (m)</td>
+<td>graph: waypoint-to-way limit (m), the start's own</td>
+</tr>
+<tr>
+<td><code>goal_max_snap_distance</code></td>
+<td><code>30.0</code></td>
+<td>graph: the goal's limit (m); farther fails with <code>snap_too_far</code></td>
+</tr>
+<tr>
+<td><code>keep_goal</code></td>
+<td><code>true</code></td>
+<td>end the route at the goal coordinate, not at its projection</td>
+</tr>
+<tr>
+<td><code>exclude_highway</code></td>
+<td><code>["steps"]</code></td>
+<td><code>highway=</code> values never routed over (stairs)</td>
+</tr>
+<tr>
+<td><code>traversability_file</code></td>
+<td><code>""</code></td>
+<td>tag rule file deciding what may be driven on (<code>""</code> = the package's <code>config/traversability.yaml</code>, see <a href="#traversability-rules">Traversability rules</a>); launch argument <code>traversability:=</code></td>
 </tr>
 <tr>
 <td><code>cell_size</code>, <code>inflate_obstacles</code></td>
@@ -2058,54 +2106,135 @@ robot's position with the default parameters.</p>
 </span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="k">else</span><span class="p">:</span>
 </span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="nb">open</span><span class="p">(</span><span class="s2">"route.gpx"</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">create_gpx_track</span><span class="p">(</span><span class="n">route</span><span class="o">.</span><span class="n">latlon</span><span class="p">))</span>
 </span></code></pre></div>
+<h2 id="traversability-rules">Traversability rules</h2>
+<p>Which OSM ways the robot may drive on is decided from their tags by
+<code>config/traversability.yaml</code>, the one file to edit when the answer changes. The rules are
+applied when a map is loaded for planning (<code>load_mapdata_with_annotations</code>), so the route
+planner, the <code>osm_cloud</code> cost cloud and the intersection rings all describe the same
+network; the saved <code>.mapdata</code> and the viewer keep showing everything.</p>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">default</span><span class="p">:</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">traversable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nt">cost</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="nt">rules</span><span class="p">:</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">match</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">highway</span><span class="p">:</span><span class="w"> </span><span class="nv">steps</span><span class="p p-Indicator">}</span><span class="w">          </span><span class="c1"># exact value</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">    </span><span class="nt">traversable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">    </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stairs</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">match</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">surface</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">grass</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">mud</span><span class="p p-Indicator">]}</span><span class="w">   </span><span class="c1"># any of these values</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">    </span><span class="nt">traversable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">    </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">soft surface</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">match</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">bridge</span><span class="p">:</span><span class="w"> </span><span class="s">"*"</span><span class="p p-Indicator">}</span><span class="w">             </span><span class="c1"># the tag is present, whatever its value</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">    </span><span class="nt">traversable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">    </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bridge</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">match</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">highway</span><span class="p">:</span><span class="w"> </span><span class="nv">path</span><span class="p p-Indicator">,</span><span class="nt"> informal</span><span class="p">:</span><span class="w"> </span><span class="nv">yes</span><span class="p p-Indicator">}</span><span class="w">   </span><span class="c1"># several keys: all must match (AND)</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="w">    </span><span class="nt">cost</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="w">    </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">informal path</span>
+</span></code></pre></div>
+<ul>
+<li>Rules are tried in order and the <strong>first match wins</strong>, so an allow rule placed before a
+  deny rule is the way to make an exception (<code>{bridge: boardwalk} traversable: true</code> above
+  <code>{bridge: "*"} traversable: false</code>). A way no rule matches gets <code>default</code>.</li>
+<li><code>traversable: false</code> removes the way: it is never routed over, its junctions get no
+  intersection ring, and it is off-road in the <code>osm_cloud</code> cost cloud.</li>
+<li><code>cost:</code> is optional and <strong>additive on top of</strong> the <code>highway</code>/<code>surface</code> cost from
+  <code>config/planner_defaults.yaml</code>: the graph planner weighs the way's edges
+  <code>(1 + way cost + rule cost) × length</code>. Surfaces and way types are already priced by
+  those tables, so use it only for tags they know nothing about (<code>informal=yes</code>). The
+  reported route length is always the geometric one.</li>
+<li><code>reason:</code> is what the load log prints next to the count of removed ways.</li>
+<li>YAML parses a bare <code>yes</code>/<code>no</code> as a boolean, but rule and tag values are compared as the
+  strings OSM uses, so <code>informal: yes</code> and <code>informal: "yes"</code> are the same rule — quoting is
+  never needed.</li>
+<li>The file is validated on load: an unknown key, a negative <code>cost</code> or a non-boolean
+  <code>traversable</code> is an error naming the file and the rule.</li>
+</ul>
+<p>The shipped defaults refuse stairs, grass/mud/sand surfaces, bridges, <code>smoothness=bad</code> or
+worse and <code>access=no|private</code>. Measured on the Stromovka map (<code>kralovska_obora.mapdata</code>,
+289 ways) they remove 15 stairways, 6 soft-surface ways, 13 bridges and 1 rough way, and
+leave both routes driven there on 2026-09-08 exactly as they were. A <code>tunnel</code> rule is
+shipped <strong>commented out</strong>: the covered alley at Šlechtova is the only short way west, and
+removing the two tunnels turned a 751 m route into 2495 m.</p>
+<p>Where the file is chosen:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>route_planner</code>, <code>osm_cloud</code></td>
+<td>parameter <code>traversability_file</code> (<code>""</code> = the package file)</td>
+</tr>
+<tr>
+<td>launch files</td>
+<td><code>traversability:=&lt;file&gt;</code> (forwarded only when non-empty)</td>
+</tr>
+<tr>
+<td><code>map_data_plan</code></td>
+<td><code>--traversability FILE</code>, <code>--no-traversability</code></td>
+</tr>
+<tr>
+<td>library</td>
+<td><code>load_mapdata_with_annotations(..., traversability=...)</code>, <code>plan_route(..., traversability=...)</code>, <code>GraphPlanner(..., traversability=...)</code> — a <code>TraversabilityRules</code>, a path, or <code>None</code> for the package file</td>
+</tr>
+</tbody>
+</table>
+<p>The nodes read the file once at startup and include it (with its mtime) in their map and
+planner caches: edit the file, restart the node. Both nodes must be given the same file,
+or <code>osm_cloud</code> publishes rings on ways the planner refuses.</p>
 <h2 id="python-library">Python Library</h2>
 <p>All planners work standalone — no ROS2 context required.</p>
 <h3 id="graphplanner">GraphPlanner</h3>
 <p>Plans a route constrained to the OSM road and footway network using A*.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.map_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">MapData</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.pathsolver.graph_planner</span><span class="w"> </span><span class="kn">import</span> <span class="n">GraphPlanner</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">md</span> <span class="o">=</span> <span class="n">MapData</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"coords.mapdata"</span><span class="p">)</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="n">start</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">md</span><span class="o">.</span><span class="n">min_x</span> <span class="o">+</span> <span class="mi">10</span><span class="p">,</span> <span class="n">md</span><span class="o">.</span><span class="n">min_y</span> <span class="o">+</span> <span class="mi">10</span><span class="p">])</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="n">goal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">md</span><span class="o">.</span><span class="n">max_x</span> <span class="o">-</span> <span class="mi">10</span><span class="p">,</span> <span class="n">md</span><span class="o">.</span><span class="n">max_y</span> <span class="o">-</span> <span class="mi">10</span><span class="p">])</span>
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="n">planner</span> <span class="o">=</span> <span class="n">GraphPlanner</span><span class="p">(</span><span class="n">md</span><span class="p">,</span> <span class="n">highway_types</span><span class="o">=</span><span class="p">[</span><span class="s2">"footway"</span><span class="p">,</span> <span class="s2">"road"</span><span class="p">])</span>
-</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="n">result</span> <span class="o">=</span> <span class="n">planner</span><span class="o">.</span><span class="n">plan</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">start</span><span class="p">,</span> <span class="n">goal</span><span class="p">]))</span>  <span class="c1"># np.ndarray or None</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.map_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">MapData</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.pathsolver.graph_planner</span><span class="w"> </span><span class="kn">import</span> <span class="n">GraphPlanner</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">md</span> <span class="o">=</span> <span class="n">MapData</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"coords.mapdata"</span><span class="p">)</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="n">start</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">md</span><span class="o">.</span><span class="n">min_x</span> <span class="o">+</span> <span class="mi">10</span><span class="p">,</span> <span class="n">md</span><span class="o">.</span><span class="n">min_y</span> <span class="o">+</span> <span class="mi">10</span><span class="p">])</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">goal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">md</span><span class="o">.</span><span class="n">max_x</span> <span class="o">-</span> <span class="mi">10</span><span class="p">,</span> <span class="n">md</span><span class="o">.</span><span class="n">max_y</span> <span class="o">-</span> <span class="mi">10</span><span class="p">])</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="n">planner</span> <span class="o">=</span> <span class="n">GraphPlanner</span><span class="p">(</span><span class="n">md</span><span class="p">,</span> <span class="n">highway_types</span><span class="o">=</span><span class="p">[</span><span class="s2">"footway"</span><span class="p">,</span> <span class="s2">"road"</span><span class="p">])</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="n">result</span> <span class="o">=</span> <span class="n">planner</span><span class="o">.</span><span class="n">plan</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">start</span><span class="p">,</span> <span class="n">goal</span><span class="p">]))</span>  <span class="c1"># np.ndarray or None</span>
 </span></code></pre></div>
 <h3 id="replanpath">ReplanPath</h3>
 <p>Grid-based local replanning around OSM barriers. See the <a href="../api/pathsolver/#replanpath">ReplanPath API reference</a> for full details.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.map_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">MapData</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.pathsolver.replan</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplanPath</span><span class="p">,</span> <span class="n">parse_args</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.utils.parsing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ways_to_shapely</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.utils.gpx</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_path</span><span class="p">,</span> <span class="n">utm_path_to_latlon</span><span class="p">,</span> <span class="n">create_gpx_content</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">md</span> <span class="o">=</span> <span class="n">MapData</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"coords.mapdata"</span><span class="p">)</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="n">path_data</span> <span class="o">=</span> <span class="n">parse_path</span><span class="p">(</span><span class="s2">"waypoints.gpx"</span><span class="p">)</span>  <span class="c1"># returns (utm_array, zone_num, zone_let)</span>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="n">args</span> <span class="o">=</span> <span class="n">parse_args</span><span class="p">([])</span>
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="n">args</span><span class="o">.</span><span class="n">low</span> <span class="o">=</span> <span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">min_x</span><span class="p">,</span> <span class="n">md</span><span class="o">.</span><span class="n">min_y</span><span class="p">)</span>
-</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="n">args</span><span class="o">.</span><span class="n">high</span> <span class="o">=</span> <span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">max_x</span><span class="p">,</span> <span class="n">md</span><span class="o">.</span><span class="n">max_y</span><span class="p">)</span>
-</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="n">args</span><span class="o">.</span><span class="n">cell_size</span> <span class="o">=</span> <span class="mf">0.25</span>
-</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="n">args</span><span class="o">.</span><span class="n">inflate_obstacles</span> <span class="o">=</span> <span class="mf">0.25</span>
-</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="n">args</span><span class="o">.</span><span class="n">simplify_path</span> <span class="o">=</span> <span class="kc">True</span>
-</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="n">args</span><span class="o">.</span><span class="n">smooth_path</span> <span class="o">=</span> <span class="kc">False</span>
-</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>
-</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="n">replanner</span> <span class="o">=</span> <span class="n">ReplanPath</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">ways_to_shapely</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">barriers_list</span><span class="p">))</span>
-</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a><span class="n">replanner</span><span class="o">.</span><span class="n">fill_grid</span><span class="p">(</span><span class="n">md</span><span class="p">,</span> <span class="n">highway_types</span><span class="o">=</span><span class="p">[</span><span class="s2">"footway"</span><span class="p">],</span> <span class="n">max_path_dist</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
-</span><span id="__span-5-19"><a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a><span class="n">new_path</span> <span class="o">=</span> <span class="n">replanner</span><span class="o">.</span><span class="n">replan</span><span class="p">(</span><span class="n">path_data</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"astar"</span><span class="p">)</span>
-</span><span id="__span-5-20"><a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>
-</span><span id="__span-5-21"><a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="n">wgs84</span> <span class="o">=</span> <span class="n">utm_path_to_latlon</span><span class="p">(</span><span class="n">new_path</span><span class="p">,</span> <span class="n">path_data</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">path_data</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
-</span><span id="__span-5-22"><a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">"planned.gpx"</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
-</span><span id="__span-5-23"><a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a>    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">create_gpx_content</span><span class="p">(</span><span class="n">wgs84</span><span class="p">))</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.map_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">MapData</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.pathsolver.replan</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplanPath</span><span class="p">,</span> <span class="n">parse_args</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.utils.parsing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ways_to_shapely</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.utils.gpx</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_path</span><span class="p">,</span> <span class="n">utm_path_to_latlon</span><span class="p">,</span> <span class="n">create_gpx_content</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="n">md</span> <span class="o">=</span> <span class="n">MapData</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"coords.mapdata"</span><span class="p">)</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="n">path_data</span> <span class="o">=</span> <span class="n">parse_path</span><span class="p">(</span><span class="s2">"waypoints.gpx"</span><span class="p">)</span>  <span class="c1"># returns (utm_array, zone_num, zone_let)</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="n">args</span> <span class="o">=</span> <span class="n">parse_args</span><span class="p">([])</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="n">args</span><span class="o">.</span><span class="n">low</span> <span class="o">=</span> <span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">min_x</span><span class="p">,</span> <span class="n">md</span><span class="o">.</span><span class="n">min_y</span><span class="p">)</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="n">args</span><span class="o">.</span><span class="n">high</span> <span class="o">=</span> <span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">max_x</span><span class="p">,</span> <span class="n">md</span><span class="o">.</span><span class="n">max_y</span><span class="p">)</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="n">args</span><span class="o">.</span><span class="n">cell_size</span> <span class="o">=</span> <span class="mf">0.25</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="n">args</span><span class="o">.</span><span class="n">inflate_obstacles</span> <span class="o">=</span> <span class="mf">0.25</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="n">args</span><span class="o">.</span><span class="n">simplify_path</span> <span class="o">=</span> <span class="kc">True</span>
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="n">args</span><span class="o">.</span><span class="n">smooth_path</span> <span class="o">=</span> <span class="kc">False</span>
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="n">replanner</span> <span class="o">=</span> <span class="n">ReplanPath</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">ways_to_shapely</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">barriers_list</span><span class="p">))</span>
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="n">replanner</span><span class="o">.</span><span class="n">fill_grid</span><span class="p">(</span><span class="n">md</span><span class="p">,</span> <span class="n">highway_types</span><span class="o">=</span><span class="p">[</span><span class="s2">"footway"</span><span class="p">],</span> <span class="n">max_path_dist</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="n">new_path</span> <span class="o">=</span> <span class="n">replanner</span><span class="o">.</span><span class="n">replan</span><span class="p">(</span><span class="n">path_data</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"astar"</span><span class="p">)</span>
+</span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>
+</span><span id="__span-6-21"><a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a><span class="n">wgs84</span> <span class="o">=</span> <span class="n">utm_path_to_latlon</span><span class="p">(</span><span class="n">new_path</span><span class="p">,</span> <span class="n">path_data</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">path_data</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+</span><span id="__span-6-22"><a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a><span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">"planned.gpx"</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+</span><span id="__span-6-23"><a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a>    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">create_gpx_content</span><span class="p">(</span><span class="n">wgs84</span><span class="p">))</span>
 </span></code></pre></div>
 <h2 id="available-algorithms">Available Algorithms</h2>
 <h3 id="graph-planning">Graph Planning</h3>
 <p>Plans a path by searching the OSM road and footway network using A*. The route is constrained
 to follow existing ways, making it suitable for on-road or on-path navigation where staying on
 designated routes is required. This algorithm is fast and produces geometrically clean results,
-but cannot leave the road network to avoid obstacles.</p>
+but cannot leave the road network to avoid obstacles. Its edge weights are
+<code>length × (1 + way cost)</code> with the same <code>highway_costs</code>/<code>surface_costs</code> tables the cost
+grid uses, plus any extra cost from the <a href="#traversability-rules">traversability rules</a>, so
+a gravel shortcut loses to a slightly longer paved way; the reported route length stays
+geometric.</p>
 <h3 id="grid-a">Grid A*</h3>
 <p>Discretizes the area around the route into a uniform grid and runs A* on it.
 Each cell is marked free or occupied based on OSM barrier polygons (optionally inflated).
@@ -2128,7 +2257,7 @@ one value per grid cell. Each cell represents a <code>cell_size × cell_size</co
 <li>For every remaining cell, the distance to the nearest way centre-line is calculated.</li>
 <li>
 <p>If that distance is ≤ <code>max_path_dist</code>, the cell receives a blended cost:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>cost = way_cost + (default_off_path_cost − way_cost) × (dist / max_path_dist)²
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>cost = way_cost + (default_off_path_cost − way_cost) × (dist / max_path_dist)²
 </span></code></pre></div>
 <p>where <code>way_cost = min(path_cost_cap, highway_cost + surface_cost)</code>.</p>
 </li>
@@ -2218,28 +2347,28 @@ controller benefits from smooth curvature and the small positional deviation is 
 <h2 id="using-astar_search-directly">Using <code>astar_search</code> directly</h2>
 <p><code>astar_search</code> is the generic A* implementation that powers both <code>GraphPlanner</code> and
 <code>grid_astar</code>. You can use it directly to build a custom planner for any graph-like problem.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.pathsolver.astar</span><span class="w"> </span><span class="kn">import</span> <span class="n">astar_search</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># Example: plan over a simple weighted grid</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">neighbors</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">r</span><span class="p">,</span> <span class="n">c</span> <span class="o">=</span> <span class="n">node</span>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="n">candidates</span> <span class="o">=</span> <span class="p">[(</span><span class="n">r</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">c</span><span class="p">),</span> <span class="p">(</span><span class="n">r</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">c</span><span class="p">),</span> <span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">c</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">c</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="k">return</span> <span class="p">[(</span><span class="n">n</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">candidates</span> <span class="k">if</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">n</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">10</span> <span class="ow">and</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">n</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">]</span>
-</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
-</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>
-</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">heuristic</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
-</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>    <span class="n">goal</span> <span class="o">=</span> <span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">9</span><span class="p">)</span>
-</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>    <span class="k">return</span> <span class="nb">abs</span><span class="p">(</span><span class="n">node</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">goal</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">+</span> <span class="nb">abs</span><span class="p">(</span><span class="n">node</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">goal</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
-</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>
-</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>
-</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="n">path</span> <span class="o">=</span> <span class="n">astar_search</span><span class="p">(</span>
-</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>    <span class="n">start_node</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
-</span><span id="__span-7-18"><a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>    <span class="n">goal_node</span><span class="o">=</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">9</span><span class="p">),</span>
-</span><span id="__span-7-19"><a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a>    <span class="n">get_neighbors_func</span><span class="o">=</span><span class="n">neighbors</span><span class="p">,</span>
-</span><span id="__span-7-20"><a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a>    <span class="n">heuristic_func</span><span class="o">=</span><span class="n">heuristic</span><span class="p">,</span>
-</span><span id="__span-7-21"><a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a><span class="p">)</span>
-</span><span id="__span-7-22"><a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a><span class="c1"># path is a list of (row, col) tuples from start to goal, or None if unreachable</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.pathsolver.astar</span><span class="w"> </span><span class="kn">import</span> <span class="n">astar_search</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># Example: plan over a simple weighted grid</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">neighbors</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="n">r</span><span class="p">,</span> <span class="n">c</span> <span class="o">=</span> <span class="n">node</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    <span class="n">candidates</span> <span class="o">=</span> <span class="p">[(</span><span class="n">r</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">c</span><span class="p">),</span> <span class="p">(</span><span class="n">r</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">c</span><span class="p">),</span> <span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">c</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">c</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>    <span class="k">return</span> <span class="p">[(</span><span class="n">n</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">candidates</span> <span class="k">if</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">n</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">10</span> <span class="ow">and</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">n</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">]</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">heuristic</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>    <span class="n">goal</span> <span class="o">=</span> <span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">9</span><span class="p">)</span>
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a>    <span class="k">return</span> <span class="nb">abs</span><span class="p">(</span><span class="n">node</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">goal</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">+</span> <span class="nb">abs</span><span class="p">(</span><span class="n">node</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">goal</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+</span><span id="__span-8-14"><a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a>
+</span><span id="__span-8-15"><a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a>
+</span><span id="__span-8-16"><a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="n">path</span> <span class="o">=</span> <span class="n">astar_search</span><span class="p">(</span>
+</span><span id="__span-8-17"><a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>    <span class="n">start_node</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+</span><span id="__span-8-18"><a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a>    <span class="n">goal_node</span><span class="o">=</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">9</span><span class="p">),</span>
+</span><span id="__span-8-19"><a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a>    <span class="n">get_neighbors_func</span><span class="o">=</span><span class="n">neighbors</span><span class="p">,</span>
+</span><span id="__span-8-20"><a id="__codelineno-8-20" name="__codelineno-8-20" href="#__codelineno-8-20"></a>    <span class="n">heuristic_func</span><span class="o">=</span><span class="n">heuristic</span><span class="p">,</span>
+</span><span id="__span-8-21"><a id="__codelineno-8-21" name="__codelineno-8-21" href="#__codelineno-8-21"></a><span class="p">)</span>
+</span><span id="__span-8-22"><a id="__codelineno-8-22" name="__codelineno-8-22" href="#__codelineno-8-22"></a><span class="c1"># path is a list of (row, col) tuples from start to goal, or None if unreachable</span>
 </span></code></pre></div>
 <p><code>get_neighbors_func</code> must return an iterable of <code>(neighbor_node, edge_cost)</code> tuples.
 <code>heuristic_func</code> must be admissible (never overestimate the true cost to the goal) for A* to
