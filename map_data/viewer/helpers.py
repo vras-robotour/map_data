@@ -1053,7 +1053,7 @@ def apply_added_nodes(
         except ValueError:
             continue  # after_node_id was deleted or not found; skip
 
-        insert_pos = idx + 1 + offset
+        insert_pos = idx + 1
         node_ids.insert(insert_pos, synth_id)
 
         if coords is not None:
@@ -1263,3 +1263,152 @@ def rebuild_way_without_nodes(
         return None
 
     return w
+
+
+def update_segment_annotations_for_split_change(
+    store: dict[str, Any],
+    original_way_id: int,
+    way: "Way",
+    old_split_nids: list[int],
+    new_split_nids: list[int],
+) -> None:
+    """
+    Update segment-specific annotations in the store when split points change.
+
+    When a way's split points are modified, the virtual segment IDs (original_way_id:index)
+    change meaning. This function maps deleted ways, deleted nodes, and change_log entries
+    from the old segments to the new segments.
+    """
+    node_ids = [getattr(n, "id", n) for n in way.nodes]
+    if not node_ids or node_ids[0] == node_ids[-1]:
+        return
+
+    old_splits = {int(nid) for nid in old_split_nids}
+    new_splits = {int(nid) for nid in new_split_nids}
+
+    def get_segs(splits: set[int]) -> list[list[int]]:
+        segs: list[list[int]] = []
+        curr: list[int] = []
+        for i, nid in enumerate(node_ids):
+            curr.append(nid)
+            is_interior = 0 < i < len(node_ids) - 1
+            if is_interior and int(nid) in splits:
+                segs.append(curr)
+                curr = [nid]
+        segs.append(curr)
+        return segs
+
+    old_segs = get_segs(old_splits)
+    new_segs = get_segs(new_splits)
+
+    def edge_to_seg(segs: list[list[int]]) -> dict[int, int]:
+        mapping = {}
+        e_idx = 0
+        for s_idx, seg in enumerate(segs):
+            for _ in range(len(seg) - 1):
+                mapping[e_idx] = s_idx
+                e_idx += 1
+        return mapping
+
+    old_edges = edge_to_seg(old_segs)
+    new_edges = edge_to_seg(new_segs)
+    num_edges = len(node_ids) - 1
+
+    deleted_ways = store.get("deleted_ways", [])
+    old_deleted_idxs = set()
+    new_deleted_ways = []
+
+    prefix = f"{original_way_id}:"
+    for d in deleted_ways:
+        wid = d["id"] if isinstance(d, dict) else d
+        if str(wid).startswith(prefix):
+            old_deleted_idxs.add(int(str(wid).split(":")[1]))
+        else:
+            new_deleted_ways.append(d)
+
+    for new_idx in range(len(new_segs)):
+        edges_in_new = [e for e, s in new_edges.items() if s == new_idx]
+        if edges_in_new and all(old_edges[e] in old_deleted_idxs for e in edges_in_new):
+            new_deleted_ways.append({"id": f"{prefix}{new_idx}"})
+
+    store["deleted_ways"] = new_deleted_ways
+
+    def map_node(old_idx: int, nid: int) -> set[int]:
+        try:
+            i = node_ids.index(nid)
+        except ValueError:
+            return set()
+
+        E = []
+        if i > 0:
+            E.append(i - 1)
+        if i < num_edges:
+            E.append(i)
+
+        Ej = {e for e in E if old_edges[e] == old_idx}
+
+        mapped = set()
+        for new_idx in set(new_edges.get(e, -1) for e in E):
+            if new_idx == -1:
+                continue
+            Ek = {e for e in E if new_edges[e] == new_idx}
+            if Ej & Ek:
+                mapped.add(new_idx)
+        return mapped
+
+    dn = store.get("deleted_nodes", [])
+    if isinstance(dn, dict):
+        dn = [
+            {"way_id": int(k) if str(k).isdigit() else k, "node_id": v}
+            for k, vs in dn.items()
+            for v in vs
+        ]
+
+    new_dn = []
+    for d in dn:
+        wid = d["way_id"]
+        if str(wid).startswith(prefix):
+            old_idx = int(str(wid).split(":")[1])
+            nid = d["node_id"]
+            mapped_new_idxs = map_node(old_idx, nid)
+            for new_idx in mapped_new_idxs:
+                new_dn.append({"way_id": f"{prefix}{new_idx}", "node_id": nid})
+        else:
+            new_dn.append(d)
+
+    store["deleted_nodes"] = new_dn
+
+    cl = store.get("change_log", [])
+    new_cl = []
+    for e in cl:
+        if e.get("type") == "way":
+            wid = e["id"]
+            if str(wid).startswith(prefix):
+                old_idx = int(str(wid).split(":")[1])
+                mapped_new_idxs = set()
+                for new_idx in range(len(new_segs)):
+                    edges_in_new = [e for e, s in new_edges.items() if s == new_idx]
+                    if edges_in_new and all(old_edges[edge] == old_idx for edge in edges_in_new):
+                        mapped_new_idxs.add(new_idx)
+                for new_idx in mapped_new_idxs:
+                    new_entry = dict(e)
+                    new_entry["id"] = f"{prefix}{new_idx}"
+                    new_cl.append(new_entry)
+            else:
+                new_cl.append(e)
+        elif e.get("type") == "node":
+            wid = e.get("way_id")
+            if str(wid).startswith(prefix):
+                old_idx = int(str(wid).split(":")[1])
+                nid = e["node_id"]
+                mapped_new_idxs = map_node(old_idx, nid)
+                for new_idx in mapped_new_idxs:
+                    new_entry = dict(e)
+                    new_entry["way_id"] = f"{prefix}{new_idx}"
+                    new_cl.append(new_entry)
+            else:
+                new_cl.append(e)
+        else:
+            new_cl.append(e)
+
+    store["change_log"] = new_cl

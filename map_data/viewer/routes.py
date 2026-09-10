@@ -118,6 +118,7 @@ from .helpers import (
     migrate_change_log,
     rebuild_way_without_nodes,
     split_way,
+    update_segment_annotations_for_split_change,
 )
 
 SIGNIFICANT_CHANGE_TOLERANCE = 0.1
@@ -1848,7 +1849,19 @@ def split_way_endpoint() -> Response:
         way_splits = splits.setdefault(original_way_id, [])
 
         if node_id_int not in way_splits:
+            old_splits = list(way_splits)
             way_splits.append(node_id_int)
+            new_splits = list(way_splits)
+
+            # Re-map segment references
+            path = _safe_data_path(filename)
+            md = load_mapdata_cached(str(path))
+            resolved = _resolve_way(md, store, int(original_way_id))
+            if resolved.way is not None:
+                update_segment_annotations_for_split_change(
+                    store, int(original_way_id), resolved.way, old_splits, new_splits
+                )
+
             cl = store.setdefault("change_log", [])
             if not any(
                 e.get("type") == "split"
@@ -1906,9 +1919,21 @@ def undo_way_split() -> Response:
     with annotation_store(ann_path) as store:
         splits = store.get("split_ways", {})
         if str(way_id_int) in splits:
-            splits[str(way_id_int)] = [nid for nid in splits[str(way_id_int)] if nid != node_id_int]
-            if not splits[str(way_id_int)]:
-                del splits[str(way_id_int)]
+            old_splits = list(splits[str(way_id_int)])
+            new_splits = [nid for nid in old_splits if nid != node_id_int]
+
+            if len(new_splits) != len(old_splits):
+                splits[str(way_id_int)] = new_splits
+                if not new_splits:
+                    del splits[str(way_id_int)]
+
+                path = _safe_data_path(filename)
+                md = load_mapdata_cached(str(path))
+                resolved = _resolve_way(md, store, way_id_int)
+                if resolved.way is not None:
+                    update_segment_annotations_for_split_change(
+                        store, way_id_int, resolved.way, old_splits, new_splits
+                    )
 
         cl = store.get("change_log", [])
         store["change_log"] = [
