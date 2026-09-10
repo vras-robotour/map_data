@@ -30,6 +30,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -38,6 +39,7 @@ from shapely import geometry
 
 from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE, GraphPlanner
 from map_data.pathsolver.replan import ReplanPath, parse_args
+from map_data.traversability import TraversabilityRules
 from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 
@@ -178,6 +180,7 @@ def plan_route(
     keep_start: bool = False,
     keep_goal: bool = False,
     exclude_highway: Iterable[str] = NON_ROUTABLE_HIGHWAY_VALUES,
+    traversability: TraversabilityRules | str | Path | None = None,
 ) -> RouteResult:
     """
     Plan a route through ``points_latlon`` (``[(lat, lon), ...]``, at least two).
@@ -207,8 +210,15 @@ def plan_route(
     like the rest of the route.
 
     ``exclude_highway`` is the ``highway`` tag values the graph planner never
-    routes over (stairs by default); it is ignored when ``planner`` is given,
-    which brings its own.
+    routes over (stairs by default), and ``traversability`` the tag rules that
+    decide the same question from the map's own tags (``None`` = the package's
+    ``config/traversability.yaml``); both are ignored when ``planner`` is
+    given, which brings its own.
+
+    ``highway_costs``/``surface_costs`` price the ``highway``/``surface`` tags
+    for *both* planners: the grid planner's cells and the graph planner's edge
+    weights (``length * (1 + cost)``). ``None`` takes
+    ``config/planner_defaults.yaml``.
 
     Raises :class:`RoutePlanningError` on failure.
     """
@@ -226,6 +236,9 @@ def plan_route(
                 highway_types=highway_types,
                 max_snap_distance=max_snap_distance,
                 exclude_highway=exclude_highway,
+                traversability=traversability,
+                highway_costs=highway_costs,
+                surface_costs=surface_costs,
             )
         snap = [planner.snap_distance(p) for p in utm_path]
         too_far = [i for i, d in enumerate(snap) if d > max_snap_distance]

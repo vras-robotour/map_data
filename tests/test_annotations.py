@@ -8,6 +8,7 @@ import utm
 from shapely.geometry import LineString
 
 from map_data.annotations import (
+    NO_ANNOTATIONS,
     annotation_path_for,
     load_mapdata_with_annotations,
 )
@@ -299,3 +300,53 @@ def test_shipped_rules_on_the_stromovka_map():
     summary = rules.summary(md.footways_list + md.roads_list)
 
     assert summary == {"stairs": 15, "soft surface": 6, "bridge": 13, "rough surface": 1}
+
+
+#: Start/goal of the two routes the robot drove in Stromovka on 2026-09-08
+#: (first and last point of field_sync/2026-09-08/missions/route_*.gpx).
+FIELD_ROUTES = {
+    "route_20260908-103357": (
+        (50.104521772138874, 14.428430322399514),
+        (50.10675190261408, 14.425881099968743),
+    ),
+    "route_20260908-105547": (
+        (50.10674062206266, 14.42576494185599),
+        (50.109685402615185, 14.417962599968284),
+    ),
+}
+#: A rule that lengthens a driven route by more than this is not shipped enabled.
+MAX_DETOUR_FACTOR = 1.3
+
+
+def _plan_field_routes(rules, **kwargs):
+    """``{name: length_m}`` for :data:`FIELD_ROUTES` on the Stromovka map."""
+    md, _ = load_mapdata_with_annotations(KRALOVSKA, NO_ANNOTATIONS, traversability=rules)
+    return {
+        name: plan_route(
+            md,
+            [start, goal],
+            keep_start=True,
+            keep_goal=True,
+            spacing=3.0,
+            traversability=rules,
+            **kwargs,
+        ).length_m
+        for name, (start, goal) in FIELD_ROUTES.items()
+    }
+
+
+@pytest.mark.skipif(not KRALOVSKA.is_file(), reason="kralovska_obora.mapdata is not in the repo")
+def test_shipped_rules_keep_the_driven_routes_plannable():
+    """
+    The defaults must not cut Stromovka in two. Both 2026-09-08 routes have to
+    plan, and neither may grow by more than a third against the plain shortest
+    path — the reason the ``tunnel`` rule is shipped commented out.
+    """
+    plain = _plan_field_routes(TraversabilityRules(), highway_costs={}, surface_costs={})
+    shipped = _plan_field_routes(load_traversability())
+
+    for name, length in shipped.items():
+        assert length > 0
+        assert length <= MAX_DETOUR_FACTOR * plain[name], (
+            f"{name}: {length:.0f} m with the shipped rules, {plain[name]:.0f} m without"
+        )

@@ -3,6 +3,7 @@ import pytest
 from shapely.geometry import LineString
 
 from map_data.pathsolver.graph_planner import GraphPlanner
+from map_data.traversability import TraversabilityRules
 from map_data.utils.way import Way
 
 
@@ -439,7 +440,10 @@ def test_graph_planner_excludes_stairs_by_default():
 
 
 def test_graph_planner_uses_stairs_when_nothing_is_excluded():
-    planner = GraphPlanner(_stairs_shortcut_map(), exclude_highway=())
+    """Both switches off (the default rule file refuses stairs as well)."""
+    planner = GraphPlanner(
+        _stairs_shortcut_map(), exclude_highway=(), traversability=TraversabilityRules()
+    )
 
     result = planner.plan(np.array([[0.0, 0.0], [0.0, 10.0]]))
 
@@ -463,7 +467,10 @@ def test_graph_planner_excluded_stairs_can_make_a_goal_unreachable():
 
     waypoints = np.array([[0.0, 0.0], [0.0, 10.0]])
     assert GraphPlanner(md).plan(waypoints) is None
-    assert GraphPlanner(md, exclude_highway=()).plan(waypoints) is not None
+    assert (
+        GraphPlanner(md, exclude_highway=(), traversability=TraversabilityRules()).plan(waypoints)
+        is not None
+    )
 
 
 def test_graph_planner_keep_goal_ends_at_the_requested_point():
@@ -499,3 +506,89 @@ def test_graph_planner_keep_goal_does_not_stack_an_on_network_goal():
     assert result is not None
     assert np.allclose(result[-1], [8.0, 0.0])
     _assert_no_stacked_points(result)
+
+
+# ── way costs ──────────────────────────────────────────────────────────────
+
+
+def _surface_choice_map():
+    """
+    Two ways from (0, 0) to (100, 0): a straight 100 m gravel one and a
+    120 m paved detour over (50, 20) — 1.2x as long, so the planner takes it
+    only once gravel costs more than 0.2 per metre.
+    """
+    nodes_coords = {
+        100: (0.0, 0.0),
+        101: (100.0, 0.0),
+        200: (50.0, 36.0),  # 2 * hypot(50, 36) = 123.2 m
+    }
+    gravel = _make_footway(1, [100, 101], nodes_coords)
+    gravel.tags = {"highway": "footway", "surface": "gravel"}
+    paved = _make_footway(2, [100, 200, 101], nodes_coords)
+    paved.tags = {"highway": "footway", "surface": "asphalt"}
+    return MockMapData([gravel, paved], nodes_coords)
+
+
+#: Tables that price only the surface, so the test does not depend on planner_defaults.yaml.
+_COST_TABLES = {"highway_costs": {"footway": 0.0}, "surface_costs": {"gravel": 0.5}}
+_FREE_TABLES = {"highway_costs": {"footway": 0.0}, "surface_costs": {}}
+
+
+def _takes_the_detour(result):
+    return any(np.allclose(p, [50.0, 36.0]) for p in result)
+
+
+def test_graph_planner_prefers_the_paved_detour_when_the_surface_costs():
+    planner = GraphPlanner(_surface_choice_map(), **_COST_TABLES)
+
+    result = planner.plan(np.array([[0.0, 0.0], [100.0, 0.0]]))
+
+    assert result is not None
+    assert _takes_the_detour(result), "150 m of weighted gravel beats 123 m of asphalt"
+
+
+def test_graph_planner_takes_the_short_way_when_nothing_costs():
+    planner = GraphPlanner(_surface_choice_map(), **_FREE_TABLES)
+
+    result = planner.plan(np.array([[0.0, 0.0], [100.0, 0.0]]))
+
+    assert result is not None
+    assert not _takes_the_detour(result), "with equal costs the shorter way wins"
+
+
+def test_graph_planner_edge_factor_adds_the_table_and_the_rule_cost():
+    rules = TraversabilityRules.from_dict(
+        {"rules": [{"match": {"informal": "yes"}, "cost": 1.0}]}, source="test"
+    )
+    planner = GraphPlanner(_surface_choice_map(), traversability=rules, **_COST_TABLES)
+    gravel, paved = planner.map_data.footways_list
+
+    assert planner.edge_factor(gravel) == pytest.approx(1.5)
+    assert planner.edge_factor(paved) == pytest.approx(1.0)
+    informal = Way(id=9, nodes=[], tags={"highway": "footway", "informal": "yes"})
+    assert planner.edge_factor(informal) == pytest.approx(2.0)
+
+
+def test_graph_planner_reported_length_stays_geometric():
+    """The weights bend the route; the length that comes back is the real one."""
+    from map_data.pathsolver.route import path_length
+
+    planner = GraphPlanner(_surface_choice_map(), **_COST_TABLES)
+
+    result = planner.plan(np.array([[0.0, 0.0], [100.0, 0.0]]))
+
+    assert path_length(result) == pytest.approx(2 * np.hypot(50.0, 36.0), abs=0.5)
+
+
+def test_graph_planner_drops_ways_the_rules_refuse():
+    rules = TraversabilityRules.from_dict(
+        {"rules": [{"match": {"surface": "gravel"}, "traversable": False, "reason": "loose"}]},
+        source="test",
+    )
+    planner = GraphPlanner(_surface_choice_map(), traversability=rules, **_FREE_TABLES)
+
+    result = planner.plan(np.array([[0.0, 0.0], [100.0, 0.0]]))
+
+    assert [w.id for w in planner._allowed_ways] == [2]
+    assert result is not None
+    assert _takes_the_detour(result)

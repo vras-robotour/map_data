@@ -14,7 +14,9 @@ from shapely.geometry import LineString, Point
 from shapely.strtree import STRtree
 
 from map_data.pathsolver.astar import astar_search
-from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
+from map_data.pathsolver.way_cost import load_cost_tables, way_cost
+from map_data.traversability import TraversabilityRules, load_traversability
+from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES, Way
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +51,9 @@ MIN_GOAL_LEG_LENGTH = 1.0
 DEFAULT_MAX_SNAP_DISTANCE = 100.0
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from pathlib import Path
+
     from map_data.map_data import MapData
 
 
@@ -72,6 +77,10 @@ class GraphPlanner:
         highway_types: list[str] | None = None,
         max_snap_distance: float = DEFAULT_MAX_SNAP_DISTANCE,
         exclude_highway: Iterable[str] = NON_ROUTABLE_HIGHWAY_VALUES,
+        traversability: "TraversabilityRules | str | Path | None" = None,
+        highway_costs: "Mapping[str, float] | None" = None,
+        surface_costs: "Mapping[str, float] | None" = None,
+        path_cost_cap: float | None = None,
     ) -> None:
         """
         Initialize the graph planner.
@@ -96,12 +105,33 @@ class GraphPlanner:
             :func:`~map_data.annotations.load_mapdata_with_annotations` has
             them removed already; this filter also covers callers that pass a
             raw :meth:`MapData.load` map.
+        traversability : TraversabilityRules or str or Path, optional
+            Tag rules deciding which ways may be driven on at all and what
+            extra cost they carry (``None`` = the package's
+            ``config/traversability.yaml``, see
+            :mod:`map_data.traversability`). ``exclude_highway`` is folded into
+            them. Ways the rules reject are left out of the graph, again as a
+            safety net for raw maps.
+        highway_costs, surface_costs : mapping, optional
+            Cost per ``highway`` / ``surface`` tag value; ``None`` takes the
+            tables from ``config/planner_defaults.yaml``, the very ones the
+            grid planner uses (:mod:`map_data.pathsolver.way_cost`). An edge of
+            a way weighs ``length * (1 + way cost + rule cost)``, so a gravel
+            detour is taken only when it is enough shorter; the *reported*
+            route length stays geometric.
+        path_cost_cap : float, optional
+            Upper bound of the ``highway`` + ``surface`` cost (``None`` = the
+            config value).
 
         """
         self.map_data = map_data
         self.highway_types = highway_types or ["footway"]
         self.max_snap_distance = max_snap_distance
         self.exclude_highway = frozenset(exclude_highway)
+        self.traversability = load_traversability(traversability).extend(self.exclude_highway)
+        self.highway_costs, self.surface_costs, self.path_cost_cap = load_cost_tables(
+            highway_costs, surface_costs, path_cost_cap
+        )
         self.nodes: dict[int, np.ndarray] = self.map_data.get_points()
         self.graph: dict[int, list[tuple[int, float]]] = {}
         self._build_graph()
@@ -120,12 +150,10 @@ class GraphPlanner:
             self._allowed_ways.extend(self.map_data.footways_list)
         if "road" in self.highway_types:
             self._allowed_ways.extend(self.map_data.roads_list)
-        if self.exclude_highway:
-            self._allowed_ways = [
-                w
-                for w in self._allowed_ways
-                if (w.tags or {}).get("highway") not in self.exclude_highway
-            ]
+        # exclude_highway is part of self.traversability (extend() puts it first).
+        self._allowed_ways = [
+            w for w in self._allowed_ways if self.traversability.is_traversable(w)
+        ]
 
         # Per-planner copies of the node lists. Splits are spliced into these
         # copies so the shared Way objects owned by map_data stay untouched
@@ -220,25 +248,46 @@ class GraphPlanner:
         # Second pass: build final graph and tree from (possibly modified) node lists
         final_edge_segments = []
         final_edge_node_pairs = []
+        final_edge_factors = []
 
-        for nodes in way_nodes:
+        for way_idx, nodes in enumerate(way_nodes):
+            factor = self.edge_factor(self._allowed_ways[way_idx])
             for i in range(len(nodes) - 1):
                 n1, n2 = nodes[i], nodes[i + 1]
                 p1 = self.nodes[n1].ravel()[:2]
                 p2 = self.nodes[n2].ravel()[:2]
                 dist = float(np.linalg.norm(p1 - p2))
 
-                self._add_edge(n1, n2, dist)
+                # Weight, not length: the route's own length is measured on its
+                # geometry afterwards (map_data.pathsolver.route.path_length).
+                self._add_edge(n1, n2, dist * factor)
                 final_edge_segments.append(LineString([p1, p2]))
                 final_edge_node_pairs.append((n1, n2))
+                final_edge_factors.append(factor)
 
         self._edge_segments = final_edge_segments
         self._edge_node_pairs = final_edge_node_pairs
+        self._edge_factors = final_edge_factors
         self._edge_tree = STRtree(final_edge_segments) if final_edge_segments else None
+
+    def edge_factor(self, way: Way) -> float:
+        """
+        Weight multiplier of *way*'s edges: ``1 + way cost + rule cost``.
+
+        The ``highway``/``surface`` cost comes from the shared tables
+        (:func:`~map_data.pathsolver.way_cost.way_cost`, the grid planner's own
+        prices), the extra from a ``cost:`` in the traversability rules. Never
+        below 1, which keeps the straight-line A* heuristic admissible.
+        """
+        return (
+            1.0
+            + way_cost(way.tags, self.highway_costs, self.surface_costs, self.path_cost_cap)
+            + self.traversability.extra_cost(way)
+        )
 
     def _add_edge(self, u: int, v: int, d: float) -> None:
         """
-        Add an undirected edge of length *d* between nodes *u* and *v*.
+        Add an undirected edge of weight *d* between nodes *u* and *v*.
         """
         self.graph.setdefault(u, []).append((v, d))
         self.graph.setdefault(v, []).append((u, d))
@@ -246,9 +295,13 @@ class GraphPlanner:
     def _find_closest_edge(
         self,
         point_utm: np.ndarray,
-    ) -> tuple[tuple[int, int, np.ndarray] | None, float]:
+    ) -> tuple[tuple[int, int, np.ndarray, float] | None, float]:
         """
         Find the closest edge using an STRtree spatial index.
+
+        Returns ``((node a, node b, projection, weight factor), distance)``;
+        the factor is the one :meth:`edge_factor` gave that edge, so the two
+        halves a waypoint splits it into are priced like the rest of the way.
         """
         if self._edge_tree is None:
             return None, float("inf")
@@ -263,7 +316,7 @@ class GraphPlanner:
         min_dist = line.distance(p_sh)
         proj_dist = line.project(p_sh)
         projected_point = np.array(line.interpolate(proj_dist).coords[0])
-        return (n1, n2, projected_point), min_dist
+        return (n1, n2, projected_point, self._edge_factors[nearest_idx]), min_dist
 
     def snap_distance(self, point_utm: np.ndarray) -> float:
         """
@@ -415,29 +468,33 @@ class GraphPlanner:
 
             id_s = "temp_start"
             id_g = "temp_goal"
-            n_s1, n_s2, p_proj_s = edge_start_info
-            n_g1, n_g2, p_proj_g = edge_goal_info
+            n_s1, n_s2, p_proj_s, f_s = edge_start_info
+            n_g1, n_g2, p_proj_g, f_g = edge_goal_info
+
+            def weighted(p: np.ndarray, node: int, factor: float) -> float:
+                """Distance from a projection to one end of its edge, priced like the way."""
+                return float(np.linalg.norm(p - self.nodes[node].ravel()[:2])) * factor
 
             # Construct local subgraph for snapped points
             extra = {
                 "positions": {id_s: p_proj_s, id_g: p_proj_g},
                 id_s: [
-                    (n_s1, np.linalg.norm(p_proj_s - self.nodes[n_s1].ravel()[:2])),
-                    (n_s2, np.linalg.norm(p_proj_s - self.nodes[n_s2].ravel()[:2])),
+                    (n_s1, weighted(p_proj_s, n_s1, f_s)),
+                    (n_s2, weighted(p_proj_s, n_s2, f_s)),
                 ],
                 id_g: [
-                    (n_g1, np.linalg.norm(p_proj_g - self.nodes[n_g1].ravel()[:2])),
-                    (n_g2, np.linalg.norm(p_proj_g - self.nodes[n_g2].ravel()[:2])),
+                    (n_g1, weighted(p_proj_g, n_g1, f_g)),
+                    (n_g2, weighted(p_proj_g, n_g2, f_g)),
                 ],
-                n_s1: [(id_s, np.linalg.norm(p_proj_s - self.nodes[n_s1].ravel()[:2]))],
-                n_s2: [(id_s, np.linalg.norm(p_proj_s - self.nodes[n_s2].ravel()[:2]))],
-                n_g1: [(id_g, np.linalg.norm(p_proj_g - self.nodes[n_g1].ravel()[:2]))],
-                n_g2: [(id_g, np.linalg.norm(p_proj_g - self.nodes[n_g2].ravel()[:2]))],
+                n_s1: [(id_s, weighted(p_proj_s, n_s1, f_s))],
+                n_s2: [(id_s, weighted(p_proj_s, n_s2, f_s))],
+                n_g1: [(id_g, weighted(p_proj_g, n_g1, f_g))],
+                n_g2: [(id_g, weighted(p_proj_g, n_g2, f_g))],
             }
 
             # Special case: start and goal on the same edge
             if (n_s1 == n_g1 and n_s2 == n_g2) or (n_s1 == n_g2 and n_s2 == n_g1):
-                dist_sg = np.linalg.norm(p_proj_s - p_proj_g)
+                dist_sg = float(np.linalg.norm(p_proj_s - p_proj_g)) * f_s
                 # extra's value type is a union of adjacency-list and positions-dict
                 # entries; mypy can't tell these two keys hold lists.
                 extra[id_s].append((id_g, dist_sg))  # type: ignore[attr-defined]
