@@ -14,6 +14,11 @@ from shapely.geometry import LineString
 from map_data.map_data import MapData
 from map_data.pathsolver.grid_astar import grid_astar, simplify_path_checked
 from map_data.pathsolver.rrt_star import RRTStar
+from map_data.pathsolver.way_cost import (
+    FALLBACK_HIGHWAY_COSTS,
+    FALLBACK_PATH_COST_CAP,
+    FALLBACK_SURFACE_COSTS,
+)
 from map_data.utils.config import load_config
 from map_data.utils.gpx import create_gpx_content, parse_path, utm_path_to_latlon
 from map_data.utils.parsing import ways_to_shapely
@@ -60,37 +65,12 @@ def load_planner_defaults() -> dict[str, Any]:
 class ReplanPath:
     # These will be populated from config or fallback to hardcoded defaults if config missing
     _DEFAULTS: dict[str, Any] = load_planner_defaults()
-    HIGHWAY_COSTS: dict[str, float] = _DEFAULTS.get(
-        "highway_costs",
-        {
-            "pedestrian": 0.0,
-            "footway": 0.0,
-            "path": 0.1,
-            "living_street": 0.1,
-            "track": 0.3,
-            "service": 0.3,
-            "residential": 0.5,
-            "unclassified": 0.5,
-            "tertiary": 0.7,
-            "secondary": 0.9,
-            "primary": 1.0,
-        },
-    )
-    SURFACE_COSTS: dict[str, float] = _DEFAULTS.get(
-        "surface_costs",
-        {
-            "asphalt": 0.0,
-            "paving_stones": 0.0,
-            "concrete": 0.0,
-            "fine_gravel": 0.1,
-            "gravel": 0.2,
-            "dirt": 0.3,
-            "grass": 0.5,
-            "sand": 0.4,
-        },
-    )
+    # The tables themselves live in config/planner_defaults.yaml and are shared
+    # with the graph planner through map_data.pathsolver.way_cost.
+    HIGHWAY_COSTS: dict[str, float] = _DEFAULTS.get("highway_costs", FALLBACK_HIGHWAY_COSTS)
+    SURFACE_COSTS: dict[str, float] = _DEFAULTS.get("surface_costs", FALLBACK_SURFACE_COSTS)
     DEFAULT_OFF_PATH_COST: float = _DEFAULTS.get("default_off_path_cost", 0.9)
-    PATH_COST_CAP: float = _DEFAULTS.get("path_cost_cap", 0.85)
+    PATH_COST_CAP: float = _DEFAULTS.get("path_cost_cap", FALLBACK_PATH_COST_CAP)
 
     def __init__(
         self,

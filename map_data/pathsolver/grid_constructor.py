@@ -14,6 +14,8 @@ import shapely as sh
 from matplotlib.path import Path
 from scipy.spatial import cKDTree
 
+from map_data.pathsolver.way_cost import way_cost
+
 # Segments shorter than this (in the same units as grid coordinates, i.e.
 # metres) are treated as coincident points rather than subdivided further.
 TOLERANCE = 1e-3
@@ -284,11 +286,9 @@ class PathGrid:
         path_point_costs = []
 
         for way in all_ways:
-            hw = way.tags.get("highway", "path")
-            surface = way.tags.get("surface", "asphalt")
-            base_cost = self.highway_costs.get(hw, 0.5)
-            surface_cost = self.surface_costs.get(surface, 0.0)
-            way_cost = min(self.path_cost_cap, base_cost + surface_cost)
+            # Same helper as the graph planner's edge weights, so the two
+            # planners cannot start charging different prices for a way.
+            cost = way_cost(way.tags, self.highway_costs, self.surface_costs, self.path_cost_cap)
 
             for i in range(len(way.nodes) - 1):
                 p0 = points[way.nodes[i]].ravel()[:2]
@@ -296,17 +296,17 @@ class PathGrid:
                 dist = np.linalg.norm(p1 - p0)
                 if i == 0:
                     path_points.append(p0)
-                    path_point_costs.append(way_cost)
+                    path_point_costs.append(cost)
                 if dist <= TOLERANCE:
                     path_points.append(p1)
-                    path_point_costs.append(way_cost)
+                    path_point_costs.append(cost)
                     continue
                 num = int(np.ceil(dist / self.cell_size))
                 step = dist / num
                 vec = (p1 - p0) / dist
                 for j in range(num):
                     path_points.append(p0 + (j + 1) * step * vec)
-                    path_point_costs.append(way_cost)
+                    path_point_costs.append(cost)
 
         if path_points:
             tree = cKDTree(np.array(path_points))
