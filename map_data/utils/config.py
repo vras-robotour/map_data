@@ -21,6 +21,29 @@ def setup_logging(level: int = logging.INFO) -> None:
     )
 
 
+def config_path(filename: str) -> Path:
+    """
+    Where a config file of the package would live.
+
+    Attempts the ROS2 resource index, falling back to a path relative to this
+    file (a source checkout). The file need not exist; see :func:`find_config`.
+    """
+    try:
+        from ament_index_python.resources import get_resource
+
+        _, package_path = get_resource("packages", "map_data")
+        return Path(package_path) / "share" / "map_data" / "config" / filename
+    except (ImportError, LookupError):
+        # Fallback for non-ROS2 environments
+        return (Path(__file__).parent / ".." / ".." / "config" / filename).resolve()
+
+
+def find_config(filename: str) -> Path | None:
+    """The package's config file of that name, or ``None`` if it is not installed."""
+    path = config_path(filename)
+    return path if path.is_file() else None
+
+
 def load_config(filename: str) -> dict[str, Any]:
     """
     Load a YAML configuration file from the package's config directory.
@@ -28,22 +51,15 @@ def load_config(filename: str) -> dict[str, Any]:
     Attempts to find the file via ROS2 resource index, falling back to
     relative path from this file.
     """
-    try:
-        from ament_index_python.resources import get_resource
+    config_path_ = config_path(filename)
 
-        _, package_path = get_resource("packages", "map_data")
-        config_path = Path(package_path) / "share" / "map_data" / "config" / filename
-    except (ImportError, LookupError):
-        # Fallback for non-ROS2 environments
-        config_path = (Path(__file__).parent / ".." / ".." / "config" / filename).resolve()
-
-    if config_path.exists():
+    if config_path_.exists():
         try:
-            with config_path.open() as f:
+            with config_path_.open() as f:
                 return yaml.safe_load(f) or {}
         except Exception:
-            logger.exception("Error loading config file %s", config_path)
+            logger.exception("Error loading config file %s", config_path_)
             return {}
 
-    logger.debug("Config file not found: %s", config_path)
+    logger.debug("Config file not found: %s", config_path_)
     return {}

@@ -1,0 +1,71 @@
+# Which OSM ways the robot may drive on, decided from their tags. Rules are tried in
+# order and the FIRST matching rule wins; a way no rule matches gets `default`.
+#   match: {key: value}          exact value        {key: [a, b]}  any of these values
+#          {key: "*"}            tag present        several keys   all must match (AND)
+#   traversable: false           the way is removed: never routed over, no intersection
+#                                ring at its junctions, off-road in osm_cloud's cost cloud
+#   cost: 0.5                    optional EXTRA cost, added to the highway/surface cost
+#                                from planner_defaults.yaml: the graph planner weighs the
+#                                way's edges (1 + way cost + this) x length. Only for tags
+#                                those tables know nothing about - surfaces and highway
+#                                types are already priced there, so do not repeat them.
+#   reason: text                 shown in the load log next to the count of removed ways
+#
+# YAML reads a bare `yes` as the boolean true, but rule and tag values are both compared
+# as the strings OSM uses, so `informal: yes` and `informal: "yes"` mean the same thing
+# and quoting is never needed.
+#
+# Used by the route_planner and osm_cloud nodes (parameter `traversability_file`, empty =
+# this file), by `ros2 launch ... traversability:=<file>` and by
+# `map_data_plan --traversability <file>` (`--no-traversability` switches the rules off).
+# A node reads the file once at startup: edit it, then restart the node.
+#
+# The counts below were measured on data/kralovska_obora.mapdata (Stromovka, 289 ways),
+# against the two routes the robot drove there on 2026-09-08 (365 m and 751 m).
+
+default:
+  traversable: true
+  cost: 0.0
+
+rules:
+  # 15 ways. A wheeled robot cannot take stairs.
+  - match: {highway: steps}
+    traversable: false
+    reason: stairs
+
+  # 6 ways (5 grass, 1 mud; no sand in Stromovka). Neither route uses one.
+  - match: {surface: [grass, mud, sand]}
+    traversable: false
+    reason: soft surface
+
+  # DISABLED. Under a tunnel the GNSS fix is lost and the robot drives blind, but the two
+  # tunnels of Stromovka are a 48 m underpass and the 33 m covered alley at Šlechtova -
+  # and that alley is the only short way west: removing both turned the 2026-09-08 route 2
+  # from 751 m into 2495 m (+232 %). Enable it where a tunnel has an alternative, or
+  # delete the individual tunnel you distrust in the viewer.
+  # - match: {tunnel: "*"}
+  #   traversable: false
+  #   reason: tunnel (GNSS loss)
+
+  # 13 ways (bridge=yes 10, bridge=boardwalk 4, one of them stairs already). A narrow
+  # bridge with a kerb is where a 90 kg robot ends up in the water. Measured: neither
+  # 2026-09-08 route changes by a metre without them.
+  - match: {bridge: "*"}
+    traversable: false
+    reason: bridge
+
+  # 1 way. Anything the OSM mappers call bad or worse is not worth the risk.
+  - match: {smoothness: [bad, very_bad, horrible, very_horrible, impassable]}
+    traversable: false
+    reason: rough surface
+
+  # 0 ways in Stromovka, but private land is private land.
+  - match: {access: [no, private]}
+    traversable: false
+    reason: no access
+
+  # 1 way. A trodden shortcut nobody maintains, and no surface tag to price it by:
+  # worth taking only when the alternative is more than twice as long.
+  - match: {informal: "yes"}
+    cost: 1.0
+    reason: informal path
