@@ -27,6 +27,7 @@ from map_data.map_data import MapData
 from map_data.traversability import TraversabilityRules, load_traversability
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES, Way
 from map_data.viewer.helpers import (
+    apply_added_nodes,
     apply_node_position_overrides,
     geojson_geom_to_utm,
     get_deleted_node_ids,
@@ -72,8 +73,9 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
     deleted_way_ids = get_deleted_way_ids(store)
     has_node_dels = bool(store.get("deleted_nodes"))
     has_splits = bool(store.get("split_ways"))
+    has_added_nodes = bool(store.get("added_nodes"))
 
-    if deleted_way_ids or has_node_dels or has_splits:
+    if deleted_way_ids or has_node_dels or has_splits or has_added_nodes:
         for lst_name in ("roads_list", "footways_list", "barriers_list"):
             cat = _CAT_FOR_LIST[lst_name]
             new_lst = []
@@ -85,6 +87,9 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                     w = rebuild_way_without_nodes(w, del_nids, zn, zl, nodes_cache, category=cat)  # noqa: PLW2901
                     if w is None:
                         continue
+
+                w = apply_added_nodes(w, store, zn, zl)  # noqa: PLW2901
+
                 split_nids = get_split_node_ids(store, w.id)
                 if split_nids:
                     segments = split_way(w, split_nids, zn, zl, nodes_cache)

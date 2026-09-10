@@ -1043,7 +1043,7 @@ def apply_added_nodes(
     # the buffer shape, so geometry is left unchanged; only way.nodes is updated.
     coords = list(geom.coords) if is_linestring else None
 
-    offset = 0
+    nodes_added = 0
     for a in added_for_way:
         synth_id = a["id"]
         after_id = a["after_node_id"]
@@ -1072,9 +1072,9 @@ def apply_added_nodes(
             coord_pos = min(insert_pos, coord_limit)
             coords.insert(coord_pos, (e, n_utm))
 
-        offset += 1
+        nodes_added += 1
 
-    if offset == 0:
+    if nodes_added == 0:
         return way
 
     w.nodes = node_ids
