@@ -5,11 +5,21 @@ html, body { height: 100%; margin: 0; overflow: hidden; font-size: 14px; }
 #main { display: flex; flex: 1; overflow: hidden; }
 #sidebar {
   width: 290px; min-width: 290px;
-  scrollbar-gutter: stable;
   background: #16213e; color: #cdd3de; border-right: 1px solid #333;
   display: flex; flex-direction: column; gap: 0;
 }
 #map { flex: 1; }
+
+/* The panel that fills the sidebar scrolls on its own, so a long body
+   (the planner) stays reachable instead of running off the bottom. */
+#props-panel, #planner-sidebar-panel, #tracker-sidebar-panel {
+  min-height: 0; overflow-y: auto; scrollbar-gutter: stable;
+}
+
+#sidebar ::-webkit-scrollbar { width: 8px; }
+#sidebar ::-webkit-scrollbar-track { background: transparent; }
+#sidebar ::-webkit-scrollbar-thumb { background: #2f3e63; border-radius: 4px; }
+#sidebar ::-webkit-scrollbar-thumb:hover { background: #3d5081; }
 
 .panel { padding: 12px 14px; border-bottom: 1px solid #2a2a4a; }
 .panel-title {
@@ -104,7 +114,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; font-size: 14px; }
 .change-id { color: #6c7a9c; font-size: 0.68rem; }
 
 /* Collapsible panels at the bottom of the sidebar */
-.bottom-panel { border-top: 1px solid #2a2a4a; }
+.bottom-panel { border-top: 1px solid #2a2a4a; flex-shrink: 0; }
 .bottom-panel-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 14px; cursor: pointer; background: #1a2747;
