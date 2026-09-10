@@ -7,6 +7,9 @@ parameters, no GUI and no ROS.
 
 Examples
 --------
+The tag rules of ``config/traversability.yaml`` decide which ways the robot may drive
+on (``--traversability FILE`` for another rule file, ``--no-traversability`` for none).
+
 Paths-only route between two coordinates, 3 m waypoint spacing, saved as a GPX track::
 
     map_data_plan -f stromovka.mapdata --start 50.1038,14.4294 --goal 50.1067,14.4193 \\
@@ -35,6 +38,7 @@ from map_data.pathsolver.route import (
     plan_route,
     route_to_dicts,
 )
+from map_data.traversability import TraversabilityRules
 from map_data.utils.gpx import create_gpx_content, create_gpx_track
 
 logger = logging.getLogger("map_data_plan")
@@ -120,6 +124,17 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="TYPE",
         help="allowed way types: footway and/or road (default: footway)",
     )
+    ap.add_argument(
+        "--traversability",
+        metavar="FILE",
+        help="tag rule file deciding which ways may be driven on and what they cost "
+        "(default: the package's config/traversability.yaml)",
+    )
+    ap.add_argument(
+        "--no-traversability",
+        action="store_true",
+        help="ignore the rules entirely; stairs are still excluded (highway=steps)",
+    )
     ap.add_argument("--spacing", type=float, default=0.0, help="max m between output waypoints")
     ap.add_argument(
         "--max-snap-distance",
@@ -157,11 +172,18 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     path = resolve_mapdata(args.file)
-    md, _ = load_mapdata_with_annotations(path, annotations_arg(args.annotations))
+    # None = the package's rule file; an empty rule set = --no-traversability.
+    traversability = TraversabilityRules() if args.no_traversability else args.traversability
+    if isinstance(traversability, str) and not Path(traversability).expanduser().is_file():
+        raise SystemExit(f"traversability rules {traversability!r} not found")
+    md, _ = load_mapdata_with_annotations(
+        path, annotations_arg(args.annotations), traversability=traversability
+    )
     try:
         result = plan_route(
             md,
             points,
+            traversability=traversability,
             algorithm=args.algorithm,
             highway_types=args.ways,
             spacing=args.spacing,

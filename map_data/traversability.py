@@ -56,7 +56,8 @@ _TOP_KEYS = frozenset({"default", "rules"})
 
 #: Reason reported for ways no rule matched.
 DEFAULT_REASON = "default"
-#: Reason of the rule :meth:`TraversabilityRules.extend` prepends.
+#: Reason of the rule :meth:`TraversabilityRules.extend` prepends (the excluded
+#: ``highway`` values are appended to it, e.g. ``"excluded highway type (steps)"``).
 EXCLUDE_HIGHWAY_REASON = "excluded highway type"
 
 
@@ -340,7 +341,7 @@ class TraversabilityRules:
         rule = Rule(
             match=(("highway", values),),
             traversable=False,
-            reason=EXCLUDE_HIGHWAY_REASON,
+            reason=f"{EXCLUDE_HIGHWAY_REASON} ({'/'.join(values)})",
         )
         return replace(self, rules=(rule, *self.rules))
 

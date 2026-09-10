@@ -34,6 +34,7 @@ from map_data.annotations import (
     annotation_path_for,
     load_mapdata_with_annotations,
 )
+from map_data.traversability import resolve_traversability_path
 from map_data.utils.geodesy import ecef_to_latlon, utm_to_local_via_ecef
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 
@@ -81,6 +82,10 @@ class OSMCloud(Node):
         self.exclude_highway: list[str] = list(
             self.declare_parameter("exclude_highway", sorted(NON_ROUTABLE_HIGHWAY_VALUES)).value
         )
+        # Tag rules (stairs, grass, bridges, ...) deciding which ways the robot may drive
+        # on, as in route_planner: "" = the package's config/traversability.yaml. The two
+        # nodes must use the same file, or the rings describe a network nothing routes on.
+        self.traversability_file: str = self.declare_parameter("traversability_file", "").value
         self.save_mapdata: bool = self.declare_parameter("save_mapdata", False).value
         self.max_path_dist: float = self.declare_parameter("max_path_dist", 1.0).value
         self.neighbor_cost: str = self.declare_parameter("neighbor_cost", "linear").value
@@ -229,26 +234,36 @@ class OSMCloud(Node):
         Load ``path`` with the same merge the planner uses.
 
         The annotation store selected by the ``annotations`` parameter is merged
-        in and the ``exclude_highway`` way types are dropped, so the rings and the
-        cost grid published here describe the network ``route_planner`` routes on.
+        in, and the ways the ``traversability_file`` rules (and ``exclude_highway``)
+        refuse are dropped, so the rings and the cost grid published here describe
+        the network ``route_planner`` routes on.
         """
         ann = None if self.annotations in ("", "auto") else self.annotations
         map_data, store = load_mapdata_with_annotations(
             path,
             ann,
             exclude_highway=self.exclude_highway,
+            traversability=self.traversability_file or None,
         )
         if ann == NO_ANNOTATIONS:
             store_name = "none"
         else:
             ann_path = Path(ann).expanduser() if ann else annotation_path_for(path)
             store_name = ann_path.name if ann_path.is_file() else "no store"
+        removed = getattr(map_data, "traversability_removed", {})
+        trav_path = resolve_traversability_path(self.traversability_file)
         self.get_logger().info(
             f"loaded {Path(path).name}: {len(map_data.footways_list)} footways, "
             f"{len(map_data.roads_list)} roads, {len(map_data.crossroads_list)} crossroads; "
             f"annotations={store_name} ({len(store.get('deleted_ways', []))} deleted ways, "
             f"{len(store.get('annotations', []))} drawn), "
-            f"excluded highway={','.join(self.exclude_highway) or 'none'}"
+            f"excluded highway={','.join(self.exclude_highway) or 'none'}, "
+            f"traversability={trav_path.name if trav_path else 'none'} ("
+            + (
+                ", ".join(f"{reason} {count}" for reason, count in removed.items())
+                or "nothing removed"
+            )
+            + ")"
         )
         return map_data
 

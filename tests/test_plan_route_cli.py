@@ -5,6 +5,7 @@ import json
 import pytest
 import utm
 
+from map_data.map_data import MapData
 from map_data.plan_route_cli import main, parse_latlon
 
 
@@ -90,3 +91,49 @@ def test_cli_annotations_switch(footway_network_mapdata, capsys):
     assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["reason"] == "snap_too_far"
     assert main(args + ["--annotations", "none"]) == 0
     assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["success"]
+
+
+def test_cli_traversability_switches(footway_network_mapdata, tmp_path, capsys):
+    """A rule file that removes the branch fails; ``--no-traversability`` ignores it."""
+    path, lat0, lon0 = footway_network_mapdata
+    md = MapData.load(str(path))
+    for way in md.footways_list:
+        if way.id == 2:  # the branch up to the goal
+            way.tags = {"highway": "footway", "surface": "grass"}
+    md.save(str(path))
+    rules = tmp_path / "rules.yaml"
+    rules.write_text("rules:\n  - match: {surface: grass}\n    traversable: false\n")
+    args = [
+        "-f",
+        str(path),
+        "--start",
+        _latlon(lat0, lon0, 0.0, 0.0),
+        "--goal",
+        _latlon(lat0, lon0, 100.0, 95.0),
+        "--max-snap-distance",
+        "50",
+        "--json",
+    ]
+
+    assert main([*args, "--traversability", str(rules)]) == 1
+    assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["reason"] == "snap_too_far"
+    assert main([*args, "--no-traversability"]) == 0
+    assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["success"]
+
+
+def test_cli_rejects_a_missing_rule_file(footway_network_mapdata):
+    path, lat0, lon0 = footway_network_mapdata
+
+    with pytest.raises(SystemExit, match="not found"):
+        main(
+            [
+                "-f",
+                str(path),
+                "--start",
+                _latlon(lat0, lon0, 0.0, 0.0),
+                "--goal",
+                _latlon(lat0, lon0, 200.0, 0.0),
+                "--traversability",
+                "/nonexistent/rules.yaml",
+            ]
+        )

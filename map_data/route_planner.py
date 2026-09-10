@@ -38,6 +38,10 @@ inflate_obstacles, simplify_path, smooth_path
 exclude_highway : str[]
     ``highway`` tag values never routed over (default ``["steps"]``: a wheeled
     robot cannot take stairs).
+traversability_file : str
+    Tag rules deciding which ways may be driven on and what they cost
+    (``""`` = the package's ``config/traversability.yaml``). Read once at
+    startup: edit the file, then restart the node.
 keep_goal : bool
     End the route at the requested goal coordinate rather than at its projection
     onto the network (default ``True``).
@@ -81,12 +85,20 @@ from map_data.pathsolver.route import (
     latlon_to_utm_path,
     plan_route,
 )
+from map_data.traversability import resolve_traversability_path
 from map_data.utils.geodesy import latlon_to_ecef
 from map_data.utils.gpx import create_gpx_track
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 from map_data_interfaces.action import PlanRoute
 
 WGS84_FRAME = "wgs84"
+
+
+def _removed_summary(removed: dict[str, int]) -> str:
+    """``"stairs 15, bridge 13"`` for the load log; ``"nothing removed"`` when empty."""
+    if not removed:
+        return "nothing removed"
+    return ", ".join(f"{reason} {count}" for reason, count in removed.items())
 
 
 def _default_data_dir() -> str:
@@ -111,6 +123,9 @@ class RoutePlanner(Node):
         # highway= values dropped from the map and from the graph: stairs are footways
         # in OSM and in the saved .mapdata, but a wheeled robot cannot take them.
         self.exclude_highway = list(p("exclude_highway", sorted(NON_ROUTABLE_HIGHWAY_VALUES)).value)
+        # Tag rules (stairs, grass, bridges, ...) deciding what may be driven on and what
+        # it costs; "" = the package's config/traversability.yaml. Read at startup only.
+        self.traversability_file = p("traversability_file", "").value
         # Load mapdata_file and build its footway graph at startup (~20 MB) so the first
         # goal does not pay for it; graph planners are cached per map / way set anyway.
         self.preload = bool(p("preload", True).value)
@@ -143,7 +158,7 @@ class RoutePlanner(Node):
         self._fix_time = 0.0
         self._lock = threading.Lock()  # one plan at a time
         # (key, mtime, MapData)
-        self._map_cache: tuple[tuple[str, str], float, object] | None = None
+        self._map_cache: tuple[tuple[str, str, str], float, object] | None = None
         # (map key, mtime, highway types, snap distance) -> GraphPlanner; small LRU
         self._planner_cache: OrderedDict[tuple, GraphPlanner] = OrderedDict()
         self._planner_cache_size = 4
@@ -262,6 +277,7 @@ class RoutePlanner(Node):
             tuple(highway_types),
             float(max_snap),
             tuple(sorted(self.exclude_highway)),
+            self.traversability_file,
         )
         planner = self._planner_cache.get(key)
         if planner is not None and planner.map_data is md:
@@ -273,6 +289,7 @@ class RoutePlanner(Node):
             highway_types=list(highway_types),
             max_snap_distance=max_snap,
             exclude_highway=self.exclude_highway,
+            traversability=self.traversability_file or None,
         )
         self._planner_cache[key] = planner
         while len(self._planner_cache) > self._planner_cache_size:
@@ -305,21 +322,34 @@ class RoutePlanner(Node):
         mtime = path.stat().st_mtime
         if ann_path is not None and ann_path.is_file():
             mtime += ann_path.stat().st_mtime
-        key = (str(path), str(ann))
+        # An edited rule file must invalidate the cached map (a restart is enough
+        # for the parameter itself, but not for a file edited under the same name).
+        trav_path = resolve_traversability_path(self.traversability_file)
+        if trav_path is not None:
+            mtime += trav_path.stat().st_mtime
+        key = (str(path), str(ann), str(self.traversability_file))
         if self._map_cache and self._map_cache[0] == key and self._map_cache[1] == mtime:
             return self._map_cache[2]
-        md, store = load_mapdata_with_annotations(path, ann, exclude_highway=self.exclude_highway)
+        md, store = load_mapdata_with_annotations(
+            path,
+            ann,
+            exclude_highway=self.exclude_highway,
+            traversability=self.traversability_file or None,
+        )
         if ann == NO_ANNOTATIONS:
             store_name = "none"
         elif ann_path is not None and ann_path.is_file():
             store_name = ann_path.name
         else:
             store_name = "no store"
+        removed = getattr(md, "traversability_removed", {})
         self.get_logger().info(
             f"loaded {path.name}: {len(md.footways_list)} footways, {len(md.roads_list)} roads, "
             f"annotations={store_name} ({len(store.get('deleted_ways', []))} deleted ways, "
             f"{len(store.get('annotations', []))} drawn), "
-            f"excluded highway={','.join(self.exclude_highway) or 'none'}"
+            f"excluded highway={','.join(self.exclude_highway) or 'none'}, "
+            f"traversability={trav_path.name if trav_path else 'none'} "
+            f"({_removed_summary(removed)})"
         )
         self._map_cache = (key, mtime, md)
         return md

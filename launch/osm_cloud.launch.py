@@ -67,17 +67,18 @@ def launch_setup(context, *args, **kwargs):
             if potential_path.exists():
                 osm_grid_params = str(potential_path)
 
-    # Frame / placement overrides: only forwarded when set, so the yaml values apply
-    # otherwise (later parameter sources win in ROS 2).
-    frame_overrides = {}
+    # Frame / placement / traversability overrides: only forwarded when set, so the
+    # yaml values apply otherwise (later parameter sources win in ROS 2).
+    optional_overrides = {}
     for name, value in (
         ("local_frame", LaunchConfiguration("local_frame").perform(context)),
         ("utm_frame", LaunchConfiguration("utm_frame").perform(context)),
         ("earth_frame", LaunchConfiguration("earth_frame").perform(context)),
         ("transform_mode", LaunchConfiguration("transform_mode").perform(context)),
+        ("traversability_file", LaunchConfiguration("traversability").perform(context)),
     ):
         if value:
-            frame_overrides[name] = value
+            optional_overrides[name] = value
 
     # Define the osm_cloud node
     osm_cloud_node = Node(
@@ -98,7 +99,7 @@ def launch_setup(context, *args, **kwargs):
                 # Always forwarded (default "auto"), so it wins over the yaml files:
                 # set it on the launch line to plan and publish on the unedited map.
                 "annotations": LaunchConfiguration("annotations"),
-                **frame_overrides,
+                **optional_overrides,
             },
         ],
     )
@@ -164,6 +165,13 @@ def generate_launch_description():
         "'auto' = <map>.annotations.json next to it, 'none' = the unedited map, or a "
         "path to a store file. The planner and this node must see the same map.",
     )
+    traversability_arg = DeclareLaunchArgument(
+        "traversability",
+        default_value="",
+        description="Tag rule file deciding which ways the robot may drive on "
+        "(empty = the value from osm_grid_params, i.e. the package's "
+        "config/traversability.yaml). Must match route_planner's.",
+    )
     config_file_arg = DeclareLaunchArgument(
         "config_file",
         default_value="helhest.yaml",
@@ -187,6 +195,7 @@ def generate_launch_description():
             earth_frame_arg,
             transform_mode_arg,
             annotations_arg,
+            traversability_arg,
             config_file_arg,
             osm_grid_params_arg,
             OpaqueFunction(function=launch_setup),

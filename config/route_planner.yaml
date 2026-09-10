@@ -6,9 +6,9 @@
 #       highway_types:=footway,road
 #
 # params_file takes an absolute path or a name in the package's config/ directory.
-# The launch arguments (mapdata_file, mapdata_path, annotations, preload, algorithm,
-# highway_types, spacing, mission_dir, gps_fix_topic, earth_frame, local_frame) are applied
-# on top of this file; every argument left unset keeps the value below.
+# The launch arguments (mapdata_file, mapdata_path, annotations, traversability, preload,
+# algorithm, highway_types, spacing, mission_dir, gps_fix_topic, earth_frame, local_frame)
+# are applied on top of this file; every argument left unset keeps the value below.
 #
 # Not to be confused with planner_defaults.yaml, which holds the routing cost tables
 # (highway/surface costs, buffer widths) read by the pathsolver library itself.
@@ -30,6 +30,13 @@ route_planner:
     # Stairs are footways in OSM and in the saved .mapdata; a wheeled robot cannot
     # take them. Set to [] to route over everything the map has.
     exclude_highway: ["steps"]
+    # Tag rules deciding which ways the robot may drive on at all (stairs, grass, bridges,
+    # tunnels, ...) and what an awkward one costs extra: an absolute path, or "" for the
+    # package's config/traversability.yaml, which is the file to edit. Read once at
+    # startup - edit it, then restart the node. osm_cloud must be given the same file, or
+    # it publishes intersection rings on ways the planner refuses.
+    # The launch argument is traversability:=<file>.
+    traversability_file: ""
     # Load the map and build its graph at startup (~0.3 s) instead of on the first goal.
     preload: true
 

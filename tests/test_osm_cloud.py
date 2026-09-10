@@ -80,6 +80,7 @@ import json  # noqa: E402
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
+import utm  # noqa: E402
 from conftest import build_footway_network_mapdata  # noqa: E402
 from shapely.geometry import LineString  # noqa: E402
 
@@ -330,7 +331,10 @@ class TestOSMCloudMapLoading:
 
         assert node.annotations == "auto"
         assert node.exclude_highway == ["steps"]
-        loader.assert_called_once_with("fake.mapdata", None, exclude_highway=["steps"])
+        assert node.traversability_file == ""
+        loader.assert_called_once_with(
+            "fake.mapdata", None, exclude_highway=["steps"], traversability=None
+        )
 
     def test_annotations_parameter_is_passed_through(self):
         loader = MagicMock(return_value=(_FakeMapData(), {}))
@@ -344,7 +348,9 @@ class TestOSMCloudMapLoading:
             loader,
         )
 
-        loader.assert_called_once_with("fake.mapdata", "/tmp/store.json", exclude_highway=[])
+        loader.assert_called_once_with(
+            "fake.mapdata", "/tmp/store.json", exclude_highway=[], traversability=None
+        )
 
     def test_annotations_none_loads_the_unedited_map(self):
         loader = MagicMock(return_value=(_FakeMapData(), {}))
@@ -352,7 +358,53 @@ class TestOSMCloudMapLoading:
             {"mapdata_file": "fake.mapdata", "auto_utm": True, "annotations": "none"}, loader
         )
 
-        loader.assert_called_once_with("fake.mapdata", "none", exclude_highway=["steps"])
+        loader.assert_called_once_with(
+            "fake.mapdata", "none", exclude_highway=["steps"], traversability=None
+        )
+
+    def test_traversability_file_is_passed_through(self):
+        """A rule file given as a parameter reaches the loader; "" means the package one."""
+        loader = MagicMock(return_value=(_FakeMapData(), {}))
+        node = _build_osm_cloud(
+            {
+                "mapdata_file": "fake.mapdata",
+                "auto_utm": True,
+                "traversability_file": "/tmp/rules.yaml",
+            },
+            loader,
+        )
+
+        assert node.traversability_file == "/tmp/rules.yaml"
+        loader.assert_called_once_with(
+            "fake.mapdata",
+            None,
+            exclude_highway=["steps"],
+            traversability="/tmp/rules.yaml",
+        )
+
+    def test_grass_way_is_missing_from_the_loaded_map(self, tmp_path):
+        """The default rules reach the real loader: a grass way gets no ring."""
+        path = tmp_path / "network.mapdata"
+        lat0, lon0 = build_footway_network_mapdata(path)
+        md = MapData.load(str(path))
+        e0, n0, zn, zl = utm.from_latlon(lat0, lon0)
+        md.nodes_cache[107] = dict(
+            zip(("lat", "lon"), utm.to_latlon(e0 + 200.0, n0 - 60.0, zn, zl), strict=False)
+        ) | {"tags": {}}
+        md.footways_list.append(
+            Way(
+                id=5,
+                nodes=[107, 103],
+                tags={"highway": "footway", "surface": "grass"},
+                line=LineString([(e0 + 200.0, n0 - 60.0), (e0 + 200.0, n0)]).buffer(1.0),
+            )
+        )
+        md.save(str(path))
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "auto_utm": True})
+
+        merged = node.load_map_data(str(path))
+
+        assert [w.id for w in merged.footways_list] == [1, 2, 3]
 
     def test_deleted_way_is_missing_from_the_loaded_map(self, tmp_path):
         """A real (small) map plus a store that deletes way 2: the node sees two ways."""

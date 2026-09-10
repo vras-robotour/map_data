@@ -30,6 +30,7 @@ def test_config_defaults_match_the_node():
     assert params["annotations"] == "auto"
     assert params["spacing"] == 3.0
     assert params["exclude_highway"] == ["steps"]  # stairs are not routable
+    assert params["traversability_file"] == ""  # "" = the package's traversability.yaml
     assert params["max_snap_distance"] == 100.0  # the start (the robot's own fix)
     assert params["goal_max_snap_distance"] == 30.0  # the goal, failing with snap_too_far
     assert params["keep_goal"] is True
@@ -58,3 +59,36 @@ def test_node_declares_the_same_defaults_as_the_config():
     assert 'p("keep_goal", True)' in src
     assert 'p("goal_max_snap_distance", 30.0)' in src
     assert 'p("exclude_highway", sorted(NON_ROUTABLE_HIGHWAY_VALUES))' in src
+    assert 'p("traversability_file", "")' in src
+
+
+# ── traversability ─────────────────────────────────────────────────────────
+
+LAUNCH_FILE = PKG / "launch" / "route_planner.launch.py"
+
+
+def test_launch_maps_traversability_onto_the_node_parameter():
+    """``traversability:=<file>`` is the argument; the node parameter is the file name."""
+    src = LAUNCH_FILE.read_text()
+    assert '"traversability",\n            default_value="",' in src
+    assert 'given("traversability", "traversability_file")' in src
+
+
+def test_traversability_file_reaches_the_map_load_and_the_planner():
+    src = (PKG / "map_data" / "route_planner.py").read_text()
+    assert "traversability=self.traversability_file or None" in src
+    # once for load_mapdata_with_annotations, once for the GraphPlanner
+    assert src.count("traversability=self.traversability_file or None") == 2
+
+
+def test_traversability_file_is_part_of_both_cache_keys():
+    """
+    Editing the rule file and restarting must not hand back the map or the graph
+    built with the old rules.
+    """
+    src = (PKG / "map_data" / "route_planner.py").read_text()
+    map_key = src.split("key = (str(path), str(ann)")[1][:40]
+    assert "self.traversability_file" in map_key
+    planner_key = src.split("        key = (\n            cache[0],")[1][:300]
+    assert "self.traversability_file" in planner_key
+    assert "trav_path.stat().st_mtime" in src  # the file's own mtime, for the map cache

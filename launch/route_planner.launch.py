@@ -51,6 +51,13 @@ def _arguments():
             "or a store file.",
         ),
         DeclareLaunchArgument(
+            "traversability",
+            default_value="",
+            description="Tag rule file deciding which ways the robot may drive on and what "
+            "they cost (empty = the value from params_file, i.e. the package's "
+            "config/traversability.yaml). osm_cloud must be given the same file.",
+        ),
+        DeclareLaunchArgument(
             "mission_dir", default_value="", description="Where routes are written as GPX."
         ),
         DeclareLaunchArgument("gps_fix_topic", default_value=""),
@@ -85,6 +92,7 @@ def launch_setup(context, *args, **kwargs):
         **given("mapdata_file"),
         **given("mapdata_path", "data_dir"),
         **given("annotations"),
+        **given("traversability", "traversability_file"),
         **given("mission_dir"),
         **given("gps_fix_topic"),
         **given("earth_frame"),

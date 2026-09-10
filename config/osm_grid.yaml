@@ -26,3 +26,9 @@ osm_cloud:
     # highway= values dropped from the map: stairs are footways in OSM, but the planner
     # does not route over them, so they get no intersection rings and no road cost.
     exclude_highway: ["steps"]
+    # Tag rules deciding which ways the robot may drive on (stairs, grass, bridges, ...):
+    # an absolute path, or "" for the package's config/traversability.yaml. This must be
+    # the same file route_planner uses, or a junction on a way the planner refuses still
+    # gets a ring. osm_cloud.launch.py forwards its traversability:= argument on top of
+    # this file when it is given. Read at startup only: edit the file, then restart.
+    traversability_file: ""

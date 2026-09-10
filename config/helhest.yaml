@@ -74,5 +74,8 @@ osm_cloud:
     # this file, so override it there rather than here when using the launch file.
     annotations: "auto"
     exclude_highway: ["steps"]
+    # Tag rules deciding which ways the robot may drive on; "" = the package's
+    # config/traversability.yaml. Keep it equal to route_planner's traversability_file.
+    traversability_file: ""
     intersections_topic: "intersections"
     intersection_markers_topic: "intersection_markers"
