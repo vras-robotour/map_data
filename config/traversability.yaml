@@ -28,44 +28,34 @@ default:
   cost: 0.0
 
 rules:
-  # 15 ways. A wheeled robot cannot take stairs.
   - match: {highway: steps}
     traversable: false
     reason: stairs
 
-  # 6 ways (5 grass, 1 mud; no sand in Stromovka). Neither route uses one.
   - match: {surface: [grass, mud, sand]}
     traversable: false
     reason: soft surface
 
-  # DISABLED. Under a tunnel the GNSS fix is lost and the robot drives blind, but the two
-  # tunnels of Stromovka are a 48 m underpass and the 33 m covered alley at Šlechtova -
-  # and that alley is the only short way west: removing both turned the 2026-09-08 route 2
-  # from 751 m into 2495 m (+232 %). Enable it where a tunnel has an alternative, or
-  # delete the individual tunnel you distrust in the viewer.
   # - match: {tunnel: "*"}
   #   traversable: false
   #   reason: tunnel (GNSS loss)
 
-  # 13 ways (bridge=yes 10, bridge=boardwalk 4, one of them stairs already). A narrow
-  # bridge with a kerb is where a 90 kg robot ends up in the water. Measured: neither
-  # 2026-09-08 route changes by a metre without them.
+  - match: {highway: "cycleway"}
+    traversable: false
+    reason: overlap with footways - invalid intersections
+
   - match: {bridge: "*"}
     traversable: false
     reason: bridge
 
-  # 1 way. Anything the OSM mappers call bad or worse is not worth the risk.
   - match: {smoothness: [bad, very_bad, horrible, very_horrible, impassable]}
     traversable: false
     reason: rough surface
 
-  # 0 ways in Stromovka, but private land is private land.
   - match: {access: [no, private]}
     traversable: false
     reason: no access
 
-  # 1 way. A trodden shortcut nobody maintains, and no surface tag to price it by:
-  # worth taking only when the alternative is more than twice as long.
   - match: {informal: "yes"}
     cost: 1.0
     reason: informal path
