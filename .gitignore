@@ -17,6 +17,10 @@ paths/*
 site
 _demo_out/
 
+# Local working datasets (keep the directory, not its contents)
+data/*
+!data/.gitkeep
+
 # Committed demo dataset (served by the static docs demo)
 !demo/*.mapdata
 !demo/*.annotations.json
