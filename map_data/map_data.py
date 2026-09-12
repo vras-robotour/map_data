@@ -550,6 +550,38 @@ class MapData:
             )
         return removed
 
+    def centre_line(self, way: Way) -> geometry.LineString | None:
+        """
+        Rebuild a way's unbuffered centre line in UTM from its node ids.
+
+        ``footways_list``/``roads_list`` hold the *buffered* geometry (a 3 m
+        wide footway, a 7 m wide road), so the stored ``line`` cannot be used
+        to find where two ways cross: a line intersected with a corridor gives
+        the run inside it, not a crossing point. The node ids survive in
+        ``nodes_cache``, so the true centre line can be rebuilt from them.
+
+        A way that still carries an unbuffered ``LineString`` (a raw parse, an
+        annotation's own centre line) is already what is wanted and is returned
+        as-is. Returns ``None`` when the way has fewer than two known nodes, in
+        which case the caller has to fall back to the stored geometry.
+        """
+        if way.line is not None and way.line.geom_type == "LineString":
+            return way.line
+        coords: list[tuple[float, float]] = []
+        for node_id in way.nodes:
+            node_data = self.nodes_cache.get(node_id)
+            if node_data is None:
+                return None
+            e, n, _, _ = utm.from_latlon(
+                node_data["lat"],
+                node_data["lon"],
+                force_zone_number=self.zone_number,
+                force_zone_letter=self.zone_letter,
+            )
+            if not coords or (e, n) != coords[-1]:
+                coords.append((e, n))
+        return geometry.LineString(coords) if len(coords) >= 2 else None
+
     def parse_intersections(self, ways_dict: dict[Any, Way]) -> list[Way]:
         """
         Identify the routable nodes where ways actually branch, as crossroad Ways.
@@ -611,23 +643,34 @@ class MapData:
     @staticmethod
     def geometric_intersections(
         lines: list[tuple[Way, geometry.LineString]],
-        others: list[Way],
+        others: list[tuple[Way, geometry.base.BaseGeometry]],
         touch_tolerance: float = 1.0,
         radius: float = 1.5,
     ) -> list[Way]:
         """
         Detect crossroads geometrically for ways that share no OSM node ids.
 
-        Used for manually annotated paths: a crossroad is created wherever an
-        annotated centre line crosses another way, or where one of its endpoints
-        lies within ``touch_tolerance`` metres of another way (a T-junction).
+        Used for manually annotated paths: a crossroad is created where an
+        annotated centre line crosses another way's centre line, where the two
+        stop running together, or where one of its endpoints lies within
+        ``touch_tolerance`` metres of another way (a T-junction).
+
+        Both sides must be **centre lines**. The geometry stored on a parsed
+        ``Way`` is the way buffered to its width, and intersecting a line with
+        a 3 m wide corridor yields the stretch of line inside it rather than a
+        crossing: a path merely running alongside a footway then reports a
+        junction it never reaches, and a real crossing is reported half a
+        corridor away from where it happens. :meth:`centre_line` rebuilds the
+        unbuffered line from a way's node ids for exactly this.
 
         Parameters
         ----------
         lines : list of (Way, LineString)
             Annotated ways with their (unbuffered) centre lines, in UTM.
-        others : list of Way
-            Ways to test against (the annotated way itself is skipped).
+        others : list of (Way, BaseGeometry)
+            Ways to test against, each with its centre line (the annotated way
+            itself is skipped). A way whose centre line could not be rebuilt
+            may be passed with its stored geometry, at the cost above.
         touch_tolerance : float
             Endpoint-to-way distance (m) that still counts as touching.
         radius : float
@@ -657,21 +700,38 @@ class MapData:
             )
             next_id -= 1
 
+        def junction_points(geom: geometry.base.BaseGeometry) -> list[geometry.Point]:
+            """The junctions an intersection geometry stands for."""
+            parts = getattr(geom, "geoms", [geom])
+            points: list[geometry.Point] = []
+            for part in parts:
+                if part.is_empty:
+                    continue
+                if part.geom_type == "Point":
+                    points.append(part)
+                elif part.geom_type in ("LineString", "LinearRing"):
+                    # The two ways run together along this stretch: they meet
+                    # where it starts and separate where it ends.
+                    points.append(geometry.Point(part.coords[0]))
+                    points.append(geometry.Point(part.coords[-1]))
+                else:
+                    points.append(part.representative_point())
+            return points
+
         for way, line in lines:
             if line is None or line.is_empty or line.geom_type != "LineString":
                 continue
             ends = [geometry.Point(line.coords[0]), geometry.Point(line.coords[-1])]
-            for other in others:
-                if other is way or other.line is None or other.line.is_empty:
+            for other, other_line in others:
+                if other is way or other_line is None or other_line.is_empty:
                     continue
-                inter = line.intersection(other.line)
+                inter = line.intersection(other_line)
                 if not inter.is_empty:
-                    geoms = getattr(inter, "geoms", [inter])
-                    for g in geoms:
-                        add(g.representative_point(), 2)
+                    for pt in junction_points(inter):
+                        add(pt, 2)
                     continue
                 for end in ends:
-                    if end.distance(other.line) <= touch_tolerance:
+                    if end.distance(other_line) <= touch_tolerance:
                         add(end, 2)
         return crossroads
 

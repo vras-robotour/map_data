@@ -225,9 +225,14 @@ def merge_annotations(md: MapData, store: dict[str, Any]) -> None:
 
     # Annotated paths share no OSM node ids with the map, so node-based crossroad
     # detection cannot see them; add crossroads where they cross or touch other ways.
+    # Both sides have to be centre lines - the ways carry their buffered geometry,
+    # against which a path running alongside one reports a junction it never reaches.
     if ann_lines:
+        others = [
+            (o, md.centre_line(o) or o.line) for o in list(md.footways_list) + list(md.roads_list)
+        ]
         md.crossroads_list = list(md.crossroads_list) + MapData.geometric_intersections(
-            ann_lines, list(md.footways_list) + list(md.roads_list)
+            ann_lines, others
         )
 
 
