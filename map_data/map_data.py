@@ -783,6 +783,13 @@ class MapData:
         """
         Load a previously saved ``.mapdata`` file.
 
+        The node-based crossroads are recomputed rather than trusted: they are
+        derived from the ways, and a file written by an older version carries
+        the junctions its detector found (footways only, one per node of a
+        corridor mapped twice). Crossroads that cannot be recomputed from node
+        ids, the ``annotation_intersection`` ones a drawn path contributes, are
+        kept as they were saved.
+
         Parameters
         ----------
         path : str
@@ -794,7 +801,15 @@ class MapData:
             Restored instance with all way lists populated.
 
         """
-        return load_mapdata(cls, path)
+        md = load_mapdata(cls, path)
+        geometric = [
+            c for c in md.crossroads_list if c.tags.get("type") == "annotation_intersection"
+        ]
+        md.crossroads_list = (
+            md.parse_intersections({str(w.id): w for w in md.footways_list + md.roads_list})
+            + geometric
+        )
+        return md
 
     def __str__(self) -> str:
         source = f"File: {self.coords_file}" if self.coords_file else "Array"

@@ -337,6 +337,57 @@ def test_two_ways_running_together_meet_where_the_shared_stretch_ends():
     assert xs == [20.0, 60.0], f"expected the ends of the shared stretch, got {xs}"
 
 
+def test_loading_refreshes_crossroads_saved_by_an_older_detector(tmp_path):
+    """
+    Crossroads are derived from the ways, and every .mapdata already on disk
+    carries the ones the old detector found. Loading has to recompute them, or
+    the fix never reaches a map the robot already has.
+    """
+    path = tmp_path / "stale.mapdata"
+    lat0, lon0 = _map_with_a_wide_footway(path)
+
+    md = MapData.load(str(path))
+    # A junction the old detector could not see: a road ending on the footway.
+    e0, n0, zn, zl = utm.from_latlon(lat0, lon0)
+    lat, lon = utm.to_latlon(e0 + 100.0, n0 + 60.0, zn, zl)
+    md.nodes_cache[104] = {"lat": lat, "lon": lon, "tags": {}}
+    md.roads_list.append(
+        Way(
+            id=2,
+            is_area=True,
+            nodes=[104, 102],
+            tags={"highway": "service"},
+            line=LineString([(e0 + 100.0, n0 + 60.0), (e0 + 100.0, n0)]).buffer(3.5),
+        ),
+    )
+    md.crossroads_list = []  # as an older file would have it
+    md.save(str(path))
+
+    reloaded = MapData.load(str(path))
+    assert [c.id for c in reloaded.crossroads_list] == [102]
+
+
+def test_loading_keeps_crossroads_that_cannot_be_recomputed(tmp_path):
+    """An annotated path's crossroads come from geometry, not node ids."""
+    path = tmp_path / "withann.mapdata"
+    _map_with_a_wide_footway(path)
+
+    md = MapData.load(str(path))
+    md.crossroads_list = [
+        Way(
+            id=-1_000_000,
+            is_area=True,
+            tags={"type": "annotation_intersection", "count": "2"},
+            line=LineString([(0, 0), (1, 1)]).centroid.buffer(1.5),
+        ),
+    ]
+    md.save(str(path))
+
+    reloaded = MapData.load(str(path))
+    kept = [c for c in reloaded.crossroads_list if c.tags.get("type") == "annotation_intersection"]
+    assert len(kept) == 1
+
+
 # ── the real map the robot drives ─────────────────────────────────────────────
 
 

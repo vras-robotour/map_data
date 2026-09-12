@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Crossroad detection no longer invents junctions where one corridor is mapped
+  twice. A node was a crossroad when several ways used it, so a cycleway or an
+  annotated path drawn along an existing footway — which reuses its node ids —
+  made a junction of every node of the shared run. A node is now a crossroad
+  when more than two *distinct* neighbouring nodes leave it: two ways passing
+  between the same neighbours are one path, three directions are a fork. On the
+  full Stromovka map this drops 64 junctions, every one of them mid-corridor
+- Roads take part in crossroad detection. Only footways were considered, so a
+  footway meeting a service road was not a junction at all and the same physical
+  junction was found or missed depending on how the through way happened to be
+  tagged — 93 of them on the full Stromovka map, 42 on one drawn road alone.
+  This matters now that the graph planner routes over roads
+  (``highway_types: [footway, road]``)
+- The geometric detector used for annotated paths matches centre line against
+  centre line. It tested the drawn line against the other way's *buffered*
+  geometry, which yields the stretch of line inside a 3 m (footway) or 7 m
+  (road) corridor rather than a crossing: a path merely running alongside a way
+  reported a junction it never reaches, every real crossing was placed half a
+  corridor — up to 3.5 m, most of the follower's 5 m enter radius — from where
+  it happens, and the T-junction tolerance reached half a corridor too far.
+  ``MapData.centre_line`` rebuilds the unbuffered line from a way's node ids
+- ``MapData.load`` recomputes the node-based crossroads instead of trusting the
+  ones in the file, so a ``.mapdata`` written by an older version is corrected
+  on load; crossroads that cannot be recomputed from node ids (an annotated
+  path's) are kept as saved
+
 ## [1.4.0] — 2026-09-12
 
 ### Added
