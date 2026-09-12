@@ -2,14 +2,20 @@
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-09-12
+
 ### Added
 
-- `config/route_planner.yaml`: every `route_planner` parameter in one documented
-  file, loaded by `route_planner.launch.py` (`params_file:=` takes an absolute
-  path or a name in `config/`). The launch arguments now default to empty and are
-  applied on top of the file, so an argument left unset keeps the file's value;
-  `highway_types:=footway,road` lets the graph planner use roads as well as
-  footways. `map_data.utils.launch` holds the argument helpers
+- Traversability rules: `config/traversability.yaml` decides from OSM tags which
+  ways the robot may drive on (first matching rule wins, each with a `reason` the
+  operator sees in the node log) and what they cost. `MapData` applies the rules
+  when a map is loaded for planning — `exclude_ways` is now the shortcut for
+  rules that only deny `highway` values — and `GraphPlanner` weighs its edges by
+  the same highway/surface cost tables as the grid planner through the shared
+  `pathsolver.way_cost` helper, while the reported route length stays geometric.
+  The file is selectable per run (`traversability_file` parameter,
+  `traversability:=`, `--traversability`) and is part of the map and planner
+  cache keys, mtime included
 - Offline route planning: `map_data.pathsolver.route.plan_route` (the Planner
   screen's graph/grid planning as a library call, with `densify`, failure reasons
   and snap distances), `map_data.annotations` (annotation-store merge without the
@@ -18,6 +24,41 @@
   package (`PlanRoute.action`), `route_planner.launch.py`, `GraphPlanner.snap_distance`
   and `gpx.create_gpx_track`. The viewer's `/api/create_replan` now delegates to
   `plan_route` and reports a `reason` on failure
+- `config/route_planner.yaml`: every `route_planner` parameter in one documented
+  file, loaded by `route_planner.launch.py` (`params_file:=` takes an absolute
+  path or a name in `config/`). The launch arguments now default to empty and are
+  applied on top of the file, so an argument left unset keeps the file's value;
+  `highway_types:=footway,road` lets the graph planner use roads as well as
+  footways. `map_data.utils.launch` holds the argument helpers
+- `keep_goal` (default on) ends a route at the requested goal itself rather than
+  at its projection onto the network, which can be tens of metres short; the
+  final off-network leg is densified like the rest. The goal has its own snap
+  limit (`goal_max_snap_distance`, 30 m, failing with `snap_too_far`) separate
+  from the start's 100 m, which is the robot's own fix
+- `exclude_highway` (default `steps`): stairs stay in the saved map for the
+  viewer, but `MapData.exclude_ways` drops them at load time and `GraphPlanner`
+  filters them for callers passing a raw map, so no route is ever planned over
+  them
+- Explicit annotations switch — `--annotations auto|none|FILE` and the
+  `annotations` parameter — because a store may delete a large part of the map
+  (Stromovka's deletes 838 ways) and planning has to be able to opt out of it
+- Goal QR codes for Robotour: `map_data.utils.qr` encodes a goal as a geo URI,
+  and the viewer serves one per waypoint (`/api/qr`, `/api/qr.svg`) with a
+  full-screen modal and PNG download
+- `osm_cloud` geodetic placement of map data via the ECEF → local TF: new
+  `transform_mode` (`tf` | `auto` | `geodetic`) and `earth_frame` parameters. In
+  geodetic mode UTM points are converted to lat/lon → ECEF and placed in
+  `local_frame` through the `earth_frame` → `local_frame` transform (`FP_ECEF` →
+  `FP_ENU0` on Helhest), which is exact where a UTM translation is off by grid
+  convergence (5–8 m per km). Grid bounds use all four UTM corners and the frames
+  are launch arguments
+- Latched `osm_cloud` publishing (the grid and intersections are published once
+  at start-up and after parameter rebuilds via transient-local publishers;
+  `republish_period` restores periodic re-publishing) and
+  `MapData.geometric_intersections()`, which finds crossings and endpoint
+  T-junctions geometrically so that annotated viewer paths — which share no OSM
+  node ids and were therefore invisible to node-based detection — reach export
+  and `osm_cloud` as crossroads
 - Viewer tracker for the Helhest field stack: poses in any TF frame are converted
   to lat/lon through `earth_frame` (ECEF) instead of requiring a `utm` frame; new
   inputs `BatteryState`, `Temperature`, e-stop `Bool`, `DiagnosticArray`, `Joy`,
@@ -31,6 +72,56 @@
   intersection with its enter/exit radii, the follower's waypoint window,
   a robot trail and a fix-age / stale indicator; the sidebar has a map legend
 - `geodesy.ecef_to_latlon_array`
+- Documentation: offline route planning, the `route_planner` config file, the
+  traversability rules and the cost tables the graph planner now shares, and the
+  goal QR codes
+
+### Changed
+
+- `route_planner` preloads the map and caches its graph planners, converts ECEF
+  in a vectorised form and subscribes to static TF only, so a plan request no
+  longer pays for the map on every call
+- `setup.py` installs `.mapdata` files and annotation stores, so a planning node
+  finds its map in an installed workspace
+- `data/` is no longer tracked (the directory is kept): local working datasets do
+  not belong in the package
+- `config/helhest.yaml` uses the real crl_commander topic names, and the
+  follower threshold now lives in `road_and_gps_follower.yaml`
+- Nodes log through `warning()`; on Kilted `warn()` shares one caller id, which
+  collapses distinct warnings into one throttled message
+- Repo hygiene: the stale `todo_fixes_plan.md` is gone, the unused
+  `python3-joblib` dependency is dropped from `package.xml`, `.mypy_cache/` is
+  ignored, and a test now asserts that the version stays in step across
+  `pyproject.toml`, `package.xml`, `map_data_interfaces/package.xml` and
+  `CITATION.cff` and that the released version has a dated changelog section
+
+### Fixed
+
+- `GraphPlanner.plan()` re-inserted the raw clicked coordinate at both ends of
+  every segment, so each via point became a degenerate out-and-back off the
+  network. It now returns on-network points only and collapses coincident
+  vertices and sub-metre spurs — a 900 m loop goes from 49 to 37 vertices —
+  while `keep_start` (`start_from_robot`) still keeps waypoint 0 verbatim,
+  because planning from the robot's pose has to begin where the robot is
+- `annotations`: `apply_added_nodes` inserts each added node after its anchor
+  instead of at a running offset, so added nodes land in the right place when a
+  map is loaded for planning
+- The viewer re-maps segment annotations when a way's split points change
+- The viewer's sidebar mode panels scroll when their body is too long: as
+  `flex:1` children `min-height:auto` let them grow past the sidebar and `#main`
+  clipped the overflow, leaving the bottom of the planner unreachable
+- `osm_cloud` no longer clips intersections to the auto grid bounds: those bounds
+  come from the map's query bbox, but ways crossing it are downloaded whole, so
+  crossroads on the route were silently dropped
+- `osm_cloud` loads the same map as the planner (annotations, `exclude_highway`);
+  a junction on a retagged or deleted way published a ring nothing routes over
+- Two field fixes ported from the robot: `TransformListener(..., spin_thread=True)`
+  so TF lookups do not depend on the node's own executor, and the `utm_to_local`
+  parameter reshaped to 4×4 — a flat 16-element list otherwise breaks every
+  transform
+- Goal codes are served as vectors (`/api/qr.svg`) and the modal caption renders
+  as HTML
+- CI: the OpenCV runtime dependency is declared and the new mypy errors are fixed
 
 ## [1.3.0] — 2026-08-24
 
