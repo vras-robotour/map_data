@@ -93,13 +93,6 @@
   {
     "type": "improvement",
     "sev": "nice-to-have",
-    "title": "Repo hygiene batch",
-    "desc": "Delete the stale <code>todo_fixes_plan.md</code> at the repo root (PR #12 merged, its fixes verified landed); drop the unused <code>python3-joblib</code> from <code>package.xml</code>; add <code>.mypy_cache/</code> to <code>.gitignore</code>; consider a CI check asserting the version triplicated across <code>pyproject.toml</code>/<code>package.xml</code>/<code>CITATION.cff</code> stays in sync.",
-    "file": "todo_fixes_plan.md, package.xml, .gitignore"
-  },
-  {
-    "type": "improvement",
-    "sev": "nice-to-have",
     "title": "Cheap linter/typechecker wins",
     "desc": "mypy: add <code>check_untyped_defs</code>, <code>warn_unused_ignores</code>, <code>warn_redundant_casts</code> (none require stubs). ruff: add the <code>RUF</code>, <code>C4</code>, and <code>PT</code> rule families (<code>PT</code> is valuable given the ~3,000-line test suite).",
     "file": "pyproject.toml"
