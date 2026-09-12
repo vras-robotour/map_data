@@ -45,7 +45,7 @@ route_planner:
     # graph = follow the mapped ways (Robotour); astar / rrt = all-terrain grid planners.
     algorithm: "graph"
     # Way types the graph planner may route over: footway and/or road.
-    highway_types: ["footway", "road"]
+    highway_types: ["footway"]
     # Metres between output waypoints; 0 = the planner's own vertices.
     spacing: 3.0
     # Reject a waypoint farther than this (m) from every allowed way (snap_too_far).
