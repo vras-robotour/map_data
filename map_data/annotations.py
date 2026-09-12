@@ -114,11 +114,9 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                 else:
                     new_lst.append(w)
             setattr(md, lst_name, new_lst)
-        # parse_intersections() only reads .values(); the str() keys here (needed
-        # because virtual split-way ids are strings) don't match its dict[int, Way]
-        # signature, but that mismatch is harmless.
+        # str() keys because virtual split-way ids are strings; only .values() is read.
         md.crossroads_list = md.parse_intersections(
-            {str(w.id): w for w in md.footways_list},  # type: ignore[misc]
+            {str(w.id): w for w in md.footways_list + md.roads_list},
         )
 
     node_pos_store = store.get("node_position_overrides", {})
@@ -165,7 +163,7 @@ def apply_tag_overrides(md: MapData, store: dict[str, Any]) -> None:
         (new_roads if w.is_road() else new_footways).append(w)
     md.roads_list, md.footways_list = new_roads, new_footways
     md.crossroads_list = md.parse_intersections(
-        {str(w.id): w for w in md.footways_list},  # type: ignore[misc]
+        {str(w.id): w for w in md.footways_list + md.roads_list},
     )
 
 

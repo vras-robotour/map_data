@@ -539,7 +539,7 @@ class MapData:
         self.traversability_removed = counts
         if removed:
             self.crossroads_list = self.parse_intersections(
-                {w.id: w for w in self.footways_list},
+                {w.id: w for w in self.footways_list + self.roads_list},
             )
             for reason, count in counts.items():
                 logger.info("Removed %d way(s): %s", count, reason)
@@ -550,26 +550,45 @@ class MapData:
             )
         return removed
 
-    def parse_intersections(self, ways_dict: dict[int, Way]) -> list[Way]:
+    def parse_intersections(self, ways_dict: dict[Any, Way]) -> list[Way]:
         """
-        Identify nodes shared by multiple footways and return them as crossroad Ways.
+        Identify the routable nodes where ways actually branch, as crossroad Ways.
+
+        Every footway *and* road is considered: the robot may be routed over
+        roads (``highway_types`` includes ``road``), and a footway meeting a
+        service road is as much a junction as two footways meeting. Ways that
+        are neither (barriers, untagged areas) are ignored, so the whole
+        ``ways_dict`` of a fresh parse can be passed in.
+
+        A node is a crossroad when more than two *distinct* neighbouring nodes
+        leave it. Counting the ways that use the node instead — the obvious
+        reading of "shared by several ways" — reports a junction wherever the
+        same corridor is mapped twice, which is common: a cycleway or an
+        annotated path drawn along an existing footway reuses its node ids and
+        would otherwise turn every node of the shared run into a crossroad. Two
+        ways that run through a node between the same neighbours are the same
+        path, not a fork; three directions out of a node are.
         """
-        node_usage: dict[int, list[bool]] = {}
+        neighbours: dict[int, set[int]] = {}
+        way_count: dict[int, int] = {}
 
-        footways = [w for w in ways_dict.values() if w.is_footway()]
+        ways = [w for w in ways_dict.values() if w.is_footway() or w.is_road()]
 
-        for way in footways:
-            for i, node_id in enumerate(way.nodes):
-                is_endpoint = i == 0 or i == len(way.nodes) - 1
-                if node_id not in node_usage:
-                    node_usage[node_id] = []
-                node_usage[node_id].append(is_endpoint)
+        for way in ways:
+            node_ids = way.nodes
+            for i, node_id in enumerate(node_ids):
+                way_count[node_id] = way_count.get(node_id, 0) + 1
+                seen = neighbours.setdefault(node_id, set())
+                if i > 0:
+                    seen.add(node_ids[i - 1])
+                if i < len(node_ids) - 1:
+                    seen.add(node_ids[i + 1])
 
         crossroads = []
-        for node_id, usages in node_usage.items():
-            count = len(usages)
-            is_crossroad = count > 2 or (count == 2 and not (usages[0] and usages[1]))
-            if is_crossroad:
+        for node_id, seen in neighbours.items():
+            seen.discard(node_id)  # a way listing the same node twice in a row
+            if len(seen) > 2:
+                count = way_count[node_id]
                 node_data = self.nodes_cache.get(node_id)
                 if node_data is None:
                     continue
