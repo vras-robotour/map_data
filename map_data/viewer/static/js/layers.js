@@ -204,68 +204,94 @@ function updateWayWithSegments(originalWayId, segments) {
     return firstLayer;
 }
 
+// ── Annotation-store metadata parsing ───────────────────────────────────────
+// The /api/annotations response is parsed into deletedWays/deletedNodes/
+// tagOverrides/hiddenWays/changeLog the same way everywhere it's consumed
+// (initial load, a metadata-only refresh, or a single-way reload) — this is
+// that shared parsing, applied directly to the matching globals.
+
+function _parseWayList(list) {
+    return (list || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
+}
+
+function _parseDeletedNodes(dn) {
+    dn = dn || [];
+    if (Array.isArray(dn)) return dn;
+    return Object.entries(dn).flatMap(([wid, nids]) => nids.map(nid => ({ way_id: +wid, node_id: nid })));
+}
+
+function _parseTagOverrides(annData) {
+    const tagOvMap = annData.tag_overrides || {};
+    const tagOvMeta = annData.tag_override_meta || {};
+    // Use string keys downstream: server stores tag ids as strings, tagOverrides.id is a number (+sid)
+    return Object.entries(tagOvMap).map(([sid, tags]) => ({
+        id: +sid,
+        category: tagOvMeta[sid]?.category || 'unknown',
+        label: tagOvMeta[sid]?.label || '',
+        tags,
+    }));
+}
+
+function _buildChangeLog(annData, deletedWaysList, deletedNodesList, tagOverridesList) {
+    const rawChangeLog = (annData.change_log && annData.change_log.length > 0) ? annData.change_log : null;
+    const addedNodes = annData.added_nodes || [];
+    if (rawChangeLog) {
+        const wayMap = new Map(deletedWaysList.map(d => [d.id, d]));
+        const tagMap = new Map(tagOverridesList.map(d => [String(d.id), d]));
+        const nodePosOverrides = annData.node_position_overrides || {};
+        const addedNodeMap = new Map(addedNodes.map(a => [a.id, a]));
+        const sorted = [...rawChangeLog].sort((a, b) => (a.ts || 0) - (b.ts || 0));
+        return sorted.flatMap(e => {
+            if (e.type === 'way') { const d = wayMap.get(e.id); return d ? [{ type: 'way', ts: e.ts, ...d }] : []; }
+            if (e.type === 'tag') { const d = tagMap.get(String(e.id)); return d ? [{ type: 'tag', ts: e.ts, ...d }] : []; }
+            if (e.type === 'node') {
+                const d = deletedNodesList.find(n => n.way_id === e.way_id && n.node_id === e.node_id);
+                return d ? [{ type: 'node', ts: e.ts, ...d }] : [];
+            }
+            if (e.type === 'move') {
+                return nodePosOverrides[String(e.id)] ? [{ type: 'move', ts: e.ts, id: e.id, category: e.category || 'unknown', label: e.label || '' }] : [];
+            }
+            if (e.type === 'split') {
+                return [{ type: 'split', ts: e.ts, way_id: e.way_id, node_id: e.node_id }];
+            }
+            if (e.type === 'add_node') {
+                return addedNodeMap.has(e.node_id) ? [{ type: 'add_node', ts: e.ts, way_id: e.way_id, node_id: e.node_id }] : [];
+            }
+            return [];
+        });
+    }
+    const splits = annData.split_ways || {};
+    const splitItems = Object.entries(splits).flatMap(([wid, nids]) => nids.map(nid => ({ type: 'split', way_id: +wid, node_id: nid })));
+    return [
+        ...deletedWaysList.map(d => ({ type: 'way', ...d })),
+        ...deletedNodesList.map(d => ({ type: 'node', ...d })),
+        ...tagOverridesList.map(d => ({ type: 'tag', ...d })),
+        ...splitItems,
+        ...addedNodes.map(a => ({ type: 'add_node', way_id: a.way_id, node_id: a.id })),
+    ];
+}
+
+// Parses deleted/hidden ways & nodes, tag overrides, and (unless
+// `withChangeLog` is false) the change log out of an /api/annotations
+// response into the matching globals. Does not touch `annotations` itself —
+// callers that need it set it (and call snapshotAnnBaselines()) separately.
+function applyAnnData(annData, { withChangeLog = true } = {}) {
+    deletedWays = _parseWayList(annData.deleted_ways);
+    deletedNodes = _parseDeletedNodes(annData.deleted_nodes);
+    tagOverrides = _parseTagOverrides(annData);
+    hiddenWays = _parseWayList(annData.hidden_ways);
+    hiddenWayIds = new Set(hiddenWays.map(d => d.id));
+    if (withChangeLog) {
+        changeLog = _buildChangeLog(annData, deletedWays, deletedNodes, tagOverrides);
+    }
+}
+
 async function refreshMetadata(filename, { refreshAnnotations = false } = {}) {
     try {
         const annData = await fetchAnnotations(filename);
-
         annotations = annData.annotations || [];
         snapshotAnnBaselines();
-        deletedWays = (annData.deleted_ways || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
-        deletedNodes = (() => {
-            const dn = annData.deleted_nodes || [];
-            if (Array.isArray(dn)) return dn;
-            return Object.entries(dn).flatMap(([wid, nids]) => nids.map(nid => ({ way_id: +wid, node_id: nid })));
-        })();
-        const tagOvMap = annData.tag_overrides || {};
-        const tagOvMeta = annData.tag_override_meta || {};
-        tagOverrides = Object.entries(tagOvMap).map(([sid, tags]) => ({
-            id: +sid,
-            category: tagOvMeta[sid]?.category || 'unknown',
-            label: tagOvMeta[sid]?.label || '',
-            tags,
-        }));
-
-        hiddenWays = (annData.hidden_ways || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
-        hiddenWayIds = new Set(hiddenWays.map(d => d.id));
-
-        const rawChangeLog = (annData.change_log && annData.change_log.length > 0) ? annData.change_log : null;
-        const addedNodes = annData.added_nodes || [];
-        if (rawChangeLog) {
-            const wayMap = new Map(deletedWays.map(d => [d.id, d]));
-            // Use string keys: server stores tag ids as strings, tagOverrides.id is a number (+sid)
-            const tagMap = new Map(tagOverrides.map(d => [String(d.id), d]));
-            const nodePosOverrides = annData.node_position_overrides || {};
-            const addedNodeMap = new Map(addedNodes.map(a => [a.id, a]));
-            const sorted = [...rawChangeLog].sort((a, b) => (a.ts || 0) - (b.ts || 0));
-            changeLog = sorted.flatMap(e => {
-                if (e.type === 'way') { const d = wayMap.get(e.id); return d ? [{ type: 'way', ts: e.ts, ...d }] : []; }
-                if (e.type === 'tag') { const d = tagMap.get(String(e.id)); return d ? [{ type: 'tag', ts: e.ts, ...d }] : []; }
-                if (e.type === 'node') {
-                    const d = deletedNodes.find(n => n.way_id === e.way_id && n.node_id === e.node_id);
-                    return d ? [{ type: 'node', ts: e.ts, ...d }] : [];
-                }
-                if (e.type === 'move') {
-                    return nodePosOverrides[String(e.id)] ? [{ type: 'move', ts: e.ts, id: e.id, category: e.category || 'unknown', label: e.label || '' }] : [];
-                }
-                if (e.type === 'split') {
-                    return [{ type: 'split', ts: e.ts, way_id: e.way_id, node_id: e.node_id }];
-                }
-                if (e.type === 'add_node') {
-                    return addedNodeMap.has(e.node_id) ? [{ type: 'add_node', ts: e.ts, way_id: e.way_id, node_id: e.node_id }] : [];
-                }
-                return [];
-            });
-        } else {
-            const splits = annData.split_ways || {};
-            const splitItems = Object.entries(splits).flatMap(([wid, nids]) => nids.map(nid => ({ type: 'split', way_id: +wid, node_id: nid })));
-            changeLog = [
-                ...deletedWays.map(d => ({ type: 'way', ...d })),
-                ...deletedNodes.map(d => ({ type: 'node', ...d })),
-                ...tagOverrides.map(d => ({ type: 'tag', ...d })),
-                ...splitItems,
-                ...addedNodes.map(a => ({ type: 'add_node', way_id: a.way_id, node_id: a.id })),
-            ];
-        }
+        applyAnnData(annData);
         if (refreshAnnotations) {
             renderAnnotationLayer();
         }
@@ -297,8 +323,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         });
 
         // Pre-compute hidden way IDs before building layers
-        const _loadHiddenMeta = (annData.hidden_ways || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
-        const _loadHiddenIds = new Set(_loadHiddenMeta.map(d => d.id));
+        const _loadHiddenIds = new Set(_parseWayList(annData.hidden_ways).map(d => d.id));
 
         // Reset subtype state for fresh load
         ['road', 'footway', 'barrier', 'crossroad'].forEach(cat => {
@@ -369,59 +394,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
 
         annotations = annData.annotations || [];
         snapshotAnnBaselines();
-        deletedWays = (annData.deleted_ways || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
-        deletedNodes = (() => {
-            const dn = annData.deleted_nodes || [];
-            if (Array.isArray(dn)) return dn;
-            return Object.entries(dn).flatMap(([wid, nids]) => nids.map(nid => ({ way_id: +wid, node_id: nid })));
-        })();
-        const tagOvMap = annData.tag_overrides || {};
-        const tagOvMeta = annData.tag_override_meta || {};
-        tagOverrides = Object.entries(tagOvMap).map(([sid, tags]) => ({
-            id: +sid,
-            category: tagOvMeta[sid]?.category || 'unknown',
-            label: tagOvMeta[sid]?.label || '',
-            tags,
-        }));
-        hiddenWays = _loadHiddenMeta;
-        hiddenWayIds = _loadHiddenIds;
-        const rawChangeLog = (annData.change_log && annData.change_log.length > 0) ? annData.change_log : null;
-        const addedNodes = annData.added_nodes || [];
-        if (rawChangeLog) {
-            const wayMap = new Map(deletedWays.map(d => [d.id, d]));
-            const tagMap = new Map(tagOverrides.map(d => [String(d.id), d]));
-            const nodePosOverrides = annData.node_position_overrides || {};
-            const addedNodeMap = new Map(addedNodes.map(a => [a.id, a]));
-            const sorted = [...rawChangeLog].sort((a, b) => (a.ts || 0) - (b.ts || 0));
-            changeLog = sorted.flatMap(e => {
-                if (e.type === 'way') { const d = wayMap.get(e.id); return d ? [{ type: 'way', ts: e.ts, ...d }] : []; }
-                if (e.type === 'tag') { const d = tagMap.get(String(e.id)); return d ? [{ type: 'tag', ts: e.ts, ...d }] : []; }
-                if (e.type === 'node') {
-                    const d = deletedNodes.find(n => n.way_id === e.way_id && n.node_id === e.node_id);
-                    return d ? [{ type: 'node', ts: e.ts, ...d }] : [];
-                }
-                if (e.type === 'move') {
-                    return nodePosOverrides[String(e.id)] ? [{ type: 'move', ts: e.ts, id: e.id, category: e.category || 'unknown', label: e.label || '' }] : [];
-                }
-                if (e.type === 'split') {
-                    return [{ type: 'split', ts: e.ts, way_id: e.way_id, node_id: e.node_id }];
-                }
-                if (e.type === 'add_node') {
-                    return addedNodeMap.has(e.node_id) ? [{ type: 'add_node', ts: e.ts, way_id: e.way_id, node_id: e.node_id }] : [];
-                }
-                return [];
-            });
-        } else {
-            const splits = annData.split_ways || {};
-            const splitItems = Object.entries(splits).flatMap(([wid, nids]) => nids.map(nid => ({ type: 'split', way_id: +wid, node_id: nid })));
-            changeLog = [
-                ...deletedWays.map(d => ({ type: 'way', ...d })),
-                ...deletedNodes.map(d => ({ type: 'node', ...d })),
-                ...tagOverrides.map(d => ({ type: 'tag', ...d })),
-                ...splitItems,
-                ...addedNodes.map(a => ({ type: 'add_node', way_id: a.way_id, node_id: a.id })),
-            ];
-        }
+        applyAnnData(annData);
         renderAnnotationLayer();
         renderAnnotationList();
         renderChangesPanel();
@@ -512,34 +485,19 @@ async function _reloadWay(wayId) {
         if (!reselected) {
             currentClickedLayer = null;
             currentClickedFeature = null;
-            document.getElementById('props-content').innerHTML =
-                '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+            resetProps();
         }
     } catch (err) {
         console.error('Failed to reload way:', err);
         currentClickedLayer = null;
         currentClickedFeature = null;
-        document.getElementById('props-content').innerHTML =
-            '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+        resetProps();
     }
 }
 
 async function _refreshAnnotationsState() {
     const annData = await fetchAnnotations(currentFile);
-    deletedWays = (annData.deleted_ways || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
-    deletedNodes = (() => {
-        const dn = annData.deleted_nodes || [];
-        if (Array.isArray(dn)) return dn;
-        return Object.entries(dn).flatMap(([wid, nids]) => nids.map(nid => ({ way_id: +wid, node_id: nid })));
-    })();
-    const tagOvMap = annData.tag_overrides || {};
-    const tagOvMeta = annData.tag_override_meta || {};
-    tagOverrides = Object.entries(tagOvMap).map(([sid, tags]) => ({
-        id: +sid, category: tagOvMeta[sid]?.category || 'unknown',
-        label: tagOvMeta[sid]?.label || '', tags,
-    }));
-    hiddenWays = (annData.hidden_ways || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
-    hiddenWayIds = new Set(hiddenWays.map(d => d.id));
+    applyAnnData(annData, { withChangeLog: false });
     renderChangesPanel();
     renderHiddenPanel();
 }

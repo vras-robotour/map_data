@@ -9,8 +9,6 @@ const annDrag = {
     type: null,        // 'vertex' | 'midpoint'
     layer: null,
     vertexIndex: -1,
-    origVertices: null,
-    startLatLng: null,
     dragMarker: null,
 };
 
@@ -32,22 +30,12 @@ function _loadAnnotationVertices(layer) {
     annVertexLayer = L.layerGroup();
 
     annVertexMarkers_ann = verts.map((v, i) => {
-        const m = L.circleMarker([v.lat, v.lng], {
-            radius: 5, color: '#fff', weight: 2,
-            fillColor: '#f0a500', fillOpacity: 0.9,
-            bubblingMouseEvents: false, renderer: L.svg(),
-        });
-        const onVDown = e => _onAnnVertexDragDown(e, i);
-        m.on('mousedown', onVDown);
-        m.on('add', () => { const el = m.getElement(); if (el) el.style.cursor = 'grab'; });
+        const [m, vHit] = makeHandle(
+            [v.lat, v.lng],
+            { radius: 5, color: '#fff', weight: 2, fillColor: '#f0a500', fillOpacity: 0.9 },
+            12, 'grab', e => _onAnnVertexDragDown(e, i),
+        );
         annVertexLayer.addLayer(m);
-
-        const vHit = L.circleMarker([v.lat, v.lng], {
-            radius: 12, fillOpacity: 0, opacity: 0,
-            bubblingMouseEvents: false, renderer: L.svg(), interactive: true,
-        });
-        vHit.on('mousedown', onVDown);
-        vHit.on('add', () => { const el = vHit.getElement(); if (el) el.style.cursor = 'grab'; });
         annVertexLayer.addLayer(vHit);
         return m;
     });
@@ -58,22 +46,12 @@ function _loadAnnotationVertices(layer) {
     for (let i = 0; i < mpCount; i++) {
         const a = verts[i], b = verts[(i + 1) % n];
         const midLat = (a.lat + b.lat) / 2, midLng = (a.lng + b.lng) / 2;
-        const mp = L.circleMarker([midLat, midLng], {
-            radius: 4, color: '#4af', weight: 1.5,
-            fillColor: '#4af', fillOpacity: 0.7,
-            bubblingMouseEvents: false, renderer: L.svg(),
-        });
-        const onMpDown = e => _onAnnMidpointDragDown(e, i);
-        mp.on('mousedown', onMpDown);
-        mp.on('add', () => { const el = mp.getElement(); if (el) el.style.cursor = 'crosshair'; });
+        const [mp, mpHit] = makeHandle(
+            [midLat, midLng],
+            { radius: 4, color: '#4af', weight: 1.5, fillColor: '#4af', fillOpacity: 0.7 },
+            10, 'crosshair', e => _onAnnMidpointDragDown(e, i),
+        );
         annVertexLayer.addLayer(mp);
-
-        const mpHit = L.circleMarker([midLat, midLng], {
-            radius: 10, fillOpacity: 0, opacity: 0,
-            bubblingMouseEvents: false, renderer: L.svg(), interactive: true,
-        });
-        mpHit.on('mousedown', onMpDown);
-        mpHit.on('add', () => { const el = mpHit.getElement(); if (el) el.style.cursor = 'crosshair'; });
         annVertexLayer.addLayer(mpHit);
         mp._hitMarker = mpHit;
         annMidpointMarkers_ann.push(mp);
@@ -104,35 +82,21 @@ function _refreshAnnMidpointsNear(vi) {
     }
 }
 
-function _onAnnVertexDragDown(e, i) {
+function _startAnnDrag(e, type, i) {
     L.DomEvent.stopPropagation(e);
     annDrag.active = true;
-    annDrag.type = 'vertex';
+    annDrag.type = type;
     annDrag.layer = editSelectedLayer;
     annDrag.vertexIndex = i;
-    annDrag.origVertices = _getAnnVertices(editSelectedLayer).map(v => L.latLng(v.lat, v.lng));
-    annDrag.startLatLng = e.latlng;
-    annDrag.dragMarker = annVertexMarkers_ann[i] ?? null;
+    annDrag.dragMarker = (type === 'vertex' ? annVertexMarkers_ann : annMidpointMarkers_ann)[i] ?? null;
     map.dragging.disable();
-    map.getContainer().style.cursor = 'grabbing';
+    map.getContainer().style.cursor = type === 'vertex' ? 'grabbing' : 'crosshair';
     map.on('mousemove', _onAnnDragMove);
     map.on('mouseup', _onAnnDragUp);
 }
 
-function _onAnnMidpointDragDown(e, i) {
-    L.DomEvent.stopPropagation(e);
-    annDrag.active = true;
-    annDrag.type = 'midpoint';
-    annDrag.layer = editSelectedLayer;
-    annDrag.vertexIndex = i;
-    annDrag.origVertices = _getAnnVertices(editSelectedLayer).map(v => L.latLng(v.lat, v.lng));
-    annDrag.startLatLng = e.latlng;
-    annDrag.dragMarker = annMidpointMarkers_ann[i] ?? null;
-    map.dragging.disable();
-    map.getContainer().style.cursor = 'crosshair';
-    map.on('mousemove', _onAnnDragMove);
-    map.on('mouseup', _onAnnDragUp);
-}
+function _onAnnVertexDragDown(e, i) { _startAnnDrag(e, 'vertex', i); }
+function _onAnnMidpointDragDown(e, i) { _startAnnDrag(e, 'midpoint', i); }
 
 function _onAnnDragMove(e) {
     if (!annDrag.active) return;
@@ -157,7 +121,6 @@ async function _onAnnDragUp(e) {
     annDrag.type = null;
     annDrag.layer = null;
     annDrag.dragMarker = null;
-    annDrag.origVertices = null;
 
     if (!layer) return;
 
@@ -238,10 +201,11 @@ function _onEditDragUp() {
 async function _saveAnnotationGeometry(layer) {
     const annId = layer.options._ann_id;
     if (!annId || !currentFile) return;
-    const geom = layer.toGeoJSON().geometry;
-    await saveAnnotation(currentFile, annId, geom);
     const ann = annotations.find(a => a.id === annId);
-    if (ann) ann.geometry = geom;
+    if (!ann) return;
+    const geom = layer.toGeoJSON().geometry;
+    await updateAnnotationApi(currentFile, annId, geom, ann.type, ann.properties);
+    ann.geometry = geom;
 }
 
 function getSnappableLayers() {
@@ -303,53 +267,27 @@ const osmDrag = {
     origLayerLatLngs: null, // snapshot of layer latlngs at drag start (for way drag)
 };
 
-function _onOsmNodeDragDown(e, nodeIndex) {
-    if (currentMode !== 'edit') return;
+function _startOsmDrag(e, type, idx) {
+    if (currentMode !== 'edit' || (type === 'way' && osmDrag.active)) return;
     L.DomEvent.stopPropagation(e);
     osmDrag.active = true;
-    osmDrag.type = 'node';
+    osmDrag.type = type;
     osmDrag.wayId = currentClickedFeature?.properties?.id ?? null;
-    osmDrag.nodeIndex = nodeIndex;
+    osmDrag.nodeIndex = type === 'way' ? -1 : idx;
     osmDrag.startLatLng = e.latlng;
     osmDrag.origPositions = currentNodes.map(n => ({ lat: n.lat, lon: n.lon }));
+    osmDrag.origLayerLatLngs = (type === 'way' && currentClickedLayer) ? _cloneLatLngs(currentClickedLayer.getLatLngs()) : null;
+    osmDrag.afterNodeId = type === 'midpoint' ? (currentNodes[idx]?.id ?? null) : null;
+    osmDrag.dragMarker = type === 'midpoint' ? (midpointMarkers[idx] ?? null) : null;
     map.dragging.disable();
-    map.getContainer().style.cursor = 'grabbing';
+    map.getContainer().style.cursor = type === 'midpoint' ? 'crosshair' : 'grabbing';
     map.on('mousemove', _onOsmDragMove);
     map.on('mouseup', _onOsmDragUp);
 }
 
-function _onOsmWayDragDown(e) {
-    if (currentMode !== 'edit' || osmDrag.active) return;
-    L.DomEvent.stopPropagation(e);
-    osmDrag.active = true;
-    osmDrag.type = 'way';
-    osmDrag.wayId = currentClickedFeature?.properties?.id ?? null;
-    osmDrag.nodeIndex = -1;
-    osmDrag.startLatLng = e.latlng;
-    osmDrag.origPositions = currentNodes.map(n => ({ lat: n.lat, lon: n.lon }));
-    osmDrag.origLayerLatLngs = currentClickedLayer ? _cloneLatLngs(currentClickedLayer.getLatLngs()) : null;
-    map.dragging.disable();
-    map.getContainer().style.cursor = 'grabbing';
-    map.on('mousemove', _onOsmDragMove);
-    map.on('mouseup', _onOsmDragUp);
-}
-
-function _onMidpointDragDown(e, segmentIndex) {
-    if (currentMode !== 'edit') return;
-    L.DomEvent.stopPropagation(e);
-    osmDrag.active = true;
-    osmDrag.type = 'midpoint';
-    osmDrag.wayId = currentClickedFeature?.properties?.id ?? null;
-    osmDrag.nodeIndex = segmentIndex;
-    osmDrag.afterNodeId = currentNodes[segmentIndex]?.id ?? null;
-    osmDrag.startLatLng = e.latlng;
-    osmDrag.origPositions = currentNodes.map(n => ({ lat: n.lat, lon: n.lon }));
-    osmDrag.dragMarker = midpointMarkers[segmentIndex] ?? null;
-    map.dragging.disable();
-    map.getContainer().style.cursor = 'crosshair';
-    map.on('mousemove', _onOsmDragMove);
-    map.on('mouseup', _onOsmDragUp);
-}
+function _onOsmNodeDragDown(e, nodeIndex) { _startOsmDrag(e, 'node', nodeIndex); }
+function _onOsmWayDragDown(e) { _startOsmDrag(e, 'way'); }
+function _onMidpointDragDown(e, segmentIndex) { _startOsmDrag(e, 'midpoint', segmentIndex); }
 
 function _onOsmDragMove(e) {
     if (!osmDrag.active) return;
