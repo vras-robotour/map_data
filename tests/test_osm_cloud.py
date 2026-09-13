@@ -50,7 +50,7 @@ class _FakeNode:
         if name in self.param_overrides:
             return _FakeParameter(self.param_overrides[name])
         if isinstance(default, MagicMock):
-            # rclpy.Parameter.Type.STRING / DOUBLE_ARRAY sentinels → "unset"
+            # rclpy.Parameter.Type.STRING sentinel → "unset"
             return _FakeParameter(None)
         return _FakeParameter(default)
 
@@ -171,9 +171,8 @@ class TestTransformPoints:
         result = transform_points(pts, np.eye(4), z=0.0)
         assert result[0][2, 0] == 0.0
 
-    def test_type_error_on_non_array(self):
-        with pytest.raises(TypeError):
-            transform_points({0: [1.0, 2.0, 3.0]}, np.eye(4))
+    def test_empty_points_returns_empty_dict(self):
+        assert transform_points({}, np.eye(4)) == {}
 
     def test_multiple_points(self):
         pts = {
@@ -249,7 +248,7 @@ def _build_osm_cloud(overrides: dict, loader: MagicMock | None = None) -> OSMClo
 
 class TestOSMCloudInit:
     def test_construction_wires_declared_parameters(self):
-        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "auto_utm": True})
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
 
         assert isinstance(node, _FakeNode)
         assert node.node_name == "osm_cloud"
@@ -264,13 +263,13 @@ class TestOSMCloudInit:
         assert node.publish_intersections is False
 
     def test_construction_registers_parameter_callback(self):
-        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "auto_utm": True})
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
 
         assert node.param_callback == node.parameter_callback
 
     def test_construction_creates_grid_publisher_on_declared_topic(self):
         node = _build_osm_cloud(
-            {"mapdata_file": "fake.mapdata", "auto_utm": True, "grid_topic": "custom_grid"},
+            {"mapdata_file": "fake.mapdata", "transform_mode": "auto", "grid_topic": "custom_grid"},
         )
 
         assert node.grid_topic == "custom_grid"
@@ -280,21 +279,29 @@ class TestOSMCloudInit:
 
     def test_construction_only_creates_intersection_publishers_when_enabled(self):
         node = _build_osm_cloud(
-            {"mapdata_file": "fake.mapdata", "auto_utm": True, "publish_intersections": False},
+            {
+                "mapdata_file": "fake.mapdata",
+                "transform_mode": "auto",
+                "publish_intersections": False,
+            },
         )
 
         assert not hasattr(node, "pub_poses")
         assert not hasattr(node, "pub_markers")
 
         node_with_intersections = _build_osm_cloud(
-            {"mapdata_file": "fake.mapdata", "auto_utm": True, "publish_intersections": True},
+            {
+                "mapdata_file": "fake.mapdata",
+                "transform_mode": "auto",
+                "publish_intersections": True,
+            },
         )
         topics = [topic for topic, _ in node_with_intersections.created_publishers]
         assert node_with_intersections.intersections_topic in topics
         assert node_with_intersections.intersection_markers_topic in topics
 
     def test_construction_publishes_once_and_registers_no_timer_by_default(self):
-        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "auto_utm": True})
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
 
         # Publishers are latched; the cloud is published once at construction.
         grid_pub = dict(node.created_publishers)[node.grid_topic]
@@ -303,7 +310,7 @@ class TestOSMCloudInit:
 
     def test_construction_registers_publish_timer_when_republish_period_set(self):
         node = _build_osm_cloud(
-            {"mapdata_file": "fake.mapdata", "auto_utm": True, "republish_period": 7.5}
+            {"mapdata_file": "fake.mapdata", "transform_mode": "auto", "republish_period": 7.5}
         )
 
         assert len(node.created_timers) == 1
@@ -312,7 +319,7 @@ class TestOSMCloudInit:
         assert callback == node.publish_cb
 
     def test_construction_builds_grid_cloud_from_map_data(self):
-        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "auto_utm": True})
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
 
         assert node.grid_cloud is not None
         assert node.map_data is not None
@@ -327,7 +334,7 @@ class TestOSMCloudMapLoading:
 
     def test_defaults_are_auto_annotations_and_no_stairs(self):
         loader = MagicMock(return_value=(_FakeMapData(), {}))
-        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "auto_utm": True}, loader)
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"}, loader)
 
         assert node.annotations == "auto"
         assert node.exclude_highway == ["steps"]
@@ -341,7 +348,7 @@ class TestOSMCloudMapLoading:
         _build_osm_cloud(
             {
                 "mapdata_file": "fake.mapdata",
-                "auto_utm": True,
+                "transform_mode": "auto",
                 "annotations": "/tmp/store.json",
                 "exclude_highway": [],
             },
@@ -355,7 +362,8 @@ class TestOSMCloudMapLoading:
     def test_annotations_none_loads_the_unedited_map(self):
         loader = MagicMock(return_value=(_FakeMapData(), {}))
         _build_osm_cloud(
-            {"mapdata_file": "fake.mapdata", "auto_utm": True, "annotations": "none"}, loader
+            {"mapdata_file": "fake.mapdata", "transform_mode": "auto", "annotations": "none"},
+            loader,
         )
 
         loader.assert_called_once_with(
@@ -368,7 +376,7 @@ class TestOSMCloudMapLoading:
         node = _build_osm_cloud(
             {
                 "mapdata_file": "fake.mapdata",
-                "auto_utm": True,
+                "transform_mode": "auto",
                 "traversability_file": "/tmp/rules.yaml",
             },
             loader,
@@ -400,7 +408,7 @@ class TestOSMCloudMapLoading:
             )
         )
         md.save(str(path))
-        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "auto_utm": True})
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
 
         merged = node.load_map_data(str(path))
 
@@ -413,7 +421,7 @@ class TestOSMCloudMapLoading:
         annotation_path_for(path).write_text(
             json.dumps({"version": 1, "annotations": [], "deleted_ways": [2]})
         )
-        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "auto_utm": True})
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
 
         plain = MapData.load(str(path))
         merged = node.load_map_data(str(path))

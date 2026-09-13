@@ -59,16 +59,7 @@ def ecef_to_latlon(x: float, y: float, z: float) -> tuple[float, float, float]:
     """
     Convert an ECEF point to WGS84 (lat_deg, lon_deg, alt_m) using Bowring's closed form.
     """
-    lon = np.arctan2(y, x)
-    p = np.hypot(x, y)
-    theta = np.arctan2(z * WGS84_A, p * WGS84_B)
-    lat = np.arctan2(
-        z + _EP2 * WGS84_B * np.sin(theta) ** 3,
-        p - WGS84_E2 * WGS84_A * np.cos(theta) ** 3,
-    )
-    n = WGS84_A / np.sqrt(1.0 - WGS84_E2 * np.sin(lat) ** 2)
-    alt = p / np.cos(lat) - n
-    return float(np.degrees(lat)), float(np.degrees(lon)), float(alt)
+    return tuple(map(float, ecef_to_latlon_array(np.array([[x, y, z]]))[0]))  # type: ignore[return-value]
 
 
 def ecef_to_latlon_array(xyz: np.ndarray) -> np.ndarray:

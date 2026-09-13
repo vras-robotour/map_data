@@ -1,5 +1,5 @@
 import pytest
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import LineString
 
 from map_data.utils.parsing import combine_ways
 from map_data.utils.serialization import way_from_dict, way_to_dict
@@ -46,16 +46,6 @@ def test_combine_ways():
     assert len(new_way.nodes) == 3
     assert new_way.nodes == [10, 11, 12]
     assert new_way.line.length == pytest.approx(LineString([(0, 0), (2, 2)]).length)
-
-
-def test_way_pcd_points():
-    line = LineString([(0, 0), (10, 0)])
-    way = Way(line=line)
-    pcd = way.to_pcd_points(density=1.0, filled=False)
-    # 10m line with 1m density should have roughly 11 points (0 to 10)
-    assert len(pcd) >= 11
-    assert pcd[0][0] == 0
-    assert pcd[-1][0] == 10
 
 
 def test_way_is_barrier_wildcard():
@@ -158,16 +148,3 @@ def test_combine_ways_closed_ring_becomes_area():
     # The node chain closes back on the starting node
     assert new_way.nodes[0] == new_way.nodes[-1]
     assert new_way.nodes == [1, 2, 3, 1]
-
-
-def test_way_pcd_points_filled_polygon():
-    """
-    to_pcd_points with filled=True returns interior grid points for a polygon.
-    """
-    poly = Polygon([(0, 0), (4, 0), (4, 4), (0, 4)])
-    way = Way(line=poly, is_area=True)
-    pts = way.to_pcd_points(density=1.0, filled=True)
-
-    assert len(pts) > 0
-    for p in pts:
-        assert poly.contains(Point(float(p[0]), float(p[1])))

@@ -18,10 +18,8 @@ dependencies = [
     "overpy",
     "shapely",
     "utm",
-    "tqdm",
     "requests",
     "PyYAML",
-    "matplotlib",
     "scipy",
     # utils.qr renders goal QR codes with cv2.QRCodeEncoder; headless keeps the
     # GUI libs (libGL) out of CI images. The ROS build uses python3-opencv.

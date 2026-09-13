@@ -29,10 +29,8 @@
   <exec_depend>python3-overpy</exec_depend>
   <exec_depend>python3-shapely</exec_depend>
   <exec_depend>python3-utm</exec_depend>
-  <exec_depend>python3-tqdm</exec_depend>
   <exec_depend>python3-requests</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
-  <exec_depend>python3-matplotlib</exec_depend>
   <exec_depend>python3-scipy</exec_depend>
 
   <export>

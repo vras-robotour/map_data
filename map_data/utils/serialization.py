@@ -1,6 +1,5 @@
 import contextlib
 import json
-import logging
 import os
 import tempfile
 from pathlib import Path
@@ -13,8 +12,6 @@ from map_data.utils.way import Way
 
 if TYPE_CHECKING:
     from map_data.map_data import MapData
-
-logger = logging.getLogger(__name__)
 
 
 def way_to_dict(way: Way) -> dict[str, Any]:
@@ -64,40 +61,30 @@ def map_data_to_dict(md: "MapData") -> dict[str, Any]:
     }
 
 
-def save_mapdata(md: "MapData", path: str | Path) -> None:
-    data = map_data_to_dict(md)
+def atomic_write_json(path: str | Path, data: Any, **dump_kwargs: Any) -> None:
+    """Dump JSON to a temp file next to ``path``, then replace it, so a crash or
+    full disk mid-dump cannot truncate a previously good file."""
     p = Path(path)
-    # Atomic write: dump to a temp file in the same directory, then replace
-    # the target, so a crash or full disk mid-dump cannot truncate a
-    # previously good file (mirrors viewer/helpers.py save_annotations).
     fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=p.name + ".", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-        os.replace(tmp, str(p))
+            json.dump(data, f, **dump_kwargs)
+        os.replace(tmp, p)
     except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(tmp)
         raise
 
 
+def save_mapdata(md: "MapData", path: str | Path) -> None:
+    atomic_write_json(path, map_data_to_dict(md), indent=2)
+
+
 def load_mapdata(md_class: type["MapData"], path: str | Path) -> "MapData":
     p = Path(path)
-    # Check if it's a legacy pickle file (starts with 0x80)
-    with p.open("rb") as f:
-        header = f.read(1)
-
-    if header == b"\x80":
-        logger.error(
-            "Detected legacy pickle format for %s. "
-            "Pickle support has been removed for security reasons. "
-            "Please re-parse the data from the original GPX/YAML file.",
-            path,
-        )
-        msg = f"Legacy pickle format no longer supported: {path}"
-        raise ValueError(msg)
-
-    # Try JSON
+    # A legacy pickle file (starts with 0x80) is invalid UTF-8, so json.load
+    # already raises a clear (ValueError-subclass) error on it; pickle
+    # support has been removed for security reasons regardless.
     with p.open(encoding="utf-8") as f:
         data = json.load(f)
 
@@ -115,10 +102,6 @@ def load_mapdata(md_class: type["MapData"], path: str | Path) -> "MapData":
     md.min_long = meta["min_long"]
     md.max_long = meta["max_long"]
     md.coords_file = meta["coords_file"]
-
-    from map_data.map_data import CoordsData  # local import to avoid circular dep
-
-    md.coords_data = CoordsData(md.min_long, md.max_long, md.min_lat, md.max_lat)
 
     md.osm_ways_data = None
     md.osm_rels_data = None

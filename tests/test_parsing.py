@@ -1,11 +1,11 @@
 import json
 import logging
 
-import numpy as np
 import overpy
-from shapely.geometry import LineString, Polygon
+import pytest
+from shapely.geometry import LineString
 
-from map_data.utils.gpx import parse_gpx_file
+from map_data.map_data import MapData
 from map_data.utils.parsing import (
     BUFFER_WIDTHS,
     combine_ways,
@@ -436,51 +436,14 @@ def test_parse_osm_ways_skips_degenerate_ways(caplog):
     assert caplog.text.count("Skipping degenerate way") == 2
 
 
-# ── Way.to_pcd_points: cache invalidation ───────────────────────────────────
+# ── MapData GPX parsing: zone boundary / empty file ─────────────────────────
 
 
-def test_to_pcd_points_cache_invalidated_on_density_change():
-    way = Way(line=LineString([(0.0, 0.0), (10.0, 0.0)]))
-
-    sparse = way.to_pcd_points(density=1.0, filled=False)
-    dense = way.to_pcd_points(density=2.0, filled=False)
-
-    # A stale cache would silently return the density=1.0 result again.
-    assert len(dense) > len(sparse)
-
-    # Calling with the original args again must not return the stale
-    # (density=2.0) result either.
-    sparse_again = way.to_pcd_points(density=1.0, filled=False)
-    np.testing.assert_array_equal(sparse_again, sparse)
-
-
-def test_to_pcd_points_cache_invalidated_on_filled_change():
-    poly = Polygon([(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
-    way = Way(line=poly, is_area=True)
-
-    boundary_only = way.to_pcd_points(density=1.0, filled=False)
-    filled_interior = way.to_pcd_points(density=1.0, filled=True)
-
-    # A stale cache keyed only on density (ignoring `filled`) would return
-    # the same array for both calls. `filled=True` only samples the
-    # interior (no boundary points), so the two point sets are disjoint.
-    assert len(filled_interior) != len(boundary_only)
-    boundary_set = {tuple(p) for p in boundary_only}
-    filled_set = {tuple(p) for p in filled_interior}
-    assert boundary_set.isdisjoint(filled_set)
-
-    boundary_again = way.to_pcd_points(density=1.0, filled=False)
-    np.testing.assert_array_equal(boundary_again, boundary_only)
-
-
-# ── parse_gpx_file: empty GPX ────────────────────────────────────────────────
-
-
-def test_parse_gpx_file_zone_boundary_single_zone(tmp_path):
+def test_mapdata_gpx_zone_boundary_single_zone(tmp_path):
     """
     A path crossing a UTM zone boundary (18 deg E splits zones 33/34) must be
-    converted entirely in the first waypoint's zone. Per-point natural-zone
-    conversion would put the second point ~400 km away in easting.
+    converted entirely in one zone. Per-point natural-zone conversion would
+    put the second point ~400 km away in easting.
     """
     gpx_content = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -492,20 +455,16 @@ def test_parse_gpx_file_zone_boundary_single_zone(tmp_path):
     gpx_path = tmp_path / "zone_boundary.gpx"
     gpx_path.write_text(gpx_content)
 
-    waypoints, zone_num, zone_let = parse_gpx_file(str(gpx_path))
+    md = MapData(str(gpx_path), coords_type="file")
 
-    assert zone_num == 33
-    assert zone_let == "U"
+    assert md.zone_number == 33
+    assert md.zone_letter == "U"
     # ~0.002 deg of longitude at lat 50 is ~140 m, not ~400 km.
-    assert abs(waypoints[1][0] - waypoints[0][0]) < 1000
+    assert abs(md.waypoints[1][0] - md.waypoints[0][0]) < 1000
 
 
-def test_parse_gpx_file_empty_returns_empty_list(tmp_path):
-    """
-    A structurally valid GPX file with no waypoints, tracks, or routes
-    must return the "no data" sentinel (`[]`), not a 3-tuple with empty
-    contents — callers (e.g. parse_path) branch on the return type.
-    """
+def test_mapdata_empty_gpx_raises(tmp_path):
+    """A structurally valid GPX file with no waypoints, tracks, or routes is an error."""
     gpx_content = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"></gpx>\n'
@@ -513,7 +472,5 @@ def test_parse_gpx_file_empty_returns_empty_list(tmp_path):
     gpx_path = tmp_path / "empty.gpx"
     gpx_path.write_text(gpx_content)
 
-    result = parse_gpx_file(str(gpx_path))
-
-    assert result == []
-    assert not isinstance(result, tuple)
+    with pytest.raises(ValueError, match="No points"):
+        MapData(str(gpx_path), coords_type="file")

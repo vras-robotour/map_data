@@ -21,21 +21,20 @@ def setup_logging(level: int = logging.INFO) -> None:
     )
 
 
-def config_path(filename: str) -> Path:
-    """
-    Where a config file of the package would live.
-
-    Attempts the ROS2 resource index, falling back to a path relative to this
-    file (a source checkout). The file need not exist; see :func:`find_config`.
-    """
+def package_share(subdir: str, package: str = "map_data") -> Path:
+    """The installed ``share/<package>/<subdir>``, or the source tree's ``<subdir>``."""
     try:
         from ament_index_python.resources import get_resource
 
-        _, package_path = get_resource("packages", "map_data")
-        return Path(package_path) / "share" / "map_data" / "config" / filename
+        _, prefix = get_resource("packages", package)
+        return Path(prefix) / "share" / package / subdir
     except (ImportError, LookupError):
-        # Fallback for non-ROS2 environments
-        return (Path(__file__).parent / ".." / ".." / "config" / filename).resolve()
+        return (Path(__file__).parent / ".." / ".." / subdir).resolve()
+
+
+def config_path(filename: str) -> Path:
+    """Where a config file of the package would live (need not exist; see :func:`find_config`)."""
+    return package_share("config") / filename
 
 
 def find_config(filename: str) -> Path | None:

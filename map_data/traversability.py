@@ -94,15 +94,12 @@ class Verdict:
     reason : str
         The matching rule's ``reason`` (:data:`DEFAULT_REASON` when no rule
         matched), for logs and route explanations.
-    rule_index : int or None
-        Index of the matching rule in the file, ``None`` for the default.
 
     """
 
     traversable: bool = True
     cost: float = 0.0
     reason: str = DEFAULT_REASON
-    rule_index: int | None = None
 
 
 @dataclass(frozen=True)
@@ -274,7 +271,6 @@ class TraversabilityRules:
                         traversable=rule.traversable,
                         cost=rule.cost,
                         reason=rule.reason or f"rule {i}",
-                        rule_index=i,
                     )
         return self.default
 
@@ -292,33 +288,6 @@ class TraversabilityRules:
         know nothing about.
         """
         return self.evaluate(way.tags).cost
-
-    def edge_factor(self, way: Way) -> float:
-        """
-        Multiplier the rules alone put on the graph edges of *way*
-        (``1 + extra cost``; the graph planner adds the table cost on top).
-
-        Always ``>= 1``, so the straight-line A* heuristic stays admissible
-        and a route's weight never falls below its geometric length.
-        """
-        return 1.0 + self.extra_cost(way)
-
-    def summary(self, ways: Iterable[Way]) -> dict[str, int]:
-        """
-        Count the non-traversable ways of *ways* per reason.
-
-        Returns
-        -------
-        dict
-            ``{reason: number of ways removed for it}``, in rule order.
-
-        """
-        counts: dict[str, int] = {}
-        for way in ways:
-            verdict = self.evaluate(way.tags)
-            if not verdict.traversable:
-                counts[verdict.reason] = counts.get(verdict.reason, 0) + 1
-        return counts
 
     def extend(self, exclude_highway: Iterable[str]) -> TraversabilityRules:
         """
@@ -344,11 +313,6 @@ class TraversabilityRules:
             reason=f"{EXCLUDE_HIGHWAY_REASON} ({'/'.join(values)})",
         )
         return replace(self, rules=(rule, *self.rules))
-
-    def describe(self) -> str:
-        """One-line description of the rule set, for the node logs."""
-        where = self.source or "built-in defaults"
-        return f"{len(self.rules)} rule(s) from {where}"
 
 
 def _parse_traversable(value: Any, where: str, source: str) -> bool:

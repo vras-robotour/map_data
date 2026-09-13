@@ -37,16 +37,6 @@ class OverpassClient:
         )
         self.api = overpy.Overpass()
 
-    def query(self, query_str: str, retries: int | None = None) -> overpy.Result | None:
-        raw_text = self.query_raw(query_str, retries)
-        if not raw_text:
-            return None
-        try:
-            return self.api.parse_json(raw_text)
-        except (overpy.exception.OverPyException, json.JSONDecodeError):
-            logger.exception("Could not parse Overpass response")
-            return None
-
     def query_raw(
         self,
         query_str: str,
@@ -146,10 +136,5 @@ class OverpassClient:
                     wait_secs = min(int(m_wait.group(1)) + 2 if m_wait else 60, max_wait)
                     logger.info("Overpass busy, waiting %ss...", wait_secs)
                     time.sleep(wait_secs)
-                elif "Connected as:" in text and "Rate limit:" in text:
-                    # Alternative status format sometimes seen
-                    if "Available slots: 0" in text:
-                        logger.info("Overpass busy (0 slots), waiting 15s...")
-                        time.sleep(15)
         except requests.RequestException as e:
             logger.debug("Could not check Overpass status at %s: %s", status_url, e)

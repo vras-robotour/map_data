@@ -131,7 +131,7 @@ def test_exclude_ways_removes_stairs_and_their_crossroads(footway_network_mapdat
     _add_stairway(md, lat0, lon0)
     n_crossroads = len(md.crossroads_list)
 
-    removed = md.exclude_ways({"steps"})
+    removed = md.apply_traversability(TraversabilityRules().extend({"steps"}))
 
     assert removed == 1
     assert [w.id for w in md.footways_list] == [1, 2, 3]
@@ -144,7 +144,7 @@ def test_exclude_ways_empty_set_is_a_noop(footway_network_mapdata):
     md = MapData.load(str(path))
     _add_stairway(md, lat0, lon0)
 
-    assert md.exclude_ways(()) == 0
+    assert md.apply_traversability(TraversabilityRules().extend(())) == 0
     assert len(md.footways_list) == 4
 
 
@@ -172,7 +172,7 @@ def test_exclude_ways_on_the_stromovka_map():
     md = MapData.load(str(KRALOVSKA))
     n_crossroads = len(md.crossroads_list)
 
-    removed = md.exclude_ways({"steps"})
+    removed = md.apply_traversability(TraversabilityRules().extend({"steps"}))
 
     assert removed == 15  # the 15 stairways of the Královská obora map
     assert not any(w.tags.get("highway") == "steps" for w in md.footways_list)
@@ -297,9 +297,13 @@ def test_shipped_rules_on_the_stromovka_map():
     md = MapData.load(str(KRALOVSKA))
     rules = load_traversability()
 
-    summary = rules.summary(md.footways_list + md.roads_list)
+    counts: dict[str, int] = {}
+    for way in md.footways_list + md.roads_list:
+        verdict = rules.evaluate(way.tags)
+        if not verdict.traversable:
+            counts[verdict.reason] = counts.get(verdict.reason, 0) + 1
 
-    assert summary == {"stairs": 15, "soft surface": 6, "bridge": 13, "rough surface": 1}
+    assert counts == {"stairs": 15, "soft surface": 6, "bridge": 13, "rough surface": 1}
 
 
 #: Start/goal of the two routes the robot drove in Stromovka on 2026-09-08

@@ -39,6 +39,7 @@ from map_data.pathsolver.route import (
     route_to_dicts,
 )
 from map_data.traversability import TraversabilityRules
+from map_data.utils.config import package_share
 from map_data.utils.gpx import create_gpx_content, create_gpx_track
 
 logger = logging.getLogger("map_data_plan")
@@ -75,13 +76,7 @@ def resolve_mapdata(name: str) -> Path:
     p = Path(name).expanduser()
     if p.exists():
         return p.resolve()
-    try:
-        from ament_index_python.resources import get_resource
-
-        _, package_path = get_resource("packages", "map_data")
-        candidate = Path(package_path) / "share" / "map_data" / "data" / name
-    except (ImportError, LookupError):
-        candidate = (Path(__file__).parent / ".." / "data" / name).resolve()
+    candidate = package_share("data") / name
     if candidate.exists():
         return candidate
     raise SystemExit(f"map data file {name!r} not found (looked at {p} and {candidate})")
