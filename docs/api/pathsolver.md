@@ -28,7 +28,7 @@ See [Using `astar_search` directly](../planning.md#using-astar_search-directly) 
       show_source: true
       heading_level: 3
 
-::: map_data.pathsolver.graph_planner.GraphPlanner.a_star
+::: map_data.pathsolver.graph_planner.GraphPlanner._route_segment
     options:
       show_source: true
       heading_level: 3
@@ -53,11 +53,6 @@ See [Using `astar_search` directly](../planning.md#using-astar_search-directly) 
       heading_level: 3
 
 ::: map_data.pathsolver.rrt_star.RRTStar.find_path
-    options:
-      show_source: true
-      heading_level: 3
-
-::: map_data.pathsolver.rrt_star.RRTStar._is_collision
     options:
       show_source: true
       heading_level: 3
@@ -88,11 +83,6 @@ See [Using `astar_search` directly](../planning.md#using-astar_search-directly) 
       heading_level: 3
 
 ::: map_data.pathsolver.rrt_star.RRTStar._reconstruct_path
-    options:
-      show_source: true
-      heading_level: 3
-
-::: map_data.pathsolver.rrt_star.RRTStar._simplify_path
     options:
       show_source: true
       heading_level: 3
@@ -162,12 +152,8 @@ Plan a path through the cost grid.
 | `path` | `np.ndarray` of shape `(N, 2+)` — input waypoints in UTM metres |
 | `algorithm` | `"astar"` (Grid A*) or `"rrt"` (RRT*) |
 
-Returns `np.ndarray` (replanned path), `None` (cancelled), or `False` (no path found).
-Segments between consecutive waypoints are processed in parallel via `joblib`.
-
-#### `visualize(path, old_path=None)`
-
-Save a matplotlib debug plot as `replan.png` showing the cost grid, obstacles, and path.
+Returns `np.ndarray` (replanned path) or `None` (no path found, or the run was cancelled).
+Segments between consecutive waypoints are processed sequentially.
 
 ### Cancellation
 
@@ -183,13 +169,12 @@ cancel_replan_backend(transfer_id)
 ### Minimal usage example
 
 ```python
+import numpy as np
 from map_data.map_data import MapData
 from map_data.pathsolver.replan import ReplanPath, parse_args
 from map_data.utils.parsing import ways_to_shapely
-from map_data.utils.gpx import parse_path
 
 md = MapData.load("coords.mapdata")
-path_data = parse_path("waypoints.gpx")  # (utm_array, zone_num, zone_let)
 
 args = parse_args([])
 args.low = (md.min_x, md.min_y)
@@ -198,5 +183,7 @@ args.high = (md.max_x, md.max_y)
 replanner = ReplanPath(args, ways_to_shapely(md.barriers_list))
 replanner.fill_grid(md, highway_types=["footway"], max_path_dist=2.0)
 
-new_path = replanner.replan(path_data[0], algorithm="astar")
+start = np.array([md.min_x + 10, md.min_y + 10])
+goal = np.array([md.max_x - 10, md.max_y - 10])
+new_path = replanner.replan(np.array([start, goal]), algorithm="astar")
 ```

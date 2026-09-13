@@ -391,7 +391,7 @@ This planner is well-suited for route planning on well-mapped pedestrian or road
 
 `map_data/pathsolver/replan.py`
 
-Orchestrates cost-grid planning. Grid construction, smoothing, and visualization are handled by dedicated sub-modules:
+Orchestrates cost-grid planning. Grid construction and smoothing are handled by dedicated sub-modules:
 
 | Module | Class / function | Responsibility |
 |--------|-----------------|----------------|
@@ -399,7 +399,6 @@ Orchestrates cost-grid planning. Grid construction, smoothing, and visualization
 | `pathsolver/grid_astar.py` | `grid_astar` | Fast, optimal A* search on the discrete grid |
 | `pathsolver/rrt_star.py` | `RRTStar` | Sampling-based planner; supports Informed RRT* (ellipsoidal sampling after first path found) and adaptive neighbor radius (`γ·√(log n/n)`) for asymptotic optimality |
 | `pathsolver/smoothing.py` | `smooth_path` | Gradient-descent path smoothing with optional collision checking |
-| `pathsolver/visualizer.py` | `visualize_replan` | Matplotlib debug visualization of the grid, obstacles, and planned path |
 
 Each `PathGrid` cell cost is determined by:
 
@@ -473,16 +472,14 @@ map_data/                          # repository root
 │   │   ├── grid_astar.py          # grid A* search
 │   │   ├── replan.py              # ReplanPath orchestrator
 │   │   ├── rrt_star.py            # RRTStar (Informed + adaptive radius)
-│   │   ├── smoothing.py           # gradient-descent path smoother
-│   │   └── visualizer.py          # Matplotlib debug visualizer
+│   │   └── smoothing.py           # gradient-descent path smoother
 │   ├── utils/
 │   │   ├── config.py              # YAML loading + setup_logging()
-│   │   ├── gpx.py                 # GPX / YAML waypoint parsing
+│   │   ├── gpx.py                 # GPX writing (create_gpx_content / create_gpx_track)
 │   │   ├── overpass.py            # Overpass API client
 │   │   ├── parsing.py             # OSM feature classification & buffering
 │   │   ├── serialization.py       # .mapdata JSON read / write
-│   │   ├── way.py                 # Way dataclass
-│   │   └── points_to_graph_points.py
+│   │   └── way.py                 # Way dataclass
 │   └── viewer/
 │       ├── app.py                 # Flask app factory + SocketIO
 │       ├── routes.py              # REST API endpoints

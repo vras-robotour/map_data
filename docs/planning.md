@@ -1,35 +1,8 @@
 # Path Planning
 
 The `pathsolver` module provides standalone planning capabilities — no ROS2 context is required.
-You can use the `replan` CLI tool to process existing GPX tracks, or import the planners directly as a Python library.
-
-## CLI Tool: `replan`
-
-The `replan` tool refines an existing GPX track using one of the available pathfinding algorithms
-and the obstacle information stored in a `.mapdata` file.
-
-```bash
-# Replan a GPX track using Grid A* and save the result
-python3 -m map_data.pathsolver.replan \
-    --path data/coords.gpx \
-    --file coords.mapdata \
-    --save data/planned.gpx \
-    --visualize
-```
-
-### Parameters
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--path <file>` | — | Input `.gpx` or `.yaml` file containing the initial path |
-| `--file <file>` | — | `.mapdata` file used for obstacle and footway information |
-| `--cell_size <meters>` | `0.25` | Grid resolution for all-terrain planning |
-| `--inflate_obstacles <meters>` | `0.25` | Safety buffer added around barrier polygons |
-| `--max_path_dist <meters>` | `2.0` | Max distance from a known way at which a cell receives a way-influenced cost |
-| `--simplify_path` | `false` | Remove redundant waypoints using Douglas-Peucker simplification |
-| `--smooth_path` | `false` | Apply gradient-descent smoothing to the planned path |
-| `--visualize` | `false` | Show a matplotlib plot of the planned path and obstacles |
-| `--save <file>` | — | Save the resulting path as a GPX file |
+Use the `map_data_plan` CLI to process waypoints against a `.mapdata` file, or import the
+planners directly as a Python library.
 
 ## Offline route planning: `map_data_plan` and the `route_planner` action
 
@@ -249,13 +222,12 @@ result = planner.plan(np.array([start, goal]))  # np.ndarray or None
 Grid-based local replanning around OSM barriers. See the [ReplanPath API reference](api/pathsolver.md#replanpath) for full details.
 
 ```python
+import numpy as np
 from map_data.map_data import MapData
 from map_data.pathsolver.replan import ReplanPath, parse_args
 from map_data.utils.parsing import ways_to_shapely
-from map_data.utils.gpx import parse_path, utm_path_to_latlon, create_gpx_content
 
 md = MapData.load("coords.mapdata")
-path_data = parse_path("waypoints.gpx")  # returns (utm_array, zone_num, zone_let)
 
 args = parse_args([])
 args.low = (md.min_x, md.min_y)
@@ -267,11 +239,10 @@ args.smooth_path = False
 
 replanner = ReplanPath(args, ways_to_shapely(md.barriers_list))
 replanner.fill_grid(md, highway_types=["footway"], max_path_dist=2.0)
-new_path = replanner.replan(path_data[0], algorithm="astar")
 
-wgs84 = utm_path_to_latlon(new_path, path_data[1], path_data[2])
-with open("planned.gpx", "w") as f:
-    f.write(create_gpx_content(wgs84))
+start = np.array([md.min_x + 10, md.min_y + 10])
+goal = np.array([md.max_x - 10, md.max_y - 10])
+new_path = replanner.replan(np.array([start, goal]), algorithm="astar")
 ```
 
 ## Available Algorithms
