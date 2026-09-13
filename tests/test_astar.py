@@ -23,7 +23,7 @@ def test_astar_grid_simple_success():
     obstacles = []
     replanner = ReplanPath(args, obstacles)
     # Mock a grid where everything is passable (cost 0)
-    replanner._reshaped_grid_cache = np.zeros((20, 20), dtype=float)
+    replanner.path_grid.grid_2d_cache = np.zeros((20, 20), dtype=float)
 
     start = (1.0, 1.0)
     goal = (9.0, 9.0)
@@ -45,7 +45,9 @@ def test_astar_grid_with_obstacle():
     replanner = ReplanPath(args, obstacles)
     # Fill grid with base cost 0.5 (random terrain)
     grid = np.full((20, 20), 0.5, dtype=float)
-    replanner._reshaped_grid_cache = replanner._burn_obstacles_into_grid(grid)
+    replanner.path_grid.grid_2d_cache = replanner.path_grid.burn_obstacles(
+        grid, replanner.obstacles
+    )
 
     start = (2.0, 2.0)
     goal = (8.0, 8.0)
@@ -67,7 +69,9 @@ def test_astar_grid_no_path():
 
     replanner = ReplanPath(args, obstacles)
     grid = np.zeros((20, 20), dtype=float)
-    replanner._reshaped_grid_cache = replanner._burn_obstacles_into_grid(grid)
+    replanner.path_grid.grid_2d_cache = replanner.path_grid.burn_obstacles(
+        grid, replanner.obstacles
+    )
 
     start = (1.0, 1.0)
     goal = (9.0, 9.0)
@@ -113,7 +117,7 @@ def test_astar_grid_with_obstacle_and_path():
     replanner = ReplanPath(args, obstacles)
     # ReplanPath.grid needs to be initialized for fill_grid
     # ReplanPath.grid is expected to have shape (N, 3) before padding to (N, 4) in fill_grid
-    replanner.grid = replanner._create_grid(args.low, args.high, args.cell_size)
+    replanner.grid = replanner.path_grid.create_empty_grid()
 
     # Mock points for the nodes
     points = {
@@ -165,7 +169,7 @@ def test_astar_grid_goal_outside_boundary():
     """
     args = Args()
     replanner = ReplanPath(args, [])
-    replanner._reshaped_grid_cache = np.zeros((20, 20), dtype=float)
+    replanner.path_grid.grid_2d_cache = np.zeros((20, 20), dtype=float)
 
     start = (1.0, 1.0)
     goal = (15.0, 15.0)  # beyond 10x10 grid
@@ -180,7 +184,7 @@ def test_astar_grid_start_equals_goal_same_cell():
     """
     args = Args()
     replanner = ReplanPath(args, [])
-    replanner._reshaped_grid_cache = np.zeros((20, 20), dtype=float)
+    replanner.path_grid.grid_2d_cache = np.zeros((20, 20), dtype=float)
 
     start = (5.0, 5.0)
     goal = (5.05, 5.05)  # floor(5.05/0.5)=10 == floor(5.0/0.5)=10

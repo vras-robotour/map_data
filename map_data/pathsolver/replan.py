@@ -2,32 +2,25 @@
 
 import argparse
 import logging
-import sys
 import threading
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import shapely as sh
 from shapely.geometry import LineString
 
-from map_data.map_data import MapData
-from map_data.pathsolver.grid_astar import grid_astar, simplify_path_checked
+from map_data.pathsolver.grid_astar import GRID_COST_WEIGHT, grid_astar, simplify_path_checked
 from map_data.pathsolver.rrt_star import RRTStar
-from map_data.pathsolver.way_cost import (
-    FALLBACK_HIGHWAY_COSTS,
-    FALLBACK_PATH_COST_CAP,
-    FALLBACK_SURFACE_COSTS,
-)
+from map_data.pathsolver.way_cost import load_cost_tables
 from map_data.utils.config import load_config
-from map_data.utils.gpx import create_gpx_content, parse_path, utm_path_to_latlon
-from map_data.utils.parsing import ways_to_shapely
 
 from .grid_constructor import PathGrid
 
 # Decoupled components
 from .smoothing import smooth_path
-from .visualizer import visualize_replan
+
+if TYPE_CHECKING:
+    from map_data.map_data import MapData
 
 logger = logging.getLogger(__name__)
 
@@ -63,15 +56,6 @@ def load_planner_defaults() -> dict[str, Any]:
 
 
 class ReplanPath:
-    # These will be populated from config or fallback to hardcoded defaults if config missing
-    _DEFAULTS: dict[str, Any] = load_planner_defaults()
-    # The tables themselves live in config/planner_defaults.yaml and are shared
-    # with the graph planner through map_data.pathsolver.way_cost.
-    HIGHWAY_COSTS: dict[str, float] = _DEFAULTS.get("highway_costs", FALLBACK_HIGHWAY_COSTS)
-    SURFACE_COSTS: dict[str, float] = _DEFAULTS.get("surface_costs", FALLBACK_SURFACE_COSTS)
-    DEFAULT_OFF_PATH_COST: float = _DEFAULTS.get("default_off_path_cost", 0.9)
-    PATH_COST_CAP: float = _DEFAULTS.get("path_cost_cap", FALLBACK_PATH_COST_CAP)
-
     def __init__(
         self,
         args: argparse.Namespace,
@@ -83,17 +67,28 @@ class ReplanPath:
     ) -> None:
         self.args = args
         self.transfer_id = transfer_id
-        _defaults = self._DEFAULTS
+        defaults = load_planner_defaults()
         self.grid_cost_weight = (
-            grid_cost_weight
-            if grid_cost_weight is not None
-            else _defaults.get("grid_cost_weight", 5.0)
+            grid_cost_weight if grid_cost_weight is not None else GRID_COST_WEIGHT
         )
 
-        if highway_costs is not None:
-            self.HIGHWAY_COSTS = highway_costs
-        if surface_costs is not None:
-            self.SURFACE_COSTS = surface_costs
+        # The highway/surface cost tables and their cap are the one place that
+        # already knows how to fall back to config/planner_defaults.yaml
+        # (map_data.pathsolver.way_cost, shared with the graph planner) — don't
+        # re-derive them here.
+        self.HIGHWAY_COSTS, self.SURFACE_COSTS, self.PATH_COST_CAP = load_cost_tables(
+            highway_costs,
+            surface_costs,
+        )
+        self.DEFAULT_OFF_PATH_COST = float(defaults.get("default_off_path_cost", 0.9))
+
+        # RRT* settings: informed sampling and post-goal improvement are on by
+        # default in production (see RRTStar.find_path), capped by improve_iter.
+        rrt_defaults = defaults.get("rrt", {})
+        self.rrt_informed = bool(rrt_defaults.get("informed", True))
+        self.rrt_improve_after_goal = bool(rrt_defaults.get("improve_after_goal", True))
+        self.rrt_improve_iter = int(rrt_defaults.get("improve_iter", 200))
+        self.rrt_adaptive_radius = bool(rrt_defaults.get("adaptive_radius", True))
 
         # Use the decoupled PathGrid component
         self.path_grid = PathGrid(
@@ -117,7 +112,6 @@ class ReplanPath:
 
         # Spatial index for faster collision checking
         self.obstacles_tree = sh.STRtree(self.obstacles) if self.obstacles else None
-        self.debug = False
 
     @property
     def grid(self) -> np.ndarray:
@@ -130,41 +124,22 @@ class ReplanPath:
     def grid(self, value: np.ndarray) -> None:
         self.path_grid.grid = value
 
-    @property
-    def _reshaped_grid_cache(self) -> np.ndarray | None:
+    def _ensure_grid_2d_cache(self) -> np.ndarray:
         """
-        Compatibility property for the 2D cost grid.
+        Build (once) and return the obstacle-burned 2D cost grid.
+
+        ``replan()``, ``_astar()`` and ``_rrt_star()`` all need this and none
+        of them should redundantly rebuild it, so they all call this instead.
         """
+        if self.path_grid.grid_2d_cache is None:
+            grid_2d = self.path_grid.get_grid_2d()
+            self.path_grid.grid_2d_cache = self.path_grid.burn_obstacles(
+                grid_2d,
+                self.obstacles,
+            )
         return self.path_grid.grid_2d_cache
 
-    @_reshaped_grid_cache.setter
-    def _reshaped_grid_cache(self, value: np.ndarray | None) -> None:
-        self.path_grid.grid_2d_cache = value
-
     def replan(self, path: np.ndarray, algorithm: str = "astar") -> np.ndarray | None:
-        def process_segment(
-            i: int,
-            path: np.ndarray,
-            _args: argparse.Namespace,
-        ) -> list[np.ndarray] | None:
-            if _is_cancelled(self.transfer_id):
-                return None
-
-            start = path[i]
-            goal = path[i + 1]
-            segment_path = [start[:2]]
-            path_seg = LineString([start[:2], goal[:2]])
-            if self._colides(path_seg):
-                if algorithm == "rrt":
-                    way = self._rrt_star(start[:2], goal[:2])
-                else:
-                    way = self._astar(start[:2], goal[:2])
-
-                if way is None:
-                    return None
-                segment_path.extend(way[1:-1])
-            return segment_path
-
         # A cancel targeting a *previous* replan with the same transfer_id may
         # arrive after that run already returned; discard any such stale ID on
         # entry so it cannot instantly abort this run, and again on exit (via
@@ -175,22 +150,29 @@ class ReplanPath:
             # This is pure-Python, GIL-bound work, so it runs sequentially.
             # Warm the grid cache once up front to avoid every segment lazily
             # (and redundantly) rebuilding it in _astar/_rrt_star.
-            if self.path_grid.grid_2d_cache is None:
-                grid_2d = self.path_grid.get_grid_2d()
-                self.path_grid.grid_2d_cache = self.path_grid.burn_obstacles(
-                    grid_2d,
-                    self.obstacles,
-                )
+            self._ensure_grid_2d_cache()
 
             new_path: list[np.ndarray] = []
             for i in range(len(path) - 1):
-                segment_path = process_segment(i, path, self.args)
-
                 if _is_cancelled(self.transfer_id):
                     return None
 
-                if segment_path is None:
-                    logger.warning("%s failed to find a path.", algorithm)
+                start = path[i]
+                goal = path[i + 1]
+                segment_path = [start[:2]]
+                path_seg = LineString([start[:2], goal[:2]])
+                if self._colides(path_seg):
+                    if algorithm == "rrt":
+                        way = self._rrt_star(start[:2], goal[:2])
+                    else:
+                        way = self._astar(start[:2], goal[:2])
+
+                    if way is None:
+                        logger.warning("%s failed to find a path.", algorithm)
+                        return None
+                    segment_path.extend(way[1:-1])
+
+                if _is_cancelled(self.transfer_id):
                     return None
                 new_path.extend(segment_path)
 
@@ -219,7 +201,10 @@ class ReplanPath:
         if getattr(self.args, "smooth_path", False):
             path = smooth_path(path, collision_check_func=self._colides)
 
-        # 3. Final Douglas-Peucker simplification on the whole path.
+        # 3. Final Douglas-Peucker simplification on the whole path. This is
+        #    the *only* simplification pass (grid_astar and RRTStar hand back
+        #    their raw paths): running it once here, over the whole assembled
+        #    route, does what per-segment simplification did twice already.
         #    Every shortcut the simplification introduces is collision-checked
         #    against the obstacle polygons; colliding shortcuts keep their
         #    original vertices so the path cannot chord into an obstacle.
@@ -233,36 +218,33 @@ class ReplanPath:
         return path
 
     def _rrt_star(self, start: np.ndarray, goal: np.ndarray) -> np.ndarray | None:
-        if self.path_grid.grid_2d_cache is None:
-            grid_2d = self.path_grid.get_grid_2d()
-            self.path_grid.grid_2d_cache = self.path_grid.burn_obstacles(grid_2d, self.obstacles)
-
         planner = RRTStar(
             start=start,
             goal=goal,
             obstacles=self.obstacles,
             obstacles_tree=self.obstacles_tree,
-            grid=self.path_grid.grid_2d_cache,
+            grid=self._ensure_grid_2d_cache(),
             low=self.args.low,
             grid_scale=self.args.cell_size,
             grid_cost_weight=self.grid_cost_weight,
             transfer_id=self.transfer_id,
-            simplify=self.args.simplify_path,
+            informed=self.rrt_informed,
+            improve_after_goal=self.rrt_improve_after_goal,
+            improve_iter=self.rrt_improve_iter,
+            adaptive_radius=self.rrt_adaptive_radius,
         )
         return planner.find_path()
 
     def _astar(self, start: np.ndarray, goal: np.ndarray) -> np.ndarray | None:
-        if self.path_grid.grid_2d_cache is None:
-            grid_2d = self.path_grid.get_grid_2d()
-            self.path_grid.grid_2d_cache = self.path_grid.burn_obstacles(grid_2d, self.obstacles)
-
         return grid_astar(
-            self.path_grid.grid_2d_cache,
+            self._ensure_grid_2d_cache(),
             start,
             goal,
             self.args.low,
             self.args.cell_size,
-            simplify_path=self.args.simplify_path,
+            # The final pass in _post_process_path is the only simplification;
+            # doing it again per segment here would just redo that work.
+            simplify_path=False,
             grid_cost_weight=self.grid_cost_weight,
         )
 
@@ -272,26 +254,9 @@ class ReplanPath:
         intersecting_indices = self.obstacles_tree.query(path_seg, predicate="intersects")
         return len(intersecting_indices) > 0
 
-    def _create_grid(
-        self,
-        _low: tuple[float, float],
-        _high: tuple[float, float],
-        _cell_size: float = 0.25,
-    ) -> np.ndarray:
-        """
-        Compatibility delegate for _create_grid.
-        """
-        return self.path_grid.create_empty_grid()
-
-    def _burn_obstacles_into_grid(self, grid_2d: np.ndarray) -> np.ndarray:
-        """
-        Compatibility delegate for _burn_obstacles_into_grid.
-        """
-        return self.path_grid.burn_obstacles(grid_2d, self.obstacles)
-
     def fill_grid(
         self,
-        map_data: MapData,
+        map_data: "MapData",
         highway_types: list[str] | None = None,
         max_path_dist: float = 2.0,
     ) -> None:
@@ -305,79 +270,24 @@ class ReplanPath:
             max_path_dist=max_path_dist,
         )
 
-    def visualize(self, path: np.ndarray | None, old_path: np.ndarray | None = None) -> None:
-        """
-        Visualize the grid, obstacles, and path using Matplotlib.
-        """
-        grid_2d = self.path_grid.get_grid_2d()
-        visualize_replan(
-            path,
-            grid_2d,
-            self.args.low,
-            self.args.high,
-            self.obstacles,
-            old_path=old_path,
-        )
-
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--path", type=str, default="data/coords.gpx", help="Path file")
-    parser.add_argument("--file", type=str, default=None, help="Map data file")
-    parser.add_argument("--simplify_path", action="store_true", help="Simplify path")
-    parser.add_argument("--cell_size", type=float, default=0.25, help="Cell size for the grid")
-    parser.add_argument(
-        "--inflate_obstacles",
-        type=float,
-        default=0.25,
-        help="Inflate obstacles by this amount",
+    """
+    Default parameter namespace for :class:`ReplanPath`.
+
+    Not a CLI parser — the standalone ``replan`` script this once served no
+    longer exists (see ``map_data_plan`` / :mod:`map_data.plan_route_cli`
+    instead). This is just the shared way callers (the viewer, and
+    :func:`~map_data.pathsolver.route.plan_route`) build a defaults object
+    and override the fields they care about (``low``, ``high``,
+    ``cell_size``, ...).
+    """
+    del args  # nothing left parses real CLI arguments here
+    return argparse.Namespace(
+        low=(0.0, 0.0),
+        high=(0.0, 0.0),
+        cell_size=0.25,
+        inflate_obstacles=0.25,
+        simplify_path=True,
+        smooth_path=False,
     )
-    parser.add_argument("--smooth_path", action="store_true", help="Smooth path")
-    parser.add_argument(
-        "--max_path_dist",
-        type=float,
-        default=2.0,
-        help="Maximum distance from path to be traversable",
-    )
-    parser.add_argument("--save", type=str, default=None, help="Save path to file")
-    parser.add_argument("--visualize", action="store_true", help="Visualize the path")
-
-    return parser.parse_args(args)
-
-
-if __name__ == "__main__":
-    args = parse_args()
-
-    base_dir = Path(__file__).parent
-    path_file = (base_dir / ".." / args.path).resolve()
-    path_data = parse_path(str(path_file))
-
-    if args.file is None:
-        # parse_path() returns [] on failure; MapData(..., coords_type="array")
-        # will raise on the malformed input, which is desired CLI-script behavior.
-        map_data = MapData(path_data, coords_type="array")  # type: ignore[arg-type]
-        map_data.run_queries()
-        ret = map_data.run_parse()
-        if ret:
-            sys.exit(1)
-    else:
-        map_file = (base_dir / ".." / args.file).resolve()
-        map_data = MapData.load(str(map_file))
-
-    args.low = (map_data.min_x, map_data.min_y)
-    args.high = (map_data.max_x, map_data.max_y)
-    obstacles = ways_to_shapely(map_data.barriers_list)
-
-    replanner = ReplanPath(args, obstacles)
-    replanner.fill_grid(map_data, max_path_dist=args.max_path_dist)
-
-    new_path = replanner.replan(path_data[0], algorithm="astar")
-
-    if args.save and new_path is not None:
-        new_wgs_path = utm_path_to_latlon(new_path, path_data[1], path_data[2])
-        gpx_content = create_gpx_content(new_wgs_path, creator_name="A* Replanner")
-        with Path(args.save).open("w") as f:
-            f.write(gpx_content)
-
-    if args.visualize:
-        replanner.visualize(new_path, path_data[0])

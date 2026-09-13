@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import shapely as sh
-from matplotlib.path import Path
 from scipy.spatial import cKDTree
 
 from map_data.pathsolver.way_cost import way_cost
@@ -261,25 +260,13 @@ class PathGrid:
                 if not np.any(mask_bbox):
                     continue
 
-                if obstacle.geom_type == "Polygon":
-                    poly_path = Path(np.array(obstacle.exterior.coords))
-                    mask_inside = poly_path.contains_points(path_grid[mask_bbox, :2])
-                    for interior in obstacle.interiors:
-                        hole_path = Path(np.array(interior.coords))
-                        mask_inside &= ~hole_path.contains_points(path_grid[mask_bbox, :2])
+                if obstacle.geom_type in ("Polygon", "MultiPolygon"):
+                    mask_inside = sh.contains_xy(
+                        obstacle,
+                        path_grid[mask_bbox, 0],
+                        path_grid[mask_bbox, 1],
+                    )
                     path_grid[mask_bbox, 3] = np.where(mask_inside, 1.0, path_grid[mask_bbox, 3])
-                elif obstacle.geom_type == "MultiPolygon":
-                    for poly in obstacle.geoms:
-                        poly_path = Path(np.array(poly.exterior.coords))
-                        mask_inside = poly_path.contains_points(path_grid[mask_bbox, :2])
-                        for interior in poly.interiors:
-                            hole_path = Path(np.array(interior.coords))
-                            mask_inside &= ~hole_path.contains_points(path_grid[mask_bbox, :2])
-                        path_grid[mask_bbox, 3] = np.where(
-                            mask_inside,
-                            1.0,
-                            path_grid[mask_bbox, 3],
-                        )
 
         # 3. Process ways to set their costs
         path_points = []
@@ -367,8 +354,8 @@ class PathGrid:
         Set cells covered by obstacle geometries to ``np.inf`` in place.
 
         For each obstacle, only the sub-rectangle of cell indices overlapping
-        its bounding box is tested (via `matplotlib.path.Path.contains_points`
-        against a mesh of that sub-region's cell centers), so cost is roughly
+        its bounding box is tested (via `shapely.contains_xy` against a mesh
+        of that sub-region's cell centers), so cost is roughly
         linear in obstacle count rather than total grid size. ``Polygon``
         interior rings are treated as holes (points inside a hole are not
         burned). Geometry types other than ``Polygon``/``MultiPolygon`` are
@@ -418,33 +405,10 @@ class PathGrid:
             xv, yv = np.meshgrid(x, y)
             points_bbox = np.stack((xv.ravel(), yv.ravel()), axis=-1)
 
-            if obstacle.geom_type == "Polygon":
-                mask = (
-                    Path(np.array(obstacle.exterior.coords))
-                    .contains_points(points_bbox)
-                    .reshape(len(y), len(x))
+            if obstacle.geom_type in ("Polygon", "MultiPolygon"):
+                mask = sh.contains_xy(obstacle, points_bbox[:, 0], points_bbox[:, 1]).reshape(
+                    len(y),
+                    len(x),
                 )
-                for interior in obstacle.interiors:
-                    hole_mask = (
-                        Path(np.array(interior.coords))
-                        .contains_points(points_bbox)
-                        .reshape(len(y), len(x))
-                    )
-                    mask &= ~hole_mask
                 grid_2d[iy_min : iy_max + 1, ix_min : ix_max + 1][mask] = np.inf
-            elif obstacle.geom_type == "MultiPolygon":
-                for poly in obstacle.geoms:
-                    mask = (
-                        Path(np.array(poly.exterior.coords))
-                        .contains_points(points_bbox)
-                        .reshape(len(y), len(x))
-                    )
-                    for interior in poly.interiors:
-                        hole_mask = (
-                            Path(np.array(interior.coords))
-                            .contains_points(points_bbox)
-                            .reshape(len(y), len(x))
-                        )
-                        mask &= ~hole_mask
-                    grid_2d[iy_min : iy_max + 1, ix_min : ix_max + 1][mask] = np.inf
         return grid_2d

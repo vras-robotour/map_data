@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import shapely as sh
 import utm
 from shapely import geometry
 
@@ -91,10 +92,10 @@ class RouteResult:
 
 def path_length(path_utm: np.ndarray) -> float:
     """Polyline length (m) of an ``(N, 2+)`` UTM array."""
-    if len(path_utm) < 2:
+    pts = np.asarray(path_utm, dtype=float)
+    if len(pts) < 2:
         return 0.0
-    seg = np.diff(np.asarray(path_utm, dtype=float)[:, :2], axis=0)
-    return float(np.sum(np.hypot(seg[:, 0], seg[:, 1])))
+    return float(geometry.LineString(pts[:, :2]).length)
 
 
 def densify(path_utm: np.ndarray, spacing: float) -> np.ndarray:
@@ -107,13 +108,7 @@ def densify(path_utm: np.ndarray, spacing: float) -> np.ndarray:
     pts = np.asarray(path_utm, dtype=float)
     if spacing <= 0.0 or len(pts) < 2:
         return pts
-    out = [pts[0]]
-    for a, b in zip(pts[:-1], pts[1:], strict=True):
-        d = float(np.hypot(*(b[:2] - a[:2])))
-        n = max(1, int(np.ceil(d / spacing)))
-        for i in range(1, n + 1):
-            out.append(a + (b - a) * (i / n))
-    return np.array(out)
+    return np.array(sh.segmentize(geometry.LineString(pts[:, :2]), spacing).coords)
 
 
 def latlon_to_utm_path(
@@ -152,10 +147,6 @@ def _grid_bbox(
         min(md.max_y, float(np.max(utm_path[:, 1])) + GRID_MARGIN_M),
     )
     return p_low, p_high
-
-
-def grid_cell_count(area_m2: float, cell_size: float) -> float:
-    return area_m2 / (cell_size * cell_size)
 
 
 def plan_route(
@@ -260,7 +251,7 @@ def plan_route(
             sub_algorithm = algorithm
         p_low, p_high = _grid_bbox(md, utm_path)
         area_m2 = max(0.0, p_high[0] - p_low[0]) * max(0.0, p_high[1] - p_low[1])
-        cells = grid_cell_count(area_m2, cell_size)
+        cells = area_m2 / (cell_size * cell_size)
         if cells > max_grid_cells:
             raise RoutePlanningError(
                 "grid_too_large",
@@ -273,7 +264,6 @@ def plan_route(
         args.smooth_path = smooth_path
         args.cell_size = cell_size
         args.inflate_obstacles = inflate_obstacles
-        args.visualize = False
         args.low = p_low
         args.high = p_high
 

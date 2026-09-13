@@ -8,7 +8,6 @@ space with obstacle avoidance and cost-aware steering.
 import logging
 import math
 import random
-from collections.abc import Iterator
 
 import numpy as np
 import shapely as sh
@@ -16,7 +15,7 @@ from scipy.spatial import cKDTree
 from shapely.geometry import LineString, Point
 from shapely.strtree import STRtree
 
-from map_data.utils.config import load_config
+from map_data.pathsolver.grid_astar import GRID_COST_WEIGHT, _bresenham_cells
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +23,6 @@ logger = logging.getLogger(__name__)
 # Balances rebuild cost (O(n log n)) against linear-scan cost for the unindexed tail.
 _KDTREE_REBUILD_INTERVAL = 50
 
-_DEFAULTS = load_config("planner_defaults.yaml")
-GRID_COST_WEIGHT = _DEFAULTS.get("grid_cost_weight", 5.0)
 GOAL_SAMPLE_BIAS = 0.1
 
 
@@ -64,9 +61,9 @@ class RRTStar:
         traversability_threshold: float = 10.0,  # inf is blocked, high values are expensive
         grid_cost_weight: float = GRID_COST_WEIGHT,
         *,
-        simplify: bool = True,
         transfer_id: str | None = None,
         improve_after_goal: bool = False,
+        improve_iter: int = 200,
         informed: bool = True,
         adaptive_radius: bool = True,
     ) -> None:
@@ -82,8 +79,9 @@ class RRTStar:
             Goal position as a 2-element array ``[x, y]`` in world
             coordinates.
         obstacles : list
-            List of Shapely geometries representing hard barriers. Used
-            together with *obstacles_tree* for fast spatial queries.
+            Shapely geometries representing hard barriers. Not read directly
+            (collision checks go through *obstacles_tree*); accepted so
+            callers can pass the same pair they already have.
         obstacles_tree : STRtree or None
             Pre-built Shapely STRtree index over *obstacles*. Pass ``None``
             to skip polygon-based collision checking (grid only).
@@ -106,21 +104,32 @@ class RRTStar:
         traversability_threshold : float
             Grid cost at which a cell is considered an obstacle
             (default ``10.0``). ``np.inf`` marks cells as hard obstacles.
-        simplify : bool
-            If ``True``, post-process the raw node path with a greedy
-            line-of-sight simplification before returning (default ``True``).
         transfer_id : str or None
             Optional identifier used to check for external cancellation
             signals during planning. Pass ``None`` to disable.
         improve_after_goal : bool
             If ``True``, continue iterating after the goal is first reached
-            to find a lower-cost path. If ``False`` (default), return as
-            soon as the goal is reached.
+            to find a lower-cost path via informed sampling and rewiring. If
+            ``False`` (default), return as soon as the goal is reached.
+        improve_iter : int
+            With *improve_after_goal*, the most extra iterations spent
+            improving once the goal is first reached (default ``200``);
+            *max_iter* still caps the total.
+        informed : bool
+            If ``True`` (default), sample from the informed ellipse once a
+            solution exists (see :meth:`_sample_informed`), shrinking as
+            *improve_after_goal* lowers the best cost found.
+        adaptive_radius : bool
+            If ``True`` (default), shrink the rewiring radius as the tree
+            grows per the RRT* asymptotic-optimality formula, instead of
+            using a fixed *neighbor_radius*.
 
         """
         self.start = start
         self.goal = goal
-        self.obstacles = obstacles
+        # obstacles itself is not read (collision checks go through
+        # obstacles_tree); kept as a parameter so callers can pass the same
+        # (geometries, tree) pair they already have.
         self.obstacles_tree = obstacles_tree
         self.grid = grid  # (Y, X)
         self.grid_shape = grid.shape
@@ -141,9 +150,9 @@ class RRTStar:
         self.goal_tolerance = step_size
         self.traversability_threshold = traversability_threshold
         self.grid_cost_weight = grid_cost_weight
-        self.simplify = simplify
         self.transfer_id = transfer_id
         self.improve_after_goal = improve_after_goal
+        self.improve_iter = improve_iter
         self.informed = informed
         self.adaptive_radius = adaptive_radius
         self._best_cost: float = float("inf")
@@ -195,81 +204,23 @@ class RRTStar:
             self._trav_xs = None
             self._trav_ys = None
 
-    def _is_collision(self, point1: np.ndarray, point2: np.ndarray | None = None) -> bool:
+    def _point_blocked(self, point: np.ndarray) -> bool:
         """
-        Return ``True`` if a point or segment intersects an obstacle.
+        Return ``True`` if *point* itself sits on an obstacle or a blocked cell.
 
-        Checks both the Shapely obstacle polygons (via STRtree) and the cost
-        grid (via Bresenham rasterisation). A point is in collision if its
-        grid cost meets or exceeds *traversability_threshold*; a segment is
-        in collision if any traversed cell does.
+        Used only to reject a freshly steered point before its segment from
+        the nearest node is costed (:meth:`_segment_cost` already re-checks
+        every cell the segment crosses, including this endpoint).
         """
-        if self.obstacles_tree:
-            geom = Point(point1) if point2 is None else LineString([point1, point2])
-            if len(self.obstacles_tree.query(geom, predicate="intersects")) > 0:
-                return True
-
-        if point2 is None:
-            return self._get_grid_cost(point1) >= self.traversability_threshold
-
-        p1_grid = (
-            int((point1[0] - self.low[0]) / self.grid_scale),
-            int((point1[1] - self.low[1]) / self.grid_scale),
-        )
-        p2_grid = (
-            int((point2[0] - self.low[0]) / self.grid_scale),
-            int((point2[1] - self.low[1]) / self.grid_scale),
-        )
-
-        for px, py in self._bresenham(p1_grid, p2_grid):
-            in_bounds = 0 <= px < self.grid_shape[1] and 0 <= py < self.grid_shape[0]
-            if in_bounds and self.grid[py, px] >= self.traversability_threshold:
-                return True
-        return False
-
-    def _bresenham(
-        self,
-        start: tuple[int, int],
-        goal: tuple[int, int],
-    ) -> Iterator[tuple[int, int]]:
-        """
-        Yield integer grid cells along the line from *start* to *goal* (Bresenham).
-        """
-        x0, y0 = start
-        x1, y1 = goal
-        dx, dy = abs(x1 - x0), abs(y1 - y0)
-        x, y = x0, y0
-        sx = -1 if x0 > x1 else 1
-        sy = -1 if y0 > y1 else 1
-        if dx > dy:
-            err = dx / 2.0
-            while x != x1:
-                yield (x, y)
-                err -= dy
-                if err < 0:
-                    y += sy
-                    err += dx
-                x += sx
-        else:
-            err = dy / 2.0
-            while y != y1:
-                yield (x, y)
-                err -= dx
-                if err < 0:
-                    x += sx
-                    err += dy
-                y += sy
-        yield (x1, y1)
-
-    def _get_grid_cost(self, point: np.ndarray) -> float:
-        """
-        Return the grid cost at *point*, clamped to grid bounds.
-        """
+        if self.obstacles_tree and len(
+            self.obstacles_tree.query(Point(point), predicate="intersects"),
+        ):
+            return True
         ix = int((point[0] - self.low[0]) / self.grid_scale)
         iy = int((point[1] - self.low[1]) / self.grid_scale)
         ix = np.clip(ix, 0, self.grid_shape[1] - 1)
         iy = np.clip(iy, 0, self.grid_shape[0] - 1)
-        return float(self.grid[iy, ix])
+        return float(self.grid[iy, ix]) >= self.traversability_threshold
 
     def _set_parent(self, idx: int, parent_idx: int, new_cost: float) -> None:
         """
@@ -373,24 +324,18 @@ class RRTStar:
             return target
         return start + (direction / dist) * self.step_size
 
-    def _get_near_nodes(self, new_point: np.ndarray, radius: float | None = None) -> list[int]:
+    def _get_near_nodes(self, new_point: np.ndarray, radius: float) -> list[int]:
         """
         Return indices of all tree nodes within *radius* of *new_point*.
-
-        *radius* defaults to ``self.neighbor_radius`` when not supplied.
         """
-        r = radius if radius is not None else self.neighbor_radius
         n = len(self.nodes)
         new_idx = n - 1  # node just appended by the caller
-        r2 = r**2
+        r2 = radius**2
 
-        if self._kdtree is None:
-            sq_dists = ((self._nodes_buf[:n] - new_point) ** 2).sum(axis=1)
-            return list(np.where((sq_dists < r2) & (sq_dists > 0))[0])
-
-        # KD-tree covers [0, _kdtree_n); _nearest_node always rebuilds first so
-        # new_point is never included in the tree.
-        result: list[int] = list(self._kdtree.query_ball_point(new_point, r))
+        # self._kdtree is never None here: the caller always runs
+        # _nearest_node() first this iteration, which builds it.
+        # KD-tree covers [0, _kdtree_n); new_point is never included in it.
+        result: list[int] = list(self._kdtree.query_ball_point(new_point, radius))  # type: ignore[union-attr]
 
         # Linear scan over nodes added since the last rebuild, excluding new_point itself
         for i in range(self._kdtree_n, n):
@@ -432,7 +377,7 @@ class RRTStar:
             int((end[0] - self.low[0]) / self.grid_scale),
             int((end[1] - self.low[1]) / self.grid_scale),
         )
-        bres_line = self._bresenham(p1_grid, p2_grid)
+        bres_line = _bresenham_cells(p1_grid, p2_grid)
 
         total_grid_cost = 0.0
         count = 0
@@ -469,10 +414,15 @@ class RRTStar:
         from .replan import _is_cancelled
 
         goal_idx = None
+        goal_found_iter = None
 
-        for _ in range(self.max_iter):
+        # ponytail: improvement is capped in iterations, not seconds; add a
+        # wall-clock budget if per-iteration cost varies too much across maps.
+        for i in range(self.max_iter):
             if _is_cancelled(self.transfer_id):
                 return None
+            if goal_found_iter is not None and i - goal_found_iter > self.improve_iter:
+                break
 
             # Keep the informed-sampling ellipse in sync with the goal's true
             # cost: rewires (direct or propagated) may have improved it since
@@ -484,7 +434,7 @@ class RRTStar:
             nearest_idx = self._nearest_node(rand_point)
             new_point = self._steer(self.nodes[nearest_idx], rand_point)
 
-            if self._is_collision(new_point):
+            if self._point_blocked(new_point):
                 continue
 
             collision, nearest_seg_cost = self._segment_cost(self.nodes[nearest_idx], new_point)
@@ -532,6 +482,7 @@ class RRTStar:
                 if not col:
                     new_goal_cost = self.cost[new_idx] + sc
                     if goal_idx is None:
+                        goal_found_iter = i
                         goal_idx = len(self.nodes)
                         self.nodes.append(self.goal)
                         self._nodes_buf[goal_idx] = self.goal
@@ -553,6 +504,11 @@ class RRTStar:
     def _reconstruct_path(self, goal_idx: int) -> list[np.ndarray]:
         """
         Walk the parent chain from *goal_idx* back to the root and return the path.
+
+        Not simplified here: :meth:`~map_data.pathsolver.replan.ReplanPath._post_process_path`
+        already runs a collision-checked Douglas-Peucker pass over the whole
+        assembled route, so simplifying each RRT* segment first would just
+        redo the same work at a smaller (and less effective) scale.
         """
         path = []
         curr: int | None = goal_idx
@@ -560,67 +516,4 @@ class RRTStar:
             path.append(self.nodes[curr])
             curr = self.parent[curr]
         path.reverse()
-        if self.simplify and len(path) > 2:
-            return self._simplify_path(path)
         return path
-
-    def _simplify_path(self, path: list[np.ndarray]) -> list[np.ndarray]:
-        """
-        Greedily remove intermediate waypoints that have line-of-sight to a later node.
-        """
-        if len(path) <= 2:
-            return path
-        simplified = [path[0]]
-        curr = 0
-        while curr < len(path) - 1:
-            next_best = curr + 1
-            for i in range(len(path) - 1, curr + 1, -1):
-                col, _ = self._segment_cost(path[curr], path[i])
-                if not col:
-                    next_best = i
-                    break
-            simplified.append(path[next_best])
-            curr = next_best
-        return simplified
-
-
-# Example usage
-if __name__ == "__main__":
-    from shapely.geometry import Polygon
-
-    # Define start and goal points
-    start = np.array([0.0, 0.0])
-    goal = np.array([10.0, 10.0])
-
-    # Define obstacles as Shapely polygons
-    obstacles = [
-        Polygon([(2, 2), (2, 4), (4, 4), (4, 2)]),
-        Polygon([(6, 6), (6, 8), (8, 8), (8, 6)]),
-        Polygon([(3, 7), (3, 9), (5, 9), (5, 7)]),
-    ]
-
-    # Define a 10x10 grid with 0-1 traversability costs
-    grid = np.zeros((100, 100), dtype=float)
-    grid[40:60, 40:60] = 1  # Non-traversable region
-
-    # Initialize and run RRT*
-    rrt_star = RRTStar(
-        start,
-        goal,
-        obstacles,
-        obstacles_tree=None,
-        grid=grid,
-        low=(0.0, 0.0),
-        max_iter=2000,
-        step_size=0.1,
-        neighbor_radius=1.5,
-        grid_scale=0.1,
-    )
-    path = rrt_star.find_path()
-
-    if path is not None:
-        logger.info("Path found:")
-        for point in path:
-            logger.info("(%.2f, %.2f)", point[0], point[1])
-    else:
-        logger.info("No path found.")
