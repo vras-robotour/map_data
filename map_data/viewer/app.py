@@ -10,7 +10,6 @@ from typing import Any
 
 from flask import Flask, Response, abort, request
 from flask_socketio import SocketIO
-from werkzeug.routing import IntegerConverter
 
 from ..utils.config import setup_logging
 from .ros_node import ROS_AVAILABLE, TrackerNode
@@ -109,10 +108,6 @@ def _authenticate_socketio_connection() -> bool | None:
     return None
 
 
-class SignedIntConverter(IntegerConverter):
-    regex = r"-?\d+"
-
-
 def telemetry_broadcaster(interval: float) -> None:
     """
     Background thread to broadcast ROS2 telemetry via WebSockets.
@@ -136,7 +131,6 @@ def create_app(data_dir: str | None = None, telemetry_hz: float = 2.0) -> Flask:
     static_dir = base_dir / "static"
 
     app = Flask(__name__, template_folder=str(template_dir), static_folder=str(static_dir))
-    app.url_map.converters["signed_int"] = SignedIntConverter
     app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
     if data_dir:

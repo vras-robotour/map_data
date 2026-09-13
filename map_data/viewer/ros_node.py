@@ -151,8 +151,6 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
     }
 
     def __init__(self) -> None:
-        if not ROS_AVAILABLE:
-            return
         super().__init__("map_data_tracker")
 
         for name, default in self._TOPIC_DEFAULTS.items():
@@ -221,7 +219,6 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         self._last_teleop_time = 0.0
         self.nav_state: str | None = None
         self.follower_state: str | None = None
-        self.localization_state = None
         self.last_speech: dict[str, str] | None = None
         self.diagnostics: dict[str, Any] | None = None
 
@@ -477,14 +474,11 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             and (now - self._last_teleop_time) < TELEOP_TIMEOUT,
             "nav_state": self.nav_state,
             "follower_state": self.follower_state,
-            "localization_state": self.localization_state,
             "last_speech": dict(self.last_speech) if self.last_speech else None,
             "diagnostics": dict(self.diagnostics) if self.diagnostics else None,
         }
 
     def get_telemetry(self) -> dict[str, Any] | None:
-        if not ROS_AVAILABLE:
-            return None
         with self._lock:
             age = None if self._last_fix_time is None else time.time() - self._last_fix_time
             stale = age is not None and age > self.stale_after
@@ -564,25 +558,6 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             [[p.pose.position.x, p.pose.position.y, p.pose.position.z] for p in poses], dtype=float
         ).reshape(-1, 3)
 
-    def _convert_path_latlon(
-        self,
-        msg: Path | NavigateThroughPoses.Goal | FollowWaypoints.Goal | FollowGPSWaypoints.Goal,
-    ) -> list[dict[str, float]] | None:
-        if isinstance(msg, FollowGPSWaypoints.Goal):
-            return [
-                {"lat": pose.position.latitude, "lon": pose.position.longitude}
-                for pose in msg.gps_poses
-            ]
-        if isinstance(msg, Path):
-            poses = msg.poses
-        elif isinstance(msg, NavigateThroughPoses.Goal):
-            poses = msg.poses.goals
-        elif isinstance(msg, FollowWaypoints.Goal):
-            poses = msg.poses
-        else:
-            return None
-        return self._points_to_latlon(msg.header.frame_id, self._poses_xyz(poses))
-
     # ------------------------------------------------------------------ callbacks: position
     def _gps_callback(self, msg: NavSatFix) -> None:
         with self._lock:
@@ -647,7 +622,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
 
     # ------------------------------------------------------------------ callbacks: geometry
     def _path_callback(self, msg: Path) -> None:
-        waypoints = self._convert_path_latlon(msg)
+        waypoints = self._points_to_latlon(msg.header.frame_id, self._poses_xyz(msg.poses))
         if waypoints:
             with self._lock:
                 self.waypoints_gps = subsample(waypoints, PATH_SUBSAMPLE)
