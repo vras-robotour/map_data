@@ -29,9 +29,7 @@ function _enforceLayerOrder() {
         if (layer && map.hasLayer(layer)) layer.bringToFront();
     });
     // Ensure robot is on top
-    if (typeof trackerMode !== 'undefined' && trackerMode.showRobot) {
-        trackerMode.showRobot(); 
-    }
+    trackerMode.showRobot();
     if (map.hasLayer(drawnItems)) drawnItems.bringToFront();
 }
 
@@ -179,13 +177,7 @@ async function initApp() {
             const data = await fetchAreaApi({
                 ...pendingBbox,
                 name,
-                grid_margin: parseFloat(document.getElementById('fetch-grid-margin')?.value) || 150,
-                obstacle_radius: parseFloat(document.getElementById('fetch-obstacle-radius')?.value) || 2.0,
-                buffer_widths: {
-                    road: parseFloat(document.getElementById('fetch-buf-road')?.value) || 7.0,
-                    footway: parseFloat(document.getElementById('fetch-buf-footway')?.value) || 3.0,
-                    barrier: parseFloat(document.getElementById('fetch-buf-barrier')?.value) || 2.0,
-                },
+                ...readFetchOptions('fetch'),
             }, task => setStatus(formatFetchProgress(task), 'text-warning'));
             setStatus(
                 `Fetched: ${data.roads} roads, ${data.footways} footways, ${data.barriers} barriers`,
@@ -214,10 +206,8 @@ async function initApp() {
                 return;
             }
             if (cb.dataset.layer === 'robot') {
-                if (typeof trackerMode !== 'undefined') {
-                    if (cb.checked) trackerMode.showRobot();
-                    else trackerMode.hideRobot();
-                }
+                if (cb.checked) trackerMode.showRobot();
+                else trackerMode.hideRobot();
                 return;
             }
             const layer = geoLayers[cb.dataset.layer];
@@ -229,29 +219,12 @@ async function initApp() {
 
     map.on('click', () => {
         if (currentMode === 'view') {
-            clearNodes();
-            if (currentClickedLayer) {
-                const oldCat = currentClickedLayer._osmCat;
-                currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
-                currentClickedLayer = null;
-            }
-            currentClickedFeature = null;
-            const el = document.getElementById('props-content');
-            if (el) el.innerHTML = '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+            deselectCurrent();
         }
     });
 
     document.getElementById('ann-add-prop-btn')?.addEventListener('click', () => {
-        const div = document.createElement('div');
-        div.className = 'd-flex gap-1 mb-1';
-        div.innerHTML = `
-      <input class="form-control form-control-sm bg-dark text-light border-secondary ep-key"
-             placeholder="key" style="flex:1;font-size:0.75rem;">
-      <input class="form-control form-control-sm bg-dark text-light border-secondary ep-val"
-             placeholder="value" style="flex:1;font-size:0.75rem;">
-      <button type="button" class="btn btn-sm btn-outline-danger px-1"
-              onclick="this.closest('.d-flex').remove()">×</button>`;
-        document.getElementById('ann-extra-props').appendChild(div);
+        document.getElementById('ann-extra-props').insertAdjacentHTML('beforeend', kvRow('ep'));
     });
 
     document.getElementById('ann-detail-save')?.addEventListener('click', async () => {
@@ -283,18 +256,6 @@ async function initApp() {
             }
             pendingAnnGeom = null;
         }
-    });
-
-    document.querySelectorAll('[data-subtype-toggle]').forEach(btn => {
-        btn.addEventListener('click', e => {
-            e.preventDefault();
-            e.stopPropagation();
-            const cat = btn.dataset.subtypeToggle;
-            const panel = document.getElementById(`subfilter-${cat}`);
-            const open = panel.style.display !== 'block';
-            panel.style.display = open ? 'block' : 'none';
-            btn.textContent = open ? '▲' : '▼';
-        });
     });
 
     document.addEventListener('keydown', e => {
@@ -363,17 +324,7 @@ async function initApp() {
             case 'Escape':
                 if (currentAppMode === 'viewer') {
                     if (currentClickedLayer || currentClickedFeature) {
-                        if (currentClickedLayer) {
-                            const oldCat = currentClickedLayer._osmCat;
-                            currentClickedLayer.setStyle(
-                                oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id))
-                            );
-                            currentClickedLayer = null;
-                        }
-                        currentClickedFeature = null;
-                        clearNodes();
-                        const propsEl = document.getElementById('props-content');
-                        if (propsEl) propsEl.innerHTML = '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+                        deselectCurrent();
                     } else if (currentMode !== 'view') {
                         setMode('view');
                     }
@@ -390,8 +341,7 @@ async function initApp() {
                             e.preventDefault();
                             removeAnnotationById(currentClickedLayer.options._ann_id);
                             currentClickedLayer = null;
-                            const propsEl = document.getElementById('props-content');
-                            if (propsEl) propsEl.innerHTML = '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+                            resetProps();
                         } else if (currentClickedFeature &&
                             ['road', 'footway', 'barrier'].includes(currentClickedFeature.properties.category)) {
                             e.preventDefault();

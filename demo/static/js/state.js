@@ -11,7 +11,6 @@ let annotations = [];
 let annBaselineGeoms = {}; // annId → geometry snapshot from load/creation time (for revert)
 let pendingBbox = null;
 let nodeLayer = null;   // L.LayerGroup of node circle markers
-let nodeCount = 0;      // actual OSM node count from last fetch
 let currentNodes = [];     // fetched OSM node objects for the active way
 let nodeMarkers = [];     // L.CircleMarker refs, same order as currentNodes
 let midpointMarkers = [];  // L.CircleMarker refs for midpoint insert handles between nodes
@@ -36,7 +35,7 @@ let editingAnnId = null;      // annotation ID being edited in the modal
 let editingWayId = null;      // OSM way ID being edited in the way-edit modal
 
 // ── Layers ───────────────────────────────────────────────────────────────────
-const geoLayers = { road: null, footway: null, barrier: null, waypoint: null, crossroad: null, robot: null, costGrid: null };
+const geoLayers = { road: null, footway: null, barrier: null, waypoint: null, crossroad: null, costGrid: null };
 
 // subtypeLayers[cat][subtype] = array of individual L.Path layers inside geoLayers[cat]
 const subtypeLayers = { road: {}, footway: {}, barrier: {}, crossroad: {} };

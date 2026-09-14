@@ -88,31 +88,37 @@
         </div>
 
         <!-- Road -->
-        <div class="layer-row">
-          <input type="checkbox" class="st-check" data-layer="road" checked>
-          <div class="layer-swatch" style="background:#333; border:1px solid #555;"></div>
-          <span>Roads</span>
-          <button class="subtype-btn" data-subtype-toggle="road">▼</button>
-        </div>
-        <div id="subfilter-road" class="subtype-panel"></div>
+        <details>
+          <summary class="layer-row">
+            <input type="checkbox" class="st-check" data-layer="road" checked onclick="event.stopPropagation()">
+            <div class="layer-swatch" style="background:#333; border:1px solid #555;"></div>
+            <span>Roads</span>
+            <span class="subtype-btn"></span>
+          </summary>
+          <div id="subfilter-road" class="subtype-panel"></div>
+        </details>
 
         <!-- Footway -->
-        <div class="layer-row">
-          <input type="checkbox" class="st-check" data-layer="footway" checked>
-          <div class="layer-swatch" style="background:#FFD700; border:1px solid #b89900;"></div>
-          <span>Footways</span>
-          <button class="subtype-btn" data-subtype-toggle="footway">▼</button>
-        </div>
-        <div id="subfilter-footway" class="subtype-panel"></div>
+        <details>
+          <summary class="layer-row">
+            <input type="checkbox" class="st-check" data-layer="footway" checked onclick="event.stopPropagation()">
+            <div class="layer-swatch" style="background:#FFD700; border:1px solid #b89900;"></div>
+            <span>Footways</span>
+            <span class="subtype-btn"></span>
+          </summary>
+          <div id="subfilter-footway" class="subtype-panel"></div>
+        </details>
 
         <!-- Barrier -->
-        <div class="layer-row">
-          <input type="checkbox" class="st-check" data-layer="barrier" checked>
-          <div class="layer-swatch" style="background:#BF0009; border:1px solid #8b0000;"></div>
-          <span>Barriers</span>
-          <button class="subtype-btn" data-subtype-toggle="barrier">▼</button>
-        </div>
-        <div id="subfilter-barrier" class="subtype-panel"></div>
+        <details>
+          <summary class="layer-row">
+            <input type="checkbox" class="st-check" data-layer="barrier" checked onclick="event.stopPropagation()">
+            <div class="layer-swatch" style="background:#BF0009; border:1px solid #8b0000;"></div>
+            <span>Barriers</span>
+            <span class="subtype-btn"></span>
+          </summary>
+          <div id="subfilter-barrier" class="subtype-panel"></div>
+        </details>
 
         <!-- Crossroads -->
         <div class="layer-row">
@@ -276,40 +282,106 @@
           </div>
         </div>
         <div id="tracker-status-content" class="mt-2" style="flex: 1; min-height: 0; overflow-y: auto; font-size: 0.8rem;">
-          <div class="text-secondary italic">Waiting for telemetry...</div>
+          <div id="tsi-section-hardware" class="mb-3">
+            <div id="tsi-row-battery" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+              <span class="text-secondary fw-bold">BATTERY</span>
+              <span id="tsi-battery" class="text-light">—</span>
+            </div>
+            <div id="tsi-row-estop" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+              <span class="text-secondary fw-bold">E-STOP</span>
+              <span id="tsi-estop">—</span>
+            </div>
+            <div id="tsi-row-motors" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+              <span class="text-secondary fw-bold">MOTORS</span>
+              <span id="tsi-motors">—</span>
+            </div>
+            <div id="tsi-motor-error" class="text-danger small" hidden></div>
+            <div id="tsi-row-temp" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+              <span class="text-secondary fw-bold">TEMP</span>
+              <span id="tsi-temp" class="text-light">—</span>
+            </div>
+          </div>
+          <div id="tsi-section-localization" class="mb-3">
+            <div id="tsi-row-gps" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+              <span class="text-secondary fw-bold">LOCALIZATION</span>
+              <span id="tsi-gps-fix">—</span>
+            </div>
+            <div id="tsi-row-fix-age" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+              <span class="text-secondary fw-bold">FIX AGE</span>
+              <span id="tsi-fix-age">—</span>
+            </div>
+            <div id="tsi-row-speed" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+              <span class="text-secondary fw-bold">SPEED</span>
+              <span id="tsi-speed">—</span>
+            </div>
+            <div id="tsi-row-speed-limit" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+              <span class="text-secondary fw-bold">LIMIT</span>
+              <span id="tsi-speed-limit">—</span>
+            </div>
+          </div>
+          <div id="tsi-section-navigation" class="mb-3">
+            <div class="panel-title mb-1" style="font-size:0.6rem;">NAVIGATION</div>
+            <div class="small">
+              <div id="tsi-row-nav-state">State: <span id="tsi-nav-state" class="text-info">IDLE</span></div>
+              <div id="tsi-row-follower">Follower: <span id="tsi-follower-state" class="text-info">—</span></div>
+              <div id="tsi-row-diag">Diagnostics: <span id="tsi-diag" class="text-success">—</span></div>
+              <div id="tsi-collision" hidden>Collision: <span id="tsi-collision-val" class="text-warning"></span></div>
+              <div id="tsi-recovery" class="text-danger fw-bold" hidden>RECOVERY ACTIVE</div>
+              <div id="tsi-teleop" class="text-warning fw-bold" hidden>TELEOP ACTIVE</div>
+            </div>
+          </div>
+          <div id="tsi-legend" class="mb-3">
+            <div class="panel-title mb-1" style="font-size:0.6rem;">MAP LEGEND</div>
+            <div class="small" style="line-height:1.5">
+              <div id="tsi-leg-robot">Robot (heading arrow, greyed = stale fix)</div>
+              <div id="tsi-leg-trail">Robot trail</div>
+              <div id="tsi-leg-path">Planner path</div>
+              <div id="tsi-leg-sequence">Waypoint sequence (commander)</div>
+              <div id="tsi-leg-window">Waypoint window (road_follower)</div>
+              <div id="tsi-leg-road">Visual road path</div>
+              <div id="tsi-leg-goal">Current goal</div>
+              <div id="tsi-leg-intersections">OSM intersections</div>
+              <div id="tsi-leg-active">Active intersection: enter radius
+                &nbsp;<span id="tsi-leg-active-exit-icon"></span> exit radius</div>
+            </div>
+          </div>
+          <div id="tsi-speech-box" class="mt-3 p-2 bg-dark border border-secondary rounded" hidden>
+            <div class="small text-secondary mb-1">LAST SPEECH (<span id="tsi-speech-level"></span>)</div>
+            <div id="tsi-speech-text"></div>
+          </div>
         </div>
       </div>
 
       <!-- Bottom stacked collapsible panels -->
-      <div id="ann-panel" class="bottom-panel" style="display:none;">
-        <div class="bottom-panel-header" onclick="togglePanel('ann')">
+      <details id="ann-panel" class="bottom-panel" hidden open>
+        <summary class="bottom-panel-header">
           <h6 class="bottom-panel-title">ANNOTATIONS <span id="ann-count"></span></h6>
-          <span id="ann-toggle" class="panel-toggle-icon">▲</span>
-        </div>
+          <span class="panel-toggle-icon"></span>
+        </summary>
         <div id="ann-body" class="bottom-panel-body">
           <div id="ann-list"></div>
         </div>
-      </div>
+      </details>
 
-      <div id="changes-panel" class="bottom-panel" style="display:none;">
-        <div class="bottom-panel-header" onclick="togglePanel('changes')">
+      <details id="changes-panel" class="bottom-panel" hidden open>
+        <summary class="bottom-panel-header">
           <h6 class="bottom-panel-title">CHANGES <span id="changes-count"></span></h6>
-          <span id="changes-toggle" class="panel-toggle-icon">▲</span>
-        </div>
+          <span class="panel-toggle-icon"></span>
+        </summary>
         <div id="changes-body" class="bottom-panel-body">
           <div id="changes-list"></div>
         </div>
-      </div>
+      </details>
 
-      <div id="hidden-panel" class="bottom-panel" style="display:none;">
-        <div class="bottom-panel-header" onclick="togglePanel('hidden')">
+      <details id="hidden-panel" class="bottom-panel" hidden open>
+        <summary class="bottom-panel-header">
           <h6 class="bottom-panel-title">HIDDEN <span id="hidden-count"></span></h6>
-          <span id="hidden-toggle" class="panel-toggle-icon">▲</span>
-        </div>
+          <span class="panel-toggle-icon"></span>
+        </summary>
         <div id="hidden-body" class="bottom-panel-body">
           <div id="hidden-list"></div>
         </div>
-      </div>
+      </details>
 
     </div>
 
@@ -326,6 +398,8 @@
 
   </div>
 </div>
+
+
 
 <!-- Fetch Area Modal -->
 <!-- Robotour goal QR code: shown full screen (white) so a laptop/tablet can be held to the robot camera -->
@@ -368,44 +442,44 @@
           The area will be saved as <code>NAME.mapdata</code>.
         </div>
         <div class="mt-2">
-          <button class="btn btn-link btn-sm text-secondary p-0" type="button"
-                  data-bs-toggle="collapse" data-bs-target="#fetch-advanced"
-                  style="font-size:0.65rem; text-decoration:none;">
-            ▸ Advanced options
-          </button>
-          <div class="collapse" id="fetch-advanced">
-            <div class="mt-2 d-flex flex-column gap-2">
-              <div>
-                <label class="form-label text-secondary mb-1" style="font-size:0.68rem;">Grid Margin (m)</label>
-                <input id="fetch-grid-margin" type="number" value="150" step="10" min="10"
-                       class="form-control form-control-sm bg-dark text-light border-secondary">
-              </div>
-              <div>
-                <label class="form-label text-secondary mb-1" style="font-size:0.68rem;">Obstacle Radius (m)</label>
-                <input id="fetch-obstacle-radius" type="number" value="2.0" step="0.5" min="0.1"
-                       class="form-control form-control-sm bg-dark text-light border-secondary">
-              </div>
-              <div class="form-text text-secondary" style="font-size:0.65rem; margin-top:-4px;">Buffer widths (m)</div>
-              <div class="d-flex gap-2">
-                <div class="flex-fill">
-                  <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Road</label>
-                  <input id="fetch-buf-road" type="number" value="7.0" step="0.5" min="0"
-                         class="form-control form-control-sm bg-dark text-light border-secondary">
-                </div>
-                <div class="flex-fill">
-                  <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Footway</label>
-                  <input id="fetch-buf-footway" type="number" value="3.0" step="0.5" min="0"
-                         class="form-control form-control-sm bg-dark text-light border-secondary">
-                </div>
-                <div class="flex-fill">
-                  <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Barrier</label>
-                  <input id="fetch-buf-barrier" type="number" value="2.0" step="0.5" min="0"
-                         class="form-control form-control-sm bg-dark text-light border-secondary">
-                </div>
-              </div>
-            </div>
-          </div>
+  <button class="btn btn-link btn-sm text-secondary p-0" type="button"
+          data-bs-toggle="collapse" data-bs-target="#fetch-advanced"
+          style="font-size:0.65rem; text-decoration:none;">
+    ▸ Advanced options
+  </button>
+  <div class="collapse" id="fetch-advanced">
+    <div class="mt-2 d-flex flex-column gap-2">
+      <div>
+        <label class="form-label text-secondary mb-1" style="font-size:0.68rem;">Grid Margin (m)</label>
+        <input id="fetch-grid-margin" type="number" value="150" step="10" min="10"
+               class="form-control form-control-sm bg-dark text-light border-secondary">
+      </div>
+      <div>
+        <label class="form-label text-secondary mb-1" style="font-size:0.68rem;">Obstacle Radius (m)</label>
+        <input id="fetch-obstacle-radius" type="number" value="2.0" step="0.5" min="0.1"
+               class="form-control form-control-sm bg-dark text-light border-secondary">
+      </div>
+      <div class="form-text text-secondary" style="font-size:0.65rem; margin-top:-4px;">Buffer widths (m)</div>
+      <div class="d-flex gap-2">
+        <div class="flex-fill">
+          <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Road</label>
+          <input id="fetch-buf-road" type="number" value="7.0" step="0.5" min="0"
+                 class="form-control form-control-sm bg-dark text-light border-secondary">
         </div>
+        <div class="flex-fill">
+          <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Footway</label>
+          <input id="fetch-buf-footway" type="number" value="3.0" step="0.5" min="0"
+                 class="form-control form-control-sm bg-dark text-light border-secondary">
+        </div>
+        <div class="flex-fill">
+          <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Barrier</label>
+          <input id="fetch-buf-barrier" type="number" value="2.0" step="0.5" min="0"
+                 class="form-control form-control-sm bg-dark text-light border-secondary">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
       </div>
       <div class="modal-footer border-secondary py-2">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
@@ -431,44 +505,44 @@
           The map will be created as <code>NAME.mapdata</code>.
         </div>
         <div class="mt-2">
-          <button class="btn btn-link btn-sm text-secondary p-0" type="button"
-                  data-bs-toggle="collapse" data-bs-target="#gpx-advanced"
-                  style="font-size:0.65rem; text-decoration:none;">
-            ▸ Advanced options
-          </button>
-          <div class="collapse" id="gpx-advanced">
-            <div class="mt-2 d-flex flex-column gap-2">
-              <div>
-                <label class="form-label text-secondary mb-1" style="font-size:0.68rem;">Grid Margin (m)</label>
-                <input id="gpx-grid-margin" type="number" value="150" step="10" min="10"
-                       class="form-control form-control-sm bg-dark text-light border-secondary">
-              </div>
-              <div>
-                <label class="form-label text-secondary mb-1" style="font-size:0.68rem;">Obstacle Radius (m)</label>
-                <input id="gpx-obstacle-radius" type="number" value="2.0" step="0.5" min="0.1"
-                       class="form-control form-control-sm bg-dark text-light border-secondary">
-              </div>
-              <div class="form-text text-secondary" style="font-size:0.65rem; margin-top:-4px;">Buffer widths (m)</div>
-              <div class="d-flex gap-2">
-                <div class="flex-fill">
-                  <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Road</label>
-                  <input id="gpx-buf-road" type="number" value="7.0" step="0.5" min="0"
-                         class="form-control form-control-sm bg-dark text-light border-secondary">
-                </div>
-                <div class="flex-fill">
-                  <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Footway</label>
-                  <input id="gpx-buf-footway" type="number" value="3.0" step="0.5" min="0"
-                         class="form-control form-control-sm bg-dark text-light border-secondary">
-                </div>
-                <div class="flex-fill">
-                  <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Barrier</label>
-                  <input id="gpx-buf-barrier" type="number" value="2.0" step="0.5" min="0"
-                         class="form-control form-control-sm bg-dark text-light border-secondary">
-                </div>
-              </div>
-            </div>
-          </div>
+  <button class="btn btn-link btn-sm text-secondary p-0" type="button"
+          data-bs-toggle="collapse" data-bs-target="#gpx-advanced"
+          style="font-size:0.65rem; text-decoration:none;">
+    ▸ Advanced options
+  </button>
+  <div class="collapse" id="gpx-advanced">
+    <div class="mt-2 d-flex flex-column gap-2">
+      <div>
+        <label class="form-label text-secondary mb-1" style="font-size:0.68rem;">Grid Margin (m)</label>
+        <input id="gpx-grid-margin" type="number" value="150" step="10" min="10"
+               class="form-control form-control-sm bg-dark text-light border-secondary">
+      </div>
+      <div>
+        <label class="form-label text-secondary mb-1" style="font-size:0.68rem;">Obstacle Radius (m)</label>
+        <input id="gpx-obstacle-radius" type="number" value="2.0" step="0.5" min="0.1"
+               class="form-control form-control-sm bg-dark text-light border-secondary">
+      </div>
+      <div class="form-text text-secondary" style="font-size:0.65rem; margin-top:-4px;">Buffer widths (m)</div>
+      <div class="d-flex gap-2">
+        <div class="flex-fill">
+          <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Road</label>
+          <input id="gpx-buf-road" type="number" value="7.0" step="0.5" min="0"
+                 class="form-control form-control-sm bg-dark text-light border-secondary">
         </div>
+        <div class="flex-fill">
+          <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Footway</label>
+          <input id="gpx-buf-footway" type="number" value="3.0" step="0.5" min="0"
+                 class="form-control form-control-sm bg-dark text-light border-secondary">
+        </div>
+        <div class="flex-fill">
+          <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Barrier</label>
+          <input id="gpx-buf-barrier" type="number" value="2.0" step="0.5" min="0"
+                 class="form-control form-control-sm bg-dark text-light border-secondary">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
       </div>
       <div class="modal-footer border-secondary py-2">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
@@ -508,65 +582,22 @@
   </div>
 </div>
 
-<!-- Planner Auto-Fetch Modal -->
-<div class="modal fade" id="planner-fetch-modal" tabindex="-1">
+<!-- Wormhole Share Modal -->
+<div class="modal fade" id="wormhole-modal" tabindex="-1">
   <div class="modal-dialog modal-sm modal-dialog-centered">
-    <div class="modal-content bg-dark text-light border-secondary">
+    <div class="modal-content bg-dark text-light border-secondary text-center">
       <div class="modal-header border-secondary py-2">
-        <h6 class="modal-title">No Map Loaded</h6>
+        <h6 class="modal-title">Share via Wormhole</h6>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body py-2">
-        <p class="mb-2" style="font-size:0.75rem;">A map is required for planning. Please provide a name to fetch data from OSM for this area:</p>
-        <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">MAP NAME</label>
-        <input id="planner-fetch-name-input" type="text" placeholder="e.g. park_path"
-               class="form-control form-control-sm bg-dark text-light border-secondary">
-        <div class="form-text text-secondary mt-1" style="font-size:0.65rem;">
-          The area will be saved as <code>NAME.mapdata</code>.
-        </div>
-        <div class="mt-2">
-          <button class="btn btn-link btn-sm text-secondary p-0" type="button"
-                  data-bs-toggle="collapse" data-bs-target="#planner-fetch-advanced"
-                  style="font-size:0.65rem; text-decoration:none;">
-            ▸ Advanced options
-          </button>
-          <div class="collapse" id="planner-fetch-advanced">
-            <div class="mt-2 d-flex flex-column gap-2">
-              <div>
-                <label class="form-label text-secondary mb-1" style="font-size:0.68rem;">Grid Margin (m)</label>
-                <input id="planner-fetch-grid-margin" type="number" value="150" step="10" min="10"
-                       class="form-control form-control-sm bg-dark text-light border-secondary">
-              </div>
-              <div>
-                <label class="form-label text-secondary mb-1" style="font-size:0.68rem;">Obstacle Radius (m)</label>
-                <input id="planner-fetch-obstacle-radius" type="number" value="2.0" step="0.5" min="0.1"
-                       class="form-control form-control-sm bg-dark text-light border-secondary">
-              </div>
-              <div class="form-text text-secondary" style="font-size:0.65rem; margin-top:-4px;">Buffer widths (m)</div>
-              <div class="d-flex gap-2">
-                <div class="flex-fill">
-                  <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Road</label>
-                  <input id="planner-fetch-buf-road" type="number" value="7.0" step="0.5" min="0"
-                         class="form-control form-control-sm bg-dark text-light border-secondary">
-                </div>
-                <div class="flex-fill">
-                  <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Footway</label>
-                  <input id="planner-fetch-buf-footway" type="number" value="3.0" step="0.5" min="0"
-                         class="form-control form-control-sm bg-dark text-light border-secondary">
-                </div>
-                <div class="flex-fill">
-                  <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Barrier</label>
-                  <input id="planner-fetch-buf-barrier" type="number" value="2.0" step="0.5" min="0"
-                         class="form-control form-control-sm bg-dark text-light border-secondary">
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      <div class="modal-body py-3">
+        <p class="mb-2" style="font-size:0.8rem;">Use this code on the receiving device:</p>
+        <div id="wormhole-code" class="font-monospace fw-bold"
+             style="font-size:1.4rem;color:#ffca28;background:#16213e;border:1px solid #333;border-radius:4px;padding:12px;margin-bottom:12px;"></div>
+        <p class="text-secondary mb-0" style="font-size:0.72rem;">The code will expire once the transfer is complete or after a timeout.</p>
       </div>
-      <div class="modal-footer border-secondary py-2">
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" id="planner-fetch-submit" class="btn btn-primary btn-sm">Fetch & Plan</button>
+      <div class="modal-footer border-secondary py-2 justify-content-center">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>

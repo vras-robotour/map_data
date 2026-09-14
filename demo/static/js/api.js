@@ -16,17 +16,38 @@ function _staticReadOnly(action) {
     throw new Error('Read-only static demo');
 }
 
+// Shared fetch wrapper for every non-static-demo API call: builds the query
+// string, sets JSON headers/body (or leaves FormData bodies alone), and
+// refuses up-front (via _staticReadOnly) when `readOnlyMsg` is given and the
+// page is running as the read-only static demo.
+async function api(method, path, { query, body, readOnlyMsg } = {}) {
+    if (STATIC_BASE && readOnlyMsg) _staticReadOnly(readOnlyMsg);
+    const qs = query
+        ? '?' + Object.entries(query).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')
+        : '';
+    const opts = { method };
+    if (body !== undefined) {
+        if (body instanceof FormData) {
+            opts.body = body;
+        } else {
+            opts.headers = { 'Content-Type': 'application/json' };
+            opts.body = JSON.stringify(body);
+        }
+    }
+    return await fetch(`${path}${qs}`, opts);
+}
+
 async function fetchFileList() {
     if (STATIC_BASE) return await _staticJson('api/files.json');
-    const res = await fetch('/api/files');
+    const res = await api('GET', '/api/files');
     return await res.json();
 }
 
 async function fetchMapData(filename) {
     if (STATIC_BASE) return await _staticJson('api/mapdata.json');
-    const geoRes = await fetch(`/api/mapdata?file=${encodeURIComponent(filename)}`);
-    if (!geoRes.ok) throw new Error(await geoRes.text());
-    return await geoRes.json();
+    const res = await api('GET', '/api/mapdata', { query: { file: filename } });
+    if (!res.ok) throw new Error(await res.text());
+    return await res.json();
 }
 
 async function fetchAnnotations(filename) {
@@ -34,168 +55,121 @@ async function fetchAnnotations(filename) {
         try { return await _staticJson('api/annotations.json'); }
         catch (_) { return { annotations: [] }; }
     }
-    const annRes = await fetch(`/api/annotations?file=${encodeURIComponent(filename)}`);
-    if (!annRes.ok) return { annotations: [] };
-    return await annRes.json();
-}
-
-async function saveAnnotation(filename, annId, geometry) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    await fetch(`/api/annotations/${annId}?file=${encodeURIComponent(filename)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ geometry: geometry }),
-    });
+    const res = await api('GET', '/api/annotations', { query: { file: filename } });
+    if (!res.ok) return { annotations: [] };
+    return await res.json();
 }
 
 async function deleteAnnotationApi(filename, annId) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    return await fetch(`/api/annotations/${annId}?file=${encodeURIComponent(filename)}`, {
-        method: 'DELETE'
+    return await api('DELETE', `/api/annotations/${annId}`, {
+        query: { file: filename }, readOnlyMsg: 'Editing',
     });
 }
 
 async function createAnnotationApi(filename, type, geometry, properties) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    const res = await fetch(`/api/annotations?file=${encodeURIComponent(filename)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, geometry, properties })
+    const res = await api('POST', '/api/annotations', {
+        query: { file: filename }, body: { type, geometry, properties }, readOnlyMsg: 'Editing',
     });
     return await res.json();
 }
 
 async function updateAnnotationApi(filename, annId, geometry, type, properties) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    const res = await fetch(`/api/annotations/${annId}?file=${encodeURIComponent(filename)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ geometry, type, properties })
+    const res = await api('PUT', `/api/annotations/${annId}`, {
+        query: { file: filename }, body: { geometry, type, properties }, readOnlyMsg: 'Editing',
     });
     return await res.json();
 }
 
 async function fetchWayNodes(filename, wayId) {
     if (STATIC_BASE) return await _staticJson(`api/way_nodes/${String(wayId).replace(':', '_')}.json`);
-    const res = await fetch(`/api/way_nodes?file=${encodeURIComponent(filename)}&way_id=${wayId}`);
+    const res = await api('GET', '/api/way_nodes', { query: { file: filename, way_id: wayId } });
     if (!res.ok) throw new Error(await res.text());
     return await res.json();
 }
 
 async function updateWayTagsApi(filename, wayId, tags, cat, lbl) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    return await fetch(`/api/ways/${wayId}/tags?file=${encodeURIComponent(filename)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tags, category: cat, label: lbl })
+    return await api('PUT', `/api/ways/${wayId}/tags`, {
+        query: { file: filename }, body: { tags, category: cat, label: lbl }, readOnlyMsg: 'Editing',
     });
 }
 
 async function deleteWayTagsApi(filename, wayId) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    return await fetch(`/api/ways/${wayId}/tags?file=${encodeURIComponent(filename)}`, {
-        method: 'DELETE'
-    });
+    return await api('DELETE', `/api/ways/${wayId}/tags`, { query: { file: filename }, readOnlyMsg: 'Editing' });
 }
 
 async function deleteWayApi(filename, wayId, cat, label) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    return await fetch(`/api/ways/${wayId}?file=${encodeURIComponent(filename)}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category: cat, label })
+    return await api('DELETE', `/api/ways/${wayId}`, {
+        query: { file: filename }, body: { category: cat, label }, readOnlyMsg: 'Editing',
     });
 }
 
 async function deleteNodeApi(filename, wayId, nodeId) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    const res = await fetch(`/api/way_node?file=${encodeURIComponent(filename)}&way_id=${wayId}&node_id=${nodeId}`, {
-        method: 'DELETE'
+    return await api('DELETE', '/api/way_node', {
+        query: { file: filename, way_id: wayId, node_id: nodeId }, readOnlyMsg: 'Editing',
     });
-    return res;
 }
 
 async function addWayNodeApi(filename, wayId, afterNodeId, lat, lon) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    return await fetch(`/api/way_node?file=${encodeURIComponent(filename)}&way_id=${wayId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ after_node_id: afterNodeId, lat, lon }),
+    return await api('POST', '/api/way_node', {
+        query: { file: filename, way_id: wayId },
+        body: { after_node_id: afterNodeId, lat, lon },
+        readOnlyMsg: 'Editing',
     });
 }
 
 async function splitWayApi(filename, wayId, nodeId) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    const res = await fetch(`/api/ways/split?file=${encodeURIComponent(filename)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ way_id: wayId, node_id: nodeId })
+    return await api('POST', '/api/ways/split', {
+        query: { file: filename }, body: { way_id: wayId, node_id: nodeId }, readOnlyMsg: 'Editing',
     });
-    return res;
 }
 
 async function undoWaySplitApi(filename, wayId, nodeId) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    const res = await fetch(`/api/ways/split?file=${encodeURIComponent(filename)}&way_id=${wayId}&node_id=${nodeId}`, {
-        method: 'DELETE'
+    return await api('DELETE', '/api/ways/split', {
+        query: { file: filename, way_id: wayId, node_id: nodeId }, readOnlyMsg: 'Editing',
     });
-    return res;
 }
+
 async function hideWayApi(filename, wayId, cat, label) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    return await fetch(`/api/ways/${wayId}/hide?file=${encodeURIComponent(filename)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category: cat, label })
+    return await api('PUT', `/api/ways/${wayId}/hide`, {
+        query: { file: filename }, body: { category: cat, label }, readOnlyMsg: 'Editing',
     });
 }
 
 async function showWayApi(filename, wayId) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    return await fetch(`/api/ways/${wayId}/show?file=${encodeURIComponent(filename)}`, {
-        method: 'PUT'
-    });
+    return await api('PUT', `/api/ways/${wayId}/show`, { query: { file: filename }, readOnlyMsg: 'Editing' });
 }
 
 async function restoreWayApi(filename, wayId) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    return await fetch(`/api/ways/${wayId}/restore?file=${encodeURIComponent(filename)}`, {
-        method: 'PUT'
-    });
+    return await api('PUT', `/api/ways/${wayId}/restore`, { query: { file: filename }, readOnlyMsg: 'Editing' });
 }
 
 async function restoreNodeApi(filename, wayId, nodeId) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    return await fetch(`/api/way_node/restore?file=${encodeURIComponent(filename)}&way_id=${wayId}&node_id=${nodeId}`, {
-        method: 'PUT'
+    return await api('PUT', '/api/way_node/restore', {
+        query: { file: filename, way_id: wayId, node_id: nodeId }, readOnlyMsg: 'Editing',
     });
 }
 
 async function fetchWayApi(filename, wayId) {
-    if (STATIC_BASE) _staticReadOnly('Way lookup');
-    return await fetch(`/api/ways/${wayId}?file=${encodeURIComponent(filename)}`);
+    return await api('GET', `/api/ways/${wayId}`, { query: { file: filename }, readOnlyMsg: 'Way lookup' });
 }
 
 async function fetchWaySegmentsApi(filename, wayId) {
-    if (STATIC_BASE) _staticReadOnly('Way lookup');
-    const res = await fetch(`/api/ways/${wayId}/segments?file=${encodeURIComponent(filename)}`);
+    const res = await api('GET', `/api/ways/${wayId}/segments`, { query: { file: filename }, readOnlyMsg: 'Way lookup' });
     if (!res.ok) throw new Error(await res.text());
     return await res.json();
 }
 
 async function moveWayNodesApi(filename, wayId, nodes, category, label) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    return await fetch(`/api/way_nodes/move?file=${encodeURIComponent(filename)}&way_id=${wayId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodes, category: category ?? 'unknown', label: label ?? '' }),
+    return await api('PUT', '/api/way_nodes/move', {
+        query: { file: filename, way_id: wayId },
+        body: { nodes, category: category ?? 'unknown', label: label ?? '' },
+        readOnlyMsg: 'Editing',
     });
 }
 
 async function undoWayNodeMovesApi(filename, wayId) {
-    if (STATIC_BASE) _staticReadOnly('Editing');
-    return await fetch(`/api/way_nodes/move?file=${encodeURIComponent(filename)}&way_id=${wayId}`, {
-        method: 'DELETE',
+    return await api('DELETE', '/api/way_nodes/move', {
+        query: { file: filename, way_id: wayId }, readOnlyMsg: 'Editing',
     });
 }
 
@@ -205,18 +179,13 @@ function formatFetchProgress(task) {
 }
 
 async function fetchAreaApi(params, onProgress) {
-    if (STATIC_BASE) _staticReadOnly('OSM fetching');
-    const res = await fetch('/api/fetch_area', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params),
-    });
+    const res = await api('POST', '/api/fetch_area', { body: params, readOnlyMsg: 'OSM fetching' });
     if (!res.ok) throw new Error(await res.text());
     const { task_id } = await res.json();
     const startedAt = Date.now();
     while (true) {
         await new Promise(r => setTimeout(r, 1500));
-        const poll = await fetch(`/api/fetch_area/${task_id}`);
+        const poll = await api('GET', `/api/fetch_area/${task_id}`);
         if (!poll.ok) throw new Error(await poll.text());
         const task = await poll.json();
         if (task.status === 'done') return task.result;
@@ -226,21 +195,13 @@ async function fetchAreaApi(params, onProgress) {
 }
 
 async function uploadGpxApi(formData) {
-    if (STATIC_BASE) _staticReadOnly('Uploading');
-    const res = await fetch('/api/upload_gpx', {
-        method: 'POST',
-        body: formData,
-    });
+    const res = await api('POST', '/api/upload_gpx', { body: formData, readOnlyMsg: 'Uploading' });
     if (!res.ok) throw new Error(await res.text());
     return await res.json();
 }
 
 async function uploadMapdataApi(formData) {
-    if (STATIC_BASE) _staticReadOnly('Uploading');
-    const res = await fetch('/api/upload_mapdata', {
-        method: 'POST',
-        body: formData,
-    });
+    const res = await api('POST', '/api/upload_mapdata', { body: formData, readOnlyMsg: 'Uploading' });
     if (!res.ok) throw new Error(await res.text());
     return await res.json();
 }

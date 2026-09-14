@@ -38,6 +38,20 @@ function escHtml(s) {
         .replace(/'/g, '&#39;');
 }
 
+// Builds one "key / value / delete" row for the way-edit and annotation
+// extra-properties forms. `cls` is the input class prefix ('we' or 'ep') the
+// save handler later queries by (e.g. '.we-key').
+function kvRow(cls, k = '', v = '') {
+    return `<div class="d-flex gap-1 mb-1">
+      <input class="form-control form-control-sm bg-dark text-light border-secondary ${cls}-key"
+             placeholder="key" value="${escHtml(k)}" style="flex:1;font-size:0.75rem;">
+      <input class="form-control form-control-sm bg-dark text-light border-secondary ${cls}-val"
+             placeholder="value" value="${escHtml(v)}" style="flex:1;font-size:0.75rem;">
+      <button type="button" class="btn btn-sm btn-outline-danger px-1"
+              onclick="this.closest('.d-flex').remove()">×</button>
+    </div>`;
+}
+
 // ── CSRF header on same-origin API calls ─────────────────────────────────────
 // When the server runs with MAP_DATA_ACCESS_TOKEN set, cookie-authenticated
 // state-changing requests must also carry a custom header as CSRF proof
@@ -84,6 +98,57 @@ function _annStyle(ann) {
 function _layerBaseStyle(layer) {
     const ann = annotations.find(a => a.id === layer.options._ann_id);
     return _annStyle(ann || {});
+}
+
+// Builds a visible circle-marker handle plus a larger transparent hit-target
+// marker at the same point, both wired to the same mousedown handler and
+// hover cursor — the pattern every draggable vertex/midpoint/node handle uses.
+// Returns [visible, hit]; the caller adds both to whatever layer group it uses.
+function makeHandle(latlng, style, hitRadius, cursor, onDown) {
+    const visible = L.circleMarker(latlng, { bubblingMouseEvents: false, renderer: L.svg(), ...style });
+    visible.on('mousedown', onDown);
+    visible.on('add', () => { const el = visible.getElement(); if (el) el.style.cursor = cursor; });
+
+    const hit = L.circleMarker(latlng, {
+        radius: hitRadius, fillOpacity: 0, opacity: 0,
+        bubblingMouseEvents: false, renderer: L.svg(), interactive: true,
+    });
+    hit.on('mousedown', onDown);
+    hit.on('add', () => { const el = hit.getElement(); if (el) el.style.cursor = cursor; });
+
+    return [visible, hit];
+}
+
+// Opens a Leaflet popup styled as a small context menu at `latlng`, with one
+// button per [label, onClick] entry. The popup is closed before the handler
+// runs, same as every context menu in the app already did by hand.
+function showMenu(latlng, entries, { minWidth = 150 } = {}) {
+    const container = document.createElement('div');
+    container.className = 'context-menu';
+    entries.forEach(([label, onClick]) => {
+        const btn = document.createElement('button');
+        btn.innerHTML = label;
+        btn.onclick = () => { map.closePopup(); onClick(); };
+        container.appendChild(btn);
+    });
+    L.popup({ minWidth, className: 'planner-popup', offset: [0, -5], closeButton: false })
+        .setLatLng(latlng)
+        .setContent(container)
+        .openOn(map);
+}
+
+// Reads the grid_margin/obstacle_radius/buffer_widths fields shared by the
+// fetch-area, GPX-upload advanced options (see the `advanced` Jinja macro).
+function readFetchOptions(prefix) {
+    return {
+        grid_margin: parseFloat(document.getElementById(`${prefix}-grid-margin`)?.value) || 150,
+        obstacle_radius: parseFloat(document.getElementById(`${prefix}-obstacle-radius`)?.value) || 2.0,
+        buffer_widths: {
+            road: parseFloat(document.getElementById(`${prefix}-buf-road`)?.value) || 7.0,
+            footway: parseFloat(document.getElementById(`${prefix}-buf-footway`)?.value) || 3.0,
+            barrier: parseFloat(document.getElementById(`${prefix}-buf-barrier`)?.value) || 2.0,
+        },
+    };
 }
 
 function getSubtype(feature, cat) {
