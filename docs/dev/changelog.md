@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- `osm_cloud` takes a `highway_types` parameter (and `highway_types:=` launch
+  argument), as `route_planner` does: the grid can be drawn from roads as well
+  as footways, so it shows the network the graph planner routes on when roads
+  are allowed. The default stays `["footway"]`
+
 ## [2.0.0] — 2026-09-13
 
 A major version because node parameters and public helpers are removed.
@@ -26,11 +33,11 @@ A major version because node parameters and public helpers are removed.
 
 ### Changed
 
-- RRT* runs as Informed RRT*: once a path is found it keeps improving it for up
+- RRT*runs as Informed RRT*: once a path is found it keeps improving it for up
   to `rrt.improve_iter` (200) iterations, sampling the informed ellipse with an
   adaptive rewiring radius. The settings live in a new `rrt:` section of
   `config/planner_defaults.yaml`
-- Grid A* and RRT* paths are simplified once, over the whole route, instead of
+- Grid A*and RRT* paths are simplified once, over the whole route, instead of
   per segment and then again at the end
 - Obstacles are rasterised with `shapely.contains_xy`; the demo map's grid is
   identical
@@ -38,12 +45,6 @@ A major version because node parameters and public helpers are removed.
   the wormhole share dialog is a Bootstrap modal, and the duplicated frontend
   and route code is consolidated
 - Annotation stores in legacy formats are normalised once, when loaded
-### Added
-
-- `osm_cloud` takes a `highway_types` parameter (and `highway_types:=` launch
-  argument), as `route_planner` does: the grid can be drawn from roads as well
-  as footways, so it shows the network the graph planner routes on when roads
-  are allowed. The default stays `["footway"]`
 
 ### Fixed
 
@@ -359,7 +360,6 @@ A major version because node parameters and public helpers are removed.
 - Fixed `__version__` single-sourcing (now reads dynamically via `importlib.metadata`)
 - Fixed double-normalization in quadratic neighbor cost logic
 - Fixed viewer routes re-raising HTTP exceptions properly and applying zero-coordinate checks
-
 
 ## [1.1.0] — 2026-07-07
 
