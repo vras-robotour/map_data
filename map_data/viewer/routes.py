@@ -470,10 +470,15 @@ def _safe_data_path(filename: str) -> Path:
     Resolve a user-supplied filename within the data directory.
 
     Aborts with 400 if the resolved path would escape the data directory
-    (e.g. via '../' traversal sequences).
+    (e.g. via '../' traversal sequences or an absolute path). Symlinks inside
+    the data directory are followed, wherever they point.
     """
     data_dir = _get_data_dir().resolve()
-    resolved = (data_dir / filename).resolve()
+    # Normalise lexically, not with resolve(): a colcon --symlink-install
+    # links share/map_data/data/*.mapdata to build/, outside data_dir, so
+    # resolving the symlink would reject every installed map. The normalised
+    # path is the one returned and opened, so '..' cannot slip past the check.
+    resolved = Path(os.path.normpath(data_dir / filename))
     if not (resolved == data_dir or data_dir in resolved.parents):
         abort(400, "Invalid file path")
     return resolved

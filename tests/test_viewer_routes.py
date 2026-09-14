@@ -233,6 +233,32 @@ def test_path_traversal_nested_rejected(app_client):
     assert resp.status_code == 400
 
 
+def test_path_absolute_rejected(app_client):
+    client, _ = app_client
+    resp = client.get("/api/mapdata?file=/etc/passwd")
+    assert resp.status_code == 400
+
+
+def test_symlinked_mapdata_loads(tmp_path):
+    # colcon --symlink-install makes share/map_data/data/*.mapdata symlinks
+    # into build/, outside the data directory; the viewer must still open them.
+    data_dir = tmp_path / "share" / "data"
+    data_dir.mkdir(parents=True)
+    target = tmp_path / "build" / "linked.mapdata"
+    target.parent.mkdir()
+    _make_mapdata(target)
+    (data_dir / "linked.mapdata").symlink_to(target)
+
+    app = create_app(data_dir=str(data_dir))
+    app.config["TESTING"] = True
+    with app.test_client() as client:
+        assert "linked.mapdata" in client.get("/api/files").get_json()["mapdata"]
+        resp = client.get("/api/mapdata?file=linked.mapdata")
+        assert resp.status_code == 200
+        assert resp.get_json()["type"] == "FeatureCollection"
+        assert client.get("/api/mapdata?file=../build/linked.mapdata").status_code == 400
+
+
 # ── way tags ─────────────────────────────────────────────────────────────────
 
 
