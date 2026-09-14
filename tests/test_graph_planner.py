@@ -717,6 +717,20 @@ def test_area_entry_tolerance(gap, reachable):
     assert (route is not None) == reachable
 
 
+def test_waypoint_snapped_onto_area_rim_crosses_it():
+    """
+    A waypoint outside the square snaps onto its rim between two plain outline
+    nodes, neither an entry: the route still crosses from there instead of
+    walking the rim to the far corner.
+    """
+    md = _area_map(_SQUARE, [[(20.0, 20.0), (30.0, 20.0)]])
+
+    route = GraphPlanner(md).plan(np.array([[10.0, -5.0], [30.0, 20.0]]))
+
+    assert route[0] == pytest.approx([10.0, 0.0])
+    assert _route_length(route) == pytest.approx(500**0.5 + 10.0)
+
+
 def test_adjacent_areas_enter_each_other_on_shared_outline():
     """
     Two squares sharing an edge: its nodes lie on no way but the two outlines

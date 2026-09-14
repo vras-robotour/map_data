@@ -60,18 +60,8 @@ class WalkableArea:
         self.entries = entries
         self._inside = prep(polygon.buffer(_EPS))
         self._index = {n: i for i, n in enumerate(entries)}
-        # Anchor of an entry: the node itself, or its nearest boundary point
-        # when it lies just outside; the leg between them is paid on top.
-        anchors = [
-            p
-            if polygon.covers(Point(p))
-            else np.array(nearest_points(polygon, Point(p))[0].coords[0])
-            for p in entries.values()
-        ]
-        self._legs = [
-            float(np.linalg.norm(p - a)) for p, a in zip(entries.values(), anchors, strict=True)
-        ]
-        self._points = anchors + _bend_corners(polygon)
+        anchors, self._legs = zip(*(self._anchor(p) for p in entries.values()), strict=True)
+        self._points = list(anchors) + _bend_corners(polygon)
         self._weights: np.ndarray | None = None
         self._crossings: dict[int, dict[int, Crossing]] = {}
 
@@ -80,6 +70,17 @@ class WalkableArea:
         Return ``True`` if *point* lies in the area (boundary included, holes excluded).
         """
         return bool(self.polygon.covers(Point(point)))
+
+    def _anchor(self, point: np.ndarray) -> tuple[np.ndarray, float]:
+        """
+        Where *point* joins the area and the length of the leg to it: the point
+        itself when inside, else its nearest boundary point.
+        """
+        point = np.asarray(point, dtype=float)
+        if self.covers(point):
+            return point, 0.0
+        anchor = np.array(nearest_points(self.polygon, Point(point))[0].coords[0])
+        return anchor, float(np.linalg.norm(point - anchor))
 
     def crossings(self, node: int) -> dict[int, Crossing]:
         """
@@ -106,27 +107,35 @@ class WalkableArea:
         self, point: np.ndarray, goal: np.ndarray | None = None
     ) -> tuple[dict[int, Crossing], Crossing | None]:
         """
-        Crossings from a *point* inside the area to its entries and, when given, to *goal*.
+        Crossings from a *point* in or next to the area to its entries and, when given, to *goal*.
 
-        The goal crossing is ``None`` when *goal* is not given or cannot be
-        reached from *point* inside the area.
+        A point (or goal) just outside joins the area at its nearest boundary
+        point, like an entry does. The goal crossing is ``None`` when *goal* is
+        not given or cannot be reached from *point* inside the area.
         """
-        extra = [] if goal is None else [np.asarray(goal, dtype=float)]
-        dist, prev = self._search(point, extra)
-        points = self._points + extra + [point]
+        anchor, leg = self._anchor(point)
+        extra: list[np.ndarray] = []
+        goal_leg = 0.0
+        if goal is not None:
+            goal_anchor, goal_leg = self._anchor(goal)
+            extra = [goal_anchor]
+        dist, prev = self._search(anchor, extra)
+        points = self._points + extra + [anchor]
+        start = [np.asarray(point, dtype=float)]
         to_entries = {
             node: (
-                (dist[j] + self._legs[j]) * self.factor,
-                [*_trace(prev, points, j), self.entries[node]],
+                (leg + dist[j] + self._legs[j]) * self.factor,
+                [*start, *_trace(prev, points, j), self.entries[node]],
             )
             for node, j in self._index.items()
             if np.isfinite(dist[j])
         }
         to_goal = None
-        if goal is not None and np.isfinite(dist[len(self._points)]):
+        g = len(self._points)
+        if goal is not None and np.isfinite(dist[g]):
             to_goal = (
-                dist[len(self._points)] * self.factor,
-                _trace(prev, points, len(self._points)),
+                (leg + dist[g] + goal_leg) * self.factor,
+                [*start, *_trace(prev, points, g), np.asarray(goal, dtype=float)],
             )
         return to_entries, to_goal
 

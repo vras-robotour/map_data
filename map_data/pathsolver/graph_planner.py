@@ -341,11 +341,13 @@ class GraphPlanner:
             for node in entries:
                 self._node_areas.setdefault(node, []).append(area)
 
-    def _area_at(self, point: np.ndarray) -> WalkableArea | None:
+    def _area_at(self, point: np.ndarray, tolerance: float = 0.0) -> WalkableArea | None:
         """
-        The walkable area covering *point*, or ``None``.
+        The walkable area nearest to *point* if within *tolerance* (0: covering it), or ``None``.
         """
-        return next((a for a in self._areas if a.covers(point)), None)
+        p = Point(point)
+        nearest = min(self._areas, key=lambda a: a.polygon.distance(p), default=None)
+        return nearest if nearest is not None and nearest.polygon.distance(p) <= tolerance else None
 
     def edge_factor(self, way: Way) -> float:
         """
@@ -533,7 +535,6 @@ class GraphPlanner:
                 id_s: np.asarray(path_utm[i], dtype=float)[:2],
                 id_g: np.asarray(path_utm[i + 1], dtype=float)[:2],
             }
-            areas = {tid: self._area_at(p) for tid, p in ends.items()}
 
             # Positions, adjacency and crossing geometry of the two temporary
             # nodes, kept in separate dicts (rather than one mixing them under
@@ -544,18 +545,9 @@ class GraphPlanner:
             snapped: dict[str, tuple[int, int, float]] = {}
 
             for tid, waypoint in ends.items():
-                area = areas[tid]
-                if area is not None:
-                    # Inside a walkable area the waypoint itself is the node,
-                    # joined to the area's entries (and to the goal, when both
-                    # lie in this area) by in-area crossings.
+                if self._area_at(waypoint) is not None:
+                    # Inside a walkable area the waypoint itself is the node.
                     positions[tid] = waypoint
-                    shared = tid == id_s and areas[id_g] is area
-                    to_entries, to_goal = area.from_point(waypoint, ends[id_g] if shared else None)
-                    for node, (cost, points) in to_entries.items():
-                        _link(extra_adj, extra_via, tid, node, cost, points)
-                    if to_goal is not None:
-                        _link(extra_adj, extra_via, id_s, id_g, *to_goal)
                     continue
 
                 edge_info, dist = self._find_closest_edge(waypoint)
@@ -578,6 +570,23 @@ class GraphPlanner:
                     # Distance from the projection to one end of its edge, priced like the way.
                     cost = float(np.linalg.norm(proj - self.nodes[node].ravel()[:2])) * factor
                     _link(extra_adj, extra_via, tid, node, cost, None)
+
+            # A node inside a walkable area, or snapped onto or next to one (its
+            # rim, say, whose own nodes need not be entries), is joined to the
+            # area's entries, and to the other node when both are in it, by
+            # in-area crossings.
+            areas = {tid: self._area_at(p, ENTRY_TOLERANCE) for tid, p in positions.items()}
+            for tid in (id_s, id_g):
+                area = areas[tid]
+                if area is None:
+                    continue
+                shared = tid == id_s and areas[id_g] is area
+                goal = positions[id_g] if shared else None
+                to_entries, to_goal = area.from_point(positions[tid], goal)
+                for node, (cost, points) in to_entries.items():
+                    _link(extra_adj, extra_via, tid, node, cost, points)
+                if to_goal is not None:
+                    _link(extra_adj, extra_via, id_s, id_g, *to_goal)
 
             # Special case: start and goal on the same edge
             if id_s in snapped and id_g in snapped:
