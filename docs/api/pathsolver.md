@@ -33,6 +33,13 @@ See [Using `astar_search` directly](../planning.md#using-astar_search-directly) 
       show_source: true
       heading_level: 3
 
+### Walkable areas
+
+::: map_data.pathsolver.walkable_area
+    options:
+      show_root_heading: false
+      heading_level: 4
+
 ## Grid A*
 
 ::: map_data.pathsolver.grid_astar.grid_astar

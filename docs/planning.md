@@ -258,6 +258,13 @@ grid uses, plus any extra cost from the [traversability rules](#traversability-r
 a gravel shortcut loses to a slightly longer paved way; the reported route length stays
 geometric.
 
+Walkable areas — closed `area=yes` (or multipolygon) ways such as pedestrian squares — are
+crossed, not walked around. Their entries are the network nodes on, inside or within 1 m of
+the area; between two entries the planner takes the shortest path inside the polygon,
+bending round concave corners and holes. These crossings are worked out per area when the
+search first reaches it and are never added to the graph. A waypoint inside an area stays
+where it is (its snap distance is 0) instead of moving to the area's rim.
+
 ### Grid A\*
 
 Discretizes the area around the route into a uniform grid and runs A\* on it.

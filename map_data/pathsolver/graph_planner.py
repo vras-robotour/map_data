@@ -5,15 +5,18 @@ This module provides the GraphPlanner class which builds a graph from
 OpenStreetMap ways and finds paths using Dijkstra or A*.
 """
 
+import itertools
 import logging
+from collections import Counter
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 import numpy as np
-from shapely.geometry import LineString, Point
+from shapely.geometry import LineString, Point, Polygon
 from shapely.strtree import STRtree
 
 from map_data.pathsolver.astar import astar_search
+from map_data.pathsolver.walkable_area import ENTRY_TOLERANCE, WalkableArea
 from map_data.pathsolver.way_cost import load_cost_tables, way_cost
 from map_data.traversability import TraversabilityRules, load_traversability
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES, Way
@@ -66,6 +69,12 @@ class GraphPlanner:
     (negative-ID ways) are spliced into the graph by projecting their
     endpoints onto the nearest OSM edge, so annotations extend the
     traversable network seamlessly.
+
+    Walkable areas (closed ``area=yes`` or multipolygon ways, e.g. pedestrian
+    squares) can be crossed rather than only walked around: A* may hop between
+    any two of an area's entries along the shortest path inside it (see
+    :mod:`map_data.pathsolver.walkable_area`), and a waypoint inside an area
+    stays where it is instead of snapping to its rim.
 
     Planning is performed with A* (see :meth:`plan`). The planner operates
     entirely in UTM coordinates.
@@ -271,6 +280,72 @@ class GraphPlanner:
         self._edge_node_pairs = final_edge_node_pairs
         self._edge_factors = final_edge_factors
         self._edge_tree = STRtree(final_edge_segments) if final_edge_segments else None
+        self._build_areas(way_nodes)
+
+    def _build_areas(self, way_nodes: list[list[int]]) -> None:
+        """
+        Collect the walkable areas among the allowed ways, with their entries.
+
+        A walkable area is a closed way tagged ``area=yes`` or
+        ``type=multipolygon``. Its entries are the graph nodes within
+        :data:`~map_data.pathsolver.walkable_area.ENTRY_TOLERANCE` of it that
+        belong to another way or have an edge other than the area's own
+        outline: where another way (an adjacent area included) joins it, runs
+        inside it or ends next to it, or an annotation is spliced onto it.
+        Crossings between them are computed on demand, never added to
+        :attr:`graph`.
+        """
+        self._areas: list[WalkableArea] = []
+        self._node_areas: dict[int, list[WalkableArea]] = {}
+        on_ways = Counter(n for nodes in way_nodes for n in set(nodes))
+        candidates = [
+            (way, nodes)
+            for way, nodes in zip(self._allowed_ways, way_nodes, strict=True)
+            if len(nodes) >= 4
+            and nodes[0] == nodes[-1]
+            and (way.tags.get("area") == "yes" or way.tags.get("type") == "multipolygon")
+        ]
+        if not candidates:
+            return
+        ids = list(self.graph)
+        xy = np.array([self.nodes[n].ravel()[:2] for n in ids])
+        for way, ring in candidates:
+            # The outline comes from the nodes (a parsed map's way.line is buffered),
+            # the holes from way.line, the only place they are kept.
+            # ponytail: a parsed map's holes are shrunk by half the buffer width
+            # (1.5 m for a footway); keep the unbuffered relation rings if that bites.
+            lines = getattr(way.line, "geoms", [way.line])
+            holes = [r.coords for g in lines if isinstance(g, Polygon) for r in g.interiors]
+            polygon = Polygon([self.nodes[n].ravel()[:2] for n in ring], holes)
+            if not polygon.is_valid:
+                logger.warning("Area way %s has an invalid outline; not crossing it.", way.id)
+                continue
+            ring_nodes = set(ring)
+            outline = {frozenset(e) for e in itertools.pairwise(ring)}
+            lo = np.array(polygon.bounds[:2]) - ENTRY_TOLERANCE
+            hi = np.array(polygon.bounds[2:]) + ENTRY_TOLERANCE
+            entries = {
+                ids[i]: xy[i]
+                for i in np.flatnonzero(np.all((xy >= lo) & (xy <= hi), axis=1))
+                if (
+                    ids[i] not in ring_nodes
+                    or on_ways[ids[i]] > 1
+                    or any(frozenset((ids[i], v)) not in outline for v, _ in self.graph[ids[i]])
+                )
+                and polygon.distance(Point(xy[i])) <= ENTRY_TOLERANCE
+            }
+            if not entries:
+                continue
+            area = WalkableArea(polygon, self.edge_factor(way), entries)
+            self._areas.append(area)
+            for node in entries:
+                self._node_areas.setdefault(node, []).append(area)
+
+    def _area_at(self, point: np.ndarray) -> WalkableArea | None:
+        """
+        The walkable area covering *point*, or ``None``.
+        """
+        return next((a for a in self._areas if a.covers(point)), None)
 
     def edge_factor(self, way: Way) -> float:
         """
@@ -323,10 +398,14 @@ class GraphPlanner:
     def snap_distance(self, point_utm: np.ndarray) -> float:
         """
         Distance (m) from ``point_utm`` (``[easting, northing]``) to the nearest
-        graph edge, or ``inf`` when the graph has no edges. This is the distance
-        :meth:`plan` compares against ``max_snap_distance``.
+        graph edge, 0 inside a walkable area, or ``inf`` when the graph has no
+        edges. This is the distance :meth:`plan` compares against
+        ``max_snap_distance``.
         """
-        _, dist = self._find_closest_edge(np.asarray(point_utm, dtype=float)[:2])
+        point = np.asarray(point_utm, dtype=float)[:2]
+        if self._area_at(point) is not None:
+            return 0.0
+        _, dist = self._find_closest_edge(point)
         return float(dist)
 
     def _route_segment(
@@ -335,15 +414,18 @@ class GraphPlanner:
         id_g: int | str,
         positions: dict[int | str, np.ndarray],
         extra_adj: dict[int | str, list[tuple[int | str, float]]],
+        extra_via: "dict[tuple[int | str, int | str], list[np.ndarray]]",
     ) -> list[np.ndarray] | None:
         """
         Run A* from *id_s* to *id_g* over the graph plus a local subgraph.
 
         *positions* gives the world coordinate of the two temporary snapped
         nodes (everything else resolves through :attr:`nodes`); *extra_adj*
-        gives their (and their edge endpoints') extra adjacency. Kept as two
-        plain dicts rather than one mixing both under string/int keys, so
-        neither needs a cast to satisfy the type checker.
+        gives their (and their edge endpoints') extra adjacency, and
+        *extra_via* the geometry of those extra hops that cross an area. Kept
+        as plain dicts rather than one mixing them under string/int keys, so
+        none needs a cast to satisfy the type checker. Besides the graph's own
+        edges, an entry of a walkable area neighbours the area's other entries.
         """
 
         def get_pos(node: int | str) -> np.ndarray:
@@ -351,9 +433,11 @@ class GraphPlanner:
             return pos if pos is not None else self.nodes[node].ravel()[:2]  # type: ignore[index]
 
         def get_neighbors(u: int | str) -> list[tuple[int | str, float]]:
-            neighs: list[tuple[int | str, float]] = (
-                list(self.graph.get(u, [])) if isinstance(u, int) else []
-            )
+            neighs: list[tuple[int | str, float]] = []
+            if isinstance(u, int):
+                neighs.extend(self.graph.get(u, []))
+                for area in self._node_areas.get(u, ()):
+                    neighs.extend((v, cost) for v, (cost, _) in area.crossings(u).items())
             neighs.extend(extra_adj.get(u, []))
             return neighs
 
@@ -363,7 +447,29 @@ class GraphPlanner:
         node_path = astar_search(id_s, id_g, get_neighbors, heuristic)
         if node_path is None:
             return None
-        return [get_pos(n) for n in node_path]
+        route = [get_pos(node_path[0])]
+        for a, b in itertools.pairwise(node_path):
+            via = extra_via.get((a, b)) or self._crossing_points(a, b)
+            route.extend(via[1:] if via else [get_pos(b)])
+        return route
+
+    def _crossing_points(self, a: int | str, b: int | str) -> list[np.ndarray] | None:
+        """
+        Points from *a* to *b* of the area crossing A* took between them, or
+        ``None`` when it took the straight graph edge.
+
+        A* only reports the node sequence, so the hop is recovered as the
+        cheaper of the graph edge and the crossings joining the two nodes —
+        the one A* relaxed with.
+        """
+        if not (isinstance(a, int) and isinstance(b, int)):
+            return None
+        edge = min((w for v, w in self.graph.get(a, []) if v == b), default=np.inf)
+        crossings = [
+            area.crossings(a)[b] for area in self._node_areas.get(a, ()) if b in area.crossings(a)
+        ]
+        best = min(crossings, key=lambda c: c[0], default=None)
+        return best[1] if best is not None and best[0] < edge else None
 
     def plan(
         self,
@@ -421,17 +527,40 @@ class GraphPlanner:
         full_path: list[np.ndarray] = []
 
         for i in range(len(path_utm) - 1):
-            p_start = path_utm[i]
-            p_goal = path_utm[i + 1]
+            id_s = "temp_start"
+            id_g = "temp_goal"
+            ends = {
+                id_s: np.asarray(path_utm[i], dtype=float)[:2],
+                id_g: np.asarray(path_utm[i + 1], dtype=float)[:2],
+            }
+            areas = {tid: self._area_at(p) for tid, p in ends.items()}
 
-            # Find nearest edges and projections
-            edge_start_info, dist_start = self._find_closest_edge(p_start)
-            edge_goal_info, dist_goal = self._find_closest_edge(p_goal)
+            # Positions, adjacency and crossing geometry of the two temporary
+            # nodes, kept in separate dicts (rather than one mixing them under
+            # string/int keys) so none needs a cast to satisfy the type checker.
+            positions: dict[int | str, np.ndarray] = {}
+            extra_adj: dict[int | str, list[tuple[int | str, float]]] = {}
+            extra_via: dict[tuple[int | str, int | str], list[np.ndarray]] = {}
+            snapped: dict[str, tuple[int, int, float]] = {}
 
-            if not edge_start_info or not edge_goal_info:
-                return None
+            for tid, waypoint in ends.items():
+                area = areas[tid]
+                if area is not None:
+                    # Inside a walkable area the waypoint itself is the node,
+                    # joined to the area's entries (and to the goal, when both
+                    # lie in this area) by in-area crossings.
+                    positions[tid] = waypoint
+                    shared = tid == id_s and areas[id_g] is area
+                    to_entries, to_goal = area.from_point(waypoint, ends[id_g] if shared else None)
+                    for node, (cost, points) in to_entries.items():
+                        _link(extra_adj, extra_via, tid, node, cost, points)
+                    if to_goal is not None:
+                        _link(extra_adj, extra_via, id_s, id_g, *to_goal)
+                    continue
 
-            for waypoint, dist in ((p_start, dist_start), (p_goal, dist_goal)):
+                edge_info, dist = self._find_closest_edge(waypoint)
+                if edge_info is None:
+                    return None
                 if dist > self.max_snap_distance:
                     logger.warning(
                         "Waypoint (%.1f, %.1f) is %.1f m from the nearest graph "
@@ -442,43 +571,23 @@ class GraphPlanner:
                         self.max_snap_distance,
                     )
                     return None
-
-            id_s = "temp_start"
-            id_g = "temp_goal"
-            n_s1, n_s2, p_proj_s, f_s = edge_start_info
-            n_g1, n_g2, p_proj_g, f_g = edge_goal_info
-
-            def weighted(p: np.ndarray, node: int, factor: float) -> float:
-                """Distance from a projection to one end of its edge, priced like the way."""
-                return float(np.linalg.norm(p - self.nodes[node].ravel()[:2])) * factor
-
-            # Positions and adjacency for the two temporary snapped nodes, kept in
-            # separate dicts (rather than one mixing both under string/int keys) so
-            # neither needs a cast to satisfy the type checker.
-            positions: dict[int | str, np.ndarray] = {id_s: p_proj_s, id_g: p_proj_g}
-            extra_adj: dict[int | str, list[tuple[int | str, float]]] = {
-                id_s: [
-                    (n_s1, weighted(p_proj_s, n_s1, f_s)),
-                    (n_s2, weighted(p_proj_s, n_s2, f_s)),
-                ],
-                id_g: [
-                    (n_g1, weighted(p_proj_g, n_g1, f_g)),
-                    (n_g2, weighted(p_proj_g, n_g2, f_g)),
-                ],
-                n_s1: [(id_s, weighted(p_proj_s, n_s1, f_s))],
-                n_s2: [(id_s, weighted(p_proj_s, n_s2, f_s))],
-                n_g1: [(id_g, weighted(p_proj_g, n_g1, f_g))],
-                n_g2: [(id_g, weighted(p_proj_g, n_g2, f_g))],
-            }
+                n1, n2, proj, factor = edge_info
+                positions[tid] = proj
+                snapped[tid] = (n1, n2, factor)
+                for node in (n1, n2):
+                    # Distance from the projection to one end of its edge, priced like the way.
+                    cost = float(np.linalg.norm(proj - self.nodes[node].ravel()[:2])) * factor
+                    _link(extra_adj, extra_via, tid, node, cost, None)
 
             # Special case: start and goal on the same edge
-            if (n_s1 == n_g1 and n_s2 == n_g2) or (n_s1 == n_g2 and n_s2 == n_g1):
-                dist_sg = float(np.linalg.norm(p_proj_s - p_proj_g)) * f_s
-                extra_adj[id_s].append((id_g, dist_sg))
-                extra_adj[id_g].append((id_s, dist_sg))
+            if id_s in snapped and id_g in snapped:
+                n_s1, n_s2, f_s = snapped[id_s]
+                if {n_s1, n_s2} == set(snapped[id_g][:2]):
+                    cost = float(np.linalg.norm(positions[id_s] - positions[id_g])) * f_s
+                    _link(extra_adj, extra_via, id_s, id_g, cost, None)
 
-            # Route between temporary nodes (projections)
-            segment = self._route_segment(id_s, id_g, positions, extra_adj)
+            # Route between temporary nodes
+            segment = self._route_segment(id_s, id_g, positions, extra_adj, extra_via)
             if segment is None:
                 return None
 
@@ -496,6 +605,24 @@ class GraphPlanner:
                 full_path.append(goal)
 
         return _drop_stacked_points(full_path)
+
+
+def _link(
+    adj: dict[int | str, list[tuple[int | str, float]]],
+    via: dict[tuple[int | str, int | str], list[np.ndarray]],
+    a: int | str,
+    b: int | str,
+    cost: float,
+    points: list[np.ndarray] | None,
+) -> None:
+    """
+    Join nodes *a* and *b* both ways in *adj*, recording the crossing's *points* (a to b) in *via*.
+    """
+    adj.setdefault(a, []).append((b, cost))
+    adj.setdefault(b, []).append((a, cost))
+    if points is not None:
+        via[(a, b)] = points
+        via[(b, a)] = points[::-1]
 
 
 def _drop_stacked_points(points: list[np.ndarray]) -> np.ndarray:

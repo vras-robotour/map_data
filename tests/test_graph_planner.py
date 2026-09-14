@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from shapely.geometry import LineString
+from shapely.geometry import LineString, Polygon
 
 from map_data.pathsolver.graph_planner import GraphPlanner
 from map_data.traversability import TraversabilityRules
@@ -592,3 +592,164 @@ def test_graph_planner_drops_ways_the_rules_refuse():
     assert [w.id for w in planner._allowed_ways] == [2]
     assert result is not None
     assert _takes_the_detour(result)
+
+
+# ── walkable areas ────────────────────────────────────────────────────────────
+#
+# A closed area=yes way is crossed along the shortest path inside its polygon
+# (holes respected) between its entries, instead of walked around its rim.
+
+
+def _route_length(route):
+    return float(np.linalg.norm(np.diff(route, axis=0), axis=1).sum())
+
+
+def _area_map(ring, feeders, holes=(), extra_coords=None):
+    """
+    A walkable area on *ring* (coordinates, first != last) plus footways
+    *feeders* given as coordinate lists; coordinates equal to a ring vertex
+    share its node.
+    """
+    coords = {}
+
+    def node(xy):
+        for nid, c in coords.items():
+            if c == xy:
+                return nid
+        coords[len(coords) + 1] = xy
+        return len(coords)
+
+    ring_ids = [node(xy) for xy in ring]
+    area = Way(
+        id=1,
+        nodes=[*ring_ids, ring_ids[0]],
+        tags={"highway": "pedestrian", "area": "yes"},
+        line=Polygon(ring, list(holes)),
+    )
+    ways = [area] + [
+        _make_footway(10 + k, [node(xy) for xy in f], coords) for k, f in enumerate(feeders)
+    ]
+    return MockMapData(ways, coords)
+
+
+_SQUARE = [(0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (0.0, 20.0)]
+
+
+def test_area_is_crossed_without_graph_edges():
+    """
+    Entries on opposite corners of a square: the route cuts the diagonal, and
+    the graph gains no edge across the square.
+    """
+    md = _area_map(_SQUARE, [[(-10.0, 0.0), (0.0, 0.0)], [(20.0, 20.0), (30.0, 20.0)]])
+    planner = GraphPlanner(md)
+
+    route = planner.plan(np.array([[-10.0, 0.0], [30.0, 20.0]]))
+
+    assert _route_length(route) == pytest.approx(20.0 + 800**0.5)
+    assert all(v != 3 for v, _ in planner.graph[1])  # no corner-to-corner edge
+
+
+def test_concave_area_crossing_stays_inside():
+    """
+    U-shaped area with entries on the tips of its arms: the route bends round
+    the notch's corners instead of cutting across it or following the rim.
+    """
+    ring = [
+        (0.0, 0.0),
+        (30.0, 0.0),
+        (30.0, 30.0),
+        (20.0, 30.0),
+        (20.0, 10.0),
+        (10.0, 10.0),
+        (10.0, 30.0),
+        (0.0, 30.0),
+    ]
+    md = _area_map(ring, [[(0.0, 40.0), (0.0, 30.0)], [(30.0, 30.0), (30.0, 40.0)]])
+
+    route = GraphPlanner(md).plan(np.array([[0.0, 40.0], [30.0, 40.0]]))
+
+    assert _route_length(route) == pytest.approx(20.0 + 2 * 500**0.5 + 10.0)
+    assert LineString(route[1:-1]).within(Polygon(ring).buffer(0.01))
+
+
+def test_area_crossing_avoids_holes():
+    """
+    A hole in the middle of the square blocks the straight crossing; the route
+    goes round the hole's corners.
+    """
+    ring = [(0.0, 0.0), (30.0, 0.0), (30.0, 15.0), (30.0, 30.0), (0.0, 30.0), (0.0, 15.0)]
+    hole = [(10.0, 10.0), (20.0, 10.0), (20.0, 20.0), (10.0, 20.0)]
+    md = _area_map(ring, [[(-10.0, 15.0), (0.0, 15.0)], [(30.0, 15.0), (40.0, 15.0)]], holes=[hole])
+
+    route = GraphPlanner(md).plan(np.array([[-10.0, 15.0], [40.0, 15.0]]))
+
+    assert _route_length(route) == pytest.approx(20.0 + 2 * 125**0.5 + 10.0)
+    assert LineString(route).intersection(Polygon(hole).buffer(-0.01)).length == 0
+
+
+def test_waypoints_inside_area_stay_put():
+    """
+    Waypoints inside an area are not snapped to its rim: one inside is reached
+    straight from an entry, two inside are joined directly.
+    """
+    md = _area_map(_SQUARE, [[(-10.0, 0.0), (0.0, 0.0)], [(20.0, 20.0), (30.0, 20.0)]])
+    planner = GraphPlanner(md)
+
+    route = planner.plan(np.array([[-10.0, 0.0], [10.0, 10.0]]))
+    assert route[-1] == pytest.approx([10.0, 10.0])
+    assert _route_length(route) == pytest.approx(10.0 + 200**0.5)
+    assert planner.snap_distance(np.array([10.0, 10.0])) == 0.0
+
+    inside = planner.plan(np.array([[5.0, 5.0], [15.0, 15.0]]))
+    assert inside == pytest.approx(np.array([[5.0, 5.0], [15.0, 15.0]]))
+
+
+@pytest.mark.parametrize(("gap", "reachable"), [(0.8, True), (1.5, False)])
+def test_area_entry_tolerance(gap, reachable):
+    """
+    A footway ending just short of the area (no shared node) still enters it
+    within 1 m; farther away the two stay disconnected.
+    """
+    md = _area_map(_SQUARE, [[(-10.0, 10.0), (-gap, 10.0)], [(20.0, 20.0), (30.0, 20.0)]])
+
+    route = GraphPlanner(md).plan(np.array([[-10.0, 10.0], [30.0, 20.0]]))
+
+    assert (route is not None) == reachable
+
+
+def test_adjacent_areas_enter_each_other_on_shared_outline():
+    """
+    Two squares sharing an edge: its nodes lie on no way but the two outlines
+    (and the shared edge is part of both), yet they are entries, so the route
+    crosses from one square into the other instead of walking both rims.
+    """
+    coords = {
+        1: (0.0, 0.0),
+        2: (20.0, 0.0),
+        3: (20.0, 20.0),
+        4: (0.0, 20.0),
+        5: (40.0, 0.0),
+        6: (40.0, 20.0),
+        7: (-10.0, 0.0),
+        8: (50.0, 20.0),
+    }
+
+    def area(way_id, ring):
+        return Way(
+            id=way_id,
+            nodes=[*ring, ring[0]],
+            tags={"highway": "pedestrian", "area": "yes"},
+            line=Polygon([coords[n] for n in ring]),
+        )
+
+    ways = [
+        area(1, [1, 2, 3, 4]),
+        area(2, [2, 5, 6, 3]),
+        _make_footway(10, [7, 1], coords),
+        _make_footway(11, [6, 8], coords),
+    ]
+
+    route = GraphPlanner(MockMapData(ways, coords)).plan(np.array([[-10.0, 0.0], [50.0, 20.0]]))
+
+    # Through the shared corner (20, 0): the areas meet only at their nodes.
+    assert _route_length(route) == pytest.approx(10.0 + 20.0 + 800**0.5 + 10.0)

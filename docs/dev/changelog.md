@@ -8,6 +8,12 @@
   argument), as `route_planner` does: the grid can be drawn from roads as well
   as footways, so it shows the network the graph planner routes on when roads
   are allowed. The default stays `["footway"]`
+- The graph planner crosses walkable areas (closed `area=yes` or multipolygon ways,
+  e.g. pedestrian squares) along the shortest path inside them, holes and concave
+  corners respected, instead of walking their rim. Any network node on, inside or
+  within 1 m of the area enters it; a waypoint inside an area is no longer snapped to
+  its rim. The crossings live with the area (`map_data.pathsolver.walkable_area`)
+  and add no graph edges
 
 ### Fixed
 
