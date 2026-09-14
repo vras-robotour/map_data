@@ -11,23 +11,14 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-
-def package_config_dir(package: str = "map_data") -> Path:
-    """The installed ``share/<package>/config``, or the source tree when not installed."""
-    try:
-        from ament_index_python.resources import get_resource
-
-        _, prefix = get_resource("packages", package)
-        return Path(prefix) / "share" / package / "config"
-    except (ImportError, LookupError):
-        return (Path(__file__).parent / ".." / ".." / "config").resolve()
+from map_data.utils.config import package_share
 
 
 def resolve_config_file(name: str, package: str = "map_data") -> str:
     """An absolute path is taken as is; a bare name is looked up in ``config/``."""
     path = Path(name).expanduser()
     if not path.is_absolute():
-        in_package = package_config_dir(package) / name
+        in_package = package_share("config", package) / name
         if in_package.exists():
             return str(in_package)
     return str(path)

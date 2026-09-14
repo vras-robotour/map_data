@@ -2,6 +2,43 @@
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-09-13
+
+A major version because node parameters and public helpers are removed.
+
+### Removed
+
+- `osm_cloud`: the `auto_utm` and `utm_to_local` parameters and the
+  `publish_static_tf` launch argument; `transform_mode` covers them
+- `MapData`: the `flip` and `current_robot_position` arguments and
+  `exclude_ways()`; use `apply_traversability(TraversabilityRules().extend(...))`.
+  The nodes' `exclude_highway` parameter is unchanged
+- `utils.gpx`: `parse_path`, `parse_gpx_file`, `parse_yaml_file`,
+  `convert_waypoint` and `utm_path_to_latlon`. `MapData` reads GPX itself; YAML
+  waypoint files are no longer accepted
+- The `python -m map_data.pathsolver.replan` CLI and its matplotlib visualizer;
+  `map_data_plan` is the offline planner
+- `Way.to_pcd_points` and `utils.points_to_graph_points`
+- `TraversabilityRules.describe`, `summary` and `edge_factor`,
+  `OverpassClient.query`, and `utils.launch.package_config_dir` (now
+  `utils.config.package_share`)
+- The `tqdm` and `matplotlib` dependencies
+
+### Changed
+
+- RRT* runs as Informed RRT*: once a path is found it keeps improving it for up
+  to `rrt.improve_iter` (200) iterations, sampling the informed ellipse with an
+  adaptive rewiring radius. The settings live in a new `rrt:` section of
+  `config/planner_defaults.yaml`
+- Grid A* and RRT* paths are simplified once, over the whole route, instead of
+  per segment and then again at the end
+- Obstacles are rasterised with `shapely.contains_xy`; the demo map's grid is
+  identical
+- Viewer: collapsible panels are native `<details>` (the whole header toggles),
+  the wormhole share dialog is a Bootstrap modal, and the duplicated frontend
+  and route code is consolidated
+- Annotation stores in legacy formats are normalised once, when loaded
+
 ### Fixed
 
 - Crossroad detection no longer invents junctions where one corridor is mapped

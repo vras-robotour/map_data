@@ -5,12 +5,9 @@ This module provides the MapData class which orchestrates downloading,
 caching, and parsing OpenStreetMap data for use in path planning.
 """
 
-import contextlib
 import json
 import logging
-import os
-import tempfile
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +18,7 @@ from gpxpy import parse as gpxparse
 from shapely import geometry
 
 from map_data.traversability import TraversabilityRules
-from map_data.utils.config import load_config
+from map_data.utils.config import load_config, package_share
 from map_data.utils.overpass import REQUEST_TIMEOUT, OverpassClient
 from map_data.utils.parsing import (
     parse_osm_nodes,
@@ -29,7 +26,7 @@ from map_data.utils.parsing import (
     parse_osm_ways,
     separate_ways,
 )
-from map_data.utils.serialization import load_mapdata, save_mapdata
+from map_data.utils.serialization import atomic_write_json, load_mapdata, save_mapdata
 from map_data.utils.way import Way
 
 logger = logging.getLogger(__name__)
@@ -38,24 +35,6 @@ logger = logging.getLogger(__name__)
 _DEFAULTS = load_config("planner_defaults.yaml")
 GRID_MARGIN: float = _DEFAULTS.get("grid_margin", 150)
 BBOX_LEN = 4
-
-
-class CoordsData:
-    """Bounding box and coordinate metadata for map data."""
-
-    def __init__(self, min_long: float, max_long: float, min_lat: float, max_lat: float) -> None:
-        self.min_long = min_long
-        self.max_long = max_long
-        self.min_lat = min_lat
-        self.max_lat = max_lat
-        self.x_margin, self.y_margin = self._compute_margin()
-
-    def _compute_margin(self) -> tuple[float, float]:
-        margin = max(
-            (self.max_lat - self.min_lat) * 0.1,
-            (self.max_long - self.min_long) * 0.1,
-        )
-        return margin, margin
 
 
 class MapData:
@@ -94,9 +73,7 @@ class MapData:
         self,
         coords: str | tuple[np.ndarray, int, str],
         coords_type: str = "file",
-        current_robot_position: np.ndarray | None = None,
         *,
-        flip: bool = False,
         grid_margin: float | None = None,
         obstacle_radius: float | None = None,
         buffer_widths: dict[str, float] | None = None,
@@ -114,16 +91,6 @@ class MapData:
         coords_type : str
             ``"file"`` (default) to parse a GPX file, or ``"array"`` to
             supply pre-converted UTM coordinates directly.
-        current_robot_position : np.ndarray, optional
-            If provided, prepended to the waypoint array so the robot's
-            current position is included in the bounding box calculation.
-            Accepts a single ``(2,)``/``(3,)`` position or an ``(M, 2)``/
-            ``(M, 3)`` array. The column count is reconciled with the
-            waypoints: a missing elevation column is padded with ``0``
-            (matching the GPX/YAML parsers' default), a superfluous one is
-            dropped; any other shape raises :class:`ValueError`.
-        flip : bool
-            If ``True``, reverse the order of the parsed waypoints.
 
         """
         if coords_type == "file":
@@ -161,29 +128,6 @@ class MapData:
             msg = f"Unknown coords_type: {coords_type!r}"
             raise ValueError(msg)
 
-        if flip:
-            self.waypoints = np.flip(self.waypoints, 0)
-
-        if current_robot_position is not None:
-            position = np.atleast_2d(np.asarray(current_robot_position, dtype=float))
-            n_cols = self.waypoints.shape[1]
-            if position.shape[1] == n_cols:
-                pass
-            elif position.shape[1] == 2 and n_cols == 3:
-                # Waypoints carry an elevation column (GPX/YAML paths default
-                # missing elevations to 0) — pad the position the same way.
-                position = np.column_stack([position, np.zeros(len(position))])
-            elif position.shape[1] == 3 and n_cols == 2:
-                position = position[:, :2]
-            else:
-                msg = (
-                    f"current_robot_position has {position.shape[1]} column(s); "
-                    f"expected 2 (easting, northing) or 3 (easting, northing, "
-                    f"elevation) to match waypoints with {n_cols} column(s)"
-                )
-                raise ValueError(msg)
-            self.waypoints = np.concatenate([position, self.waypoints])
-
         _margin = grid_margin if grid_margin is not None else GRID_MARGIN
         self.max_x = float(np.max(self.waypoints[:, 0]) + _margin)
         self.min_x = float(np.min(self.waypoints[:, 0]) - _margin)
@@ -205,7 +149,6 @@ class MapData:
             self.zone_letter,
         )
 
-        self.coords_data = CoordsData(self.min_long, self.max_long, self.min_lat, self.max_lat)
         self._check_utm_zone_boundary()
         self.points = [
             geometry.Point(x, y)
@@ -247,13 +190,7 @@ class MapData:
             )
 
     def _load_tag_configs(self) -> None:
-        try:
-            from ament_index_python.resources import get_resource
-
-            _, package_path = get_resource("packages", "map_data")
-            params_path = Path(package_path) / "share" / "map_data" / "parameters"
-        except (ImportError, LookupError):
-            params_path = (Path(__file__).parent / ".." / "parameters").resolve()
+        params_path = package_share("parameters")
 
         self.BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
             params_path / "barrier_tags.csv",
@@ -300,18 +237,7 @@ class MapData:
             "raw": raw,
         }
         try:
-            # Atomic write: dump to a temp file next to the target, then
-            # replace it, so a crash or full disk mid-dump cannot truncate a
-            # previously good cache file.
-            fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
-            try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    json.dump(cache_data, f)
-                os.replace(tmp, path)
-            except BaseException:
-                with contextlib.suppress(OSError):
-                    os.unlink(tmp)
-                raise
+            atomic_write_json(path, cache_data)
             logger.info("Saved OSM response cache to %s", path)
         except (OSError, TypeError) as e:
             logger.warning("Could not save OSM cache: %s", e)
@@ -470,29 +396,6 @@ class MapData:
 
         logger.info("Parsing finished.")
         return 0
-
-    def exclude_ways(self, highway_values: Iterable[str]) -> int:
-        """
-        Drop every road/footway whose ``highway`` tag is in *highway_values*.
-
-        A shortcut for :meth:`apply_traversability` with rules that only deny
-        those ``highway`` values (see
-        :meth:`~map_data.traversability.TraversabilityRules.extend`), kept
-        because the ``exclude_highway`` parameter of the nodes, the loader and
-        the graph planner is written in those terms.
-
-        Parameters
-        ----------
-        highway_values : iterable of str
-            ``highway`` tag values to remove. An empty iterable is a no-op.
-
-        Returns
-        -------
-        int
-            Number of ways removed.
-
-        """
-        return self.apply_traversability(TraversabilityRules().extend(highway_values))
 
     def apply_traversability(self, rules: "TraversabilityRules") -> int:
         """

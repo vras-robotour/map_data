@@ -55,7 +55,7 @@ class PlannerMode {
       const bwRoad = data.buffer_widths?.road ?? 7.0;
       const bwFootway = data.buffer_widths?.footway ?? 3.0;
       const bwBarrier = data.buffer_widths?.barrier ?? 2.0;
-      for (const prefix of ['fetch', 'gpx', 'planner-fetch']) {
+      for (const prefix of ['fetch', 'gpx']) {
         const gm = document.getElementById(`${prefix}-grid-margin`);
         const or = document.getElementById(`${prefix}-obstacle-radius`);
         const br = document.getElementById(`${prefix}-buf-road`);
@@ -130,73 +130,6 @@ class PlannerMode {
     document.getElementById('planner-costs-btn').addEventListener('click', () => this.showCostsModal());
     document.getElementById('planner-costs-save').addEventListener('click', () => this.saveCosts());
     document.getElementById('planner-costs-reset').addEventListener('click', () => this.resetCosts());
-
-    document.getElementById('planner-fetch-submit').addEventListener('click', () => this.handlePlannerAutoFetch());
-    document.getElementById('planner-fetch-name-input').addEventListener('keydown', e => {
-      if (e.key === 'Enter') this.handlePlannerAutoFetch();
-    });
-  }
-
-  async handlePlannerAutoFetch() {
-    const name = document.getElementById('planner-fetch-name-input').value.trim();
-    if (!name) {
-      document.getElementById('planner-fetch-name-input').focus();
-      return;
-    }
-    bootstrap.Modal.getInstance(document.getElementById('planner-fetch-modal')).hide();
-
-    // Calculate BBox for the current points
-    let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
-    this.points.forEach(p => {
-      if (p.lat < minLat) minLat = p.lat;
-      if (p.lat > maxLat) maxLat = p.lat;
-      if (p.lon < minLon) minLon = p.lon;
-      if (p.lon > maxLon) maxLon = p.lon;
-    });
-
-    // Add a small margin (approx 50m in degrees)
-    const margin = 0.0005;
-    const bbox = {
-      min_lat: minLat - margin,
-      max_lat: maxLat + margin,
-      min_lon: minLon - margin,
-      max_lon: maxLon + margin,
-      name: name,
-      grid_margin: parseFloat(document.getElementById('planner-fetch-grid-margin')?.value) || 150,
-      obstacle_radius: parseFloat(document.getElementById('planner-fetch-obstacle-radius')?.value) || 2.0,
-      buffer_widths: {
-        road: parseFloat(document.getElementById('planner-fetch-buf-road')?.value) || 7.0,
-        footway: parseFloat(document.getElementById('planner-fetch-buf-footway')?.value) || 3.0,
-        barrier: parseFloat(document.getElementById('planner-fetch-buf-barrier')?.value) || 2.0,
-      },
-    };
-
-    setStatus('Fetching & parsing OSM data for the area...', 'text-warning');
-    this.updateProcessingUI(true);
-    this.isProcessing = true;
-
-    try {
-      const data = await fetchAreaApi(bbox, task => setStatus(formatFetchProgress(task), 'text-warning'));
-      setStatus(`Map created: ${data.filename}. Loading and planning...`, 'text-success');
-
-      // Add to file select if it's there
-      const sel = document.getElementById('file-select');
-      if (sel && ![...sel.options].some(o => o.value === data.filename)) {
-        sel.appendChild(new Option(data.filename, data.filename));
-      }
-      if (sel) sel.value = data.filename;
-
-      // Load the map data
-      await loadMapData(data.filename, { preserveView: true });
-
-      // After loading, proceed with replan
-      this.isProcessing = false; // Reset so replanPath can proceed
-      this.replanPath();
-    } catch (err) {
-      setStatus(`Fetch failed: ${err.message}`, 'text-danger');
-      this.updateProcessingUI(false);
-      this.isProcessing = false;
-    }
   }
 
   showCostsModal() {
@@ -268,21 +201,11 @@ class PlannerMode {
   }
 
   resetCosts() {
-    if (this.defaults && this.defaults.highway_costs) {
-      this.highwayCosts = { ...this.defaults.highway_costs };
-      this.surfaceCosts = { ...this.defaults.surface_costs };
-    } else {
-      // Hardcoded fallback if everything else fails
-      this.highwayCosts = {
-        "pedestrian": 0.0, "footway": 0.0, "path": 0.1, "living_street": 0.1,
-        "track": 0.3, "service": 0.3, "residential": 0.5, "unclassified": 0.5,
-        "tertiary": 0.7, "secondary": 0.9, "primary": 1.0,
-      };
-      this.surfaceCosts = {
-        "asphalt": 0.0, "paving_stones": 0.0, "concrete": 0.0, "fine_gravel": 0.1,
-        "gravel": 0.2, "dirt": 0.3, "grass": 0.5, "sand": 0.7,
-      };
-    }
+    // /api/planner_defaults is the source of truth; this.defaults is populated
+    // from it in fetchDefaults(). If that fetch failed, there's nothing to
+    // reset to but an empty set of costs.
+    this.highwayCosts = { ...(this.defaults.highway_costs || {}) };
+    this.surfaceCosts = { ...(this.defaults.surface_costs || {}) };
     this.showCostsModal();
   }
 
@@ -651,16 +574,12 @@ class PlannerMode {
       const ext = file.name.toLowerCase().split('.').pop();
 
       if (ext === 'mapdata') {
-        if (typeof handleMapdataUpload === 'function') {
-          handleMapdataUpload(file);
-        }
+        handleMapdataUpload(file);
       } else if (ext === 'gpx') {
         if (currentAppMode === 'planner') {
           this.loadGpxFile(file);
         } else {
-          if (typeof handleGpxMapCreation === 'function') {
-            handleGpxMapCreation(file);
-          }
+          handleGpxMapCreation(file);
         }
       }
     });
@@ -852,19 +771,9 @@ ${pts}
   }
 
   showWormholeDialog(code) {
-    const overlay = document.createElement('div');
-    overlay.className = 'dialog-overlay';
-    overlay.innerHTML = `
-      <div class="dialog-content">
-        <h2>Share via Wormhole</h2>
-        <p>Use this code on the receiving device:</p>
-        <div class="wormhole-code">${code}</div>
-        <p style="font-size:0.8rem;color:#6c7a9c;">The code will expire once the transfer is complete or after a timeout.</p>
-        <button class="dialog-close-btn">Close</button>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    overlay.querySelector('.dialog-close-btn').onclick = () => {
+    document.getElementById('wormhole-code').textContent = code;
+    const modalEl = document.getElementById('wormhole-modal');
+    modalEl.addEventListener('hidden.bs.modal', () => {
       if (this.currentWormholeId) {
         fetch('/api/cancel_wormhole', {
           method: 'POST',
@@ -872,9 +781,9 @@ ${pts}
           body: JSON.stringify({ transfer_id: this.currentWormholeId })
         }).catch(err => console.error('Wormhole cancel failed:', err));
       }
-      document.body.removeChild(overlay);
       this.currentWormholeId = null;
-    };
+    }, { once: true });
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
   }
 
   /** Robotour goal QR (geo:lat,lon) for one waypoint, full screen for the robot camera. */
@@ -892,26 +801,14 @@ ${pts}
   }
 
   showContextMenu(point, latlng) {
-    const container = document.createElement('div');
-    container.className = 'context-menu';
-    const delBtn = document.createElement('button');
-    delBtn.textContent = '🗑️ Delete Point';
-    delBtn.onclick = () => {
-      this.points = this.points.filter(p => p !== point);
-      this.redraw();
-      this.updateUI();
-      map.closePopup();
-    };
-    container.appendChild(delBtn);
-    const qrBtn = document.createElement('button');
-    qrBtn.textContent = '🔳 QR code';
-    qrBtn.onclick = () => { map.closePopup(); this.showQr(point); };
-    container.appendChild(qrBtn);
-
-    L.popup({ minWidth: 120, className: 'planner-popup', offset: [0, -5], closeButton: false })
-      .setLatLng(latlng)
-      .setContent(container)
-      .openOn(map);
+    showMenu(latlng, [
+      ['🗑️ Delete Point', () => {
+        this.points = this.points.filter(p => p !== point);
+        this.redraw();
+        this.updateUI();
+      }],
+      ['🔳 QR code', () => this.showQr(point)],
+    ], { minWidth: 120 });
   }
 }
 

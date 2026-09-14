@@ -15,8 +15,6 @@ import contextlib
 import copy
 import json
 import logging
-import os
-import tempfile
 import threading
 from collections.abc import Iterator
 from pathlib import Path
@@ -34,6 +32,8 @@ from shapely.geometry import (
 from shapely.geometry import (
     Polygon as _SPoly,
 )
+
+from map_data.utils.serialization import atomic_write_json
 
 if TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry
@@ -250,6 +250,29 @@ def _get_annotation_lock(path: str) -> threading.RLock:
         return _annotation_locks[path]
 
 
+def _normalize_legacy_store(store: dict[str, Any]) -> dict[str, Any]:
+    """
+    Upgrade one-off legacy annotation-store shapes to the current one, in place.
+
+    Nothing writes these shapes any more, but old files on disk may still
+    have them: ``deleted_ways``/``hidden_ways`` as a flat list of raw IDs
+    (now a list of ``{"id": ...}`` dicts), and ``deleted_nodes`` as a
+    ``{str(way_id): [node_id, ...]}`` dict (now a flat list of
+    ``{"way_id": ..., "node_id": ...}`` dicts). Normalizing once here lets
+    every other reader assume the current shape.
+    """
+    for key in ("deleted_ways", "hidden_ways"):
+        items = store.get(key)
+        if items:
+            store[key] = [d if isinstance(d, dict) else {"id": d} for d in items]
+    dn = store.get("deleted_nodes")
+    if isinstance(dn, dict):
+        store["deleted_nodes"] = [
+            {"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs
+        ]
+    return store
+
+
 def load_annotations(path: str) -> dict[str, Any]:
     """
     Load the annotation store from *path*, or return a fresh empty store.
@@ -257,7 +280,8 @@ def load_annotations(path: str) -> dict[str, Any]:
     An empty/default store (``{"version": 1, "annotations": []}``) is
     returned both when *path* does not exist and when it exists but
     contains invalid JSON (in the latter case a warning is logged; the
-    corrupt file itself is left untouched on disk).
+    corrupt file itself is left untouched on disk). Legacy on-disk shapes
+    are upgraded via :func:`_normalize_legacy_store` before returning.
 
     Parameters
     ----------
@@ -274,7 +298,7 @@ def load_annotations(path: str) -> dict[str, Any]:
     if p.is_file():
         try:
             with p.open() as f:
-                return json.load(f)
+                return _normalize_legacy_store(json.load(f))
         except json.JSONDecodeError:
             logger.warning("Corrupt annotation file %s, returning empty store", path)
     return {"version": 1, "annotations": []}
@@ -284,11 +308,10 @@ def save_annotations(path: str, data: dict[str, Any]) -> None:
     """
     Atomically write the annotation store to *path*.
 
-    Serializes *data* as indented JSON to a temp file in the same
-    directory, then ``os.replace``s it over *path* — so readers never see a
-    partially written file. Writes are serialized per-path via
-    :func:`_get_annotation_lock` to guard against concurrent writers in the
-    same process; the temp file is cleaned up if writing fails.
+    Writes are serialized per-path via :func:`_get_annotation_lock` to
+    guard against concurrent writers in the same process; the actual
+    tempfile-plus-``os.replace`` write is
+    :func:`~map_data.utils.serialization.atomic_write_json`.
 
     Parameters
     ----------
@@ -300,16 +323,7 @@ def save_annotations(path: str, data: dict[str, Any]) -> None:
     """
     lock = _get_annotation_lock(path)
     with lock:
-        p = Path(path)
-        fd, tmp = tempfile.mkstemp(dir=p.parent, suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w") as f:
-                json.dump(data, f, indent=2)
-            os.replace(tmp, str(p))
-        except BaseException:
-            with contextlib.suppress(OSError):
-                os.unlink(tmp)
-            raise
+        atomic_write_json(path, data, indent=2)
 
 
 @contextlib.contextmanager
@@ -353,16 +367,16 @@ def get_deleted_way_ids(store: dict[str, Any]) -> set[int | str]:
     """
     Return the set of way IDs deleted in *store*.
 
-    Supports both the legacy ``store["deleted_ways"]`` format (a flat list
-    of raw IDs) and the current format (a list of dicts with an ``"id"``
-    key, which additionally carries metadata like a timestamp). Way IDs may
-    be ``int`` (original OSM ways) or ``str`` (virtual IDs of the form
-    ``"<original_id>:<segment_index>"`` produced by :func:`split_way`).
+    Way IDs may be ``int`` (original OSM ways) or ``str`` (virtual IDs of
+    the form ``"<original_id>:<segment_index>"`` produced by
+    :func:`split_way`).
 
     Parameters
     ----------
     store : dict
-        Annotation store, as returned by :func:`load_annotations`.
+        Annotation store, as returned by :func:`load_annotations`
+        (``store["deleted_ways"]`` entries are dicts with an ``"id"`` key;
+        legacy raw-ID entries are upgraded on load).
 
     Returns
     -------
@@ -370,22 +384,20 @@ def get_deleted_way_ids(store: dict[str, Any]) -> set[int | str]:
         IDs of all deleted ways.
 
     """
-    dw = store.get("deleted_ways", [])
-    return {(d["id"] if isinstance(d, dict) else d) for d in dw}
+    return {d["id"] for d in store.get("deleted_ways", [])}
 
 
 def get_deleted_node_ids(store: dict[str, Any], way_id: int | str) -> set[int]:
     """
     Return the set of deleted node IDs belonging to a given way.
 
-    Supports both the legacy ``store["deleted_nodes"]`` format (a dict
-    mapping ``str(way_id)`` to a list of node IDs) and the current format
-    (a flat list of ``{"way_id": ..., "node_id": ...}`` dicts).
-
     Parameters
     ----------
     store : dict
-        Annotation store, as returned by :func:`load_annotations`.
+        Annotation store, as returned by :func:`load_annotations`
+        (``store["deleted_nodes"]`` is a flat list of ``{"way_id": ...,
+        "node_id": ...}`` dicts; a legacy dict-shaped store is upgraded on
+        load).
     way_id : int or str
         ID of the way to look up deleted nodes for.
 
@@ -395,10 +407,7 @@ def get_deleted_node_ids(store: dict[str, Any], way_id: int | str) -> set[int]:
         OSM node IDs deleted from *way_id*.
 
     """
-    dn = store.get("deleted_nodes", [])
-    if isinstance(dn, dict):
-        return set(dn.get(str(way_id), []))
-    return {d["node_id"] for d in dn if d["way_id"] == way_id}
+    return {d["node_id"] for d in store.get("deleted_nodes", []) if d["way_id"] == way_id}
 
 
 def get_split_node_ids(store: dict[str, Any], way_id: int | str) -> list[int]:
@@ -427,6 +436,75 @@ def get_split_node_ids(store: dict[str, Any], way_id: int | str) -> list[int]:
     way_splits = splits.get(str(way_id), [])
     # Ensure they are integers for comparison with OSM node IDs
     return [int(nid) for nid in way_splits]
+
+
+def _buffer_radius(geom: "BaseGeometry", min_radius: float = 0.0) -> float:
+    """
+    Recover a buffered way's original buffer radius from its polygon.
+
+    Uses the isoperimetric relation between perimeter and area (``r = (p -
+    sqrt(p^2 - 4*pi*a)) / (2*pi)``), falling back to ``a / p`` if the
+    discriminant is negative (or ``0`` if *geom* also has zero perimeter).
+    """
+    p = geom.length
+    a = geom.area
+    disc = p * p - 4 * np.pi * a
+    r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else (a / p if p else 0)
+    return max(r, min_radius)
+
+
+class _PolygonTooSmall(Exception):
+    """Too few coordinates to rebuild a closed ring or flat polygon."""
+
+
+def _rebuild_polygon(
+    geom: "BaseGeometry",
+    utm_coords: list[tuple[float, float]],
+    is_closed: bool,
+    category: str | None,
+    tags: dict[str, Any] | None,
+    min_radius: float = 0.0,
+) -> "BaseGeometry":
+    """
+    Rebuild a buffered-``Polygon`` way's geometry from new ring/centerline coords.
+
+    Shared by :func:`apply_node_position_overrides` and
+    :func:`rebuild_way_without_nodes`. A closed ``category="barrier"`` way,
+    or a closed way tagged ``area=yes``, is a genuine flat area and is
+    rebuilt as a ``Polygon`` directly from *utm_coords*; anything else is a
+    buffered centerline and is re-buffered by :func:`_buffer_radius`.
+    *utm_coords* is closed in place (first coordinate appended) when
+    *is_closed* is true and it isn't already.
+
+    Raises
+    ------
+    _PolygonTooSmall
+        Too few coordinates to build the ring/area polygon. Buffering
+        failures (``ls.buffer()`` raising) are left for the caller, which
+        has its own fallback for that case.
+
+    """
+    if is_closed:
+        if category == "barrier":
+            ring = utm_coords if utm_coords[0] == utm_coords[-1] else [*utm_coords, utm_coords[0]]
+            if len(ring) < 4:
+                raise _PolygonTooSmall
+            try:
+                return _SPoly(ring)
+            except (ValueError, TypeError):
+                raise _PolygonTooSmall from None
+        is_area_way = (tags or {}).get("area") == "yes"
+        if utm_coords[0] != utm_coords[-1]:
+            utm_coords.append(utm_coords[0])
+        if is_area_way:
+            if len(utm_coords) < 4:
+                raise _PolygonTooSmall
+            try:
+                return _SPoly(utm_coords)
+            except (ValueError, TypeError):
+                raise _PolygonTooSmall from None
+    ls = _LineString(utm_coords)
+    return ls.buffer(_buffer_radius(geom, min_radius))
 
 
 def split_way(
@@ -505,12 +583,7 @@ def split_way(
     is_buffered = geom.geom_type == "Polygon"
 
     # Calculate buffer radius if buffered
-    radius = 0
-    if is_buffered:
-        p = geom.length
-        a = geom.area
-        disc = p * p - 4 * np.pi * a
-        radius = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else a / p
+    radius = _buffer_radius(geom) if is_buffered else 0
 
     # Reconstruct centerline coordinates
     raw_coords = []
@@ -606,23 +679,17 @@ def migrate_change_log(store: dict[str, Any]) -> None:
     tracked_tags = {e["id"] for e in cl if e.get("type") == "tag"}
     tracked_nodes = {(e["way_id"], e["node_id"]) for e in cl if e.get("type") == "node"}
 
-    untracked_ways = []
-    for d in store.get("deleted_ways", []):
-        wid = d["id"] if isinstance(d, dict) else d
-        if wid not in tracked_ways:
-            untracked_ways.append({"type": "way", "id": wid})
+    untracked_ways = [
+        {"type": "way", "id": d["id"]}
+        for d in store.get("deleted_ways", [])
+        if d["id"] not in tracked_ways
+    ]
 
-    dn = store.get("deleted_nodes", [])
-    if isinstance(dn, dict):
-        dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
-    untracked_nodes = []
-    for d in dn:
-        if isinstance(d, dict):
-            key = (d["way_id"], d["node_id"])
-            if key not in tracked_nodes:
-                untracked_nodes.append(
-                    {"type": "node", "way_id": d["way_id"], "node_id": d["node_id"]},
-                )
+    untracked_nodes = [
+        {"type": "node", "way_id": d["way_id"], "node_id": d["node_id"]}
+        for d in store.get("deleted_nodes", [])
+        if (d["way_id"], d["node_id"]) not in tracked_nodes
+    ]
 
     untracked_tags = []
     for wid_str in store.get("tag_overrides", {}):
@@ -835,71 +902,27 @@ def apply_node_position_overrides(
     elif geom.geom_type == "Polygon":
         if len(utm_coords) < 2:
             return way
-        if _is_closed:
-            if category == "barrier":
-                # Closed barrier area: reconstruct as flat Polygon from the node ring
-                ring = (
-                    utm_coords if utm_coords[0] == utm_coords[-1] else [*utm_coords, utm_coords[0]]
-                )
-                if len(ring) < 4:
-                    return way
-                try:
-                    w.line = _SPoly(ring)
-                except (ValueError, TypeError):
-                    return way
-            else:
-                # Closed road/footway: flat Polygon if area=yes, else re-buffer the loop
-                is_area_way = (getattr(way, "tags", None) or {}).get("area") == "yes"
-                if utm_coords[0] != utm_coords[-1]:
-                    utm_coords.append(utm_coords[0])
-                if is_area_way:
-                    if len(utm_coords) < 4:
-                        return way
-                    try:
-                        w.line = _SPoly(utm_coords)
-                    except (ValueError, TypeError):
-                        return way
-                else:
-                    ls = _LineString(utm_coords)
-                    p = geom.length
-                    a = geom.area
-                    disc = p * p - 4 * np.pi * a
-                    r = (
-                        (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi)
-                        if disc >= 0
-                        else (a / p if p else 0)
-                    )
-                    r = max(r, 0.01)
-                    try:
-                        w.line = ls.buffer(r)
-                    except (ValueError, TypeError):
-                        if len(utm_coords) >= 4:
-                            try:
-                                w.line = _SPoly(utm_coords)
-                            except (ValueError, TypeError):
-                                return None
-                        else:
-                            return None
-        else:
-            # Open way stored as buffered polygon: re-buffer the centerline
-            ls = _LineString(utm_coords)
-            p = geom.length
-            a = geom.area
-            disc = p * p - 4 * np.pi * a
-            r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else (a / p if p else 0)
-            r = max(r, 0.01)
+        try:
+            w.line = _rebuild_polygon(
+                geom,
+                utm_coords,
+                _is_closed,
+                category,
+                getattr(way, "tags", None),
+                min_radius=0.01,
+            )
+        except _PolygonTooSmall:
+            return way
+        except (ValueError, TypeError):
+            # Buffering the centerline failed; fall back to a flat polygon from the
+            # (now-closed) ring, matching a genuine flat-area reconstruction.
+            ring = utm_coords if utm_coords[0] == utm_coords[-1] else [*utm_coords, utm_coords[0]]
+            if len(ring) < 4:
+                return None
             try:
-                w.line = ls.buffer(r)
+                w.line = _SPoly(ring)
             except (ValueError, TypeError):
-                if len(utm_coords) >= 3:
-                    closed = [*utm_coords, utm_coords[0]]
-                    try:
-                        w.line = _SPoly(closed)
-                    except (ValueError, TypeError):
-                        return None
-                else:
-                    return None
-
+                return None
     else:
         return way
     return w
@@ -1203,53 +1226,19 @@ def rebuild_way_without_nodes(
             if len(utm_coords) < 2:
                 return None
             _is_closed_orig = len(node_ids) >= 2 and node_ids[0] == node_ids[-1]
-            if _is_closed_orig:
-                if category == "barrier":
-                    # Closed barrier area: reconstruct as flat Polygon from the node ring
-                    ring = (
-                        utm_coords
-                        if utm_coords[0] == utm_coords[-1]
-                        else [*utm_coords, utm_coords[0]]
-                    )
-                    if len(ring) < 4:
-                        return None
-                    try:
-                        w.line = _SPoly(ring)
-                    except (ValueError, TypeError):
-                        return None
-                else:
-                    # Closed road/footway: flat Polygon if area=yes, else re-buffer the loop
-                    is_area_way = (getattr(way, "tags", None) or {}).get("area") == "yes"
-                    if utm_coords[0] != utm_coords[-1]:
-                        utm_coords.append(utm_coords[0])
-                    if is_area_way:
-                        if len(utm_coords) < 4:
-                            return None
-                        try:
-                            w.line = _SPoly(utm_coords)
-                        except (ValueError, TypeError):
-                            return None
-                    else:
-                        ls = _LineString(utm_coords)
-                        p = geom.length
-                        a = geom.area
-                        disc = p * p - 4 * np.pi * a
-                        r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else a / p
-                        try:
-                            w.line = ls.buffer(r)
-                        except (ValueError, TypeError):
-                            w.line = ls
-            else:
-                # Open way stored as buffered polygon: re-buffer the centerline
-                ls = _LineString(utm_coords)
-                p = geom.length
-                a = geom.area
-                disc = p * p - 4 * np.pi * a
-                r = (p - np.sqrt(max(disc, 0.0))) / (2 * np.pi) if disc >= 0 else a / p
-                try:
-                    w.line = ls.buffer(r)
-                except (ValueError, TypeError):
-                    w.line = ls
+            try:
+                w.line = _rebuild_polygon(
+                    geom,
+                    utm_coords,
+                    _is_closed_orig,
+                    category,
+                    getattr(way, "tags", None),
+                )
+            except _PolygonTooSmall:
+                return None
+            except (ValueError, TypeError):
+                # Buffering the centerline failed; keep the (unbuffered) centerline itself.
+                w.line = _LineString(utm_coords)
         else:
             coords = list(geom.exterior.coords)
             new_coords = [coords[i] for i in keep if i < len(coords)]
@@ -1320,7 +1309,7 @@ def update_segment_annotations_for_split_change(
 
     prefix = f"{original_way_id}:"
     for d in deleted_ways:
-        wid = d["id"] if isinstance(d, dict) else d
+        wid = d["id"]
         if str(wid).startswith(prefix):
             old_deleted_idxs.add(int(str(wid).split(":")[1]))
         else:
@@ -1356,16 +1345,8 @@ def update_segment_annotations_for_split_change(
                 mapped.add(new_idx)
         return mapped
 
-    dn = store.get("deleted_nodes", [])
-    if isinstance(dn, dict):
-        dn = [
-            {"way_id": int(k) if str(k).isdigit() else k, "node_id": v}
-            for k, vs in dn.items()
-            for v in vs
-        ]
-
     new_dn = []
-    for d in dn:
+    for d in store.get("deleted_nodes", []):
         wid = d["way_id"]
         if str(wid).startswith(prefix):
             old_idx = int(str(wid).split(":")[1])

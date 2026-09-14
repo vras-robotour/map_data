@@ -86,6 +86,7 @@ from map_data.pathsolver.route import (
     plan_route,
 )
 from map_data.traversability import resolve_traversability_path
+from map_data.utils.config import package_share
 from map_data.utils.geodesy import latlon_to_ecef
 from map_data.utils.gpx import create_gpx_track
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
@@ -102,13 +103,7 @@ def _removed_summary(removed: dict[str, int]) -> str:
 
 
 def _default_data_dir() -> str:
-    try:
-        from ament_index_python.resources import get_resource
-
-        _, pkg = get_resource("packages", "map_data")
-        return str(Path(pkg) / "share" / "map_data" / "data")
-    except (ImportError, LookupError):
-        return str((Path(__file__).parent / ".." / "data").resolve())
+    return str(package_share("data"))
 
 
 class RoutePlanner(Node):

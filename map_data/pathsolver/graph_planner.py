@@ -160,71 +160,73 @@ class GraphPlanner:
         # (a second GraphPlanner on the same MapData must not see synthetic IDs).
         way_nodes: list[list[int]] = [list(way.nodes) for way in self._allowed_ways]
 
-        # First pass: identify potential splits from annotations
-        edge_segments = []
-        edge_way_info = []  # (way_index, segment_index)
-
-        for way_idx, nodes in enumerate(way_nodes):
-            for i in range(len(nodes) - 1):
-                n1, n2 = nodes[i], nodes[i + 1]
-                p1 = self.nodes[n1].ravel()[:2]
-                p2 = self.nodes[n2].ravel()[:2]
-                edge_segments.append(LineString([p1, p2]))
-                edge_way_info.append((way_idx, i))
-
-        tree = STRtree(edge_segments) if edge_segments else None
+        # First pass: identify potential splits from annotations (negative-ID
+        # ways). Building the snapping index is pointless when there are none.
+        has_annotations = any(isinstance(w.id, int) and w.id < 0 for w in self._allowed_ways)
 
         # Group splits by way and segment
         # (way_index, segment_index) -> [(proj_dist, proj_node_id, node_id, dist_to_edge)]
         splits: dict[tuple[int, int], list[tuple[float, int, int, float]]] = {}
         new_internal_id = -2000000
 
-        if tree:
+        if has_annotations:
+            edge_segments = []
+            edge_way_info = []  # (way_index, segment_index)
+
+            for way_idx, nodes in enumerate(way_nodes):
+                for i in range(len(nodes) - 1):
+                    n1, n2 = nodes[i], nodes[i + 1]
+                    p1 = self.nodes[n1].ravel()[:2]
+                    p2 = self.nodes[n2].ravel()[:2]
+                    edge_segments.append(LineString([p1, p2]))
+                    edge_way_info.append((way_idx, i))
+
+            tree = STRtree(edge_segments) if edge_segments else None
             threshold = 5.0
-            for way in self._allowed_ways:
-                # way.id >= 0 check fails if way.id is a string (virtual ID for split ways).
-                # All split ways (strings) and OSM ways (positive ints) should be skipped here.
-                if not isinstance(way.id, int) or way.id >= 0:
-                    continue
-                if not way.nodes:
-                    continue
-
-                # Check endpoints of annotation way
-                for node_id in [way.nodes[0], way.nodes[-1]]:
-                    p_node = self.nodes[node_id].ravel()[:2]
-                    p_sh = Point(p_node)
-
-                    indices = tree.query(p_sh.buffer(threshold), predicate="intersects")
-                    if len(indices) == 0:
+            if tree:
+                for way in self._allowed_ways:
+                    # way.id >= 0 check fails if way.id is a string (virtual ID for split ways).
+                    # All split ways (strings) and OSM ways (positive ints) should be skipped here.
+                    if not isinstance(way.id, int) or way.id >= 0:
+                        continue
+                    if not way.nodes:
                         continue
 
-                    # Find nearest edge that is NOT part of the same way
-                    best_idx = -1
-                    min_dist = float("inf")
-                    for idx in indices:
-                        if self._allowed_ways[edge_way_info[idx][0]].id == way.id:
+                    # Check endpoints of annotation way
+                    for node_id in [way.nodes[0], way.nodes[-1]]:
+                        p_node = self.nodes[node_id].ravel()[:2]
+                        p_sh = Point(p_node)
+
+                        indices = tree.query(p_sh.buffer(threshold), predicate="intersects")
+                        if len(indices) == 0:
                             continue
-                        d = edge_segments[idx].distance(p_sh)
-                        if d < min_dist:
-                            min_dist = d
-                            best_idx = idx
 
-                    if best_idx != -1 and min_dist <= threshold:
-                        line = edge_segments[best_idx]
-                        proj_dist = line.project(p_sh)
-                        p_proj = np.array(line.interpolate(proj_dist).coords[0])
+                        # Find nearest edge that is NOT part of the same way
+                        best_idx = -1
+                        min_dist = float("inf")
+                        for idx in indices:
+                            if self._allowed_ways[edge_way_info[idx][0]].id == way.id:
+                                continue
+                            d = edge_segments[idx].distance(p_sh)
+                            if d < min_dist:
+                                min_dist = d
+                                best_idx = idx
 
-                        proj_node_id = new_internal_id
-                        new_internal_id -= 1
-                        self.nodes[proj_node_id] = np.array([p_proj[0], p_proj[1], 0.0]).reshape(
-                            3,
-                            1,
-                        )
+                        if best_idx != -1 and min_dist <= threshold:
+                            line = edge_segments[best_idx]
+                            proj_dist = line.project(p_sh)
+                            p_proj = np.array(line.interpolate(proj_dist).coords[0])
 
-                        target_way_idx, segment_idx = edge_way_info[best_idx]
-                        splits.setdefault((target_way_idx, segment_idx), []).append(
-                            (proj_dist, proj_node_id, node_id, min_dist),
-                        )
+                            proj_node_id = new_internal_id
+                            new_internal_id -= 1
+                            self.nodes[proj_node_id] = np.array(
+                                [p_proj[0], p_proj[1], 0.0]
+                            ).reshape(3, 1)
+
+                            target_way_idx, segment_idx = edge_way_info[best_idx]
+                            splits.setdefault((target_way_idx, segment_idx), []).append(
+                                (proj_dist, proj_node_id, node_id, min_dist),
+                            )
 
         # Group pending splits per way so they can be applied in descending
         # segment order: inserting a junction into an earlier segment would
@@ -327,66 +329,41 @@ class GraphPlanner:
         _, dist = self._find_closest_edge(np.asarray(point_utm, dtype=float)[:2])
         return float(dist)
 
-    def a_star(
+    def _route_segment(
         self,
-        start_node: int | str,
-        goal_node: int | str,
-        extra_nodes: dict | None = None,
+        id_s: int | str,
+        id_g: int | str,
+        positions: dict[int | str, np.ndarray],
+        extra_adj: dict[int | str, list[tuple[int | str, float]]],
     ) -> list[np.ndarray] | None:
         """
-        Run A* between two graph nodes and return the path as UTM coordinates.
+        Run A* from *id_s* to *id_g* over the graph plus a local subgraph.
 
-        Parameters
-        ----------
-        start_node : int or str
-            ID of the start node in the graph.
-        goal_node : int or str
-            ID of the goal node in the graph.
-        extra_nodes : dict, optional
-            Temporary adjacency entries and positions for nodes not
-            permanently in the graph (e.g. snapped projection points).
-            Expected keys: ``"positions"`` mapping node ID → ``np.ndarray``,
-            plus per-node adjacency lists.
-
-        Returns
-        -------
-        list of np.ndarray or None
-            Sequence of ``[x, y]`` UTM positions along the path, or
-            ``None`` if no path exists.
-
+        *positions* gives the world coordinate of the two temporary snapped
+        nodes (everything else resolves through :attr:`nodes`); *extra_adj*
+        gives their (and their edge endpoints') extra adjacency. Kept as two
+        plain dicts rather than one mixing both under string/int keys, so
+        neither needs a cast to satisfy the type checker.
         """
 
+        def get_pos(node: int | str) -> np.ndarray:
+            pos = positions.get(node)
+            return pos if pos is not None else self.nodes[node].ravel()[:2]  # type: ignore[index]
+
         def get_neighbors(u: int | str) -> list[tuple[int | str, float]]:
-            neighs: list[tuple[int | str, float]] = []
-            if isinstance(u, int):
-                neighs.extend(self.graph.get(u, []))
-            if extra_nodes and u in extra_nodes:
-                neighs.extend(extra_nodes[u])
+            neighs: list[tuple[int | str, float]] = (
+                list(self.graph.get(u, [])) if isinstance(u, int) else []
+            )
+            neighs.extend(extra_adj.get(u, []))
             return neighs
 
-        if not get_neighbors(start_node) and start_node != goal_node:
-            return None
-
         def heuristic(u: int | str) -> float:
-            p1 = self._get_node_pos(u, extra_nodes)
-            p2 = self._get_node_pos(goal_node, extra_nodes)
-            return float(np.linalg.norm(p1 - p2))
+            return float(np.linalg.norm(get_pos(u) - get_pos(id_g)))
 
-        node_path = astar_search(start_node, goal_node, get_neighbors, heuristic)
-
+        node_path = astar_search(id_s, id_g, get_neighbors, heuristic)
         if node_path is None:
             return None
-
-        return [self._get_node_pos(node, extra_nodes) for node in node_path]
-
-    def _get_node_pos(self, node_id: int | str, extra_nodes_data: dict | None = None) -> np.ndarray:
-        if isinstance(node_id, str) and node_id.startswith("temp_"):
-            # extra_nodes_data is only None by default for callers that never pass
-            # "temp_"-prefixed IDs; the one real caller (plan()) always supplies it.
-            return extra_nodes_data["positions"][node_id]  # type: ignore[index]
-        # node_id is only ever a non-"temp_" str in theory; in practice every str
-        # id used against self.nodes (int-keyed) is "temp_"-prefixed and handled above.
-        return self.nodes[node_id].ravel()[:2]  # type: ignore[index]
+        return [get_pos(n) for n in node_path]
 
     def plan(
         self,
@@ -475,9 +452,11 @@ class GraphPlanner:
                 """Distance from a projection to one end of its edge, priced like the way."""
                 return float(np.linalg.norm(p - self.nodes[node].ravel()[:2])) * factor
 
-            # Construct local subgraph for snapped points
-            extra = {
-                "positions": {id_s: p_proj_s, id_g: p_proj_g},
+            # Positions and adjacency for the two temporary snapped nodes, kept in
+            # separate dicts (rather than one mixing both under string/int keys) so
+            # neither needs a cast to satisfy the type checker.
+            positions: dict[int | str, np.ndarray] = {id_s: p_proj_s, id_g: p_proj_g}
+            extra_adj: dict[int | str, list[tuple[int | str, float]]] = {
                 id_s: [
                     (n_s1, weighted(p_proj_s, n_s1, f_s)),
                     (n_s2, weighted(p_proj_s, n_s2, f_s)),
@@ -495,14 +474,12 @@ class GraphPlanner:
             # Special case: start and goal on the same edge
             if (n_s1 == n_g1 and n_s2 == n_g2) or (n_s1 == n_g2 and n_s2 == n_g1):
                 dist_sg = float(np.linalg.norm(p_proj_s - p_proj_g)) * f_s
-                # extra's value type is a union of adjacency-list and positions-dict
-                # entries; mypy can't tell these two keys hold lists.
-                extra[id_s].append((id_g, dist_sg))  # type: ignore[attr-defined]
-                extra[id_g].append((id_s, dist_sg))  # type: ignore[attr-defined]
+                extra_adj[id_s].append((id_g, dist_sg))
+                extra_adj[id_g].append((id_s, dist_sg))
 
             # Route between temporary nodes (projections)
-            segment = self.a_star(id_s, id_g, extra)
-            if not segment:
+            segment = self._route_segment(id_s, id_g, positions, extra_adj)
+            if segment is None:
                 return None
 
             # segment is [p_proj_s, ..., p_proj_g] — entirely on the network. The

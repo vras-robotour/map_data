@@ -35,7 +35,7 @@ from map_data.annotations import (
     load_mapdata_with_annotations,
 )
 from map_data.traversability import resolve_traversability_path
-from map_data.utils.geodesy import ecef_to_latlon, utm_to_local_via_ecef
+from map_data.utils.geodesy import apply_transform, ecef_to_latlon, utm_to_local_via_ecef
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 
 CLOUD_COLS = 4
@@ -60,10 +60,6 @@ class OSMCloud(Node):
         #   "geodetic" - UTM -> lat/lon -> ECEF, then the earth_frame -> local_frame TF
         #                (exact for GNSS/INS stacks such as Fixposition: FP_ECEF -> FP_ENU0)
         self.transform_mode: str = self.declare_parameter("transform_mode", "tf").value
-        self.utm_to_local_param: list[float] | None = self.declare_parameter(
-            "utm_to_local",
-            rclpy.Parameter.Type.DOUBLE_ARRAY,
-        ).value
         self.mapdata_file: str | None = self.declare_parameter(
             "mapdata_file",
             rclpy.Parameter.Type.STRING,
@@ -96,7 +92,6 @@ class OSMCloud(Node):
         # cross the bbox are downloaded whole, so the network (and the crossroads on it)
         # reaches past those bounds: only *explicit* bounds may clip the intersections.
         self.grid_bounds_auto: bool = False
-        self.auto_utm: bool = self.declare_parameter("auto_utm", False).value
         self.publish_intersections: bool = self.declare_parameter(
             "publish_intersections",
             False,
@@ -155,12 +150,8 @@ class OSMCloud(Node):
                 f"Unknown transform_mode '{self.transform_mode}', falling back to 'tf'"
             )
             self.transform_mode = "tf"
-        if self.auto_utm and self.transform_mode == "tf":
-            self.transform_mode = "auto"  # backward-compatible alias
 
-        if self.utm_to_local_param is not None:
-            self.utm_to_local = np.array(self.utm_to_local_param).reshape(4, 4)
-        elif self.transform_mode == "geodetic":
+        if self.transform_mode == "geodetic":
             self.get_ecef_to_local()
         elif self.transform_mode == "auto":
             self.get_logger().info("Auto-calculating UTM to local transform from map center")
@@ -340,29 +331,34 @@ class OSMCloud(Node):
 
         self.get_logger().info("Published OSM data", throttle_duration_sec=60.0)
 
-    def get_utm_to_local(self) -> None:
+    def _poll_tf(self, target: str, source: str) -> np.ndarray | None:
         """
-        Poll for the UTM to local coordinate transform.
+        Block until the ``source -> target`` TF transform is available.
 
-        While rclpy is not shutdown, try to get the UTM to local transform every second or
-        until successful.
+        While rclpy is not shutdown, retry every second until successful;
+        returns ``None`` only if rclpy is shut down while waiting.
         """
         while rclpy.ok():
             try:
-                utm_to_local = self.tf.lookup_transform(
-                    self.local_frame,
-                    self.utm_frame,
+                tf_msg = self.tf.lookup_transform(
+                    target,
+                    source,
                     rclpy.time.Time(),
                     rclpy.duration.Duration(seconds=TF_POLL_TIMEOUT),
                 )
-                self.utm_to_local = numpify(utm_to_local.transform)
-                self.get_logger().info(f"Got UTM to local transform: {self.utm_to_local}")
-                break
+                return numpify(tf_msg.transform)
             except (TransformException, RuntimeError, TypeError, ValueError) as e:
                 self.get_logger().warning(
-                    f"Failed to get UTM to local transform: {e}", throttle_duration_sec=10.0
+                    f"Failed to get {source} -> {target} transform: {e}",
+                    throttle_duration_sec=10.0,
                 )
                 rclpy.spin_once(self, timeout_sec=1.0)
+        return None
+
+    def get_utm_to_local(self) -> None:
+        """Poll for the UTM to local coordinate transform."""
+        self.utm_to_local = self._poll_tf(self.local_frame, self.utm_frame)
+        self.get_logger().info(f"Got UTM to local transform: {self.utm_to_local}")
 
     def get_ecef_to_local(self) -> None:
         """
@@ -370,28 +366,14 @@ class OSMCloud(Node):
 
         The result is stored as a 4x4 matrix mapping ECEF points into ``local_frame``.
         """
-        while rclpy.ok():
-            try:
-                tf_msg = self.tf.lookup_transform(
-                    self.local_frame,
-                    self.earth_frame,
-                    rclpy.time.Time(),
-                    rclpy.duration.Duration(seconds=TF_POLL_TIMEOUT),
-                )
-                self.ecef_to_local = numpify(tf_msg.transform)
-                origin = np.linalg.inv(self.ecef_to_local)[:3, 3]
-                lat, lon, alt = ecef_to_latlon(*origin)
-                self.get_logger().info(
-                    f"Got {self.earth_frame} -> {self.local_frame} transform; "
-                    f"{self.local_frame} origin at lat={lat:.7f} lon={lon:.7f} alt={alt:.1f}"
-                )
-                break
-            except (TransformException, RuntimeError, TypeError, ValueError) as e:
-                self.get_logger().warning(
-                    f"Failed to get {self.earth_frame} -> {self.local_frame} transform: {e}",
-                    throttle_duration_sec=10.0,
-                )
-                rclpy.spin_once(self, timeout_sec=1.0)
+        self.ecef_to_local = self._poll_tf(self.local_frame, self.earth_frame)
+        if self.ecef_to_local is not None:
+            origin = np.linalg.inv(self.ecef_to_local)[:3, 3]
+            lat, lon, alt = ecef_to_latlon(*origin)
+            self.get_logger().info(
+                f"Got {self.earth_frame} -> {self.local_frame} transform; "
+                f"{self.local_frame} origin at lat={lat:.7f} lon={lon:.7f} alt={alt:.1f}"
+            )
 
     def _transform_ready(self) -> bool:
         if self.transform_mode == "geodetic":
@@ -618,7 +600,7 @@ def transform_points(
     z: float | None = None,
 ) -> dict[int, np.ndarray]:
     """
-    Transform points.
+    Apply a 4x4 transform to every point in *points* (each a (3, 1) column vector).
 
     Parameters
     ----------
@@ -627,47 +609,22 @@ def transform_points(
     transform : np.array
         Transformation matrix.
     z : float
-        Z value to set.
+        Z value to set on every transformed point, overriding the transform's.
 
     Returns
     -------
     transformed : dict
-        Dictionary id: transformed point.
+        Dictionary id: transformed (3, 1) point.
 
     """
-
-    def transform_point(point: np.ndarray, transform_mat: np.ndarray) -> np.ndarray:
-        """
-        Transform a point with a transformation matrix.
-
-        Parameters
-        ----------
-        point : np.array
-            Point to transform.
-        transform_mat : np.array
-            Transformation matrix.
-
-        Returns
-        -------
-        point : np.array
-            Transformed point.
-
-        """
-        if not isinstance(point, np.ndarray):
-            msg = f"point must be np.ndarray, got {type(point).__name__}"
-            raise TypeError(msg)
-        if not isinstance(transform_mat, np.ndarray):
-            msg = f"transform_mat must be np.ndarray, got {type(transform_mat).__name__}"
-            raise TypeError(msg)
-
-        return np.dot(transform_mat[:3, :3], point) + transform_mat[:3, 3:]
-
-    transformed = {}
-    for pid, point in points.items():
-        transformed[pid] = transform_point(point, transform)
-        if z is not None:
-            transformed[pid][2] = z
-    return transformed
+    if not points:
+        return {}
+    ids = list(points)
+    stacked = np.stack([np.asarray(points[i]).reshape(3) for i in ids])
+    transformed = apply_transform(stacked, transform)
+    if z is not None:
+        transformed[:, 2] = z
+    return {pid: transformed[k].reshape(3, 1) for k, pid in enumerate(ids)}
 
 
 def split_ways_to_points(

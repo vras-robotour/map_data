@@ -175,7 +175,7 @@ An ordered audit log. Each entry has a `type` field and optional `ts` (ISO times
 
 ## GPX waypoint format
 
-The package reads standard **GPX 1.1** files. Waypoints must be `<wpt>` elements. Track points (`<trkpt>`) and route points (`<rtept>`) are also accepted by `MapData` (for map creation), but `parse_gpx_file` in `map_data/utils/gpx.py` reads only `<wpt>` elements for path planning.
+`MapData` reads standard **GPX 1.1** files (used for map creation, e.g. `create_mapdata` and `osm_cloud`'s `gpx_file` parameter). It reads `<wpt>` elements if the file has any; otherwise it falls back to track points (`<trkpt>`) from `<trk>` elements, and then to route points (`<rtept>`) from `<rte>` elements. Loading fails if none of the three are present.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -186,31 +186,4 @@ The package reads standard **GPX 1.1** files. Waypoints must be `<wpt>` elements
 </gpx>
 ```
 
-Elevation is optional for path planning; when present it is preserved in the output GPX produced by `create_gpx_content`.
-
----
-
-## YAML waypoint format
-
-As an alternative to GPX, the package accepts a simple YAML file via `parse_yaml_file` (called automatically by `parse_path` when the file extension is `.yaml`).
-
-```yaml
-waypoints:
-  - latitude: 50.1234
-    longitude: 14.5678
-    elevation: 200.0
-  - latitude: 50.1240
-    longitude: 14.5690
-    elevation: 201.5
-  - latitude: 50.1250
-    longitude: 14.5700
-```
-
-Rules:
-
-- The top-level key must be `waypoints`.
-- Each entry must have `latitude` and `longitude` (decimal degrees, WGS-84).
-- `elevation` is optional; it defaults to `0.0` if omitted.
-- The file must use the `.yaml` extension for automatic format detection.
-
-The parsed result is identical to the GPX path: a NumPy array of UTM coordinates plus the inferred UTM zone number and letter.
+YAML waypoint files are not supported.

@@ -15,122 +15,78 @@ document.querySelectorAll('.app-mode-btn').forEach(btn => {
     });
 });
 
+// Per-mode config for setAppMode: everything that's a straight lookup rather
+// than mode-specific behavior (which stays inline below).
+const APP_MODE_CONFIG = {
+    viewer: {
+        status: ['Viewer Mode', 'text-info'],
+        disableModeBtns: false, interactive: true, drawControl: 'add',
+        plannerAction: 'disable', trackerAction: 'disable',
+    },
+    planner: {
+        status: ['Planner Mode', 'text-warning'],
+        disableModeBtns: true, interactive: false, drawControl: 'remove',
+        plannerAction: 'enable', trackerAction: 'disable',
+    },
+    tracker: {
+        status: ['Tracker Mode', 'text-success'],
+        disableModeBtns: true, interactive: false, drawControl: 'remove',
+        plannerAction: 'disable', trackerAction: 'enable',
+    },
+};
+
 function setAppMode(mode) {
     if (mode === currentAppMode) return;
     currentAppMode = mode;
+    const cfg = APP_MODE_CONFIG[mode];
 
     document.querySelectorAll('.app-mode-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.appMode === mode);
     });
 
-    const sidebar = document.getElementById('sidebar');
-    const propsPanel = document.getElementById('props-panel');
-    const plannerPanel = document.getElementById('planner-sidebar-panel');
-    const trackerPanel = document.getElementById('tracker-sidebar-panel');
+    document.getElementById('props-panel').style.display = mode === 'viewer' ? '' : 'none';
+    document.getElementById('planner-sidebar-panel').style.display = mode === 'planner' ? 'flex' : 'none';
+    document.getElementById('tracker-sidebar-panel').style.display = mode === 'tracker' ? 'flex' : 'none';
 
-    // Accessory panels
-    const accessoryPanels = ['ann-panel', 'changes-panel', 'hidden-panel'];
+    document.querySelectorAll('.mode-btn').forEach(btn => btn.disabled = cfg.disableModeBtns);
+    const gpxBtn = document.getElementById('gpx-create-btn');
+    if (gpxBtn) gpxBtn.disabled = cfg.disableModeBtns;
+
+    toggleMapInteractivity(cfg.interactive);
 
     if (mode === 'viewer') {
-        propsPanel.style.display = ''; // Revert to CSS default (block)
-        plannerPanel.style.display = 'none';
-        trackerPanel.style.display = 'none';
-
-        // Enable all mode buttons
-        document.querySelectorAll('.mode-btn').forEach(btn => btn.disabled = false);
-        const gpxBtn = document.getElementById('gpx-create-btn');
-        if (gpxBtn) gpxBtn.disabled = false;
-
-        toggleMapInteractivity(true);
-
-        // Robot visibility: keep if layer checked, else hide
-        const robotCb = document.querySelector('[data-layer="robot"]');
-        if (robotCb && !robotCb.checked && typeof trackerMode !== 'undefined') {
-            trackerMode.hideRobot();
-        } else if (typeof trackerMode !== 'undefined') {
-            trackerMode.showRobot();
-        }
-
         // Restore accessory panels visibility based on their content/state
         renderAnnotationList();
         renderChangesPanel();
         renderHiddenPanel();
-
-        setStatus('Viewer Mode', 'text-info');
-        if (plannerMode) plannerMode.disable();
-        if (typeof trackerMode !== 'undefined' && trackerMode) trackerMode.disable();
-        // Re-enable draw controls if they were active
-        if (drawControl) map.addControl(drawControl);
-    } else if (mode === 'planner') {
-        propsPanel.style.display = 'none';
-        plannerPanel.style.display = 'flex';
-        trackerPanel.style.display = 'none';
-
-        // Disable all mode buttons
-        document.querySelectorAll('.mode-btn').forEach(btn => btn.disabled = true);
-        const gpxBtn = document.getElementById('gpx-create-btn');
-        if (gpxBtn) gpxBtn.disabled = true;
-
-        if (currentMode !== 'view') {
-            setMode('view');
-        }
-
-        toggleMapInteractivity(false);
-
-        // Hide all accessory panels in planner mode
-        accessoryPanels.forEach(id => {
+    } else {
+        // Hide all accessory panels outside viewer mode
+        ['ann-panel', 'changes-panel', 'hidden-panel'].forEach(id => {
             const el = document.getElementById(id);
-            if (el) el.style.display = 'none';
+            if (el) el.hidden = true;
         });
-
-        setStatus('Planner Mode', 'text-warning');
-
-        // Cleanup Viewer state
-        clearNodes();
-        if (currentClickedLayer && currentClickedLayer._osmCat) {
-            currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
-        }
-        currentClickedLayer = null;
-        currentClickedFeature = null;
-        document.getElementById('props-content').innerHTML =
-            '<span class="text-secondary" style="font-style:italic;">Click a feature to inspect</span>';
-
-        if (drawControl) map.removeControl(drawControl);
-
-        // Robot visibility: keep if layer checked, else hide
-        const robotCb = document.querySelector('[data-layer="robot"]');
-        if (robotCb && !robotCb.checked && typeof trackerMode !== 'undefined') {
-            trackerMode.hideRobot();
-        } else if (typeof trackerMode !== 'undefined') {
-            trackerMode.showRobot();
-        }
-
-        if (typeof trackerMode !== 'undefined' && trackerMode) trackerMode.disable();
-        if (plannerMode) plannerMode.enable();
-    } else if (mode === 'tracker') {
-        propsPanel.style.display = 'none';
-        plannerPanel.style.display = 'none';
-        trackerPanel.style.display = 'flex';
-
-        // Disable all mode buttons
-        document.querySelectorAll('.mode-btn').forEach(btn => btn.disabled = true);
-        const gpxBtn = document.getElementById('gpx-create-btn');
-        if (gpxBtn) gpxBtn.disabled = true;
-
-        toggleMapInteractivity(false);
-        accessoryPanels.forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.style.display = 'none';
-        });
-
-        setStatus('Tracker Mode', 'text-success');
-        if (drawControl) map.removeControl(drawControl);
-        if (plannerMode) plannerMode.disable();
-        if (typeof trackerMode !== 'undefined' && trackerMode) {
-            trackerMode.enable();
-            trackerMode.showRobot();
-        }
     }
+
+    if (mode === 'planner') {
+        // Leaving whatever viewer edit mode was active, and clear its selection
+        if (currentMode !== 'view') setMode('view');
+        deselectCurrent();
+    }
+
+    if (drawControl) {
+        if (cfg.drawControl === 'add') map.addControl(drawControl);
+        else map.removeControl(drawControl);
+    }
+
+    // Robot visibility follows the layer checkbox in viewer/planner; tracker always shows it.
+    const robotCb = document.querySelector('[data-layer="robot"]');
+    if (mode !== 'tracker' && robotCb && !robotCb.checked) trackerMode.hideRobot();
+    else trackerMode.showRobot();
+
+    plannerMode[cfg.plannerAction]();
+    trackerMode[cfg.trackerAction]();
+
+    setStatus(...cfg.status);
 
     // Force map resize
     setTimeout(() => map.invalidateSize(), 100);
@@ -159,6 +115,13 @@ function renderSubtypeFilters(cat) {
     });
 }
 
+// Resets the properties panel to its empty "nothing selected" placeholder,
+// without touching the current selection/feature/node state.
+function resetProps() {
+    document.getElementById('props-content').innerHTML =
+        '<span class="text-secondary" style="font-style:italic;">Click a feature to inspect</span>';
+}
+
 function deselectCurrent() {
     if (currentClickedLayer) {
         const oldCat = currentClickedLayer._osmCat;
@@ -166,7 +129,7 @@ function deselectCurrent() {
         currentClickedLayer = null;
     }
     currentClickedFeature = null;
-    document.getElementById('props-content').innerHTML = '<div class="text-secondary" style="font-style:italic;">Click a feature to inspect</div>';
+    resetProps();
     clearNodes();
 }
 
@@ -196,66 +159,28 @@ function showWayContextMenu(feature, layer, latlng, cat) {
     selectWay(feature, layer, cat);
 
     const props = feature.properties;
-    const container = document.createElement('div');
-    container.className = 'context-menu';
-
+    const entries = [];
     if (['road', 'footway', 'barrier'].includes(props.category) && feature.geometry.type !== 'Point') {
-        const nodeBtn = document.createElement('button');
-        nodeBtn.innerHTML = nodeLayer ? '🙈 Hide Nodes' : '👁️ Show Nodes';
-        nodeBtn.onclick = () => { map.closePopup(); toggleNodes(); };
-        container.appendChild(nodeBtn);
+        entries.push([nodeLayer ? '🙈 Hide Nodes' : '👁️ Show Nodes', () => toggleNodes()]);
     }
-
-    const editBtn = document.createElement('button');
-    editBtn.innerHTML = '✎ Edit Properties';
-    editBtn.onclick = () => { map.closePopup(); openWayEditModal(); };
-    container.appendChild(editBtn);
-
+    entries.push(['✎ Edit Properties', () => openWayEditModal()]);
     if (hiddenWayIds.has(props.id)) {
-        const showBtn = document.createElement('button');
-        showBtn.innerHTML = '👁️ Show Object';
-        showBtn.onclick = () => { map.closePopup(); showWay(props.id); };
-        container.appendChild(showBtn);
+        entries.push(['👁️ Show Object', () => showWay(props.id)]);
     } else {
-        const hideBtn = document.createElement('button');
-        hideBtn.innerHTML = '🙈 Hide Object';
-        hideBtn.onclick = () => { map.closePopup(); hideCurrentWay(); };
-        container.appendChild(hideBtn);
-
-        const delBtn = document.createElement('button');
-        delBtn.innerHTML = '🗑️ Delete Object';
-        delBtn.onclick = () => { map.closePopup(); deleteCurrentWay(); };
-        container.appendChild(delBtn);
+        entries.push(['🙈 Hide Object', () => hideCurrentWay()]);
+        entries.push(['🗑️ Delete Object', () => deleteCurrentWay()]);
     }
-
-    L.popup({ minWidth: 150, className: 'planner-popup', offset: [0, -5], closeButton: false })
-        .setLatLng(latlng)
-        .setContent(container)
-        .openOn(map);
+    showMenu(latlng, entries);
 }
 
 function showAnnotationContextMenu(ann, layer, latlng) {
     if (currentAppMode === 'planner') return;
     // Select it first so sidebar matches
     selectAnnotation(ann, layer);
-
-    const container = document.createElement('div');
-    container.className = 'context-menu';
-
-    const editBtn = document.createElement('button');
-    editBtn.innerHTML = '✎ Edit Properties';
-    editBtn.onclick = () => { map.closePopup(); openAnnEditModal(ann.id); };
-    container.appendChild(editBtn);
-
-    const delBtn = document.createElement('button');
-    delBtn.innerHTML = '🗑️ Delete Annotation';
-    delBtn.onclick = () => { map.closePopup(); removeAnnotationById(ann.id); };
-    container.appendChild(delBtn);
-
-    L.popup({ minWidth: 150, className: 'planner-popup', offset: [0, -5], closeButton: false })
-        .setLatLng(latlng)
-        .setContent(container)
-        .openOn(map);
+    showMenu(latlng, [
+        ['✎ Edit Properties', () => openAnnEditModal(ann.id)],
+        ['🗑️ Delete Annotation', () => removeAnnotationById(ann.id)],
+    ]);
 }
 
 function showProps(props, feature = null) {
@@ -325,7 +250,6 @@ function clearNodes() {
         osmEditLayer = null;
     }
     if (osmDragGhost) { map.removeLayer(osmDragGhost); osmDragGhost = null; }
-    nodeCount = 0;
     currentNodes = [];
     nodeMarkers = [];
     midpointMarkers = [];
@@ -343,7 +267,6 @@ async function loadNodesForEditing(feature, layer) {
     try { data = await fetchWayNodes(currentFile, wayId); }
     catch (err) { setStatus('Failed to load nodes', 'text-danger'); return; }
     currentNodes = data.nodes;
-    nodeCount = currentNodes.length;
 
     osmEditLayer = layer;
     layer.on('mousedown', _onOsmWayDragDown);
@@ -374,25 +297,13 @@ async function loadNodesForEditing(feature, layer) {
 
     nodeLayer = L.layerGroup();
     nodeMarkers = currentNodes.map((node, i) => {
-        const marker = L.circleMarker([node.lat, node.lon], {
-            radius: 5, color: '#fff', weight: 2,
-            fillColor: '#f0a500', fillOpacity: 0.9,
-            bubblingMouseEvents: false,
-            renderer: L.svg(),
-        });
-        const onNodeDown = e => _onOsmNodeDragDown(e, i);
-        marker.on('mousedown', onNodeDown);
-        marker.on('add', () => { const el = marker.getElement(); if (el) el.style.cursor = 'grab'; });
+        const [marker, hit] = makeHandle(
+            [node.lat, node.lon],
+            { radius: 5, color: '#fff', weight: 2, fillColor: '#f0a500', fillOpacity: 0.9 },
+            12, 'grab', e => _onOsmNodeDragDown(e, i),
+        );
         nodeLayer.addLayer(marker);
-
-        // Transparent larger hit target so small nodes are easier to grab
-        const hit = L.circleMarker([node.lat, node.lon], {
-            radius: 12, fillOpacity: 0, opacity: 0,
-            bubblingMouseEvents: false, renderer: L.svg(), interactive: true,
-        });
-        hit.on('mousedown', onNodeDown);
-        hit.on('add', () => { const el = hit.getElement(); if (el) el.style.cursor = 'grab'; });
-        nodeLayer.addLayer(hit);
+        nodeLayer.addLayer(hit); // transparent larger hit target so small nodes are easier to grab
         return marker;
     });
 
@@ -405,24 +316,12 @@ async function loadNodesForEditing(feature, layer) {
     for (let i = 0; i < mpEnd; i++) {
         const a = currentNodes[i], b = currentNodes[i + 1];
         const mlat = (a.lat + b.lat) / 2, mlon = (a.lon + b.lon) / 2;
-        const mp = L.circleMarker([mlat, mlon], {
-            radius: 4, color: '#4af', weight: 1.5,
-            fillColor: '#4af', fillOpacity: 0.7,
-            bubblingMouseEvents: false,
-            renderer: L.svg(),
-        });
-        const onMpDown = e => _onMidpointDragDown(e, i);
-        mp.on('mousedown', onMpDown);
-        mp.on('add', () => { const el = mp.getElement(); if (el) el.style.cursor = 'crosshair'; });
+        const [mp, mpHit] = makeHandle(
+            [mlat, mlon],
+            { radius: 4, color: '#4af', weight: 1.5, fillColor: '#4af', fillOpacity: 0.7 },
+            10, 'crosshair', e => _onMidpointDragDown(e, i),
+        );
         nodeLayer.addLayer(mp);
-
-        // Transparent larger hit target for midpoints
-        const mpHit = L.circleMarker([mlat, mlon], {
-            radius: 10, fillOpacity: 0, opacity: 0,
-            bubblingMouseEvents: false, renderer: L.svg(), interactive: true,
-        });
-        mpHit.on('mousedown', onMpDown);
-        mpHit.on('add', () => { const el = mpHit.getElement(); if (el) el.style.cursor = 'crosshair'; });
         nodeLayer.addLayer(mpHit);
         midpointMarkers.push(mp);
     }
@@ -544,11 +443,7 @@ async function splitCurrentWay(wayId, nodeId) {
             clearNodes();
             loadNodesForEditing(newLayer._featureRef, newLayer);
         } else {
-            currentClickedLayer = null;
-            currentClickedFeature = null;
-            clearNodes();
-            document.getElementById('props-content').innerHTML =
-                '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+            deselectCurrent();
         }
 
         // Refresh only metadata (changes list, etc.) without map flashing
@@ -567,7 +462,6 @@ async function toggleNodes() {
     try {
         const data = await fetchWayNodes(currentFile, feature.properties.id);
         currentNodes = data.nodes;
-        nodeCount = data.nodes.length;
         nodeMarkers = [];
         nodeLayer = L.layerGroup().addTo(map);
         data.nodes.forEach((node, i) => {
@@ -602,25 +496,10 @@ function showNodeContextMenu(node, index, latlng) {
         && currentNodes[0]?.id !== currentNodes[currentNodes.length - 1]?.id;
     const canSplit = (isPath || isOpenBarrier) && index > 0 && index < total - 1;
 
-    const container = document.createElement('div');
-    container.className = 'context-menu';
-
-    if (canSplit) {
-        const splitBtn = document.createElement('button');
-        splitBtn.innerHTML = '✂️ Split Way';
-        splitBtn.onclick = () => { map.closePopup(); splitCurrentWay(wayId, node.id); };
-        container.appendChild(splitBtn);
-    }
-
-    const delBtn = document.createElement('button');
-    delBtn.innerHTML = '&#128465; Delete Node';
-    delBtn.onclick = () => { map.closePopup(); deleteCurrentNode(wayId, node.id); };
-    container.appendChild(delBtn);
-
-    L.popup({ minWidth: 150, className: 'planner-popup', offset: [0, -5], closeButton: false })
-        .setLatLng(latlng)
-        .setContent(container)
-        .openOn(map);
+    const entries = [];
+    if (canSplit) entries.push(['✂️ Split Way', () => splitCurrentWay(wayId, node.id)]);
+    entries.push(['&#128465; Delete Node', () => deleteCurrentNode(wayId, node.id)]);
+    showMenu(latlng, entries);
 }
 
 function openWayEditModal() {
@@ -634,15 +513,7 @@ function openWayEditModal() {
 
 function _renderWayEditProps(obj) {
     document.getElementById('way-edit-props').innerHTML =
-        Object.entries(obj).map(([k, v]) => `
-      <div class="d-flex gap-1 mb-1">
-        <input class="form-control form-control-sm bg-dark text-light border-secondary we-key"
-               placeholder="key" value="${escHtml(k)}" style="flex:1;font-size:0.75rem;">
-        <input class="form-control form-control-sm bg-dark text-light border-secondary we-val"
-               placeholder="value" value="${escHtml(String(v))}" style="flex:1;font-size:0.75rem;">
-        <button type="button" class="btn btn-sm btn-outline-danger px-1"
-                onclick="this.closest('.d-flex').remove()">×</button>
-      </div>`).join('');
+        Object.entries(obj).map(([k, v]) => kvRow('we', k, String(v))).join('');
 }
 
 document.getElementById('way-edit-save')?.addEventListener('click', async () => {
@@ -669,17 +540,7 @@ document.getElementById('way-edit-save')?.addEventListener('click', async () => 
 });
 
 document.getElementById('way-edit-add-prop-btn')?.addEventListener('click', () => {
-    const container = document.getElementById('way-edit-props');
-    const row = document.createElement('div');
-    row.className = 'd-flex gap-1 mb-1';
-    row.innerHTML = `
-    <input class="form-control form-control-sm bg-dark text-light border-secondary we-key"
-           placeholder="key" style="flex:1;font-size:0.75rem;">
-    <input class="form-control form-control-sm bg-dark text-light border-secondary we-val"
-           placeholder="value" style="flex:1;font-size:0.75rem;">
-    <button type="button" class="btn btn-sm btn-outline-danger px-1"
-            onclick="this.closest('.d-flex').remove()">×</button>`;
-    container.appendChild(row);
+    document.getElementById('way-edit-props').insertAdjacentHTML('beforeend', kvRow('we'));
 });
 
 async function undoTagOverride(wayId) {
@@ -714,8 +575,7 @@ async function deleteCurrentWay() {
     }
     renderChangesPanel();
     renderHiddenPanel();
-    document.getElementById('props-content').innerHTML =
-        '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+    resetProps();
     setStatus(`Deleted way ${wayId}`, 'text-success');
 }
 
@@ -750,8 +610,7 @@ async function hideCurrentWay() {
     }
     renderChangesPanel();
     renderHiddenPanel();
-    document.getElementById('props-content').innerHTML =
-        '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+    resetProps();
     setStatus(`Hidden way ${wayId}`, 'text-success');
 }
 
@@ -840,8 +699,8 @@ function renderChangesPanel() {
     const list = document.getElementById('changes-list');
     const count = document.getElementById('changes-count');
     if (!panel || !list || !count) return;
-    if (!changeLog.length || currentAppMode === 'planner') { panel.style.display = 'none'; return; }
-    panel.style.display = '';
+    if (!changeLog.length || currentAppMode === 'planner') { panel.hidden = true; return; }
+    panel.hidden = false;
     count.textContent = `(${changeLog.length})`;
     list.textContent = '';
     [...changeLog].reverse().forEach(d => {
@@ -902,8 +761,7 @@ async function undoWaySplit(wayId, nodeId) {
             } else {
                 currentClickedLayer = null;
                 currentClickedFeature = null;
-                document.getElementById('props-content').innerHTML =
-                    '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+                resetProps();
             }
             clearNodes();
         }
@@ -920,8 +778,8 @@ function renderHiddenPanel() {
     const list = document.getElementById('hidden-list');
     const count = document.getElementById('hidden-count');
     if (!panel || !list || !count) return;
-    if (!hiddenWays.length || currentAppMode === 'planner') { panel.style.display = 'none'; return; }
-    panel.style.display = '';
+    if (!hiddenWays.length || currentAppMode === 'planner') { panel.hidden = true; return; }
+    panel.hidden = false;
     count.textContent = `(${hiddenWays.length})`;
     list.textContent = '';
     [...hiddenWays].reverse().forEach(d => {
@@ -978,15 +836,6 @@ async function undoWayNodeMoves(wayId) {
     }
 }
 
-function togglePanel(name) {
-    const body = document.getElementById(`${name}-body`);
-    const toggle = document.getElementById(`${name}-toggle`);
-    if (!body) return;
-    const open = body.style.display !== 'none';
-    body.style.display = open ? 'none' : '';
-    if (toggle) toggle.textContent = open ? '▼' : '▲';
-}
-
 function showAnnProps(ann) {
     if (currentClickedFeature) {
         clearNodes();
@@ -1011,8 +860,8 @@ function renderAnnotationList() {
     const count = document.getElementById('ann-count');
     if (!panel || !el || !count) return;
     const addedNodeEntries = changeLog.filter(c => c.type === 'add_node');
-    if (!annotations.length && !addedNodeEntries.length || currentAppMode === 'planner') { panel.style.display = 'none'; return; }
-    panel.style.display = '';
+    if (!annotations.length && !addedNodeEntries.length || currentAppMode === 'planner') { panel.hidden = true; return; }
+    panel.hidden = false;
     count.textContent = `(${annotations.length + addedNodeEntries.length})`;
     const annHtml = annotations.map(a => `
     <div class="ann-item">
@@ -1057,8 +906,7 @@ async function deleteSelectedAnnotation() {
         annotations = annotations.filter(a => a.id !== annId);
         if (currentClickedLayer === editSelectedLayer) {
             currentClickedLayer = null;
-            const propsEl = document.getElementById('props-content');
-            if (propsEl) propsEl.innerHTML = '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+            resetProps();
         }
         editSelectedLayer = null;
         renderAnnotationList();
@@ -1078,7 +926,7 @@ async function revertAnnotationGeometry(id) {
         return;
     }
     try {
-        await saveAnnotation(currentFile, id, baseline);
+        await updateAnnotationApi(currentFile, id, baseline, ann.type, ann.properties);
     } catch (err) {
         setStatus('Failed to revert annotation geometry', 'text-danger');
         return;
@@ -1104,8 +952,7 @@ async function removeAnnotationById(id) {
     if (res.ok) {
         if (currentClickedLayer && currentClickedLayer.options && currentClickedLayer.options._ann_id === id) {
             currentClickedLayer = null;
-            const propsEl = document.getElementById('props-content');
-            if (propsEl) propsEl.innerHTML = '<span class="text-secondary" style="font-size:0.8rem;font-style:italic;">Click a feature to inspect</span>';
+            resetProps();
         }
         annotations = annotations.filter(a => a.id !== id);
         renderAnnotationLayer();
@@ -1124,15 +971,7 @@ function updateAnnTypeFields() {
 
 function _renderExtraProps(obj) {
     document.getElementById('ann-extra-props').innerHTML =
-        Object.entries(obj).map(([k, v]) => `
-      <div class="d-flex gap-1 mb-1">
-        <input class="form-control form-control-sm bg-dark text-light border-secondary ep-key"
-               placeholder="key" value="${escHtml(k)}" style="flex:1;font-size:0.75rem;">
-        <input class="form-control form-control-sm bg-dark text-light border-secondary ep-val"
-               placeholder="value" value="${escHtml(String(v))}" style="flex:1;font-size:0.75rem;">
-        <button type="button" class="btn btn-sm btn-outline-danger px-1"
-                onclick="this.closest('.d-flex').remove()">×</button>
-      </div>`).join('');
+        Object.entries(obj).map(([k, v]) => kvRow('ep', k, String(v))).join('');
 }
 
 function _collectAnnForm() {
@@ -1229,15 +1068,7 @@ document.getElementById('gpx-upload-submit')?.addEventListener('click', async ()
     const formData = new FormData();
     formData.append('file', pendingGpxFile);
     formData.append('name', name);
-    formData.append('options', JSON.stringify({
-        grid_margin: parseFloat(document.getElementById('gpx-grid-margin')?.value) || 150,
-        obstacle_radius: parseFloat(document.getElementById('gpx-obstacle-radius')?.value) || 2.0,
-        buffer_widths: {
-            road: parseFloat(document.getElementById('gpx-buf-road')?.value) || 7.0,
-            footway: parseFloat(document.getElementById('gpx-buf-footway')?.value) || 3.0,
-            barrier: parseFloat(document.getElementById('gpx-buf-barrier')?.value) || 2.0,
-        },
-    }));
+    formData.append('options', JSON.stringify(readFetchOptions('gpx')));
 
     try {
         const data = await uploadGpxApi(formData);

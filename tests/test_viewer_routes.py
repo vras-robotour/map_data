@@ -1029,6 +1029,32 @@ def test_cancel_wormhole_unknown_transfer(app_client):
     assert resp.get_json() == {"success": False, "message": "Invalid or unknown transfer ID"}
 
 
+def test_get_transfer_code_wakes_up_on_event_instead_of_polling():
+    manager = viewer_routes.WormholeManager()
+    ready = threading.Event()
+    manager.active_transfers["tid"] = {"code": None, "code_ready": ready}
+
+    def _capture():
+        time.sleep(0.05)
+        manager.active_transfers["tid"]["code"] = "1-abc-def"
+        ready.set()
+
+    threading.Thread(target=_capture).start()
+    start = time.time()
+    code = manager.get_transfer_code("tid", timeout=5)
+    elapsed = time.time() - start
+
+    assert code == "1-abc-def"
+    assert elapsed < 1.0  # woken by the event, not stuck waiting out the timeout
+
+
+def test_get_transfer_code_blocks_full_timeout_for_unknown_transfer():
+    manager = viewer_routes.WormholeManager()
+    start = time.time()
+    assert manager.get_transfer_code("nope", timeout=0.2) is None
+    assert time.time() - start >= 0.2
+
+
 # ── non-JSON / empty bodies on JSON endpoints ────────────────────────────────
 
 

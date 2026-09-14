@@ -97,8 +97,7 @@ map_data/
 │   ├── way.py               # Way class — represents a single OSM feature with geometry
 │   ├── overpass.py          # OSM Overpass API client
 │   ├── parsing.py           # OSM XML/JSON parsing logic
-│   ├── serialization.py     # .mapdata file I/O
-│   └── points_to_graph_points.py # Equidistant point interpolation
+│   └── serialization.py     # .mapdata file I/O
 └── viewer/                  # Modular interactive viewer (Flask + Leaflet)
     ├── app.py               # App factory and server entry point
     ├── routes.py            # REST API endpoints and GeoJSON conversion

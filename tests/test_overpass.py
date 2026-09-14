@@ -39,15 +39,15 @@ def test_query_raw_success():
     assert result == MINIMAL_OVERPASS_JSON
 
 
-def test_query_returns_overpy_result():
+def test_query_raw_result_parses_to_overpy_result():
     client = OverpassClient()
     with (
         patch.object(client.session, "get", return_value=_resp(200, "")),
         patch.object(client.session, "post", return_value=_resp(200, MINIMAL_OVERPASS_JSON)),
         patch("map_data.utils.overpass.time.sleep"),
     ):
-        result = client.query("test query")
-    assert isinstance(result, overpy.Result)
+        raw = client.query_raw("test query")
+    assert isinstance(client.api.parse_json(raw), overpy.Result)
 
 
 def test_query_raw_rate_limited_rotates_endpoint():
@@ -109,17 +109,6 @@ def test_query_raw_persistent_remark_errors_return_none():
         patch("map_data.utils.overpass.time.sleep"),
     ):
         result = client.query_raw("test query")
-    assert result is None
-
-
-def test_query_persistent_remark_errors_return_none_without_raising():
-    client = OverpassClient()
-    with (
-        patch.object(client.session, "get", return_value=_resp(200, "")),
-        patch.object(client.session, "post", return_value=_resp(200, REMARK_ERROR_JSON)),
-        patch("map_data.utils.overpass.time.sleep"),
-    ):
-        result = client.query("test query")
     assert result is None
 
 

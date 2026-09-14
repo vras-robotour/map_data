@@ -283,3 +283,96 @@ def test_combined_informed_and_adaptive():
     assert path is not None
     assert np.allclose(path[0], [0.0, 0.0])
     assert np.allclose(path[-1], [10.0, 10.0])
+
+
+# ── production configuration (config/planner_defaults.yaml's rrt.* section,
+# wired through ReplanPath._rrt_star) actually uses informed improvement ──
+
+
+def test_production_config_improves_on_or_matches_first_found_path():
+    """
+    informed=True, adaptive_radius=True, improve_after_goal=True (the
+    defaults ReplanPath now reads from config/planner_defaults.yaml and
+    passes to RRTStar) must never return a path *worse* than the first one
+    found: it keeps refining with the same iteration budget instead of
+    stopping early. Same seed for both runs, so the two trees are identical
+    up to the point the first solution is found.
+    """
+    random.seed(11)
+    rrt_first_found = _make_rrt(
+        informed=True,
+        adaptive_radius=True,
+        improve_after_goal=False,
+        max_iter=1500,
+    )
+    path_first = rrt_first_found.find_path()
+    assert path_first is not None
+    first_found_cost = rrt_first_found._best_cost
+
+    random.seed(11)
+    rrt_production = _make_rrt(
+        informed=True,
+        adaptive_radius=True,
+        improve_after_goal=True,
+        max_iter=1500,
+    )
+    path_production = rrt_production.find_path()
+
+    assert path_production is not None
+    assert rrt_production._best_cost <= first_found_cost + 1e-9
+
+
+def test_production_config_exercises_the_informed_sampler():
+    """
+    The ellipse sampler (_sample_informed) must actually run once a solution
+    exists and improve_after_goal keeps the loop going — otherwise "informed"
+    is configured but dead, exactly the bug this finding fixes.
+    """
+    calls = 0
+    original = RRTStar._sample_informed
+
+    def counting_sample_informed(self):
+        nonlocal calls
+        calls += 1
+        return original(self)
+
+    random.seed(5)
+    RRTStar._sample_informed = counting_sample_informed
+    try:
+        rrt = _make_rrt(
+            informed=True,
+            adaptive_radius=True,
+            improve_after_goal=True,
+            max_iter=1500,
+        )
+        path = rrt.find_path()
+    finally:
+        RRTStar._sample_informed = original
+
+    assert path is not None
+    assert calls > 0, "production config never sampled from the informed ellipse"
+
+
+def test_improve_iter_caps_iterations_after_goal(monkeypatch):
+    """Same seed: the tree is identical up to the first goal reach, after which
+    improve_after_goal runs exactly improve_iter more iterations."""
+    calls = 0
+    original = RRTStar._nearest_node  # called once per iteration
+
+    def counting_nearest_node(self, point):
+        nonlocal calls
+        calls += 1
+        return original(self, point)
+
+    monkeypatch.setattr(RRTStar, "_nearest_node", counting_nearest_node)
+
+    random.seed(7)
+    assert _make_rrt(improve_after_goal=False, max_iter=3000).find_path() is not None
+    first_found = calls
+
+    calls = 0
+    random.seed(7)
+    assert (
+        _make_rrt(improve_after_goal=True, improve_iter=25, max_iter=3000).find_path() is not None
+    )
+    assert calls == first_found + 25

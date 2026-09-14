@@ -51,9 +51,9 @@
   {
     "type": "improvement",
     "sev": "minor",
-    "title": "Vectorize Way.to_pcd_points and smooth_path hot loops",
-    "desc": "The polygon branch materializes a <code>MultiPoint</code> over the full bbox grid and filters point-by-point with <code>prepared.contains</code> (~1M Point objects for a 500×500 m barrier at density 2) — <code>shapely.contains_xy</code> does this vectorized with no object churn; the segment loop grows <code>pcd_points</code> with <code>np.concatenate</code> per segment (quadratic copying). <code>smooth_path</code> is a scalar triple-loop that vectorizes directly as a Jacobi iteration. Distinct from the backlogged native-extension item (which covers the RRT*/grid_astar raster loops).",
-    "file": "map_data/utils/way.py, map_data/pathsolver/smoothing.py"
+    "title": "Vectorize smooth_path hot loop",
+    "desc": "<code>smooth_path</code> is a scalar triple-loop that vectorizes directly as a Jacobi iteration. Distinct from the backlogged native-extension item (which covers the RRT*/grid_astar raster loops).",
+    "file": "map_data/pathsolver/smoothing.py"
   },
   {
     "type": "improvement",
@@ -79,9 +79,9 @@
   {
     "type": "improvement",
     "sev": "nice-to-have",
-    "title": "Delete dead code and misleading names in the geometry/planner helpers",
-    "desc": "<code>points_to_graph_points</code> and <code>increase_line</code> have no callers (and the offset-row distance metric adds parallel and perpendicular components linearly — wrong if ever revived); RRT*'s <code>_is_collision</code> segment branch is unreachable; <code>GOAL_SAMPLE_BIAS</code> doubles as the unrelated traversable-cell sampling bias; the <code>density</code> parameter across geometry helpers actually means <em>spacing</em> (callers pass <code>1/density</code>).",
-    "file": "map_data/utils/points_to_graph_points.py, map_data/pathsolver/rrt_star.py"
+    "title": "Rename GOAL_SAMPLE_BIAS in rrt_star.py",
+    "desc": "<code>GOAL_SAMPLE_BIAS</code> doubles as the unrelated traversable-cell sampling bias in <code>_sample_point</code>, which is confusing since the two uses have nothing to do with each other.",
+    "file": "map_data/pathsolver/rrt_star.py"
   },
   {
     "type": "improvement",

@@ -28,6 +28,13 @@ smooth_path: false
 grid_margin: 150
 path_cost_cap: 0.85
 grid_cost_weight: 5.0
+# RRT* (map_data.pathsolver.rrt_star.RRTStar), read by ReplanPath.
+# improve_iter caps the extra iterations spent improving once the goal is reached.
+rrt:
+  informed: true
+  improve_after_goal: true
+  improve_iter: 200
+  adaptive_radius: true
 obstacle_radius: 2.0
 buffer_widths:
   road: 7.0

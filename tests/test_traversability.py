@@ -39,7 +39,6 @@ def test_exact_value_match():
 
     assert verdict.traversable is False
     assert verdict.reason == "stairs"
-    assert verdict.rule_index == 0
     assert rules.evaluate({"highway": "footway"}).traversable is True
 
 
@@ -75,7 +74,6 @@ def test_first_match_wins_so_an_allow_rule_can_precede_a_deny_rule():
 
     good = rules.evaluate({"bridge": "boardwalk"})
     assert good.traversable is True
-    assert good.rule_index == 0
     assert rules.evaluate({"bridge": "yes"}).reason == "bridge"
 
 
@@ -87,7 +85,6 @@ def test_unmatched_way_takes_the_default():
 
     assert rules.is_traversable(_way(highway="footway"))
     assert not rules.is_traversable(_way(highway="track"))
-    assert rules.evaluate({}).rule_index is None
     assert rules.evaluate(None).traversable is False
 
 
@@ -113,36 +110,17 @@ def test_empty_rules_are_a_no_op():
     rules = TraversabilityRules()
 
     assert rules.is_traversable(_way(highway="steps", surface="grass"))
-    assert rules.edge_factor(_way(highway="steps")) == 1.0
-    assert rules.summary([_way(highway="steps")]) == {}
+    assert rules.extra_cost(_way(highway="steps")) == 0.0
 
 
-# ── costs, summary, extend ──────────────────────────────────────────────────
+# ── costs, extend ────────────────────────────────────────────────────────────
 
 
-def test_edge_factor_is_one_plus_the_extra_cost():
+def test_extra_cost_from_matching_rule():
     rules = _rules({"match": {"informal": "yes"}, "cost": 1.0})
 
     assert rules.extra_cost(_way(informal="yes")) == 1.0
-    assert rules.edge_factor(_way(informal="yes")) == 2.0
-    assert rules.edge_factor(_way(highway="footway")) == 1.0
-
-
-def test_summary_counts_removed_ways_per_reason():
-    rules = _rules(
-        {"match": {"highway": "steps"}, "traversable": False, "reason": "stairs"},
-        {"match": {"surface": "grass"}, "traversable": False, "reason": "soft surface"},
-        {"match": {"informal": "yes"}, "cost": 1.0, "reason": "informal path"},
-    )
-    ways = [
-        _way(highway="steps"),
-        _way(highway="steps"),
-        _way(surface="grass"),
-        _way(informal="yes"),  # costly, not removed
-        _way(highway="footway"),
-    ]
-
-    assert rules.summary(ways) == {"stairs": 2, "soft surface": 1}
+    assert rules.extra_cost(_way(highway="footway")) == 0.0
 
 
 def test_extend_prepends_a_deny_rule_for_the_excluded_highway_values():

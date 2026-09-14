@@ -32,7 +32,7 @@ a performance/safety tradeoff:
   ``apply_node_position_overrides``, ``apply_added_nodes``, and
   ``split_way`` (all in :mod:`map_data.viewer.helpers`) follow this
   convention; any new edit helper must too. Where a whole *list* needs to
-  change (see :func:`_apply_way_edits`), it is replaced via
+  change (see :func:`apply_way_edits`), it is replaced via
   ``setattr(md, lst_name, new_lst)`` on the already-copied top-level
   object, not mutated in place, so the cached list itself is left alone.
 - **Deep copy** (``copy.deepcopy``) is used once, in
@@ -48,7 +48,7 @@ a performance/safety tradeoff:
   the cheaper shallow copy plus the manual-copy discipline instead.
 
 Functions relying on this invariant: :func:`get_mapdata`,
-:func:`_apply_way_edits`, :func:`_resolve_way`, :func:`get_way`,
+:func:`apply_way_edits`, :func:`_resolve_way`, :func:`get_way`,
 :func:`get_way_nodes`, :func:`_get_way_segments_geojson`,
 :func:`get_merged_mapdata`.
 """
@@ -84,6 +84,7 @@ from flask import (
     send_file,
 )
 from flask.typing import ResponseReturnValue
+from werkzeug.exceptions import HTTPException
 
 from map_data.annotations import apply_tag_overrides, apply_way_edits, merge_annotations
 from map_data.map_data import MapData
@@ -98,6 +99,7 @@ from map_data.pathsolver.route import (
     RoutePlanningError,
     plan_route,
 )
+from map_data.utils.config import package_share
 from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.qr import geo_uri, qr_png, qr_svg
 from map_data.utils.serialization import map_data_to_dict
@@ -120,8 +122,6 @@ from .helpers import (
     split_way,
     update_segment_annotations_for_split_change,
 )
-
-SIGNIFICANT_CHANGE_TOLERANCE = 0.1
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("viewer", __name__)
@@ -199,19 +199,6 @@ def get_planner_defaults() -> Response:
     return jsonify(load_planner_defaults())
 
 
-_CAT_FOR_LIST = {
-    "roads_list": "road",
-    "footways_list": "footway",
-    "barriers_list": "barrier",
-}
-
-
-# Way/node deletions, splits and node moves are applied by the shared
-# :func:`map_data.annotations.apply_way_edits`, so the viewer, the CLI and the
-# ROS route planner all see the same edited map.
-_apply_way_edits = apply_way_edits
-
-
 _WAY_LISTS = (
     ("roads_list", "road"),
     ("footways_list", "footway"),
@@ -236,22 +223,19 @@ class _ResolvedWay:
         exists in *any* list; this is the only reliable way to distinguish
         "not found" from "found but deleted down to nothing" once ``way``
         is ``None``.
-    nodes_cache : dict
-        ``md``'s raw ``{node_id: {"lat", "lon", "tags"}}`` cache (or
-        ``{}`` if the loaded ``MapData`` has none), unmodified.
     effective_nodes_cache : dict
-        ``nodes_cache`` merged with synthetic entries for any user-added
-        nodes on this way (keyed by their negative synthetic IDs, with any
-        recorded position override already applied) -- the cache to pass
-        to :func:`~map_data.viewer.helpers.split_way` when splitting must
-        also work at a synthetic node. Equal to ``nodes_cache`` when the
-        way was not found or has no added nodes.
+        ``md``'s raw ``{node_id: {"lat", "lon", "tags"}}`` cache, merged
+        with synthetic entries for any user-added nodes on this way (keyed
+        by their negative synthetic IDs, with any recorded position
+        override already applied) -- the cache to pass to
+        :func:`~map_data.viewer.helpers.split_way` when splitting must
+        also work at a synthetic node. Equal to ``md``'s raw cache when
+        the way was not found or has no added nodes.
 
     """
 
     way: Any
     category: str | None
-    nodes_cache: dict[int, dict[str, Any]]
     effective_nodes_cache: dict[int, dict[str, Any]]
 
 
@@ -278,7 +262,8 @@ def _resolve_way(
     *not* handled here, since callers consume split segments differently
     (picking a single segment vs. building GeoJSON for every segment);
     callers call :func:`~map_data.viewer.helpers.split_way` themselves
-    with the ``nodes_cache`` or ``effective_nodes_cache`` returned here.
+    with the ``effective_nodes_cache`` returned here (or, like
+    :func:`get_way`, with ``md.nodes_cache`` directly).
 
     If node deletions reduce the way to nothing, ``rebuild_way_without_nodes``
     returns ``None`` and the added-nodes/overrides steps are skipped
@@ -324,12 +309,7 @@ def _resolve_way(
             break
 
     if way is None:
-        return _ResolvedWay(
-            way=None,
-            category=None,
-            nodes_cache=nodes_cache,
-            effective_nodes_cache=nodes_cache,
-        )
+        return _ResolvedWay(way=None, category=None, effective_nodes_cache=nodes_cache)
 
     zn, zl = md.zone_number, md.zone_letter
 
@@ -339,37 +319,22 @@ def _resolve_way(
 
     effective_nc = nodes_cache
     if way is not None:
+        pos_overrides = get_node_position_overrides(store, search_id)
 
-        def _apply_overrides() -> None:
-            """Apply recorded node position overrides to the enclosing ``way``."""
-            nonlocal way
-            pos_overrides = get_node_position_overrides(store, search_id)
-            if pos_overrides:
-                # `way is not None` is already guaranteed by the enclosing `if way is
-                # not None:` above; mypy can't narrow a `nonlocal` var across closures.
-                way = (
-                    apply_node_position_overrides(
-                        way,  # type: ignore[arg-type]
-                        pos_overrides,
-                        zn,
-                        zl,
-                        nodes_cache,
-                        category=category,
-                    )
-                    or way
+        def _apply_overrides(w: Any) -> Any:
+            if not pos_overrides:
+                return w
+            return (
+                apply_node_position_overrides(
+                    w, pos_overrides, zn, zl, nodes_cache, category=category
                 )
-
-        def _apply_added() -> None:
-            """Apply recorded user-added synthetic nodes to the enclosing ``way``."""
-            nonlocal way
-            way = apply_added_nodes(way, store, zn, zl)  # type: ignore[arg-type] # see note above
+                or w
+            )
 
         if added_nodes_before_overrides:
-            _apply_added()
-            _apply_overrides()
+            way = _apply_overrides(apply_added_nodes(way, store, zn, zl))
         else:
-            _apply_overrides()
-            _apply_added()
+            way = apply_added_nodes(_apply_overrides(way), store, zn, zl)
 
         synth_nc: dict[int, dict[str, Any]] = {}
         for a in store.get("added_nodes", []):
@@ -386,12 +351,96 @@ def _resolve_way(
                 }
         effective_nc = {**nodes_cache, **synth_nc}
 
-    return _ResolvedWay(
-        way=way,
-        category=category,
-        nodes_cache=nodes_cache,
-        effective_nodes_cache=effective_nc,
+    return _ResolvedWay(way=way, category=category, effective_nodes_cache=effective_nc)
+
+
+def _apply_segment_deletions(
+    seg: Any,
+    seg_id: str,
+    store: dict[str, Any],
+    zn: int,
+    zl: str,
+    nodes_cache: dict[int, dict[str, Any]],
+    category: str | None,
+) -> Any:
+    """Rebuild *seg* without its segment-specific deleted nodes (keyed by *seg_id*), if any."""
+    seg_del_nids = get_deleted_node_ids(store, seg_id)
+    if not seg_del_nids:
+        return seg
+    return rebuild_way_without_nodes(seg, seg_del_nids, zn, zl, nodes_cache, category=category)
+
+
+def _select_segment(
+    way: Any,
+    way_id: str,
+    search_id: int,
+    store: dict[str, Any],
+    zn: int,
+    zl: str,
+    nodes_cache: dict[int, dict[str, Any]],
+    category: str | None,
+) -> Any:
+    """
+    Narrow *way* down to the single segment named by a virtual *way_id*.
+
+    Shared by :func:`get_way_nodes` and :func:`get_way`. A no-op (returns
+    *way* unchanged) if *way_id* carries no ``":<index>"`` suffix or the
+    way has no recorded splits.
+
+    Returns
+    -------
+    Any or None
+        The resolved segment (with its segment-specific node deletions
+        applied), or ``None`` if those deletions reduced it to nothing --
+        callers differ on how to report that, so it's left to them.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 for an invalid segment suffix. 404 for an out-of-range segment
+        index.
+
+    """
+    if ":" not in str(way_id):
+        return way
+    try:
+        segment_idx = int(str(way_id).split(":")[1])
+    except ValueError:
+        abort(400, "Invalid virtual ID")
+
+    split_nids = get_split_node_ids(store, search_id)
+    if not split_nids:
+        return way
+
+    segments = split_way(way, split_nids, zn, zl, nodes_cache)
+    if segment_idx >= len(segments):
+        abort(404, "Segment not found")
+
+    return _apply_segment_deletions(
+        segments[segment_idx], way_id, store, zn, zl, nodes_cache, category
     )
+
+
+def _apply_tag_override(
+    tags: dict[str, Any],
+    ov: dict[str, Any] | None,
+    category: str | None,
+) -> tuple[dict[str, Any], str | None]:
+    """
+    Merge a tag override into *tags* and re-derive a road/footway *category*.
+
+    Returns *tags*/*category* unchanged if *ov* is falsy. Otherwise merges
+    *ov* over *tags* and, if *category* is ``"road"`` or ``"footway"``,
+    recomputes it from the merged ``highway`` tag (any other category is
+    left alone).
+    """
+    if not ov:
+        return tags, category
+    merged = {**tags, **ov}
+    if category in ("road", "footway"):
+        hw = merged.get("highway", "")
+        category = "footway" if hw in FOOTWAY_VALUES else "road"
+    return merged, category
 
 
 def _get_data_dir() -> Path:
@@ -399,11 +448,11 @@ def _get_data_dir() -> Path:
     Return the directory holding ``.mapdata``/``.gpx``/annotation files.
 
     Resolution order: the Flask app's ``DATA_DIR`` config value if set
-    (used by tests and non-ROS2 deployments); else the ``map_data`` ROS2
-    package's installed ``share/map_data/data`` directory, via
-    ``ament_index_python``; else (no ROS2 environment available) a
-    ``data`` directory next to the installed package source, as a
-    filesystem fallback for running the viewer standalone.
+    (used by tests and non-ROS2 deployments); else
+    :func:`~map_data.utils.config.package_share`'s installed
+    ``share/map_data/data`` directory, falling back to a ``data``
+    directory next to the source tree when no ROS2 environment is
+    available.
 
     Returns
     -------
@@ -413,14 +462,7 @@ def _get_data_dir() -> Path:
     """
     if current_app.config.get("DATA_DIR"):
         return Path(current_app.config["DATA_DIR"])
-    try:
-        from ament_index_python.resources import get_resource
-
-        _, pkg = get_resource("packages", "map_data")
-        return Path(pkg) / "share" / "map_data" / "data"
-    except (ImportError, LookupError):
-        # Fallback to the local data directory relative to this file
-        return (Path(__file__).parent / ".." / ".." / "data").resolve()
+    return package_share("data")
 
 
 def _safe_data_path(filename: str) -> Path:
@@ -507,6 +549,77 @@ def _parse_way_id(way_id: str) -> int | str:
     return f"{base_int}:{suffix_int}"
 
 
+def _original_way_id(way_id: str | int) -> int:
+    """
+    Return the original (non-virtual) integer way ID for *way_id*.
+
+    Strips any ``":<segment_index>"`` virtual-segment suffix first, so a
+    plain or virtual way ID both resolve to the same underlying OSM way ID.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if the non-segment part isn't a valid integer.
+
+    """
+    try:
+        return int(str(way_id).split(":")[0])
+    except (ValueError, TypeError):
+        abort(400, "Invalid way ID")
+
+
+def _require_args(*names: str) -> Any:
+    """
+    Return each of *names* from the query string, aborting 400 if any is missing.
+
+    A single name returns its value directly; more than one returns a
+    tuple in the same order as *names*.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if any named query parameter is missing or empty.
+
+    """
+    values = tuple(request.args.get(name) for name in names)
+    if not all(values):
+        if len(names) == 1:
+            abort(400, f"Missing '{names[0]}' query parameter")
+        abort(400, "Missing required query parameters")
+    return values[0] if len(names) == 1 else values
+
+
+def _log_add(store: dict[str, Any], entry_type: str, key: dict[str, Any], **extra: Any) -> None:
+    """
+    Append a ``change_log`` entry unless one matching *entry_type* and *key* already exists.
+
+    *key* fields identify the edit (e.g. ``{"id": way_id}`` or
+    ``{"way_id": ..., "node_id": ...}``) and are compared via ``str()`` so
+    an int/str type mismatch between calls doesn't spuriously fail to
+    match; they're included in the appended entry along with **extra**
+    fields (e.g. ``category``/``label``), which are not compared for the
+    dedup check. The entry is stamped with the current time.
+    """
+    cl = store.setdefault("change_log", [])
+    if not any(
+        e.get("type") == entry_type and all(str(e.get(k)) == str(v) for k, v in key.items())
+        for e in cl
+    ):
+        cl.append({"type": entry_type, **key, **extra, "ts": time.time()})
+
+
+def _log_remove(store: dict[str, Any], entry_type: str, **key: Any) -> None:
+    """Drop ``change_log`` entries matching *entry_type* and *key* fields (via ``str()``)."""
+    cl = store.get("change_log", [])
+    store["change_log"] = [
+        e
+        for e in cl
+        if not (
+            e.get("type") == entry_type and all(str(e.get(k)) == str(v) for k, v in key.items())
+        )
+    ]
+
+
 @bp.route("/")
 def index() -> str:
     """Render the viewer's single-page HTML shell, injecting tile-provider API keys."""
@@ -551,9 +664,9 @@ def get_mapdata() -> Response:
 
     Loads the cached ``MapData`` for ``file``, takes a shallow ``copy.copy``
     (see the module docstring's "MapData copy semantics" section -- this
-    is safe because :func:`_apply_way_edits` never mutates a ``Way`` object
+    is safe because :func:`apply_way_edits` never mutates a ``Way`` object
     shared with the cache), applies deletions/splits/moves via
-    :func:`_apply_way_edits`, converts to GeoJSON, and finally merges in
+    :func:`apply_way_edits`, converts to GeoJSON, and finally merges in
     any tag overrides (re-deriving each affected feature's ``road``/
     ``footway`` category from the merged ``highway`` tag).
 
@@ -569,16 +682,14 @@ def get_mapdata() -> Response:
         400 if ``file`` is missing. 404 if the file doesn't exist.
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
     path = _safe_data_path(filename)
     if not path.is_file():
         abort(404, f"File not found: {filename}")
     map_data = copy.copy(load_mapdata_cached(str(path)))
     store = load_annotations(str(_annotation_path(filename)))
 
-    _apply_way_edits(map_data, store)
+    apply_way_edits(map_data, store)
 
     geojson = mapdata_to_geojson(map_data)
     tag_overrides = store.get("tag_overrides", {})
@@ -586,12 +697,11 @@ def get_mapdata() -> Response:
         for f in geojson["features"]:
             ov = tag_overrides.get(str(f["properties"].get("id", "")))
             if ov:
-                merged = {**(f["properties"].get("tags") or {}), **ov}
-                f["properties"]["tags"] = merged
-                cat = f["properties"].get("category")
-                if cat in ("road", "footway"):
-                    hw = merged.get("highway", "")
-                    f["properties"]["category"] = "footway" if hw in FOOTWAY_VALUES else "road"
+                f["properties"]["tags"], f["properties"]["category"] = _apply_tag_override(
+                    f["properties"].get("tags") or {},
+                    ov,
+                    f["properties"].get("category"),
+                )
     return jsonify(geojson)
 
 
@@ -615,9 +725,7 @@ def get_annotations() -> Response:
         400 if ``file`` is missing.
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
     return jsonify(load_annotations(str(_annotation_path(filename))))
 
 
@@ -643,9 +751,7 @@ def add_annotation() -> ResponseReturnValue:
         400 if ``file`` is missing or the request body has no ``geometry``.
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
     body = request.get_json(force=True)
     if not body or "geometry" not in body:
         abort(400, "Request body must include 'geometry'")
@@ -678,9 +784,7 @@ def update_annotation(ann_id: str) -> Response:
         404 if no annotation with ``ann_id`` exists for this file.
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
     body = request.get_json(force=True)
     if not body or "geometry" not in body:
         abort(400, "Request body must include 'geometry'")
@@ -714,9 +818,7 @@ def delete_annotation(ann_id: str) -> ResponseReturnValue:
         exists for this file.
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         before = len(store["annotations"])
@@ -889,24 +991,94 @@ _fetch_tasks: dict[str, dict[str, Any]] = {}
 FETCH_TASK_RETENTION_S = 60.0
 
 
+def _stamp_or_evict_if_stale(task_id: str, task: dict[str, Any], now: float) -> None:
+    """
+    Stamp a terminal task's retention clock, or evict it once expired.
+
+    A non-terminal *task* is never touched. A terminal one without a
+    ``completed_at`` yet gets stamped with *now*, starting its retention
+    clock; once more than :data:`FETCH_TASK_RETENTION_S` has passed since
+    then, it's popped from ``_fetch_tasks`` -- though *task* itself (the
+    caller's reference) is left intact, so a caller that already holds it
+    can still return its final state this one last time.
+    """
+    if task.get("status") not in ("done", "failed"):
+        return
+    completed_at = task.setdefault("completed_at", now)
+    if now - completed_at > FETCH_TASK_RETENTION_S:
+        _fetch_tasks.pop(task_id, None)
+
+
 def _sweep_stale_fetch_tasks() -> None:
     """
-    Evict terminal fetch tasks older than :data:`FETCH_TASK_RETENTION_S`.
+    Evict every terminal fetch task older than :data:`FETCH_TASK_RETENTION_S`.
 
     Called on every :func:`fetch_area` POST so that abandoned tasks (ones
     whose client never polls them to their terminal state, which is what
     normally triggers eviction in :func:`fetch_area_status`) cannot
-    accumulate in ``_fetch_tasks`` forever. Terminal tasks that do not yet
-    carry a ``completed_at`` timestamp are stamped with the current time,
-    starting their retention clock; non-terminal tasks are never touched.
+    accumulate in ``_fetch_tasks`` forever.
     """
     now = time.time()
     for task_id, task in list(_fetch_tasks.items()):
-        if task.get("status") not in ("done", "failed"):
-            continue
-        completed_at = task.setdefault("completed_at", now)
-        if now - completed_at > FETCH_TASK_RETENTION_S:
-            _fetch_tasks.pop(task_id, None)
+        _stamp_or_evict_if_stale(task_id, task, now)
+
+
+class _FetchFailed(Exception):
+    """Raised by :func:`_query_parse_save` when the Overpass query or parse step fails."""
+
+    def __init__(self, stage: str, error: str) -> None:
+        """*stage* is ``"query"`` or ``"parse"``, letting callers pick an appropriate response."""
+        super().__init__(error)
+        self.stage = stage
+        self.error = error
+
+
+def _query_parse_save(
+    md: MapData,
+    out_path: Path,
+    progress_cb: Any = None,
+    on_parse_start: Any = None,
+) -> dict[str, Any]:
+    """
+    Query Overpass, parse the result into *md*, and save it to *out_path*.
+
+    Shared by :func:`_run_fetch_task` (async, progress-reporting) and
+    :func:`upload_gpx` (synchronous, no progress reporting).
+
+    Parameters
+    ----------
+    progress_cb : callable, optional
+        Passed through to ``md.run_queries``.
+    on_parse_start : callable, optional
+        Called (with no arguments) once querying succeeds, before parsing
+        starts.
+
+    Returns
+    -------
+    dict
+        ``{"filename", "roads", "footways", "barriers", "crossroads"}``.
+
+    Raises
+    ------
+    _FetchFailed
+        If the Overpass query comes back empty, or parsing fails.
+
+    """
+    md.run_queries(progress_cb=progress_cb)
+    if any(d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)):
+        raise _FetchFailed("query", "Overpass API unavailable — try again later")
+    if on_parse_start:
+        on_parse_start()
+    if md.run_parse() != 0:
+        raise _FetchFailed("parse", "Parsing failed")
+    md.save(str(out_path))
+    return {
+        "filename": out_path.name,
+        "roads": len(md.roads_list),
+        "footways": len(md.footways_list),
+        "barriers": len(md.barriers_list),
+        "crossroads": len(md.crossroads_list),
+    }
 
 
 def _run_fetch_task(
@@ -971,29 +1143,16 @@ def _run_fetch_task(
         def _report(detail: str) -> None:
             _fetch_tasks[task_id] = {"status": "querying", "detail": detail}
 
+        def _parsing_started() -> None:
+            _fetch_tasks[task_id] = {"status": "parsing", "detail": "Parsing OSM data…"}
+
         _report("Querying Overpass…")
-        md.run_queries(progress_cb=_report)
-        if any(d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)):
-            _fetch_tasks[task_id] = {
-                "status": "failed",
-                "error": "Overpass API unavailable — try again later",
-            }
-            return
-        _fetch_tasks[task_id] = {"status": "parsing", "detail": "Parsing OSM data…"}
-        if md.run_parse() != 0:
-            _fetch_tasks[task_id] = {"status": "failed", "error": "Parsing failed"}
-            return
-        md.save(str(out_path))
-        _fetch_tasks[task_id] = {
-            "status": "done",
-            "result": {
-                "filename": out_path.name,
-                "roads": len(md.roads_list),
-                "footways": len(md.footways_list),
-                "barriers": len(md.barriers_list),
-                "crossroads": len(md.crossroads_list),
-            },
-        }
+        result = _query_parse_save(
+            md, out_path, progress_cb=_report, on_parse_start=_parsing_started
+        )
+        _fetch_tasks[task_id] = {"status": "done", "result": result}
+    except _FetchFailed as e:
+        _fetch_tasks[task_id] = {"status": "failed", "error": e.error}
     except Exception:
         logger.exception("fetch task %s failed", task_id)
         _fetch_tasks[task_id] = {"status": "failed", "error": "Internal server error"}
@@ -1119,11 +1278,7 @@ def fetch_area_status(task_id: str) -> Response:
     task = _fetch_tasks.get(task_id)
     if task is None:
         abort(404, "Unknown task ID")
-    if task["status"] in ("done", "failed"):
-        if "completed_at" not in task:
-            task["completed_at"] = time.time()
-        elif time.time() - task["completed_at"] > FETCH_TASK_RETENTION_S:
-            _fetch_tasks.pop(task_id, None)
+    _stamp_or_evict_if_stale(task_id, task, time.time())
     return jsonify(task)
 
 
@@ -1133,10 +1288,10 @@ def upload_gpx() -> Response:
     Upload a GPX track, fetch its surrounding OSM data, parse, and save it.
 
     Synchronous (unlike :func:`fetch_area`'s background-thread version):
-    the GPX is saved to a temp file (never persisted in the data
+    the GPX is saved to a temp directory (never persisted in the data
     directory), a :class:`~map_data.map_data.MapData` is built from it,
     Overpass is queried and parsed, and the result is saved as
-    ``<name>.mapdata``. The temp GPX file is always removed afterward.
+    ``<name>.mapdata``. The temp directory is always removed afterward.
 
     Parameters (multipart form)
     -----------------------------
@@ -1178,69 +1333,50 @@ def upload_gpx() -> Response:
     if not name:
         abort(400, "name is empty after sanitizing")
 
-    import json as _json
-
-    _parse_opts = _json.loads(request.form.get("options", "{}"))
-    grid_margin = _parse_opts.get("grid_margin")
-    obstacle_radius = _parse_opts.get("obstacle_radius")
-    buffer_widths = _parse_opts.get("buffer_widths")
+    parse_opts = json.loads(request.form.get("options", "{}"))
+    grid_margin = parse_opts.get("grid_margin")
+    obstacle_radius = parse_opts.get("obstacle_radius")
+    buffer_widths = parse_opts.get("buffer_widths")
 
     data_dir = _get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Use a temporary file to avoid saving the GPX to the data directory
-    with tempfile.NamedTemporaryFile(suffix=".gpx", delete=False) as tmp:
-        file.save(tmp.name)
-        gpx_tmp_path = Path(tmp.name)
+    # Use a temporary directory to avoid saving the GPX to the data directory
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        gpx_tmp_path = Path(tmp_dir) / "upload.gpx"
+        file.save(gpx_tmp_path)
 
-    try:
-        md = MapData(
-            str(gpx_tmp_path),
-            coords_type="file",
-            grid_margin=grid_margin,
-            obstacle_radius=obstacle_radius,
-            buffer_widths=buffer_widths,
-        )
-        # Restore the original filename for metadata purposes
-        md.coords_file = file.filename
-
-        area_km2 = _bbox_area_km2(md.min_lat, md.min_long, md.max_lat, md.max_long)
-        if area_km2 > MAX_FETCH_AREA_KM2:
-            abort(
-                400,
-                f"Track's surrounding area is {area_km2:.1f} km², which exceeds the "
-                f"{MAX_FETCH_AREA_KM2:.0f} km² limit for a single fetch.",
+        try:
+            md = MapData(
+                str(gpx_tmp_path),
+                coords_type="file",
+                grid_margin=grid_margin,
+                obstacle_radius=obstacle_radius,
+                buffer_widths=buffer_widths,
             )
+            # Restore the original filename for metadata purposes
+            md.coords_file = file.filename
 
-        md.run_queries()
-        if any(d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)):
-            abort(503, "Overpass API unavailable — try again later")
+            area_km2 = _bbox_area_km2(md.min_lat, md.min_long, md.max_lat, md.max_long)
+            if area_km2 > MAX_FETCH_AREA_KM2:
+                abort(
+                    400,
+                    f"Track's surrounding area is {area_km2:.1f} km², which exceeds the "
+                    f"{MAX_FETCH_AREA_KM2:.0f} km² limit for a single fetch.",
+                )
 
-        if md.run_parse() != 0:
-            abort(500, "Parsing failed")
+            out_path = data_dir / f"{name}.mapdata"
+            try:
+                result = _query_parse_save(md, out_path)
+            except _FetchFailed as e:
+                abort(503 if e.stage == "query" else 500, e.error)
 
-        out_path = data_dir / f"{name}.mapdata"
-        md.save(str(out_path))
-
-        return jsonify(
-            {
-                "filename": f"{name}.mapdata",
-                "roads": len(md.roads_list),
-                "footways": len(md.footways_list),
-                "barriers": len(md.barriers_list),
-                "crossroads": len(md.crossroads_list),
-            },
-        )
-    except Exception as e:
-        from werkzeug.exceptions import HTTPException
-
-        if isinstance(e, HTTPException):
-            raise
-        logger.exception("Error processing GPX upload")
-        abort(500, "Internal server error")
-    finally:
-        if gpx_tmp_path.exists():
-            gpx_tmp_path.unlink()
+            return jsonify(result)
+        except Exception as e:
+            if isinstance(e, HTTPException):
+                raise
+            logger.exception("Error processing GPX upload")
+            abort(500, "Internal server error")
 
 
 @bp.route("/api/upload_mapdata", methods=["POST"])
@@ -1324,10 +1460,7 @@ def get_way_nodes() -> Response:
         doesn't exist, or the requested segment index is out of range.
 
     """
-    filename = request.args.get("file")
-    way_id = request.args.get("way_id")
-    if not filename or way_id is None:
-        abort(400, "Missing 'file' or 'way_id' query parameter")
+    filename, way_id = _require_args("file", "way_id")
     path = _safe_data_path(filename)
     if not path.is_file():
         abort(404, f"File not found: {filename}")
@@ -1335,11 +1468,7 @@ def get_way_nodes() -> Response:
     md = load_mapdata_cached(str(path))
     store = load_annotations(str(_annotation_path(filename)))
 
-    original_way_id_str = str(way_id).split(":")[0]
-    try:
-        search_id = int(original_way_id_str)
-    except (ValueError, TypeError):
-        abort(400, "way_id must be an integer or virtual ID")
+    search_id = _original_way_id(way_id)
 
     resolved = _resolve_way(md, store, search_id)
     if resolved.category is None:
@@ -1353,33 +1482,9 @@ def get_way_nodes() -> Response:
     effective_nc = resolved.effective_nodes_cache
     pos_overrides = get_node_position_overrides(store, search_id)
 
-    # Handle split segments if it's a virtual ID
-    if ":" in str(way_id):
-        try:
-            segment_idx = int(str(way_id).split(":")[1])
-        except ValueError:
-            abort(400, "Invalid virtual ID")
-
-        split_nids = get_split_node_ids(store, search_id)
-        if split_nids:
-            segments = split_way(way, split_nids, zn, zl, effective_nc)
-            if segment_idx < len(segments):
-                way = segments[segment_idx]
-                # Apply segment-specific deletions
-                seg_del_nids = get_deleted_node_ids(store, way_id)
-                if seg_del_nids:
-                    way = rebuild_way_without_nodes(
-                        way,
-                        seg_del_nids,
-                        zn,
-                        zl,
-                        effective_nc,
-                        category=category,
-                    )
-                    if way is None:
-                        return jsonify({"way_id": way_id, "nodes": []})
-            else:
-                abort(404, "Segment not found")
+    way = _select_segment(way, way_id, search_id, store, zn, zl, effective_nc, category)
+    if way is None:
+        return jsonify({"way_id": way_id, "nodes": []})
 
     nodes = []
     geom_latlon = None
@@ -1449,9 +1554,7 @@ def get_way(way_id: str) -> Response:
         geometry can't be converted to GeoJSON.
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
     path = _safe_data_path(filename)
     if not path.is_file():
         abort(404, f"File not found: {filename}")
@@ -1459,12 +1562,7 @@ def get_way(way_id: str) -> Response:
     md = load_mapdata_cached(str(path))
     store = load_annotations(str(_annotation_path(filename)))
 
-    # Virtual ID handling: split by colon
-    original_way_id_str = str(way_id).split(":")[0]
-    try:
-        search_id = int(original_way_id_str)
-    except ValueError:
-        abort(400, "Invalid way ID")
+    search_id = _original_way_id(way_id)
 
     resolved = _resolve_way(md, store, search_id, added_nodes_before_overrides=True)
     if resolved.category is None:
@@ -1474,39 +1572,12 @@ def get_way(way_id: str) -> Response:
 
     way = resolved.way
     category = resolved.category
-    nodes_cache = resolved.nodes_cache
+    nodes_cache = getattr(md, "nodes_cache", {})
     zn, zl = md.zone_number, md.zone_letter
 
-    # Handle split segments if it's a virtual ID
-    if ":" in str(way_id):
-        try:
-            segment_idx = int(str(way_id).split(":")[1])
-        except ValueError:
-            abort(400, "Invalid virtual ID")
-
-        split_nids = get_split_node_ids(store, search_id)
-        if split_nids:
-            segments = split_way(way, split_nids, zn, zl, nodes_cache)
-            if segment_idx < len(segments):
-                way = segments[segment_idx]
-                # Apply segment-specific deletions
-                seg_del_nids = get_deleted_node_ids(store, way_id)
-                if seg_del_nids:
-                    way = rebuild_way_without_nodes(
-                        way,
-                        seg_del_nids,
-                        zn,
-                        zl,
-                        nodes_cache,
-                        category=category,
-                    )
-                    if way is None:
-                        abort(
-                            404,
-                            "Segment reduced to nothing by segment-specific deletions",
-                        )
-            else:
-                abort(404, "Segment not found")
+    way = _select_segment(way, way_id, search_id, store, zn, zl, nodes_cache, category)
+    if way is None:
+        abort(404, "Segment reduced to nothing by segment-specific deletions")
 
     geom = geom_to_geojson(way.line, zn, zl)
     if geom is None:
@@ -1524,13 +1595,12 @@ def get_way(way_id: str) -> Response:
         },
     }
 
-    ov = store.get("tag_overrides", {}).get(original_way_id_str)
-    if ov:
-        merged = {**(feature["properties"]["tags"]), **ov}
-        feature["properties"]["tags"] = merged
-        if category in ("road", "footway"):
-            hw = merged.get("highway", "")
-            feature["properties"]["category"] = "footway" if hw in FOOTWAY_VALUES else "road"
+    ov = store.get("tag_overrides", {}).get(str(search_id))
+    feature["properties"]["tags"], feature["properties"]["category"] = _apply_tag_override(
+        feature["properties"]["tags"],
+        ov,
+        category,
+    )
 
     return jsonify(feature)
 
@@ -1559,9 +1629,7 @@ def delete_way(way_id: str) -> Response:
         virtual way ID (see :func:`_parse_way_id`).
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
 
     # Segments (virtual IDs like "123:0") are stored as strings so that only the
     # specific segment is suppressed on reload, not the whole original way.
@@ -1579,9 +1647,7 @@ def delete_way(way_id: str) -> Response:
                     "label": body.get("label", ""),
                 },
             )
-            cl = store.setdefault("change_log", [])
-            if not any(e.get("type") == "way" and e.get("id") == stored_id for e in cl):
-                cl.append({"type": "way", "id": stored_id, "ts": time.time()})
+            _log_add(store, "way", {"id": stored_id})
     return Response("", 204)
 
 
@@ -1607,9 +1673,7 @@ def update_way_tags(way_id: str) -> Response:
         dict.
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
 
     original_way_id_str = str(way_id).split(":")[0]
 
@@ -1625,9 +1689,7 @@ def update_way_tags(way_id: str) -> Response:
             "category": body.get("category", "unknown"),
             "label": body.get("label", ""),
         }
-        cl = store.setdefault("change_log", [])
-        if not any(e.get("type") == "tag" and e.get("id") == original_way_id_str for e in cl):
-            cl.append({"type": "tag", "id": original_way_id_str, "ts": time.time()})
+        _log_add(store, "tag", {"id": original_way_id_str})
     return Response("", 204)
 
 
@@ -1653,17 +1715,12 @@ def delete_way_tags(way_id: str) -> Response:
         400 if ``file`` is missing.
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         store.get("tag_overrides", {}).pop(str(way_id), None)
         store.get("tag_override_meta", {}).pop(str(way_id), None)
-        cl = store.get("change_log", [])
-        store["change_log"] = [
-            e for e in cl if not (e.get("type") == "tag" and e.get("id") == way_id)
-        ]
+        _log_remove(store, "tag", id=way_id)
     return Response("", 204)
 
 
@@ -1690,9 +1747,7 @@ def get_way_segments(way_id: str) -> Response:
         400 if ``file`` is missing.
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
     original_way_id = str(way_id).split(":")[0]
     segments = _get_way_segments_geojson(filename, original_way_id)
     return jsonify({"segments": segments})
@@ -1755,27 +1810,13 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
     for i, seg in enumerate(segments):
         virtual_id = f"{original_way_id}:{i}"
 
-        # Apply segment-specific deletions to segment geometry
-        seg_del_nids = get_deleted_node_ids(store, virtual_id)
-        if seg_del_nids:
-            seg = rebuild_way_without_nodes(  # noqa: PLW2901
-                seg,
-                seg_del_nids,
-                zn,
-                zl,
-                effective_nc,
-                category=category,
-            )  # type: ignore[assignment] # narrowed by the `is None` check below
-            if seg is None:
-                continue
+        seg = _apply_segment_deletions(  # noqa: PLW2901
+            seg, virtual_id, store, zn, zl, effective_nc, category
+        )
+        if seg is None:
+            continue
 
-        feat_cat = category
-        tags = seg.tags or {}
-        if ov:
-            tags = {**tags, **ov}
-            if feat_cat in ("road", "footway"):
-                hw = tags.get("highway", "")
-                feat_cat = "footway" if hw in FOOTWAY_VALUES else "road"
+        tags, feat_cat = _apply_tag_override(seg.tags or {}, ov, category)
 
         features.append(
             {
@@ -1824,9 +1865,7 @@ def split_way_endpoint() -> Response:
         valid.
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
     body = request.get_json(force=True) or {}
     way_id = body.get("way_id")
     node_id = body.get("node_id")
@@ -1862,21 +1901,7 @@ def split_way_endpoint() -> Response:
                     store, int(original_way_id), resolved.way, old_splits, new_splits
                 )
 
-            cl = store.setdefault("change_log", [])
-            if not any(
-                e.get("type") == "split"
-                and e.get("way_id") == int(original_way_id)
-                and e.get("node_id") == node_id_int
-                for e in cl
-            ):
-                cl.append(
-                    {
-                        "type": "split",
-                        "way_id": int(original_way_id),
-                        "node_id": node_id_int,
-                        "ts": time.time(),
-                    },
-                )
+            _log_add(store, "split", {"way_id": int(original_way_id), "node_id": node_id_int})
 
     segments = _get_way_segments_geojson(filename, original_way_id)
     return jsonify({"success": True, "segments": segments})
@@ -1905,11 +1930,7 @@ def undo_way_split() -> Response:
         integer.
 
     """
-    filename = request.args.get("file")
-    way_id = request.args.get("way_id")
-    node_id = request.args.get("node_id")
-    if not filename or way_id is None or node_id is None:
-        abort(400, "Missing required query parameters")
+    filename, way_id, node_id = _require_args("file", "way_id", "node_id")
     try:
         way_id_int = int(way_id)
         node_id_int = int(node_id)
@@ -1935,16 +1956,7 @@ def undo_way_split() -> Response:
                         store, way_id_int, resolved.way, old_splits, new_splits
                     )
 
-        cl = store.get("change_log", [])
-        store["change_log"] = [
-            e
-            for e in cl
-            if not (
-                e.get("type") == "split"
-                and e.get("way_id") == way_id_int
-                and e.get("node_id") == node_id_int
-            )
-        ]
+        _log_remove(store, "split", way_id=way_id_int, node_id=node_id_int)
 
     segments = _get_way_segments_geojson(filename, str(way_id_int))
     return jsonify({"segments": segments})
@@ -1972,21 +1984,15 @@ def hide_way(way_id: str) -> Response:
         a valid integer.
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
 
-    original_way_id_str = str(way_id).split(":")[0]
-    try:
-        way_id_int = int(original_way_id_str)
-    except ValueError:
-        abort(400, "Invalid way ID")
+    way_id_int = _original_way_id(way_id)
 
     body = request.get_json(force=True) or {}
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         hw = store.setdefault("hidden_ways", [])
-        existing_ids = {(d["id"] if isinstance(d, dict) else d) for d in hw}
+        existing_ids = {d["id"] for d in hw}
         if way_id_int not in existing_ids:
             hw.append(
                 {
@@ -2017,22 +2023,14 @@ def show_way(way_id: str) -> Response:
         a valid integer.
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
 
-    original_way_id_str = str(way_id).split(":")[0]
-    try:
-        way_id_int = int(original_way_id_str)
-    except ValueError:
-        abort(400, "Invalid way ID")
+    way_id_int = _original_way_id(way_id)
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         hw = store.get("hidden_ways", [])
-        store["hidden_ways"] = [
-            d for d in hw if (d["id"] if isinstance(d, dict) else d) != way_id_int
-        ]
+        store["hidden_ways"] = [d for d in hw if d["id"] != way_id_int]
     return Response("", 204)
 
 
@@ -2057,22 +2055,15 @@ def restore_way(way_id: str) -> Response:
         virtual way ID (see :func:`_parse_way_id`).
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
 
     stored_id = _parse_way_id(way_id)
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         dw = store.get("deleted_ways", [])
-        store["deleted_ways"] = [
-            d for d in dw if (d["id"] if isinstance(d, dict) else d) != stored_id
-        ]
-        cl = store.get("change_log", [])
-        store["change_log"] = [
-            e for e in cl if not (e.get("type") == "way" and e.get("id") == stored_id)
-        ]
+        store["deleted_ways"] = [d for d in dw if d["id"] != stored_id]
+        _log_remove(store, "way", id=stored_id)
     return Response("", 204)
 
 
@@ -2108,16 +2099,8 @@ def add_way_node() -> Response:
         ``after_node_id``/``lat``/``lon``.
 
     """
-    filename = request.args.get("file")
-    way_id = request.args.get("way_id")
-    if not filename or way_id is None:
-        abort(400, "Missing required query parameters")
-
-    original_way_id_str = str(way_id).split(":")[0]
-    try:
-        way_id_int = int(original_way_id_str)
-    except (ValueError, TypeError):
-        abort(400, "way_id must be an integer")
+    filename, way_id = _require_args("file", "way_id")
+    way_id_int = _original_way_id(way_id)
 
     body = request.get_json(force=True) or {}
     after_node_id = body.get("after_node_id")
@@ -2178,17 +2161,13 @@ def delete_way_node() -> Response:
         non-segment part / ``node_id`` isn't a valid integer.
 
     """
-    filename = request.args.get("file")
-    way_id = request.args.get("way_id")
-    node_id_arg = request.args.get("node_id")
-    if not filename or way_id is None or node_id_arg is None:
-        abort(400, "Missing required query parameters")
+    filename, way_id, node_id_arg = _require_args("file", "way_id", "node_id")
 
     # Use the full way_id (could be virtual like "123:0") to allow segment-specific
     # deletion; _parse_way_id validates the segment suffix so raw strings never
     # reach the store.
     target_id = _parse_way_id(way_id)
-    way_id_int = int(str(target_id).split(":")[0])
+    way_id_int = _original_way_id(target_id)
     try:
         node_id = int(node_id_arg)
     except (ValueError, TypeError):
@@ -2207,39 +2186,13 @@ def delete_way_node() -> Response:
             ]
             pos_ov = store.get("node_position_overrides", {}).get(str(way_id_int), {})
             pos_ov.pop(str(node_id), None)
-            store["change_log"] = [
-                e
-                for e in store.get("change_log", [])
-                if not (
-                    e.get("type") == "add_node"
-                    and e.get("way_id") == way_id_int
-                    and e.get("node_id") == node_id
-                )
-            ]
+            _log_remove(store, "add_node", way_id=way_id_int, node_id=node_id)
             return Response("", 204)
 
         dn = store.setdefault("deleted_nodes", [])
-        if isinstance(dn, dict):
-            dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
-            store["deleted_nodes"] = dn
-
         if node_id not in get_deleted_node_ids(store, target_id):
             dn.append({"way_id": target_id, "node_id": node_id})
-            cl = store.setdefault("change_log", [])
-            if not any(
-                e.get("type") == "node"
-                and str(e.get("way_id")) == str(target_id)
-                and e.get("node_id") == node_id
-                for e in cl
-            ):
-                cl.append(
-                    {
-                        "type": "node",
-                        "way_id": target_id,
-                        "node_id": node_id,
-                        "ts": time.time(),
-                    },
-                )
+            _log_add(store, "node", {"way_id": target_id, "node_id": node_id})
     return Response("", 204)
 
 
@@ -2266,11 +2219,7 @@ def restore_way_node() -> Response:
         non-segment part / ``node_id`` isn't a valid integer.
 
     """
-    filename = request.args.get("file")
-    way_id = request.args.get("way_id")
-    node_id_arg = request.args.get("node_id")
-    if not filename or way_id is None or node_id_arg is None:
-        abort(400, "Missing required query parameters")
+    filename, way_id, node_id_arg = _require_args("file", "way_id", "node_id")
 
     # Use the full way_id to match the deletion record; validated the same way
     # as in delete_way_node.
@@ -2283,23 +2232,12 @@ def restore_way_node() -> Response:
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         dn = store.get("deleted_nodes", [])
-        if isinstance(dn, dict):
-            dn = [{"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs]
         store["deleted_nodes"] = [
             d
             for d in dn
             if not (str(d.get("way_id")) == str(target_id) and d.get("node_id") == node_id)
         ]
-        cl = store.get("change_log", [])
-        store["change_log"] = [
-            e
-            for e in cl
-            if not (
-                e.get("type") == "node"
-                and str(e.get("way_id")) == str(target_id)
-                and e.get("node_id") == node_id
-            )
-        ]
+        _log_remove(store, "node", way_id=target_id, node_id=node_id)
     return Response("", 204)
 
 
@@ -2332,16 +2270,8 @@ def move_way_nodes() -> Response:
         part isn't a valid integer, or the body has no ``nodes`` list.
 
     """
-    filename = request.args.get("file")
-    way_id = request.args.get("way_id")
-    if not filename or way_id is None:
-        abort(400, "Missing required query parameters")
-
-    original_way_id_str = str(way_id).split(":")[0]
-    try:
-        way_id_int = int(original_way_id_str)
-    except (ValueError, TypeError):
-        abort(400, "way_id must be an integer")
+    filename, way_id = _require_args("file", "way_id")
+    way_id_int = _original_way_id(way_id)
 
     body = request.get_json(force=True) or {}
     nodes = body.get("nodes")
@@ -2350,7 +2280,7 @@ def move_way_nodes() -> Response:
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         overrides = store.setdefault("node_position_overrides", {})
-        way_key = original_way_id_str
+        way_key = str(way_id_int)
         if way_key not in overrides:
             overrides[way_key] = {}
         for n in nodes:
@@ -2359,17 +2289,13 @@ def move_way_nodes() -> Response:
                 "lon": float(n["lon"]),
             }
         migrate_change_log(store)
-        cl = store.setdefault("change_log", [])
-        if not any(e.get("type") == "move" and e.get("id") == way_id_int for e in cl):
-            cl.append(
-                {
-                    "type": "move",
-                    "id": way_id_int,
-                    "category": body.get("category", "unknown"),
-                    "label": body.get("label", ""),
-                    "ts": time.time(),
-                },
-            )
+        _log_add(
+            store,
+            "move",
+            {"id": way_id_int},
+            category=body.get("category", "unknown"),
+            label=body.get("label", ""),
+        )
     return Response("", 204)
 
 
@@ -2394,24 +2320,13 @@ def undo_move_way_nodes() -> Response:
         part isn't a valid integer.
 
     """
-    filename = request.args.get("file")
-    way_id = request.args.get("way_id")
-    if not filename or way_id is None:
-        abort(400, "Missing required query parameters")
-
-    original_way_id_str = str(way_id).split(":")[0]
-    try:
-        way_id_int = int(original_way_id_str)
-    except (ValueError, TypeError):
-        abort(400, "way_id must be an integer or virtual ID")
+    filename, way_id = _require_args("file", "way_id")
+    way_id_int = _original_way_id(way_id)
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
-        store.get("node_position_overrides", {}).pop(original_way_id_str, None)
-        cl = store.get("change_log", [])
-        store["change_log"] = [
-            e for e in cl if not (e.get("type") == "move" and e.get("id") == way_id_int)
-        ]
+        store.get("node_position_overrides", {}).pop(str(way_id_int), None)
+        _log_remove(store, "move", id=way_id_int)
     return Response("", 204)
 
 
@@ -2428,7 +2343,7 @@ def get_merged_mapdata(filename: str) -> tuple[MapData | None, dict[str, Any] | 
     shallow-copy-plus-manual-Way-copy convention used elsewhere) before:
 
     1. Applying way/node deletions, splits, and node moves via
-       :func:`_apply_way_edits`.
+       :func:`apply_way_edits`.
     2. Merging tag overrides directly into each way's ``tags`` (mutating
        the way in place -- safe only because of the deepcopy), then
        re-sorting every way between ``roads_list``/``footways_list`` in
@@ -2460,11 +2375,22 @@ def get_merged_mapdata(filename: str) -> tuple[MapData | None, dict[str, Any] | 
     store = load_annotations(str(_annotation_path(filename)))
     md = copy.deepcopy(load_mapdata_cached(str(path)))
 
-    _apply_way_edits(md, store)
+    apply_way_edits(md, store)
     apply_tag_overrides(md, store)
     merge_annotations(md, store)
 
     return md, store
+
+
+def _download(
+    payload: dict[str, Any],
+    download_name: str,
+    mimetype: str,
+    indent: int | None = None,
+) -> Response:
+    """JSON-serialize *payload* and send it as a downloadable attachment."""
+    buf = io.BytesIO(json.dumps(payload, indent=indent).encode("utf-8"))
+    return send_file(buf, as_attachment=True, download_name=download_name, mimetype=mimetype)
 
 
 @bp.route("/api/export")
@@ -2490,24 +2416,14 @@ def export_mapdata() -> Response:
         400 if ``file`` is missing. 404 if the file doesn't exist.
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
 
     md, _ = get_merged_mapdata(filename)
     if md is None:
         abort(404, f"File not found: {filename}")
 
-    buf = io.BytesIO()
-    buf.write(json.dumps(map_data_to_dict(md), indent=2).encode("utf-8"))
-    buf.seek(0)
     base = Path(filename).stem
-    return send_file(
-        buf,
-        as_attachment=True,
-        download_name=f"{base}.exported.mapdata",
-        mimetype="application/json",
-    )
+    return _download(map_data_to_dict(md), f"{base}.exported.mapdata", "application/json", indent=2)
 
 
 @bp.route("/api/export/geojson")
@@ -2540,24 +2456,14 @@ def export_geojson() -> Response:
         400 if ``file`` is missing. 404 if the file doesn't exist.
 
     """
-    filename = request.args.get("file")
-    if not filename:
-        abort(400, "Missing 'file' query parameter")
+    filename = _require_args("file")
 
     md, _ = get_merged_mapdata(filename)
     if md is None:
         abort(404, f"File not found: {filename}")
 
-    buf = io.BytesIO()
-    buf.write(json.dumps(mapdata_to_geojson(md)).encode("utf-8"))
-    buf.seek(0)
     base = Path(filename).stem
-    return send_file(
-        buf,
-        as_attachment=True,
-        download_name=f"{base}.geojson",
-        mimetype="application/geo+json",
-    )
+    return _download(mapdata_to_geojson(md), f"{base}.geojson", "application/geo+json")
 
 
 @bp.route("/api/cost_grid")
@@ -2618,24 +2524,19 @@ def get_cost_grid() -> Response:
     cell_size = 1.0  # Use a coarser grid for visualization performance
     _check_grid_cells(_bbox_area_km2(min_lat, min_lon, max_lat, max_lon) * 1e6, cell_size)
 
-    # Get custom highway costs from request if provided
-    highway_costs_dict = None
-    highway_costs = request.args.get("highway_costs")
-    if highway_costs:
-        try:
-            parsed_hw = json.loads(highway_costs)
-        except json.JSONDecodeError:
-            abort(400, "highway_costs must be valid JSON")
-        highway_costs_dict = _validated_cost_dict(parsed_hw, "highway_costs")
-
-    surface_costs_dict = None
-    surface_costs = request.args.get("surface_costs")
-    if surface_costs:
-        try:
-            parsed_sf = json.loads(surface_costs)
-        except json.JSONDecodeError:
-            abort(400, "surface_costs must be valid JSON")
-        surface_costs_dict = _validated_cost_dict(parsed_sf, "surface_costs")
+    # Get custom highway/surface costs from the request, if provided
+    cost_dicts: dict[str, dict[str, float] | None] = {}
+    for name in ("highway_costs", "surface_costs"):
+        raw = request.args.get(name)
+        cost_dicts[name] = None
+        if raw:
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                abort(400, f"{name} must be valid JSON")
+            cost_dicts[name] = _validated_cost_dict(parsed, name)
+    highway_costs_dict = cost_dicts["highway_costs"]
+    surface_costs_dict = cost_dicts["surface_costs"]
 
     md, _ = get_merged_mapdata(filename)
     if md is None:
@@ -2661,12 +2562,10 @@ def get_cost_grid() -> Response:
 
     replanner.fill_grid(md, highway_types=["footway", "road"])
 
-    grid = replanner.grid  # [N, 4] -> [x, y, 0, cost]
-    # Do not filter out obstacles (cost >= 1.0) so they can be visualized
-    visible_grid = grid
-
+    # grid is [N, 4] -> [x, y, 0, cost]; obstacles (cost >= 1.0) are not filtered
+    # out, unlike planning, so they can be visualized too.
     points = []
-    for row in visible_grid:
+    for row in replanner.grid:
         lat, lon = utm.to_latlon(row[0], row[1], zn, zl)
         points.append([lat, lon, float(row[3])])
 
@@ -2780,9 +2679,8 @@ class WormholeManager:
         self.active_transfers[transfer_id] = {
             "process": process,
             "temp_dir": temp_dir,
-            "start_time": time.time(),
-            "status": "running",
             "code": None,
+            "code_ready": threading.Event(),
         }
 
         threading.Thread(
@@ -2798,11 +2696,11 @@ class WormholeManager:
 
         Polls the subprocess's stdout/stderr for the ``"Wormhole code
         is: ..."`` line, records it on ``active_transfers[transfer_id]["code"]``
-        as soon as found, then waits (up to 60s) for the process to exit
-        and records a final ``"completed"``/``"failed"`` status. Always
-        calls :meth:`_cleanup_transfer` on exit (success, failure, or
-        exception), which removes the transfer's temp directory and its
-        ``active_transfers`` entry.
+        and sets its ``"code_ready"`` event as soon as found (waking up
+        :meth:`get_transfer_code`), then waits (up to 60s) for the process
+        to exit. Always calls :meth:`_cleanup_transfer` on exit (success,
+        failure, or exception), which removes the transfer's temp
+        directory and its ``active_transfers`` entry.
 
         Parameters
         ----------
@@ -2836,16 +2734,15 @@ class WormholeManager:
 
                 if wormhole_code:
                     transfer_info["code"] = wormhole_code
+                    transfer_info["code_ready"].set()
                     break
 
                 if process.poll() is not None:
                     break
 
             process.wait(timeout=60)
-            transfer_info["status"] = "completed" if process.returncode == 0 else "failed"
         except Exception:
             logger.exception("Error in wormhole thread for %s", transfer_id)
-            transfer_info["status"] = "failed"
             if process.poll() is None:
                 process.kill()
         finally:
@@ -2853,7 +2750,11 @@ class WormholeManager:
 
     def get_transfer_code(self, transfer_id: str, timeout: float = 10) -> str | None:
         """
-        Block (polling every 0.1s) until a transfer's wormhole code is available.
+        Block until a transfer's wormhole code is available, or *timeout* elapses.
+
+        Woken up by :meth:`_capture_wormhole_code_thread` setting the
+        transfer's ``"code_ready"`` event as soon as it scrapes the code,
+        rather than polling.
 
         Parameters
         ----------
@@ -2866,26 +2767,24 @@ class WormholeManager:
         -------
         str or None
             The wormhole code, or ``None`` if it wasn't captured within
-            *timeout* (including if *transfer_id* is unknown throughout).
+            *timeout* (including if *transfer_id* is unknown throughout --
+            in which case this blocks for the full *timeout* regardless).
 
         """
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            if transfer_id in self.active_transfers and self.active_transfers[transfer_id].get(
-                "code",
-            ):
-                return str(self.active_transfers[transfer_id]["code"])
-            time.sleep(0.1)
+        transfer_info = self.active_transfers.get(transfer_id)
+        ready = transfer_info["code_ready"] if transfer_info else threading.Event()
+        if ready.wait(timeout) and transfer_info is not None:
+            return str(transfer_info["code"])
         return None
 
     def cancel_transfer(self, transfer_id: str) -> tuple[bool, str]:
         """
         Kill an active transfer's ``wormhole`` subprocess.
 
-        Marks the transfer ``"cancelled"`` but does not remove it from
-        ``active_transfers`` or clean up its temp directory here -- that
-        still happens via :meth:`_capture_wormhole_code_thread` observing
-        the process exit and calling :meth:`_cleanup_transfer`.
+        Does not remove the transfer from ``active_transfers`` or clean up
+        its temp directory here -- that still happens via
+        :meth:`_capture_wormhole_code_thread` observing the process exit
+        and calling :meth:`_cleanup_transfer`.
 
         Parameters
         ----------
@@ -2907,7 +2806,6 @@ class WormholeManager:
         if process.poll() is None:
             process.kill()
 
-        self.active_transfers[transfer_id]["status"] = "cancelled"
         return True, "Transfer cancelled"
 
     def _cleanup_transfer(self, transfer_id: str) -> None:
@@ -3052,9 +2950,9 @@ def create_replan() -> Response:
         "status": ...}``. ``retrieveNum`` is ``1`` (with ``newPath: None``
         and a ``"status"`` of ``"cancelled"`` or ``"failed"``) if planning
         produced no result, ``0`` if the result differs significantly
-        from the input path (by point count or by
-        :data:`SIGNIFICANT_CHANGE_TOLERANCE` meters at any matching
-        index), or ``-1`` if it's effectively unchanged.
+        from the input path (by point count or by more than a small
+        per-point tolerance, per :attr:`~map_data.pathsolver.route.RouteResult.changed`),
+        or ``-1`` if it's effectively unchanged.
 
     Raises
     ------

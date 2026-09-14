@@ -6,7 +6,6 @@ import overpy
 import utm
 from shapely import geometry
 from shapely.ops import linemerge, unary_union
-from tqdm import tqdm
 
 from map_data.utils.config import load_config
 from map_data.utils.way import Way
@@ -25,7 +24,7 @@ def parse_osm_ways(
     force_zone_letter: str | None = None,
 ) -> dict[int, Way]:
     ways = {}
-    for way in tqdm(osm_ways_data.ways, desc="Parse ways"):
+    for way in osm_ways_data.ways:
         lats = np.array([float(n.lat) for n in way.nodes])
         lons = np.array([float(n.lon) for n in way.nodes])
         easting, northing, _, _ = utm.from_latlon(
@@ -68,7 +67,7 @@ def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
     consumed_ids: set[int] = set()
     kept_ids: set[int] = set()
 
-    for rel in tqdm(osm_rels_data.relations, desc="Parse rels"):
+    for rel in osm_rels_data.relations:
         outer_ids: list[int] = []
         inner_ids: list[int] = []
 
@@ -122,7 +121,7 @@ def parse_osm_nodes(
     force_zone_letter: str | None = None,
 ) -> list[Way]:
     barriers = []
-    for node in tqdm(osm_nodes_data.nodes, desc="Parse nodes"):
+    for node in osm_nodes_data.nodes:
         if node.id not in nodes_cache:
             nodes_cache[node.id] = {
                 "lat": float(node.lat),
@@ -284,7 +283,7 @@ def separate_ways(
     roads: list[Way] = []
     footways: list[Way] = []
     barriers: list[Way] = []
-    for way in tqdm(ways.values(), desc="Separate ways"):
+    for way in ways.values():
         if way.is_road():
             roads.append(buffer_line(way, width=bw.get("road", 7)))
         elif way.is_footway():

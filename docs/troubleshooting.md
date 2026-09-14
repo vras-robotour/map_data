@@ -20,17 +20,11 @@ If `md.footways_list` or `md.roads_list` is empty after `run_all()`, the boundin
 
 ---
 
-## GPX / YAML parsing failures
+## GPX parsing failures
 
-### `parse_path` raises an exception
+### `MapData(coords="...", coords_type="file")` raises "No points (waypoints, tracks or routes) found"
 
-- Confirm the file uses the `.gpx` or `.yaml` extension — format detection is extension-based.
-- GPX files must contain `<wpt>` elements. Files with only `<trkpt>` or `<rtept>` are supported by `MapData` for area calculation but **not** by `parse_gpx_file` for path planning. Convert track points to waypoints in your GPX editor first.
-- YAML files must have a top-level `waypoints:` key. See [YAML waypoint format](dev/data_formats.md#yaml-waypoint-format) for the expected schema.
-
-### Only one waypoint found
-
-`parse_gpx_file` reads `<wpt>` elements in document order. If your GPX editor exports waypoints as a single track instead of individual `<wpt>` tags, re-export using the "waypoints" export option.
+`MapData` reads `<wpt>` elements if the file has any, otherwise falls back to `<trkpt>` (tracks) and then `<rtept>` (routes) — see [GPX waypoint format](dev/data_formats.md#gpx-waypoint-format). Confirm the file contains at least one of these element types.
 
 ---
 

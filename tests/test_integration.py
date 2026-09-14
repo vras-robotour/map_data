@@ -122,51 +122,6 @@ def test_save_mapdata_success_leaves_no_temp_files(tmp_path):
     MapData.load(str(path))  # and the file is loadable
 
 
-# ── MapData input-shape handling ──────────────────────────────────────────────
-
-
-def test_current_robot_position_accepts_1d_array():
-    e, n, zn, zl = utm.from_latlon(_LAT, _LON)
-    waypoints = np.array([[e, n], [e + 200, n + 200]])
-
-    md = MapData(
-        [waypoints, int(zn), zl],
-        coords_type="array",
-        current_robot_position=np.array([e - 50, n - 50]),
-    )
-
-    assert md.waypoints.shape == (3, 2)
-    assert np.allclose(md.waypoints[0], [e - 50, n - 50])
-
-
-def test_current_robot_position_padded_against_3col_waypoints():
-    e, n, zn, zl = utm.from_latlon(_LAT, _LON)
-    waypoints = np.array([[e, n, 300.0], [e + 200, n + 200, 310.0]])
-
-    md = MapData(
-        [waypoints, int(zn), zl],
-        coords_type="array",
-        current_robot_position=np.array([[e - 50, n - 50]]),
-    )
-
-    assert md.waypoints.shape == (3, 3)
-    assert md.waypoints[0, 2] == 0.0  # elevation padded like the GPX/YAML parsers
-
-
-def test_current_robot_position_elevation_dropped_against_2col_waypoints():
-    e, n, zn, zl = utm.from_latlon(_LAT, _LON)
-    waypoints = np.array([[e, n], [e + 200, n + 200]])
-
-    md = MapData(
-        [waypoints, int(zn), zl],
-        coords_type="array",
-        current_robot_position=np.array([e - 50, n - 50, 300.0]),
-    )
-
-    assert md.waypoints.shape == (3, 2)
-    assert np.allclose(md.waypoints[0], [e - 50, n - 50])
-
-
 def test_csv_to_dict_single_row(tmp_path):
     csv_path = tmp_path / "single.csv"
     csv_path.write_text("natural,water\n")

@@ -1,3 +1,4 @@
+import json
 import threading
 import types
 
@@ -104,8 +105,12 @@ def test_get_deleted_way_ids_dict_format():
     assert get_deleted_way_ids(store) == {5}
 
 
-def test_get_deleted_way_ids_int_format():
-    store = {"deleted_ways": [5]}
+def test_get_deleted_way_ids_int_format(tmp_path):
+    # Legacy raw-int deleted_ways is upgraded to the dict format on load, not
+    # handled by get_deleted_way_ids itself any more.
+    path = tmp_path / "legacy.json"
+    path.write_text(json.dumps({"deleted_ways": [5]}))
+    store = load_annotations(str(path))
     assert get_deleted_way_ids(store) == {5}
 
 

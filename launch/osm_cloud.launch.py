@@ -2,13 +2,13 @@
 
 from pathlib import Path
 
-from ament_index_python.packages import get_package_share_directory
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 from launch import LaunchDescription
+from map_data.utils.launch import resolve_config_file
 
 
 def _resolve_data_file(name: str, mapdata_path: str) -> str:
@@ -29,9 +29,8 @@ def _resolve_data_file(name: str, mapdata_path: str) -> str:
 
 
 def launch_setup(context, *args, **kwargs):
-    config_file = LaunchConfiguration("config_file").perform(context)
-    osm_grid_params = LaunchConfiguration("osm_grid_params").perform(context)
-    publish_static_tf = LaunchConfiguration("publish_static_tf").perform(context).lower() == "true"
+    config_file = resolve_config_file(LaunchConfiguration("config_file").perform(context))
+    osm_grid_params = resolve_config_file(LaunchConfiguration("osm_grid_params").perform(context))
 
     # Resolve mapdata_file / gpx_file against the mapdata_path data directory
     # when they are given as bare filenames.
@@ -40,32 +39,6 @@ def launch_setup(context, *args, **kwargs):
         LaunchConfiguration("mapdata_file").perform(context), mapdata_path
     )
     gpx_file = _resolve_data_file(LaunchConfiguration("gpx_file").perform(context), mapdata_path)
-
-    # Resolve config_file if it's just a filename
-    config_path = Path(config_file)
-    if not config_path.is_absolute():
-        package_share = get_package_share_directory("map_data")
-        potential_path = Path(package_share) / "config" / config_file
-        if potential_path.exists():
-            config_file = str(potential_path)
-        else:
-            # Try in current directory
-            potential_path = config_path.resolve()
-            if potential_path.exists():
-                config_file = str(potential_path)
-
-    # Resolve osm_grid_params if it's just a filename
-    osm_path = Path(osm_grid_params)
-    if not osm_path.is_absolute():
-        package_share = get_package_share_directory("map_data")
-        potential_path = Path(package_share) / "config" / osm_grid_params
-        if potential_path.exists():
-            osm_grid_params = str(potential_path)
-        else:
-            # Try in current directory
-            potential_path = osm_path.resolve()
-            if potential_path.exists():
-                osm_grid_params = str(potential_path)
 
     # Frame / placement / traversability overrides: only forwarded when set, so the
     # yaml values apply otherwise (later parameter sources win in ROS 2).
@@ -94,7 +67,6 @@ def launch_setup(context, *args, **kwargs):
             {
                 "mapdata_file": mapdata_file,
                 "gpx_file": gpx_file,
-                "auto_utm": publish_static_tf,
                 "grid_topic": LaunchConfiguration("grid_topic"),
                 # Always forwarded (default "auto"), so it wins over the yaml files:
                 # set it on the launch line to plan and publish on the unedited map.
@@ -128,12 +100,6 @@ def generate_launch_description():
         "grid_topic",
         default_value="osm_grid",
         description="Name of the topic to which the grid will be published.",
-    )
-    publish_static_tf_arg = DeclareLaunchArgument(
-        "publish_static_tf",
-        default_value="false",
-        description="Whether to publish static transforms for utm and map "
-        "(selects transform_mode 'auto').",
     )
     local_frame_arg = DeclareLaunchArgument(
         "local_frame",
@@ -189,7 +155,6 @@ def generate_launch_description():
             mapdata_file_arg,
             gpx_file_arg,
             grid_topic_arg,
-            publish_static_tf_arg,
             local_frame_arg,
             utm_frame_arg,
             earth_frame_arg,

@@ -5,6 +5,7 @@ import pytest
 import utm
 
 from map_data.annotations import load_mapdata_with_annotations
+from map_data.map_data import MapData
 from map_data.pathsolver.route import (
     RoutePlanningError,
     densify,
@@ -12,7 +13,7 @@ from map_data.pathsolver.route import (
     plan_route,
     route_to_dicts,
 )
-from map_data.utils.gpx import create_gpx_track, parse_gpx_file
+from map_data.utils.gpx import create_gpx_track
 
 
 def _latlon(lat0, lon0, dx, dy):
@@ -185,9 +186,9 @@ def test_gpx_track_roundtrip(tmp_path):
     assert "<trk>" in xml and "<trkpt" in xml
     f = tmp_path / "route.gpx"
     f.write_text(xml)
-    parsed, zn, zl = parse_gpx_file(str(f))
-    assert len(parsed) == 3
-    back = [utm.to_latlon(p[0], p[1], zn, zl) for p in parsed]
+    md = MapData(str(f), coords_type="file")
+    assert len(md.waypoints) == 3
+    back = [utm.to_latlon(p[0], p[1], md.zone_number, md.zone_letter) for p in md.waypoints]
     for (lat, lon), (blat, blon) in zip(pts, back, strict=True):
         assert (lat, lon) == pytest.approx((blat, blon), abs=1e-7)
 

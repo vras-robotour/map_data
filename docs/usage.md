@@ -132,7 +132,6 @@ topic (cost-aware footway grid) and optionally publishes intersections as a
 | `local_frame` | `"local_utm"` | TF frame the grid and intersections are published in (`FP_ENU0` in `osm_grid.yaml`) |
 | `earth_frame` | `"FP_ECEF"` | ECEF TF frame used by `transform_mode: geodetic` |
 | `transform_mode` | `"tf"` | `tf`: look up `utm_frame → local_frame` in TF; `auto`: local frame at the map centre; `geodetic`: UTM → lat/lon → ECEF, then the `earth_frame → local_frame` TF (exact for GNSS/INS stacks; `osm_grid.yaml` sets this) |
-| `utm_to_local` | `None` | 4×4 transform matrix; overrides `transform_mode` if set |
 | `mapdata_file` | `None` | Absolute path to a `.mapdata` file |
 | `annotations` | `"auto"` | Annotation store merged into `mapdata_file`, as in `route_planner`: `auto` = `<map>.annotations.json` next to it, `none` = the unedited map, or a path |
 | `exclude_highway` | `["steps"]` | `highway=` values dropped from the map (stairs are not routable, so they get no rings) |
@@ -144,7 +143,6 @@ topic (cost-aware footway grid) and optionally publishes intersections as a
 | `grid_res` | `0.25` | Grid point spacing (m) |
 | `grid_max` | `[0.0, 0.0]` | Upper bounds of the local-frame grid (m). `[0, 0]` triggers auto-calc. |
 | `grid_min` | `[0.0, 0.0]` | Lower bounds of the local-frame grid (m). `[0, 0]` triggers auto-calc. |
-| `auto_utm` | `false` | Alias for `transform_mode: auto` |
 | `publish_intersections` | `true` | Whether to publish footway intersections |
 | `republish_period` | `0.0` | Publishers are latched and publish once at start-up (and after parameter changes); set > 0 s to additionally re-publish periodically |
 
@@ -165,7 +163,6 @@ ros2 launch map_data osm_cloud.launch.py \
 | `mapdata_file` | `stromovka.mapdata` | Map data filename |
 | `gpx_file` | `stromovka.gpx` | GPX fallback filename |
 | `grid_topic` | `osm_grid` | Topic name for the published point cloud |
-| `publish_static_tf` | `false` | Whether to publish static transforms for utm/map (`transform_mode: auto`) |
 | `local_frame` | from yaml | Override the frame the grid/intersections are published in |
 | `utm_frame` | from yaml | Override the UTM frame name |
 | `earth_frame` | from yaml | Override the ECEF frame name (`geodetic` mode) |

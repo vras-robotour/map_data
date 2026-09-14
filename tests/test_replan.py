@@ -28,7 +28,7 @@ def transfer_id():
 def _make_replanner(transfer_id=None):
     replanner = ReplanPath(Args(), [], transfer_id=transfer_id)
     # Pre-warm the grid cache with an all-free grid (same pattern as test_astar)
-    replanner._reshaped_grid_cache = np.zeros((20, 20), dtype=float)
+    replanner.path_grid.grid_2d_cache = np.zeros((20, 20), dtype=float)
     return replanner
 
 
