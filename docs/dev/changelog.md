@@ -9,6 +9,15 @@
   as footways, so it shows the network the graph planner routes on when roads
   are allowed. The default stays `["footway"]`
 
+### Fixed
+
+- Route relations (hiking, bike, bus) are no longer merged like multipolygons.
+  Their member ways were chained into one negative-id way carrying every
+  member's tags, so a single bridge or stairs member made the whole route
+  non-traversable and the planner avoided kilometres of ordinary footway. Only
+  `multipolygon` and `boundary` relations are merged now. Existing `.mapdata`
+  files keep the merged ways until they are parsed again
+
 ## [2.0.0] — 2026-09-13
 
 A major version because node parameters and public helpers are removed.

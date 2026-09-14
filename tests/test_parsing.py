@@ -404,6 +404,47 @@ def test_parse_osm_rels_merged_members_not_classified_twice():
     assert barriers[0].id < 0
 
 
+# ── parse_osm_rels: route relations are not merged ──────────────────────────
+
+
+# A hiking route over two footways, one of them a bridge. Merging it as if it
+# were a multipolygon produced one way with both ways' tags, bridge=yes included.
+_ROUTE_REL_JSON = json.dumps(
+    {
+        "version": 0.6,
+        "elements": [
+            {"type": "node", "id": 60, "lat": _LAT, "lon": _LON},
+            {"type": "node", "id": 61, "lat": _LAT + 0.001, "lon": _LON},
+            {"type": "node", "id": 62, "lat": _LAT + 0.002, "lon": _LON},
+            {"type": "way", "id": 120, "nodes": [60, 61], "tags": {"highway": "footway"}},
+            {
+                "type": "way",
+                "id": 121,
+                "nodes": [61, 62],
+                "tags": {"highway": "footway", "bridge": "yes"},
+            },
+            {
+                "type": "relation",
+                "id": 302,
+                "members": [
+                    {"type": "way", "ref": 120, "role": ""},
+                    {"type": "way", "ref": 121, "role": ""},
+                ],
+                "tags": {"type": "route", "route": "hiking"},
+            },
+        ],
+    },
+)
+
+
+def test_parse_osm_rels_route_relation_keeps_member_ways():
+    ways = _ways_from_json(_ROUTE_REL_JSON)
+    parse_osm_rels(_api().parse_json(_ROUTE_REL_JSON), ways)
+
+    assert sorted(ways) == [120, 121]
+    assert ways[120].tags == {"highway": "footway"}
+
+
 # ── parse_osm_ways: degenerate ways are skipped ─────────────────────────────
 
 

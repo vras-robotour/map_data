@@ -63,11 +63,21 @@ def parse_osm_ways(
     return ways
 
 
+#: Relation types whose outer/inner member ways form area rings.
+AREA_RELATION_TYPES = frozenset({"multipolygon", "boundary"})
+
+
 def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
     consumed_ids: set[int] = set()
     kept_ids: set[int] = set()
 
     for rel in osm_rels_data.relations:
+        # Only area relations have rings to merge. Route relations (hiking, bike,
+        # bus) list their ways with an empty role: chaining those merged a whole
+        # route into one way carrying every member's tags, so a single bridge
+        # member made the entire route non-traversable.
+        if (rel.tags or {}).get("type") not in AREA_RELATION_TYPES:
+            continue
         outer_ids: list[int] = []
         inner_ids: list[int] = []
 
