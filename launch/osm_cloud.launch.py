@@ -8,7 +8,7 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 from launch import LaunchDescription
-from map_data.utils.launch import resolve_config_file
+from map_data.utils.launch import way_types
 
 
 def _resolve_data_file(name: str, mapdata_path: str) -> str:
@@ -52,6 +52,9 @@ def launch_setup(context, *args, **kwargs):
     ):
         if value:
             optional_overrides[name] = value
+    highway_types = LaunchConfiguration("highway_types").perform(context).strip()
+    if highway_types:
+        optional_overrides["highway_types"] = way_types(highway_types)
 
     # Define the osm_cloud node
     osm_cloud_node = Node(
@@ -138,6 +141,12 @@ def generate_launch_description():
         "(empty = the value from osm_grid_params, i.e. the package's "
         "config/traversability.yaml). Must match route_planner's.",
     )
+    highway_types_arg = DeclareLaunchArgument(
+        "highway_types",
+        default_value="",
+        description="Way types the grid is drawn from: footway, road, or both "
+        '("footway,road"); empty = the value from osm_grid_params. Match route_planner\'s.',
+    )
     config_file_arg = DeclareLaunchArgument(
         "config_file",
         default_value="helhest.yaml",
@@ -161,6 +170,7 @@ def generate_launch_description():
             transform_mode_arg,
             annotations_arg,
             traversability_arg,
+            highway_types_arg,
             config_file_arg,
             osm_grid_params_arg,
             OpaqueFunction(function=launch_setup),

@@ -38,6 +38,12 @@ A major version because node parameters and public helpers are removed.
   the wormhole share dialog is a Bootstrap modal, and the duplicated frontend
   and route code is consolidated
 - Annotation stores in legacy formats are normalised once, when loaded
+### Added
+
+- `osm_cloud` takes a `highway_types` parameter (and `highway_types:=` launch
+  argument), as `route_planner` does: the grid can be drawn from roads as well
+  as footways, so it shows the network the graph planner routes on when roads
+  are allowed. The default stays `["footway"]`
 
 ### Fixed
 

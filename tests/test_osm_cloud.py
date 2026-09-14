@@ -199,6 +199,45 @@ class TestSplitWaysToPoints:
         result = split_ways_to_points({}, {"footways": []})
         assert result.shape == (0, 2)
 
+    @staticmethod
+    def _footway_and_road():
+        points = {
+            1: np.array([[0.0], [0.0], [0.0]]),
+            2: np.array([[1.0], [0.0], [0.0]]),
+            3: np.array([[0.0], [5.0], [0.0]]),
+            4: np.array([[1.0], [5.0], [0.0]]),
+        }
+        ways = {
+            "footways": [Way(id=1, nodes=[1, 2], tags={"highway": "footway"})],
+            "roads": [Way(id=2, nodes=[3, 4], tags={"highway": "service"})],
+        }
+        return points, ways
+
+    def test_footways_only_by_default(self):
+        points, ways = self._footway_and_road()
+        result = split_ways_to_points(points, ways, max_dist=0.5)
+        assert set(result[:, 1]) == {0.0}
+
+    def test_roads_only(self):
+        points, ways = self._footway_and_road()
+        result = split_ways_to_points(points, ways, max_dist=0.5, highway_types=["road"])
+        assert set(result[:, 1]) == {5.0}
+
+    def test_footways_and_roads(self):
+        points, ways = self._footway_and_road()
+        result = split_ways_to_points(
+            points, ways, max_dist=0.5, highway_types=["footway", "road"]
+        )
+        assert set(result[:, 1]) == {0.0, 5.0}
+        assert result.shape == (6, 2)  # 3 samples per 1 m way at 0.5 m steps
+
+    def test_unknown_and_repeated_types_are_ignored(self):
+        points, ways = self._footway_and_road()
+        result = split_ways_to_points(
+            points, ways, max_dist=0.5, highway_types=["footway", "footway", "track"]
+        )
+        assert result.shape == (3, 2)
+
 
 # ── OSMCloud node construction ──────────────────────────────────────────────
 
@@ -323,6 +362,38 @@ class TestOSMCloudInit:
 
         assert node.grid_cloud is not None
         assert node.map_data is not None
+
+    def test_highway_types_default_to_footways(self):
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "auto_utm": True})
+
+        assert node.highway_types == ["footway"]
+
+    def test_highway_types_drop_unknown_values(self):
+        node = _build_osm_cloud(
+            {
+                "mapdata_file": "fake.mapdata",
+                "auto_utm": True,
+                "highway_types": ["footway", "road", "track"],
+            }
+        )
+
+        assert node.highway_types == ["footway", "road"]
+        node.get_logger().warning.assert_called()
+
+    def test_highway_types_parameter_change_rebuilds_the_grid(self):
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "auto_utm": True})
+        grid_pub = dict(node.created_publishers)[node.grid_topic]
+
+        param = MagicMock()  # MagicMock(name=...) would name the mock, not set .name
+        param.name = "highway_types"
+        param.value = ["footway", "road"]
+        split = MagicMock(return_value=np.zeros((1, 2)))
+        with patch("map_data.osm_cloud.split_ways_to_points", split):
+            node.parameter_callback([param])
+
+        assert node.highway_types == ["footway", "road"]
+        assert split.call_args.args[3] == ["footway", "road"]
+        assert grid_pub.publish.call_count == 2
 
     def test_construction_exits_without_mapdata_or_gpx_file(self):
         with pytest.raises(SystemExit):

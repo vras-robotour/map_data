@@ -118,10 +118,11 @@ Re-parse an existing `.mapdata` file (e.g. after editing tag CSVs):
 create_mapdata -f coords.mapdata
 ```
 
-## Publishing a point cloud of footways and intersections
+## Publishing a point cloud of footways, roads and intersections
 
 `osm_cloud` is a ROS2 node that publishes a `sensor_msgs/PointCloud2` on the `grid`
-topic (cost-aware footway grid) and optionally publishes intersections as a
+topic (cost-aware grid around the footways and/or roads in `highway_types`) and
+optionally publishes intersections as a
 `geometry_msgs/PoseArray` and `visualization_msgs/MarkerArray`.
 
 ### ROS2 parameters
@@ -136,6 +137,7 @@ topic (cost-aware footway grid) and optionally publishes intersections as a
 | `annotations` | `"auto"` | Annotation store merged into `mapdata_file`, as in `route_planner`: `auto` = `<map>.annotations.json` next to it, `none` = the unedited map, or a path |
 | `exclude_highway` | `["steps"]` | `highway=` values dropped from the map (stairs are not routable, so they get no rings) |
 | `traversability_file` | `""` | Tag rule file deciding which ways the robot may drive on (`""` = the package's `config/traversability.yaml`; see [Traversability rules](planning.md#traversability-rules)). Must be the same file `route_planner` uses. Launch argument: `traversability:=<file>` |
+| `highway_types` | `["footway"]` | Way types the grid is drawn from: `footway`, `road` or both. Keep it equal to `route_planner`'s `highway_types`. Launch argument: `highway_types:=footway,road` |
 | `gpx_file` | `None` | Absolute path to a `.gpx` file (used if no `.mapdata`) |
 | `save_mapdata` | `false` | Save generated mapdata when loading from a `.gpx` |
 | `max_path_dist` | `1.0` | Max distance (m) at which a grid point receives a cost |

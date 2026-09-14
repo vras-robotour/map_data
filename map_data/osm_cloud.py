@@ -7,6 +7,7 @@ into ROS2 PointCloud2 and MarkerArray messages for visualization.
 """
 
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,8 @@ from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 CLOUD_COLS = 4
 TOLERANCE = 1e-3
 TRANSFORM_MODES = ("tf", "auto", "geodetic")
+# highway_types value -> MapData.get_ways() key, as in route_planner's graph planner.
+HIGHWAY_TYPE_KEYS = {"footway": "footways", "road": "roads"}
 # lookup_transform() does not spin the node, so TF messages only arrive in the
 # spin_once() between attempts; keep the blocking wait short.
 TF_POLL_TIMEOUT = 0.5
@@ -82,6 +85,11 @@ class OSMCloud(Node):
         # on, as in route_planner: "" = the package's config/traversability.yaml. The two
         # nodes must use the same file, or the rings describe a network nothing routes on.
         self.traversability_file: str = self.declare_parameter("traversability_file", "").value
+        # Way types the grid is drawn from: footway and/or road, as route_planner's
+        # highway_types. Match the planner's, or the grid shows ways it does not route on.
+        self.highway_types: list[str] = self._valid_highway_types(
+            self.declare_parameter("highway_types", ["footway"]).value
+        )
         self.save_mapdata: bool = self.declare_parameter("save_mapdata", False).value
         self.max_path_dist: float = self.declare_parameter("max_path_dist", 1.0).value
         self.neighbor_cost: str = self.declare_parameter("neighbor_cost", "linear").value
@@ -258,6 +266,17 @@ class OSMCloud(Node):
         )
         return map_data
 
+    def _valid_highway_types(self, values: list[str]) -> list[str]:
+        """Return *values* without unknown way types, warning about each one dropped."""
+        values = list(values)
+        unknown = [v for v in values if v not in HIGHWAY_TYPE_KEYS]
+        if unknown:
+            self.get_logger().warning(
+                f"Ignoring unknown highway_types {unknown}; expected any of "
+                f"{sorted(HIGHWAY_TYPE_KEYS)}"
+            )
+        return [v for v in values if v in HIGHWAY_TYPE_KEYS]
+
     def parameter_callback(self, params: list[rclpy.Parameter]) -> SetParametersResult:
         rebuild_cloud = False
         rebuild_intersections = False
@@ -267,6 +286,9 @@ class OSMCloud(Node):
                 rebuild_cloud = True
             elif param.name == "neighbor_cost":
                 self.neighbor_cost = param.value
+                rebuild_cloud = True
+            elif param.name == "highway_types":
+                self.highway_types = self._valid_highway_types(param.value)
                 rebuild_cloud = True
             elif param.name == "grid_res":
                 self.grid_res = param.value
@@ -421,7 +443,9 @@ class OSMCloud(Node):
             ((0, 0), (0, 1)),
         )
         waypoints = np.pad(
-            split_ways_to_points(points, self.map_data.get_ways(), self.grid_res),
+            split_ways_to_points(
+                points, self.map_data.get_ways(), self.grid_res, self.highway_types
+            ),
             ((0, 0), (0, 1)),
         )
 
@@ -631,22 +655,24 @@ def split_ways_to_points(
     points: dict[int, np.ndarray],
     ways: dict[str, list[Any]],
     max_dist: float = 0.25,
+    highway_types: Sequence[str] = ("footway",),
 ) -> np.ndarray:
     """
     Split OSM ways into equidistant points.
 
-    Equidistantly split ways into points with a maximal step size. Also only use footways
-    from map data, as we are not allowed to leave the footways.
+    Equidistantly split ways into points with a maximal step size. Only the way types in
+    *highway_types* are used, as the robot is not allowed to leave them.
 
     Parameters
     ----------
     points : dict
-    ...
         Points to split ways on.
     ways : dict
         Ways to split.
     max_dist : float
         Maximal step size.
+    highway_types : sequence of str
+        Way types to split: any of ``"footway"``, ``"road"``.
 
     Returns
     -------
@@ -655,7 +681,13 @@ def split_ways_to_points(
 
     """
     waypoints = []
-    for way in ways.get("footways", []):
+    selected = [
+        way
+        for highway_type in dict.fromkeys(highway_types)
+        if highway_type in HIGHWAY_TYPE_KEYS
+        for way in ways.get(HIGHWAY_TYPE_KEYS[highway_type], [])
+    ]
+    for way in selected:
         for i, (n0, n1) in enumerate(zip(way.nodes, way.nodes[1:])):
             id0 = getattr(n0, "id", n0)
             id1 = getattr(n1, "id", n1)
