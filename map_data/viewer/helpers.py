@@ -1308,6 +1308,11 @@ def update_segment_annotations_for_split_change(
     new_deleted_ways = []
 
     prefix = f"{original_way_id}:"
+
+    def seg_id(new_idx: int) -> int | str:
+        # Back to one segment: edits move to the plain way id, which is all an unsplit way matches.
+        return f"{prefix}{new_idx}" if len(new_segs) > 1 else int(original_way_id)
+
     for d in deleted_ways:
         wid = d["id"]
         if str(wid).startswith(prefix):
@@ -1318,7 +1323,7 @@ def update_segment_annotations_for_split_change(
     for new_idx in range(len(new_segs)):
         edges_in_new = [e for e, s in new_edges.items() if s == new_idx]
         if edges_in_new and all(old_edges[e] in old_deleted_idxs for e in edges_in_new):
-            new_deleted_ways.append({"id": f"{prefix}{new_idx}"})
+            new_deleted_ways.append({"id": seg_id(new_idx)})
 
     store["deleted_ways"] = new_deleted_ways
 
@@ -1353,7 +1358,7 @@ def update_segment_annotations_for_split_change(
             nid = d["node_id"]
             mapped_new_idxs = map_node(old_idx, nid)
             for new_idx in mapped_new_idxs:
-                new_dn.append({"way_id": f"{prefix}{new_idx}", "node_id": nid})
+                new_dn.append({"way_id": seg_id(new_idx), "node_id": nid})
         else:
             new_dn.append(d)
 
@@ -1373,7 +1378,7 @@ def update_segment_annotations_for_split_change(
                         mapped_new_idxs.add(new_idx)
                 for new_idx in mapped_new_idxs:
                     new_entry = dict(e)
-                    new_entry["id"] = f"{prefix}{new_idx}"
+                    new_entry["id"] = seg_id(new_idx)
                     new_cl.append(new_entry)
             else:
                 new_cl.append(e)
@@ -1385,7 +1390,7 @@ def update_segment_annotations_for_split_change(
                 mapped_new_idxs = map_node(old_idx, nid)
                 for new_idx in mapped_new_idxs:
                     new_entry = dict(e)
-                    new_entry["way_id"] = f"{prefix}{new_idx}"
+                    new_entry["way_id"] = seg_id(new_idx)
                     new_cl.append(new_entry)
             else:
                 new_cl.append(e)

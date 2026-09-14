@@ -429,6 +429,38 @@ def test_split_way_undo(app_client_3node):
     assert len(data["segments"]) == 1
 
 
+def _mapdata_way_ids(client, filename):
+    feats = client.get(f"/api/mapdata?file={filename}").get_json()["features"]
+    return [f["properties"].get("id") for f in feats]
+
+
+def test_unsplit_way_segment_keeps_plain_id(app_client_3node):
+    # A single-way reload used to label an unsplit way "2:0"; deleting that layer
+    # stored a segment deletion the full load ignores, so the way came back.
+    client, _, filename = app_client_3node
+    seg = client.get(f"/api/ways/2/segments?file={filename}").get_json()["segments"]
+    assert [f["properties"]["id"] for f in seg] == [2]
+
+    client.delete(f"/api/ways/{seg[0]['properties']['id']}?file={filename}", json={})
+    assert 2 not in _mapdata_way_ids(client, filename)
+
+
+def test_split_undo_moves_segment_deletion_to_plain_id(app_client_3node, tmp_path):
+    client, _, filename = app_client_3node
+    client.post(
+        f"/api/ways/split?file={filename}",
+        data=json.dumps({"way_id": 2, "node_id": 202}),
+        content_type="application/json",
+    )
+    client.delete(f"/api/ways/2:0?file={filename}", json={})
+    client.delete(f"/api/ways/2:1?file={filename}", json={})
+    client.delete(f"/api/ways/split?file={filename}&way_id=2&node_id=202")
+
+    store = json.loads((tmp_path / "three.annotations.json").read_text())
+    assert [d["id"] for d in store["deleted_ways"]] == [2]
+    assert 2 not in _mapdata_way_ids(client, filename)
+
+
 # ── fetch_area / upload_gpx area limit ──────────────────────────────────────
 
 

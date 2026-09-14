@@ -1828,7 +1828,9 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
                 "type": "Feature",
                 "geometry": geom_to_geojson(seg.line, zn, zl),
                 "properties": {
-                    "id": virtual_id,
+                    # An unsplit way keeps its plain id, the one /api/mapdata uses; a
+                    # "<id>:0" here gets deleted as a segment the full load never applies.
+                    "id": virtual_id if len(segments) > 1 else int(original_way_id),
                     "category": feat_cat,
                     "is_node": feat_cat == "barrier" and not bool(seg.nodes),
                     "tags": tags,
