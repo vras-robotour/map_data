@@ -588,15 +588,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#publishing-a-point-cloud-of-footways-and-intersections" class="md-nav__link">
+  <a href="#publishing-a-point-cloud-of-footways-roads-and-intersections" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Publishing a point cloud of footways and intersections
+        Publishing a point cloud of footways, roads and intersections
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Publishing a point cloud of footways and intersections">
+    <nav class="md-nav" aria-label="Publishing a point cloud of footways, roads and intersections">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1436,15 +1436,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#publishing-a-point-cloud-of-footways-and-intersections" class="md-nav__link">
+  <a href="#publishing-a-point-cloud-of-footways-roads-and-intersections" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Publishing a point cloud of footways and intersections
+        Publishing a point cloud of footways, roads and intersections
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Publishing a point cloud of footways and intersections">
+    <nav class="md-nav" aria-label="Publishing a point cloud of footways, roads and intersections">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1630,9 +1630,10 @@ re-parses an existing <code>.mapdata</code> with the current tag configuration.<
 <p>Re-parse an existing <code>.mapdata</code> file (e.g. after editing tag CSVs):</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>create_mapdata<span class="w"> </span>-f<span class="w"> </span>coords.mapdata
 </span></code></pre></div>
-<h2 id="publishing-a-point-cloud-of-footways-and-intersections">Publishing a point cloud of footways and intersections</h2>
+<h2 id="publishing-a-point-cloud-of-footways-roads-and-intersections">Publishing a point cloud of footways, roads and intersections</h2>
 <p><code>osm_cloud</code> is a ROS2 node that publishes a <code>sensor_msgs/PointCloud2</code> on the <code>grid</code>
-topic (cost-aware footway grid) and optionally publishes intersections as a
+topic (cost-aware grid around the footways and/or roads in <code>highway_types</code>) and
+optionally publishes intersections as a
 <code>geometry_msgs/PoseArray</code> and <code>visualization_msgs/MarkerArray</code>.</p>
 <h3 id="ros2-parameters">ROS2 parameters</h3>
 <table>
@@ -1683,6 +1684,11 @@ topic (cost-aware footway grid) and optionally publishes intersections as a
 <td><code>traversability_file</code></td>
 <td><code>""</code></td>
 <td>Tag rule file deciding which ways the robot may drive on (<code>""</code> = the package's <code>config/traversability.yaml</code>; see <a href="../planning/#traversability-rules">Traversability rules</a>). Must be the same file <code>route_planner</code> uses. Launch argument: <code>traversability:=&lt;file&gt;</code></td>
+</tr>
+<tr>
+<td><code>highway_types</code></td>
+<td><code>["footway"]</code></td>
+<td>Way types the grid is drawn from: <code>footway</code>, <code>road</code> or both. Keep it equal to <code>route_planner</code>'s <code>highway_types</code>. Launch argument: <code>highway_types:=footway,road</code></td>
 </tr>
 <tr>
 <td><code>gpx_file</code></td>
