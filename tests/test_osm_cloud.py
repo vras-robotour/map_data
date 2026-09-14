@@ -225,9 +225,7 @@ class TestSplitWaysToPoints:
 
     def test_footways_and_roads(self):
         points, ways = self._footway_and_road()
-        result = split_ways_to_points(
-            points, ways, max_dist=0.5, highway_types=["footway", "road"]
-        )
+        result = split_ways_to_points(points, ways, max_dist=0.5, highway_types=["footway", "road"])
         assert set(result[:, 1]) == {0.0, 5.0}
         assert result.shape == (6, 2)  # 3 samples per 1 m way at 0.5 m steps
 
@@ -364,7 +362,7 @@ class TestOSMCloudInit:
         assert node.map_data is not None
 
     def test_highway_types_default_to_footways(self):
-        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "auto_utm": True})
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
 
         assert node.highway_types == ["footway"]
 
@@ -372,7 +370,7 @@ class TestOSMCloudInit:
         node = _build_osm_cloud(
             {
                 "mapdata_file": "fake.mapdata",
-                "auto_utm": True,
+                "transform_mode": "auto",
                 "highway_types": ["footway", "road", "track"],
             }
         )
@@ -381,7 +379,7 @@ class TestOSMCloudInit:
         node.get_logger().warning.assert_called()
 
     def test_highway_types_parameter_change_rebuilds_the_grid(self):
-        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "auto_utm": True})
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
         grid_pub = dict(node.created_publishers)[node.grid_topic]
 
         param = MagicMock()  # MagicMock(name=...) would name the mock, not set .name

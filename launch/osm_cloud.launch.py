@@ -8,7 +8,7 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 from launch import LaunchDescription
-from map_data.utils.launch import way_types
+from map_data.utils.launch import resolve_config_file, way_types
 
 
 def _resolve_data_file(name: str, mapdata_path: str) -> str:
