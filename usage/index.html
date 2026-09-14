@@ -1665,11 +1665,6 @@ topic (cost-aware footway grid) and optionally publishes intersections as a
 <td><code>tf</code>: look up <code>utm_frame → local_frame</code> in TF; <code>auto</code>: local frame at the map centre; <code>geodetic</code>: UTM → lat/lon → ECEF, then the <code>earth_frame → local_frame</code> TF (exact for GNSS/INS stacks; <code>osm_grid.yaml</code> sets this)</td>
 </tr>
 <tr>
-<td><code>utm_to_local</code></td>
-<td><code>None</code></td>
-<td>4×4 transform matrix; overrides <code>transform_mode</code> if set</td>
-</tr>
-<tr>
 <td><code>mapdata_file</code></td>
 <td><code>None</code></td>
 <td>Absolute path to a <code>.mapdata</code> file</td>
@@ -1725,11 +1720,6 @@ topic (cost-aware footway grid) and optionally publishes intersections as a
 <td>Lower bounds of the local-frame grid (m). <code>[0, 0]</code> triggers auto-calc.</td>
 </tr>
 <tr>
-<td><code>auto_utm</code></td>
-<td><code>false</code></td>
-<td>Alias for <code>transform_mode: auto</code></td>
-</tr>
-<tr>
 <td><code>publish_intersections</code></td>
 <td><code>true</code></td>
 <td>Whether to publish footway intersections</td>
@@ -1776,11 +1766,6 @@ up the required static transforms and enables intersection publishing by default
 <td><code>grid_topic</code></td>
 <td><code>osm_grid</code></td>
 <td>Topic name for the published point cloud</td>
-</tr>
-<tr>
-<td><code>publish_static_tf</code></td>
-<td><code>false</code></td>
-<td>Whether to publish static transforms for utm/map (<code>transform_mode: auto</code>)</td>
 </tr>
 <tr>
 <td><code>local_frame</code></td>

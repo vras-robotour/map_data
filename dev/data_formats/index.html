@@ -1300,17 +1300,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#yaml-waypoint-format" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        YAML waypoint format
-      
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -1680,17 +1669,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#yaml-waypoint-format" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        YAML waypoint format
-      
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -1951,7 +1929,7 @@ use in QGIS, geojson.io, or other GIS tools.</p>
 </span></code></pre></div>
 <hr />
 <h2 id="gpx-waypoint-format">GPX waypoint format</h2>
-<p>The package reads standard <strong>GPX 1.1</strong> files. Waypoints must be <code>&lt;wpt&gt;</code> elements. Track points (<code>&lt;trkpt&gt;</code>) and route points (<code>&lt;rtept&gt;</code>) are also accepted by <code>MapData</code> (for map creation), but <code>parse_gpx_file</code> in <code>map_data/utils/gpx.py</code> reads only <code>&lt;wpt&gt;</code> elements for path planning.</p>
+<p><code>MapData</code> reads standard <strong>GPX 1.1</strong> files (used for map creation, e.g. <code>create_mapdata</code> and <code>osm_cloud</code>'s <code>gpx_file</code> parameter). It reads <code>&lt;wpt&gt;</code> elements if the file has any; otherwise it falls back to track points (<code>&lt;trkpt&gt;</code>) from <code>&lt;trk&gt;</code> elements, and then to route points (<code>&lt;rtept&gt;</code>) from <code>&lt;rte&gt;</code> elements. Loading fails if none of the three are present.</p>
 <div class="language-xml highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="cp">&lt;?xml version="1.0" encoding="UTF-8"?&gt;</span>
 </span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nt">&lt;gpx</span><span class="w"> </span><span class="na">xmlns=</span><span class="s">"http://www.topografix.com/GPX/1/1"</span><span class="w"> </span><span class="na">version=</span><span class="s">"1.1"</span><span class="w"> </span><span class="na">creator=</span><span class="s">"MapData Planner"</span><span class="nt">&gt;</span>
 </span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="nt">&lt;wpt</span><span class="w"> </span><span class="na">lat=</span><span class="s">"50.1234"</span><span class="w"> </span><span class="na">lon=</span><span class="s">"14.5678"</span><span class="nt">&gt;&lt;/wpt&gt;</span>
@@ -1959,28 +1937,7 @@ use in QGIS, geojson.io, or other GIS tools.</p>
 </span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">  </span><span class="nt">&lt;wpt</span><span class="w"> </span><span class="na">lat=</span><span class="s">"50.1250"</span><span class="w"> </span><span class="na">lon=</span><span class="s">"14.5700"</span><span class="nt">&gt;&lt;/wpt&gt;</span>
 </span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="nt">&lt;/gpx&gt;</span>
 </span></code></pre></div>
-<p>Elevation is optional for path planning; when present it is preserved in the output GPX produced by <code>create_gpx_content</code>.</p>
-<hr />
-<h2 id="yaml-waypoint-format">YAML waypoint format</h2>
-<p>As an alternative to GPX, the package accepts a simple YAML file via <code>parse_yaml_file</code> (called automatically by <code>parse_path</code> when the file extension is <code>.yaml</code>).</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nt">waypoints</span><span class="p">:</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">latitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50.1234</span>
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="nt">longitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.5678</span>
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="nt">elevation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200.0</span>
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">latitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50.1240</span>
-</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">    </span><span class="nt">longitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.5690</span>
-</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">    </span><span class="nt">elevation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">201.5</span>
-</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">latitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50.1250</span>
-</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="w">    </span><span class="nt">longitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.5700</span>
-</span></code></pre></div>
-<p>Rules:</p>
-<ul>
-<li>The top-level key must be <code>waypoints</code>.</li>
-<li>Each entry must have <code>latitude</code> and <code>longitude</code> (decimal degrees, WGS-84).</li>
-<li><code>elevation</code> is optional; it defaults to <code>0.0</code> if omitted.</li>
-<li>The file must use the <code>.yaml</code> extension for automatic format detection.</li>
-</ul>
-<p>The parsed result is identical to the GPX path: a NumPy array of UTM coordinates plus the inferred UTM zone number and letter.</p>
+<p>YAML waypoint files are not supported.</p>
 
 
 

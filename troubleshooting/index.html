@@ -995,33 +995,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#gpx-yaml-parsing-failures" class="md-nav__link">
+  <a href="#gpx-parsing-failures" class="md-nav__link">
     <span class="md-ellipsis">
       
-        GPX / YAML parsing failures
+        GPX parsing failures
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="GPX / YAML parsing failures">
+    <nav class="md-nav" aria-label="GPX parsing failures">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#parse_path-raises-an-exception" class="md-nav__link">
+  <a href="#mapdatacoords-coords_typefile-raises-no-points-waypoints-tracks-or-routes-found" class="md-nav__link">
     <span class="md-ellipsis">
       
-        parse_path raises an exception
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#only-one-waypoint-found" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Only one waypoint found
+        MapData(coords="...", coords_type="file") raises "No points (waypoints, tracks or routes) found"
       
     </span>
   </a>
@@ -1608,33 +1597,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#gpx-yaml-parsing-failures" class="md-nav__link">
+  <a href="#gpx-parsing-failures" class="md-nav__link">
     <span class="md-ellipsis">
       
-        GPX / YAML parsing failures
+        GPX parsing failures
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="GPX / YAML parsing failures">
+    <nav class="md-nav" aria-label="GPX parsing failures">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#parse_path-raises-an-exception" class="md-nav__link">
+  <a href="#mapdatacoords-coords_typefile-raises-no-points-waypoints-tracks-or-routes-found" class="md-nav__link">
     <span class="md-ellipsis">
       
-        parse_path raises an exception
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#only-one-waypoint-found" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Only one waypoint found
+        MapData(coords="...", coords_type="file") raises "No points (waypoints, tracks or routes) found"
       
     </span>
   </a>
@@ -1858,15 +1836,9 @@
 <h3 id="no-features-returned">No features returned</h3>
 <p>If <code>md.footways_list</code> or <code>md.roads_list</code> is empty after <code>run_all()</code>, the bounding box may be in an area with sparse OSM coverage. Verify the coverage on <a href="https://www.openstreetmap.org">openstreetmap.org</a> before debugging the code.</p>
 <hr />
-<h2 id="gpx-yaml-parsing-failures">GPX / YAML parsing failures</h2>
-<h3 id="parse_path-raises-an-exception"><code>parse_path</code> raises an exception</h3>
-<ul>
-<li>Confirm the file uses the <code>.gpx</code> or <code>.yaml</code> extension — format detection is extension-based.</li>
-<li>GPX files must contain <code>&lt;wpt&gt;</code> elements. Files with only <code>&lt;trkpt&gt;</code> or <code>&lt;rtept&gt;</code> are supported by <code>MapData</code> for area calculation but <strong>not</strong> by <code>parse_gpx_file</code> for path planning. Convert track points to waypoints in your GPX editor first.</li>
-<li>YAML files must have a top-level <code>waypoints:</code> key. See <a href="../dev/data_formats/#yaml-waypoint-format">YAML waypoint format</a> for the expected schema.</li>
-</ul>
-<h3 id="only-one-waypoint-found">Only one waypoint found</h3>
-<p><code>parse_gpx_file</code> reads <code>&lt;wpt&gt;</code> elements in document order. If your GPX editor exports waypoints as a single track instead of individual <code>&lt;wpt&gt;</code> tags, re-export using the "waypoints" export option.</p>
+<h2 id="gpx-parsing-failures">GPX parsing failures</h2>
+<h3 id="mapdatacoords-coords_typefile-raises-no-points-waypoints-tracks-or-routes-found"><code>MapData(coords="...", coords_type="file")</code> raises "No points (waypoints, tracks or routes) found"</h3>
+<p><code>MapData</code> reads <code>&lt;wpt&gt;</code> elements if the file has any, otherwise falls back to <code>&lt;trkpt&gt;</code> (tracks) and then <code>&lt;rtept&gt;</code> (routes) — see <a href="../dev/data_formats/#gpx-waypoint-format">GPX waypoint format</a>. Confirm the file contains at least one of these element types.</p>
 <hr />
 <h2 id="path-planning-returns-none-or-false">Path planning returns <code>None</code> or <code>False</code></h2>
 <h3 id="graphplannerplan-returns-none"><code>GraphPlanner.plan()</code> returns <code>None</code></h3>

@@ -1129,6 +1129,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rrt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rrt
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#runtime-overrides" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1432,6 +1443,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rrt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rrt
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#runtime-overrides" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1502,7 +1524,7 @@
 
 
 <h1 id="planner-configuration">Planner Configuration</h1>
-<p>All default planning parameters are stored in <code>config/planner_defaults.yaml</code>. The file is loaded once at import time by <code>map_data/map_data.py</code> (which reads <code>osm_margin</code> and <code>reserve_margin</code>) and by <code>ReplanPath</code> (which reads all cost and grid parameters). Values can be overridden at runtime through the viewer's Highway Costs modal or via CLI flags such as <code>--cell_size</code> and <code>--inflate_obstacles</code>.</p>
+<p>All default planning parameters are stored in <code>config/planner_defaults.yaml</code>. The file is loaded once at import time by <code>map_data/map_data.py</code> (which reads <code>grid_margin</code>), <code>map_data/utils/parsing.py</code> (<code>obstacle_radius</code>, <code>buffer_widths</code>), <code>map_data/pathsolver/grid_astar.py</code> (<code>grid_cost_weight</code>), and by <code>ReplanPath</code> (which reads the cost tables, grid parameters, and the <code>rrt</code> settings). Values can be overridden at runtime through the viewer's Highway Costs modal or via <code>map_data_plan</code> CLI flags such as <code>--cell-size</code> and <code>--inflate-obstacles</code>.</p>
 <hr />
 <h2 id="full-default-file">Full default file</h2>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">highway_costs</span><span class="p">:</span>
@@ -1532,9 +1554,19 @@
 </span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="nt">inflate_obstacles</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.25</span>
 </span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a><span class="nt">simplify_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a><span class="nt">smooth_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
-</span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a><span class="nt">osm_margin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
-</span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a><span class="nt">reserve_margin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50</span>
-</span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a><span class="nt">path_cost_cap</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.85</span>
+</span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a><span class="nt">grid_margin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">150</span>
+</span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a><span class="nt">path_cost_cap</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.85</span>
+</span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a><span class="nt">grid_cost_weight</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
+</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a><span class="nt">rrt</span><span class="p">:</span>
+</span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a><span class="w">  </span><span class="nt">informed</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</span><span id="__span-0-33"><a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a><span class="w">  </span><span class="nt">improve_after_goal</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</span><span id="__span-0-34"><a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a><span class="w">  </span><span class="nt">improve_iter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200</span>
+</span><span id="__span-0-35"><a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a><span class="w">  </span><span class="nt">adaptive_radius</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</span><span id="__span-0-36"><a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a><span class="nt">obstacle_radius</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+</span><span id="__span-0-37"><a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a><span class="nt">buffer_widths</span><span class="p">:</span>
+</span><span id="__span-0-38"><a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a><span class="w">  </span><span class="nt">road</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7.0</span>
+</span><span id="__span-0-39"><a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a><span class="w">  </span><span class="nt">footway</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3.0</span>
+</span><span id="__span-0-40"><a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a><span class="w">  </span><span class="nt">barrier</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
 </span></code></pre></div>
 <hr />
 <h2 id="highway_costs"><code>highway_costs</code></h2>
@@ -1711,22 +1743,73 @@
 <td>Apply gradient-descent smoothing after planning (and after simplification if enabled). Produces rounder curves but may shift the path slightly away from the original grid solution.</td>
 </tr>
 <tr>
-<td><code>osm_margin</code></td>
-<td>int (m)</td>
-<td>100</td>
-<td>Metres added to each side of the waypoint bounding box when constructing the Overpass API query. Ensures features near the route boundary are included.</td>
-</tr>
-<tr>
-<td><code>reserve_margin</code></td>
-<td>int (m)</td>
-<td>50</td>
-<td>Additional metres added on top of <code>osm_margin</code> for the internal UTM bounding box (<code>min_x/max_x/min_y/max_y</code>). Used to clip the planning grid with a small safety margin.</td>
+<td><code>grid_margin</code></td>
+<td>float (m)</td>
+<td>150</td>
+<td>Metres added to each side of the waypoint bounding box (<code>MapData.min_x/max_x/min_y/max_y</code>), used both for the Overpass API query area and to clip the planning grid.</td>
 </tr>
 <tr>
 <td><code>path_cost_cap</code></td>
 <td>float</td>
 <td>0.85</td>
 <td>Maximum cost a way cell can receive after adding highway and surface penalties. Ensures that all recognised way types remain cheaper than <code>default_off_path_cost</code> (0.9), so the planner always prefers a way over open terrain.</td>
+</tr>
+<tr>
+<td><code>grid_cost_weight</code></td>
+<td>float</td>
+<td>5.0</td>
+<td>Weight applied to a cell's traversal cost when computing edge costs in Grid A<em> and RRT</em> (<code>1 + grid_value × grid_cost_weight</code>).</td>
+</tr>
+<tr>
+<td><code>obstacle_radius</code></td>
+<td>float (m)</td>
+<td>2.0</td>
+<td>Radius used when buffering point obstacles (e.g. bollards) into polygons.</td>
+</tr>
+<tr>
+<td><code>buffer_widths</code></td>
+<td>dict</td>
+<td>see above</td>
+<td>Per-category buffer width (m) used when turning barrier ways into obstacle polygons (<code>road</code>, <code>footway</code>, <code>barrier</code>).</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="rrt"><code>rrt</code></h2>
+<p>RRT*-only settings, read by <code>ReplanPath</code> and passed to <code>RRTStar</code> (see <a href="../../api/pathsolver/#rrt">RRT* API reference</a>). Once the goal is first reached, <code>improve_after_goal</code> keeps refining the path for at most <code>improve_iter</code> more iterations (and never past <code>max_iter</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>informed</code></td>
+<td>bool</td>
+<td><code>true</code></td>
+<td>Once a solution exists, sample from the shrinking informed ellipse (Informed RRT*) instead of the full free space.</td>
+</tr>
+<tr>
+<td><code>improve_after_goal</code></td>
+<td>bool</td>
+<td><code>true</code></td>
+<td>Keep iterating after the goal is first reached to find a lower-cost path, instead of returning immediately.</td>
+</tr>
+<tr>
+<td><code>improve_iter</code></td>
+<td>int</td>
+<td><code>200</code></td>
+<td>Most extra iterations spent improving after the goal is first reached. Trades planning time for path cost.</td>
+</tr>
+<tr>
+<td><code>adaptive_radius</code></td>
+<td>bool</td>
+<td><code>true</code></td>
+<td>Shrink the rewiring radius as the tree grows per the RRT* asymptotic-optimality formula, instead of using a fixed radius.</td>
 </tr>
 </tbody>
 </table>
@@ -1735,17 +1818,17 @@
 <h3 id="viewer-highway-costs-modal">Viewer Highway Costs modal</h3>
 <p>The viewer exposes a modal panel where <code>highway_costs</code> values can be edited per session. Changes take effect immediately for the next path planning request without reloading the <code>.mapdata</code> file.</p>
 <h3 id="cli-flags">CLI flags</h3>
-<p>The <code>ReplanPath</code> constructor accepts <code>--cell_size</code> and <code>--inflate_obstacles</code> as command-line arguments. These override the YAML defaults for that invocation only; the YAML file is not modified.</p>
+<p><code>map_data_plan</code> (see <a href="../../usage/">Offline CLI</a>) exposes <code>--cell-size</code> and <code>--inflate-obstacles</code>. These override the YAML defaults for that invocation only; the YAML file is not modified.</p>
 <h3 id="programmatic-override">Programmatic override</h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.pathsolver.replan</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplanPath</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.pathsolver.replan</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplanPath</span><span class="p">,</span> <span class="n">parse_args</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">planner</span> <span class="o">=</span> <span class="n">ReplanPath</span><span class="p">(</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">map_data</span><span class="o">=</span><span class="n">md</span><span class="p">,</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">cell_size</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>  <span class="c1"># coarser grid for faster planning</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">inflate_obstacles</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>  <span class="c1"># wider obstacle clearance</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="p">)</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">args</span> <span class="o">=</span> <span class="n">parse_args</span><span class="p">([])</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="n">args</span><span class="o">.</span><span class="n">cell_size</span> <span class="o">=</span> <span class="mf">0.5</span>  <span class="c1"># coarser grid for faster planning</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">args</span><span class="o">.</span><span class="n">inflate_obstacles</span> <span class="o">=</span> <span class="mf">0.5</span>  <span class="c1"># wider obstacle clearance</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">planner</span> <span class="o">=</span> <span class="n">ReplanPath</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">obstacles</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Any keyword argument accepted by <code>ReplanPath.__init__</code> takes precedence over the YAML defaults.</p>
+<p>Any <code>args</code> attribute <code>ReplanPath</code> reads (see the constructor table above) takes precedence over the YAML defaults for that instance.</p>
 
 
 

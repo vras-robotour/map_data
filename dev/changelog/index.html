@@ -1231,8 +1231,41 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="[Unreleased]">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#200-2026-09-13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [2.0.0] — 2026-09-13
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[2.0.0] — 2026-09-13">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#fixed" class="md-nav__link">
@@ -1274,7 +1307,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed" class="md-nav__link">
+  <a href="#changed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1385,7 +1418,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_1" class="md-nav__link">
+  <a href="#changed_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1463,7 +1496,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_2" class="md-nav__link">
+  <a href="#changed_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1513,7 +1546,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_3" class="md-nav__link">
+  <a href="#changed_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1617,8 +1650,41 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="[Unreleased]">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#200-2026-09-13" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [2.0.0] — 2026-09-13
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[2.0.0] — 2026-09-13">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#fixed" class="md-nav__link">
@@ -1660,7 +1726,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed" class="md-nav__link">
+  <a href="#changed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1771,7 +1837,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_1" class="md-nav__link">
+  <a href="#changed_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1849,7 +1915,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_2" class="md-nav__link">
+  <a href="#changed_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1899,7 +1965,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_3" class="md-nav__link">
+  <a href="#changed_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1947,6 +2013,41 @@
 
 <h1 id="changelog">Changelog</h1>
 <h2 id="unreleased">[Unreleased]</h2>
+<h2 id="200-2026-09-13">[2.0.0] — 2026-09-13</h2>
+<p>A major version because node parameters and public helpers are removed.</p>
+<h3 id="removed">Removed</h3>
+<ul>
+<li><code>osm_cloud</code>: the <code>auto_utm</code> and <code>utm_to_local</code> parameters and the
+  <code>publish_static_tf</code> launch argument; <code>transform_mode</code> covers them</li>
+<li><code>MapData</code>: the <code>flip</code> and <code>current_robot_position</code> arguments and
+  <code>exclude_ways()</code>; use <code>apply_traversability(TraversabilityRules().extend(...))</code>.
+  The nodes' <code>exclude_highway</code> parameter is unchanged</li>
+<li><code>utils.gpx</code>: <code>parse_path</code>, <code>parse_gpx_file</code>, <code>parse_yaml_file</code>,
+  <code>convert_waypoint</code> and <code>utm_path_to_latlon</code>. <code>MapData</code> reads GPX itself; YAML
+  waypoint files are no longer accepted</li>
+<li>The <code>python -m map_data.pathsolver.replan</code> CLI and its matplotlib visualizer;
+  <code>map_data_plan</code> is the offline planner</li>
+<li><code>Way.to_pcd_points</code> and <code>utils.points_to_graph_points</code></li>
+<li><code>TraversabilityRules.describe</code>, <code>summary</code> and <code>edge_factor</code>,
+  <code>OverpassClient.query</code>, and <code>utils.launch.package_config_dir</code> (now
+  <code>utils.config.package_share</code>)</li>
+<li>The <code>tqdm</code> and <code>matplotlib</code> dependencies</li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li>RRT<em> runs as Informed RRT</em>: once a path is found it keeps improving it for up
+  to <code>rrt.improve_iter</code> (200) iterations, sampling the informed ellipse with an
+  adaptive rewiring radius. The settings live in a new <code>rrt:</code> section of
+  <code>config/planner_defaults.yaml</code></li>
+<li>Grid A<em> and RRT</em> paths are simplified once, over the whole route, instead of
+  per segment and then again at the end</li>
+<li>Obstacles are rasterised with <code>shapely.contains_xy</code>; the demo map's grid is
+  identical</li>
+<li>Viewer: collapsible panels are native <code>&lt;details&gt;</code> (the whole header toggles),
+  the wormhole share dialog is a Bootstrap modal, and the duplicated frontend
+  and route code is consolidated</li>
+<li>Annotation stores in legacy formats are normalised once, when loaded</li>
+</ul>
 <h3 id="fixed">Fixed</h3>
 <ul>
 <li>Crossroad detection no longer invents junctions where one corridor is mapped
@@ -2048,7 +2149,7 @@
   traversability rules and the cost tables the graph planner now shares, and the
   goal QR codes</li>
 </ul>
-<h3 id="changed">Changed</h3>
+<h3 id="changed_1">Changed</h3>
 <ul>
 <li><code>route_planner</code> preloads the map and caches its graph planners, converts ECEF
   in a vectorised form and subscribes to static TF only, so a plan request no
@@ -2215,7 +2316,7 @@
 <li>Wired up the dead <code>mapdata_path</code> launch argument in <code>osm_cloud.launch.py</code> (bare
   <code>mapdata_file</code>/<code>gpx_file</code> names now resolve against the data directory)</li>
 </ul>
-<h3 id="changed_1">Changed</h3>
+<h3 id="changed_2">Changed</h3>
 <ul>
 <li>Overpass <code>run_queries</code> now filters server-side by the tag families the parser
   inspects instead of downloading every way/node in the bounding box; matching
@@ -2268,7 +2369,7 @@
 <li><code>map_data_viewer --telemetry-rate</code> flag to configure the Tracker telemetry broadcast rate (default 2 Hz)</li>
 <li><code>map_data_info --validate</code> checks a <code>.mapdata</code> file for structural issues (missing metadata or geometry, duplicate way IDs, nodes missing from the cache, disconnected footway networks) and exits non-zero when any are found</li>
 </ul>
-<h3 id="changed_2">Changed</h3>
+<h3 id="changed_3">Changed</h3>
 <ul>
 <li>The package now targets ROS2 Jazzy or later and Python 3.12+</li>
 <li><code>create_mapdata</code> no longer requires ROS2 — it falls back to the repo data directory when <code>ament_index_python</code> is unavailable</li>
@@ -2315,7 +2416,7 @@
 <li>pytest suite covering core logic and path planning edge cases</li>
 <li>Expanded test suite: <code>test_overpass.py</code> (retry logic, rate limiting, status polling), <code>test_errors.py</code> (malformed GPX, corrupt files, Overpass timeouts, planning failures), <code>test_parsing.py</code> (OSM element classification and buffering), <code>test_fill_grid.py</code> (footway cost assignment, barrier cell marking), <code>test_viewer_helpers.py</code> (GeoJSON roundtrip, way splitting, change log migration), <code>test_viewer_routes.py</code> (annotation CRUD, path-traversal security, way operations), and extended <code>test_integration.py</code> (OSM cache roundtrip, bbox mismatch, <code>parse_intersections</code>)</li>
 </ul>
-<h3 id="changed_3">Changed</h3>
+<h3 id="changed_4">Changed</h3>
 <ul>
 <li>Interactive viewer: GPX download now exports a <code>&lt;trk&gt;&lt;trkseg&gt;&lt;trkpt&gt;</code> track by default; a Track / Waypoints toggle in the planner panel switches back to the legacy <code>&lt;wpt&gt;</code> format</li>
 <li>Interactive viewer: annotation vertex handles in Edit mode now only appear when the annotation is clicked, not for all annotations at once</li>
