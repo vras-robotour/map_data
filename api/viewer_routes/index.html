@@ -1317,6 +1317,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#tracker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tracker
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tracker">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-apitrackersettings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/tracker/settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apitrackersettings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/tracker/settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#wormhole-robot-file-transfer" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2141,6 +2180,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#tracker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tracker
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tracker">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-apitrackersettings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/tracker/settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apitrackersettings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/tracker/settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#wormhole-robot-file-transfer" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2590,6 +2668,47 @@ in the Planner. Cells have cost 0.0 (free path) to 1.0 (obstacle boundary); valu
 </span></code></pre></div>
 <p><strong>Response</strong> — <code>{"success": true}</code></p>
 <hr />
+<h2 id="tracker">Tracker</h2>
+<p>Both endpoints answer <strong>503</strong> when the tracker is not running (no ROS 2 context).</p>
+<h3 id="get-apitrackersettings"><code>GET /api/tracker/settings</code></h3>
+<p>The tracker's topic settings, what its config file holds, and the topics on the ROS graph.</p>
+<p><strong>Response</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="p">{</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span><span class="nt">"path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/.../config/tracker.yaml"</span><span class="p">,</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">  </span><span class="nt">"exists"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">  </span><span class="nt">"file_error"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">  </span><span class="nt">"heading_types"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"imu"</span><span class="p">:</span><span class="w"> </span><span class="s2">"sensor_msgs/msg/Imu"</span><span class="p">,</span><span class="w"> </span><span class="nt">"..."</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">  </span><span class="nt">"topics"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"/gps/fix"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"sensor_msgs/msg/NavSatFix"</span><span class="p">]</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">  </span><span class="nt">"settings"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">    </span><span class="p">{</span>
+</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"gps_fix_topic"</span><span class="p">,</span>
+</span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="w">      </span><span class="nt">"section"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Position / heading"</span><span class="p">,</span>
+</span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="w">      </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Raw GPS fix"</span><span class="p">,</span>
+</span><span id="__span-15-12"><a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a><span class="w">      </span><span class="nt">"msg_type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"sensor_msgs/msg/NavSatFix"</span><span class="p">,</span>
+</span><span id="__span-15-13"><a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="w">      </span><span class="nt">"choices"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+</span><span id="__span-15-14"><a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a><span class="w">      </span><span class="nt">"default"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/gps/fix"</span><span class="p">,</span>
+</span><span id="__span-15-15"><a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a><span class="w">      </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/gps/fix"</span><span class="p">,</span>
+</span><span id="__span-15-16"><a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a><span class="w">      </span><span class="nt">"saved"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/fixposition/odometry_llh"</span>
+</span><span id="__span-15-17"><a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-15-18"><a id="__codelineno-15-18" name="__codelineno-15-18" href="#__codelineno-15-18"></a><span class="w">  </span><span class="p">]</span>
+</span><span id="__span-15-19"><a id="__codelineno-15-19" name="__codelineno-15-19" href="#__codelineno-15-19"></a><span class="p">}</span>
+</span></code></pre></div>
+<p><code>value</code> is the live setting and <code>saved</code> is the config file's value (the default when the file
+does not set it). <code>file_error</code> is set, and <code>saved</code> falls back to the defaults, when the file
+cannot be read.</p>
+<hr />
+<h3 id="put-apitrackersettings"><code>PUT /api/tracker/settings</code></h3>
+<p>Apply settings to the running tracker, which resubscribes and restarts its telemetry, and
+optionally save them to the config file with its comments kept.</p>
+<p><strong>Request body</strong></p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"settings"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"gps_fix_topic"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/fixposition/odometry_llh"</span><span class="p">,</span><span class="w"> </span><span class="nt">"heading_type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"yaw_vector3"</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nt">"save"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span>
+</span></code></pre></div>
+<p><code>settings</code> may be a subset. With <code>save</code>, all of the tracker's current settings are written.</p>
+<p><strong>Response 200</strong> — <code>{"changed": true, "path": "/.../config/tracker.yaml"}</code> (<code>path</code> is <code>null</code> without <code>save</code>).</p>
+<p><strong>Error 400</strong> — unknown setting, non-string value, whitespace, invalid topic name or <code>heading_type</code>.
+Nothing is applied.</p>
+<p><strong>Error 500</strong> — applied, but the config file could not be written.</p>
+<hr />
 <h2 id="wormhole-robot-file-transfer">Wormhole (Robot File Transfer)</h2>
 <p>Wormhole endpoints use <a href="https://magic-wormhole.readthedocs.io/">magic-wormhole</a> to transfer
 files peer-to-peer. Requires <code>pip install magic-wormhole</code> on the server.</p>
@@ -2597,10 +2716,10 @@ files peer-to-peer. Requires <code>pip install magic-wormhole</code> on the serv
 <p>Send a GPX file to a robot over the network. The server starts a wormhole send process and
 waits up to 15 seconds for the one-time transfer code to be generated.</p>
 <p><strong>Request body</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"gpx"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;?xml version=\"1.0\"?&gt;..."</span><span class="w"> </span><span class="p">}</span>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"gpx"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;?xml version=\"1.0\"?&gt;..."</span><span class="w"> </span><span class="p">}</span>
 </span></code></pre></div>
 <p><strong>Response 200</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"7-guitar-academy"</span><span class="p">,</span><span class="w"> </span><span class="nt">"transfer_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uuid"</span><span class="w"> </span><span class="p">}</span>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"7-guitar-academy"</span><span class="p">,</span><span class="w"> </span><span class="nt">"transfer_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uuid"</span><span class="w"> </span><span class="p">}</span>
 </span></code></pre></div>
 <p>Give the code to the robot operator, who runs <code>wormhole receive &lt;code&gt;</code> to receive the file.</p>
 <p><strong>Response 500</strong> if <code>wormhole</code> is not installed or the code was not captured in time.</p>
@@ -2608,7 +2727,7 @@ waits up to 15 seconds for the one-time transfer code to be generated.</p>
 <h3 id="post-apicancel_wormhole"><code>POST /api/cancel_wormhole</code></h3>
 <p>Cancel an active wormhole transfer.</p>
 <p><strong>Request body</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"transfer_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uuid"</span><span class="w"> </span><span class="p">}</span>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"transfer_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uuid"</span><span class="w"> </span><span class="p">}</span>
 </span></code></pre></div>
 <p><strong>Response</strong> — <code>{"success": bool, "message": "..."}</code></p>
 

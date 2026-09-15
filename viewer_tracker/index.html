@@ -798,6 +798,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="ROS2 Topic Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#config-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config file
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changing-topics-in-the-web-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changing topics in the web app
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
     </ul>
@@ -1482,6 +1510,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="ROS2 Topic Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#config-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config file
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changing-topics-in-the-web-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changing topics in the web app
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
     </ul>
@@ -1696,10 +1752,54 @@ lat/lon exactly. With <code>earth_frame</code> empty the legacy path is used: tr
 and convert with the UTM zone of the current fix.</p>
 <h2 id="ros2-topic-configuration">ROS2 Topic Configuration</h2>
 <p>The <code>TrackerNode</code> subscribes to a set of configurable topics. Set a topic parameter to an empty
-string to disable the corresponding feature and hide its UI row. <code>config/helhest.yaml</code> is the
-full configuration for the Helhest field stack (Fixposition + crl_commander + road_follower):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>map_data_viewer<span class="w"> </span>--ros-args<span class="w"> </span>--params-file<span class="w"> </span>config/helhest.yaml
+string to disable the corresponding feature and hide its UI row.</p>
+<h3 id="config-file">Config file</h3>
+<p>The topics come from a ROS 2 parameter file with a <code>map_data_tracker</code> section. By default the
+viewer reads the package's <code>config/tracker.yaml</code> (generic nav2-style topics); <code>--config</code> picks
+another one. <code>config/helhest_jr.yaml</code> holds helhest-jr's topics (Fixposition, <code>helhest_llc</code>,
+crl_commander, road_follower, <code>path_centerline</code>, no Nav2), with every tracker parameter set
+explicitly:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>map_data_viewer<span class="w"> </span>--config<span class="w"> </span>config/helhest_jr.yaml
 </span></code></pre></div>
+<p>The file is an ordinary parameter file, so <code>--ros-args --params-file</code> still works; values given
+with <code>--ros-args</code> take precedence over <code>--config</code>. A config file that cannot be read stops the
+viewer at startup. A <code>--config</code> file that does not exist yet means default topics (Save creates
+it).</p>
+<div class="admonition note">
+<p class="admonition-title">New config files need a rebuild</p>
+<p>After adding a file to <code>config/</code> (such as <code>tracker.yaml</code>), run <code>colcon build</code> again so the
+install space links to it.</p>
+</div>
+<h3 id="changing-topics-in-the-web-app">Changing topics in the web app</h3>
+<p><strong>Topics…</strong> in the Tracker sidebar opens a dialog listing every topic setting (plus
+<code>heading_type</code>, <code>earth_frame</code> and <code>utm_frame</code>), grouped like the table below. Each topic field
+suggests the topics currently on the ROS graph with the matching message type, and a dot shows
+its state: green = published with the expected type, yellow = published with another type,
+grey = not published, hollow = disabled.</p>
+<table>
+<thead>
+<tr>
+<th>Button</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Apply</strong></td>
+<td>Resubscribes the running tracker to the new topics. Its telemetry (trail, path, status) starts over. Not saved.</td>
+</tr>
+<tr>
+<td><strong>Save to file</strong></td>
+<td>Applies, then writes the settings into the config file the viewer was started with. Only changed values are rewritten; comments and layout stay. With a <code>--symlink-install</code> build the source file is updated.</td>
+</tr>
+<tr>
+<td><strong>Reload from file</strong></td>
+<td>Fills the dialog with the file's values (defaults for keys the file does not set).</td>
+</tr>
+</tbody>
+</table>
+<p>The numeric parameters (<code>battery_low_voltage</code>, <code>stale_after</code>, <code>trail_*</code>,
+<code>intersection_*_threshold</code>) are only read from the config file at startup.</p>
 <table>
 <thead>
 <tr>

@@ -1246,6 +1246,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#fixed" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1274,7 +1285,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#removed" class="md-nav__link">
+  <a href="#removed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Removed
@@ -1693,6 +1704,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#removed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#fixed" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1721,7 +1743,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#removed" class="md-nav__link">
+  <a href="#removed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Removed
@@ -2071,6 +2093,12 @@
 <h2 id="unreleased">[Unreleased]</h2>
 <h3 id="added">Added</h3>
 <ul>
+<li>The viewer's tracker topics can be changed without a restart: <strong>Topics…</strong> in the Tracker
+  sidebar resubscribes the running tracker and can save the topics back to its config file,
+  comments kept (<code>GET</code>/<code>PUT /api/tracker/settings</code>). <code>map_data_viewer --config &lt;file&gt;</code> names
+  that file, a ROS 2 parameter file with a <code>map_data_tracker</code> section. The default is the new
+  <code>config/tracker.yaml</code>, which holds the built-in defaults, so nothing changes for existing setups</li>
+<li><code>config/helhest_jr.yaml</code>: tracker topics of helhest-jr (<code>map_data_viewer --config config/helhest_jr.yaml</code>)</li>
 <li><code>osm_cloud</code> takes a <code>highway_types</code> parameter (and <code>highway_types:=</code> launch
   argument), as <code>route_planner</code> does: the grid can be drawn from roads as well
   as footways, so it shows the network the graph planner routes on when roads
@@ -2082,8 +2110,18 @@
   its rim, and one snapped onto (or within 1 m of) an area crosses it from there. The crossings live with the area (<code>map_data.pathsolver.walkable_area</code>)
   and add no graph edges</li>
 </ul>
+<h3 id="removed">Removed</h3>
+<ul>
+<li><code>config/helhest.yaml</code>: helhest-jr is the only Fixposition robot, and its topics (tracker and
+  <code>osm_cloud</code>) are in <code>config/helhest_jr.yaml</code>, now the default <code>config_file</code> of
+  <code>osm_cloud.launch.py</code></li>
+</ul>
 <h3 id="fixed">Fixed</h3>
 <ul>
+<li>The viewer's telemetry Socket.IO connection failed with <code>property 'session' of
+  'RequestContext' object has no setter</code> on Flask 3.0.2 with Flask-SocketIO 5.3 (Ubuntu
+  24.04 packages), so the tracker received nothing. The Socket.IO server no longer manages
+  a Flask session</li>
 <li>Route relations (hiking, bike, bus) are no longer merged like multipolygons.
   Their member ways were chained into one negative-id way carrying every
   member's tags, so a single bridge or stairs member made the whole route
@@ -2093,7 +2131,7 @@
 </ul>
 <h2 id="200-2026-09-13">[2.0.0] — 2026-09-13</h2>
 <p>A major version because node parameters and public helpers are removed.</p>
-<h3 id="removed">Removed</h3>
+<h3 id="removed_1">Removed</h3>
 <ul>
 <li><code>osm_cloud</code>: the <code>auto_utm</code> and <code>utm_to_local</code> parameters and the
   <code>publish_static_tf</code> launch argument; <code>transform_mode</code> covers them</li>
