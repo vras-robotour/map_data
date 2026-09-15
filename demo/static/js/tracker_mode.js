@@ -441,6 +441,167 @@ const trackerMode = (() => {
     }
 
 
+    // ── Topics dialog: switch the tracker's topics live and save them to its config file ──
+    let _settings = null; // last GET /api/tracker/settings response
+
+    // Flask's abort() answers with an HTML page; pull the message out of it.
+    async function errorText(res) {
+        const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+        return (doc.querySelector('p') || doc.body).textContent.trim();
+    }
+
+    function topicsError(msg) {
+        const el = $('tracker-topics-error');
+        el.textContent = msg || '';
+        el.hidden = !msg;
+    }
+
+    const isTopic = s => s.name.endsWith('_topic');
+    const listId = type => 'tts-list-' + type.replace(/[^A-Za-z0-9]/g, '_');
+
+    function expectedType(s) {
+        return s.name === 'heading_topic' ? _settings.heading_types[$('tts-heading_type').value] : s.msg_type;
+    }
+
+    // Dot left of a topic: green = published with the expected type, yellow = another type,
+    // grey = nobody publishes it (yet), hollow = disabled
+    function updateDot(s) {
+        const topic = $(`tts-${s.name}`).value.trim();
+        const type = expectedType(s);
+        const dot = $(`tts-dot-${s.name}`);
+        $(`tts-${s.name}`).setAttribute('list', listId(type));
+        $(`tts-type-${s.name}`).textContent = type.split('/').pop();
+        let color = 'transparent', title = 'disabled';
+        if (topic) {
+            const types = _settings.topics[topic] || _settings.topics[`/${topic}`];
+            if (!types) { color = '#6b7280'; title = 'not published'; }
+            else if (types.includes(type)) { color = '#22c55e'; title = `published as ${type}`; }
+            else { color = '#facc15'; title = `published as ${types.join(', ')}; the tracker expects ${type}`; }
+        }
+        dot.style.background = color;
+        dot.title = title;
+    }
+
+    function renderTopicsForm() {
+        // One suggestion list per message type, from the topics on the ROS graph
+        const byType = {};
+        for (const [topic, types] of Object.entries(_settings.topics)) {
+            for (const t of types) (byType[t] ||= []).push(topic);
+        }
+        const types = new Set([..._settings.settings.map(s => s.msg_type), ...Object.values(_settings.heading_types)]);
+        $('tracker-topics-lists').replaceChildren(...[...types].filter(Boolean).map(type => {
+            const dl = document.createElement('datalist');
+            dl.id = listId(type);
+            dl.append(...(byType[type] || []).sort().map(topic => new Option(topic, topic)));
+            return dl;
+        }));
+
+        const form = $('tracker-topics-form');
+        form.replaceChildren();
+        let section = null;
+        for (const s of _settings.settings) {
+            if (s.section !== section) {
+                section = s.section;
+                const title = document.createElement('div');
+                title.className = 'panel-title mt-2 mb-1';
+                title.style.fontSize = '0.6rem';
+                title.textContent = section.toUpperCase();
+                form.appendChild(title);
+            }
+            const row = document.createElement('div');
+            row.className = 'd-flex align-items-center gap-2 mb-1';
+
+            const label = document.createElement('label');
+            label.htmlFor = `tts-${s.name}`;
+            label.className = 'text-truncate';
+            label.style.flex = '0 0 45%';
+            label.title = s.description + (s.default ? ` (default: ${s.default})` : '');
+            const code = document.createElement('code');
+            code.textContent = s.name;
+            const typeHint = document.createElement('small');
+            typeHint.className = 'text-secondary ms-1';
+            typeHint.id = `tts-type-${s.name}`;
+            label.append(code, typeHint);
+
+            const dot = document.createElement('span');
+            dot.id = `tts-dot-${s.name}`;
+            dot.style.cssText = 'flex:0 0 10px; height:10px; border-radius:50%;' +
+                (isTopic(s) ? ' border:1px solid #6b7280;' : '');
+
+            let field;
+            if (s.choices.length) {
+                field = document.createElement('select');
+                field.className = 'form-select form-select-sm bg-dark text-light border-secondary';
+                field.append(...s.choices.map(c => new Option(c, c)));
+                field.addEventListener('change', () => updateDot(_settings.settings.find(x => x.name === 'heading_topic')));
+            } else {
+                field = document.createElement('input');
+                field.type = 'text';
+                field.spellcheck = false;
+                field.className = 'form-control form-control-sm bg-dark text-light border-secondary font-monospace';
+                if (isTopic(s)) {
+                    field.placeholder = 'disabled';
+                    field.addEventListener('input', () => updateDot(s));
+                }
+            }
+            field.id = `tts-${s.name}`;
+            field.style.fontSize = '0.72rem';
+            row.append(label, dot, field);
+            form.appendChild(row);
+        }
+        fillTopicsForm('value');
+    }
+
+    // Fill the form with the live ('value') or the config file's ('saved') settings
+    function fillTopicsForm(which) {
+        for (const s of _settings.settings) $(`tts-${s.name}`).value = s[which];
+        _settings.settings.filter(isTopic).forEach(updateDot);
+    }
+
+    async function showTopicsModal() {
+        if (STATIC_BASE) {
+            setStatus('Tracker topics need the backend — run map_data_viewer locally', 'text-warning');
+            return;
+        }
+        try {
+            const res = await api('GET', '/api/tracker/settings');
+            if (!res.ok) throw new Error(await errorText(res));
+            _settings = await res.json();
+        } catch (err) {
+            setStatus(`Failed to load tracker topics: ${err.message}`, 'text-danger');
+            return;
+        }
+        topicsError('');
+        renderTopicsForm();
+        $('tracker-topics-path').textContent = _settings.path;
+        const fileNote = $('tracker-topics-file-error');
+        fileNote.textContent = _settings.file_error ? `Cannot read the config file: ${_settings.file_error}`
+            : (_settings.exists ? '' : 'The config file does not exist yet; Save creates it.');
+        fileNote.hidden = !fileNote.textContent;
+        bootstrap.Modal.getOrCreateInstance($('tracker-topics-modal')).show();
+    }
+
+    async function applyTopics(save) {
+        const settings = Object.fromEntries(_settings.settings.map(s => [s.name, $(`tts-${s.name}`).value.trim()]));
+        try {
+            const res = await api('PUT', '/api/tracker/settings', { body: { settings, save } });
+            if (!res.ok) throw new Error(await errorText(res));
+            const data = await res.json();
+            const what = data.changed ? 'Tracker resubscribed' : 'Tracker topics unchanged';
+            setStatus(save ? `${what}; saved to ${data.path}` : `${what} (not saved)`, 'text-success');
+        } catch (err) {
+            topicsError(err.message);
+            return;
+        }
+        topicsError('');
+        bootstrap.Modal.getInstance($('tracker-topics-modal')).hide();
+    }
+
+    $('tracker-topics-btn')?.addEventListener('click', showTopicsModal);
+    $('tracker-topics-reload')?.addEventListener('click', () => _settings && fillTopicsForm('saved'));
+    $('tracker-topics-apply')?.addEventListener('click', () => applyTopics(false));
+    $('tracker-topics-save')?.addEventListener('click', () => applyTopics(true));
+
     // Auto-connect if ROS is available to show robot in other modes
     if (typeof ros_available !== 'undefined' && ros_available) {
         initSocket();
