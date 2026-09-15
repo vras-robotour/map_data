@@ -1,12 +1,16 @@
 // ── Layers Management ───────────────────────────────────────────────────────
 
+function _wayHidden(id) {
+    return hiddenWayIds.has(id) || (currentAppMode === 'planner' && plannerBlockedIds.has(id));
+}
+
 function setSubtypeVisible(cat, subtype, visible) {
     subtypeFilters[cat][subtype] = visible;
     const catLayer = geoLayers[cat];
     if (!catLayer) return;
     (subtypeLayers[cat][subtype] || []).forEach(layer => {
         if (visible) {
-            if (!catLayer.hasLayer(layer) && !hiddenWayIds.has(layer._featureId))
+            if (!catLayer.hasLayer(layer) && !_wayHidden(layer._featureId))
                 catLayer.addLayer(layer);
         } else {
             catLayer.removeLayer(layer);
@@ -67,7 +71,7 @@ function filterLayers(query) {
                 }
                 if (visible) {
                     const st = getSubtype(l._featureRef, cat);
-                    if (subtypeFilters[cat][st] !== false && !hiddenWayIds.has(l._featureId)) {
+                    if (subtypeFilters[cat][st] !== false && !_wayHidden(l._featureId)) {
                         if (!geoLayers[cat].hasLayer(l)) geoLayers[cat].addLayer(l);
                     } else {
                         geoLayers[cat].removeLayer(l);
@@ -404,6 +408,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         document.getElementById('export-btn').disabled = false;
         document.getElementById('export-geojson-btn').disabled = false;
         setStatus(`Loaded: ${filename}`, 'text-success');
+        if (plannerMode) plannerMode.refreshBlocked();
     } catch (err) {
         setStatus(`Error: ${err.message}`, 'text-danger');
         console.error(err);

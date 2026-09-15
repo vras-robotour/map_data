@@ -272,6 +272,14 @@
           <button class="btn btn-sm btn-outline-secondary mt-2 w-100" id="planner-costs-btn" style="font-size: 0.7rem;">
             ⚙️ Highway Costs
           </button>
+          <button class="btn btn-sm btn-outline-secondary mt-2 w-100" id="planner-rules-btn" style="font-size: 0.7rem;">
+            🚦 Traversability Rules
+          </button>
+          <div class="form-check mt-2">
+            <input class="form-check-input bg-dark border-secondary" type="checkbox" id="planner-hide-blocked">
+            <label class="form-check-label text-secondary" for="planner-hide-blocked" style="font-size: 0.75rem;"
+                   title="Hide the ways the Paths-only planner will not use: excluded by the traversability rules, stairs, or a way category that is not enabled">Show only plannable ways</label>
+          </div>
         </div>
 
         <div class="mt-auto pt-3 text-center border-top border-secondary">
@@ -549,6 +557,34 @@
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
         <button type="button" id="planner-costs-reset" class="btn btn-outline-warning btn-sm">Reset</button>
         <button type="button" id="planner-costs-save" class="btn btn-primary btn-sm">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Traversability Rules Modal -->
+<div class="modal fade" id="planner-rules-modal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border-secondary">
+      <div class="modal-header border-secondary py-2">
+        <h6 class="modal-title">Traversability Rules</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body py-2">
+        <p class="mb-2" style="font-size:0.7rem; color:#888;">
+          First matching rule wins. <b>Apply</b> uses the rules for planning in this browser tab
+          (Paths only); <b>Save</b> also writes them to <code id="planner-rules-path"></code>
+          (ROS nodes pick it up after a restart).
+        </p>
+        <textarea id="planner-rules-text" rows="22" spellcheck="false"
+                  class="form-control bg-dark text-light border-secondary font-monospace" style="font-size:0.72rem;"></textarea>
+        <div id="planner-rules-error" class="text-danger mt-2" style="font-size:0.72rem; white-space:pre-wrap;" hidden></div>
+      </div>
+      <div class="modal-footer border-secondary py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" id="planner-rules-reload" class="btn btn-outline-warning btn-sm">Reload from file</button>
+        <button type="button" id="planner-rules-apply" class="btn btn-outline-primary btn-sm">Apply</button>
+        <button type="button" id="planner-rules-save" class="btn btn-primary btn-sm">Save to file</button>
       </div>
     </div>
   </div>

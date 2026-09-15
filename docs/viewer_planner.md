@@ -58,3 +58,15 @@ The **Highway Costs** button opens a pop-up window where you can assign a base
 traversal cost (0.0 = free, 1.0 = obstacle) to each OSM highway type and an
 extra penalty per surface material. These costs influence which ways are
 preferred during **all-terrain** planning (do not apply to paths only).
+
+### Traversability Rules
+
+The **Traversability Rules** button opens `config/traversability.yaml` (see
+[Traversability rules](planning.md#traversability-rules)) in an editor. **Apply** checks
+the rules and uses them for **Paths only** planning in this browser tab. **Save to file**
+also writes them to the file, comments included. The ROS nodes read the file only at
+startup, so restart them after saving. **Reload from file** throws away the edits.
+
+**Show only plannable ways** hides the ways that **Paths only** will not route over:
+ways the rules refuse, stairs, and roads or footways whose checkbox is off. The ways
+come back when you leave the planner or clear the checkbox.

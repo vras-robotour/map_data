@@ -73,6 +73,7 @@ from typing import Any
 
 import numpy as np
 import utm
+import yaml
 from flask import (
     Blueprint,
     Response,
@@ -99,11 +100,17 @@ from map_data.pathsolver.route import (
     RoutePlanningError,
     plan_route,
 )
-from map_data.utils.config import package_share
+from map_data.traversability import (
+    DEFAULT_CONFIG_NAME,
+    TraversabilityError,
+    TraversabilityRules,
+    load_traversability,
+)
+from map_data.utils.config import config_path, package_share
 from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.qr import geo_uri, qr_png, qr_svg
 from map_data.utils.serialization import map_data_to_dict
-from map_data.utils.way import FOOTWAY_VALUES
+from map_data.utils.way import FOOTWAY_VALUES, NON_ROUTABLE_HIGHWAY_VALUES
 
 from .cache import load_mapdata_cached
 from .helpers import (
@@ -200,6 +207,90 @@ def get_planner_defaults() -> Response:
 
     """
     return jsonify(load_planner_defaults())
+
+
+def _traversability_path() -> Path:
+    """The rule file the viewer's planner reads when a request brings no rules of its own."""
+    return config_path(DEFAULT_CONFIG_NAME)
+
+
+def _request_rules(body: dict[str, Any]) -> TraversabilityRules:
+    """
+    Rules from the body's ``traversability`` YAML text, or from the rule file when absent.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if the text (or the file) is not a valid rule set.
+
+    """
+    text = body.get("traversability")
+    try:
+        if text is None:
+            return load_traversability(_traversability_path())
+        if not isinstance(text, str):
+            abort(400, "traversability must be YAML text")
+        return TraversabilityRules.from_dict(yaml.safe_load(text), source="viewer")
+    except (yaml.YAMLError, TraversabilityError) as e:
+        abort(400, str(e))
+
+
+@bp.route("/api/traversability")
+def get_traversability() -> Response:
+    """Return the rule file as ``{"yaml": text, "path": str}`` (empty text if it is missing)."""
+    path = _traversability_path()
+    return jsonify({"yaml": path.read_text() if path.is_file() else "", "path": str(path)})
+
+
+@bp.route("/api/traversability", methods=["PUT"])
+def save_traversability() -> Response:
+    """
+    Validate the body's ``traversability`` YAML text and write it to the rule file.
+
+    The text is written verbatim, so comments survive. Nodes that read the
+    file (route_planner, osm_cloud) still need a restart to pick it up.
+    """
+    body = request.get_json(force=True) or {}
+    if body.get("traversability") is None:
+        abort(400, "Missing traversability")
+    _request_rules(body)
+    path = _traversability_path()
+    path.write_text(body["traversability"])
+    return jsonify({"path": str(path)})
+
+
+@bp.route("/api/traversability/blocked", methods=["POST"])
+def get_traversability_blocked() -> Response:
+    """
+    List the ways of a file the *Paths only* planner will not route over.
+
+    JSON body: ``file``, optional ``traversability`` YAML text (default: the
+    rule file) and ``allowed_ways`` (default ``["footway"]``). A way is
+    blocked when its category is not allowed or the rules (plus the always
+    excluded stairs) refuse it. Returns ``{"blocked": [[way_id, reason], ...]}``.
+    """
+    body = request.get_json(force=True) or {}
+    filename = body.get("file")
+    if not isinstance(filename, str) or not filename:
+        abort(400, "Missing file")
+    allowed = body.get("allowed_ways", ["footway"])
+    if not isinstance(allowed, list):
+        abort(400, "allowed_ways must be a list of strings")
+    rules = _request_rules(body).extend(NON_ROUTABLE_HIGHWAY_VALUES)
+    md, _ = get_merged_mapdata(filename)
+    if md is None:
+        abort(404, f"File {filename} not found")
+
+    blocked = []
+    for cat, ways in (("footway", md.footways_list), ("road", md.roads_list)):
+        for way in ways:
+            if cat not in allowed:
+                blocked.append([way.id, f"{cat}s not enabled"])
+                continue
+            verdict = rules.evaluate(way.tags)
+            if not verdict.traversable:
+                blocked.append([way.id, verdict.reason])
+    return jsonify({"blocked": blocked})
 
 
 _WAY_LISTS = (
@@ -3046,6 +3137,7 @@ def create_replan() -> Response:
     grid_cost_weight = body.get("grid_cost_weight")
     if grid_cost_weight is not None:
         grid_cost_weight = _validated_number(grid_cost_weight, "grid_cost_weight", 0.0, 1000.0)
+    traversability = _request_rules(body)
 
     md, _ = get_merged_mapdata(filename)
     if md is None:
@@ -3073,6 +3165,7 @@ def create_replan() -> Response:
             grid_cost_weight=grid_cost_weight,
             highway_costs=highway_costs,
             surface_costs=surface_costs,
+            traversability=traversability,
             transfer_id=transfer_id,
             max_grid_cells=MAX_GRID_CELLS,
         )
