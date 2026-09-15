@@ -110,14 +110,17 @@ from .helpers import (
     annotation_store,
     apply_added_nodes,
     apply_node_position_overrides,
+    edited_nodes_cache,
     geom_to_geojson,
     get_deleted_node_ids,
     get_deleted_way_ids,
+    get_detached_node_ids,
     get_node_position_overrides,
     get_split_node_ids,
     load_annotations,
     mapdata_to_geojson,
     migrate_change_log,
+    next_synthetic_node_id,
     rebuild_way_without_nodes,
     split_way,
     update_segment_annotations_for_split_change,
@@ -336,20 +339,7 @@ def _resolve_way(
         else:
             way = apply_added_nodes(_apply_overrides(way), store, zn, zl)
 
-        synth_nc: dict[int, dict[str, Any]] = {}
-        for a in store.get("added_nodes", []):
-            if a.get("way_id") == search_id:
-                pos_ov = (
-                    store.get("node_position_overrides", {})
-                    .get(str(search_id), {})
-                    .get(str(a["id"]))
-                )
-                synth_nc[a["id"]] = {
-                    "lat": float(pos_ov["lat"] if pos_ov else a["lat"]),
-                    "lon": float(pos_ov["lon"] if pos_ov else a["lon"]),
-                    "tags": {},
-                }
-        effective_nc = {**nodes_cache, **synth_nc}
+        effective_nc = edited_nodes_cache(store, nodes_cache, search_id)
 
     return _ResolvedWay(way=way, category=category, effective_nodes_cache=effective_nc)
 
@@ -412,7 +402,9 @@ def _select_segment(
     if not split_nids:
         return way
 
-    segments = split_way(way, split_nids, zn, zl, nodes_cache)
+    segments = split_way(
+        way, split_nids, zn, zl, nodes_cache, get_detached_node_ids(store, search_id)
+    )
     if segment_idx >= len(segments):
         abort(404, "Segment not found")
 
@@ -1577,7 +1569,7 @@ def get_way(way_id: str) -> Response:
 
     way = resolved.way
     category = resolved.category
-    nodes_cache = getattr(md, "nodes_cache", {})
+    nodes_cache = resolved.effective_nodes_cache
     zn, zl = md.zone_number, md.zone_letter
 
     way = _select_segment(way, way_id, search_id, store, zn, zl, nodes_cache, category)
@@ -1806,7 +1798,9 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
     effective_nc = resolved.effective_nodes_cache
 
     split_nids = get_split_node_ids(store, search_id)
-    segments = split_way(way, split_nids, zn, zl, effective_nc)
+    segments = split_way(
+        way, split_nids, zn, zl, effective_nc, get_detached_node_ids(store, search_id)
+    )
 
     features = []
     tag_overrides = store.get("tag_overrides", {})
@@ -1850,6 +1844,11 @@ def split_way_endpoint() -> Response:
     have several split points, producing more than two segments) and
     then recomputes every segment via :func:`_get_way_segments_geojson`
     so the client can immediately render the result.
+
+    The split detaches the segments: the one after the split starts at a new
+    synthetic copy of *node_id* (``store["detached_nodes"]``, inheriting any
+    move of the node), so both ends can be moved independently and the
+    planner does not route across the split.
 
     Parameters (JSON body)
     -----------------------
@@ -1899,6 +1898,14 @@ def split_way_endpoint() -> Response:
             way_splits.append(node_id_int)
             new_splits = list(way_splits)
 
+            detached_id = next_synthetic_node_id(store)
+            store.setdefault("detached_nodes", []).append(
+                {"way_id": int(original_way_id), "node_id": node_id_int, "id": detached_id}
+            )
+            way_ov = store.get("node_position_overrides", {}).get(original_way_id, {})
+            if str(node_id_int) in way_ov:
+                way_ov[str(detached_id)] = dict(way_ov[str(node_id_int)])
+
             # Re-map segment references
             path = _safe_data_path(filename)
             md = load_mapdata_cached(str(path))
@@ -1922,6 +1929,11 @@ def undo_way_split() -> Response:
     The way still ends up split if other split points remain on it;
     removing the last one collapses ``split_ways`` back to a single
     unsplit way.
+
+    The split node is restored as it was in the map: its detached copy is
+    dropped along with any deletion of it, and the moves of both ends are
+    discarded (the way's ``move`` change-log entry goes too once no moved
+    node is left).
 
     Returns
     -------
@@ -1954,6 +1966,22 @@ def undo_way_split() -> Response:
                 splits[str(way_id_int)] = new_splits
                 if not new_splits:
                     del splits[str(way_id_int)]
+
+                detached_id = get_detached_node_ids(store, way_id_int).get(node_id_int)
+                if detached_id is not None:
+                    store["detached_nodes"] = [
+                        d for d in store["detached_nodes"] if d["id"] != detached_id
+                    ]
+                    store["deleted_nodes"] = [
+                        d for d in store.get("deleted_nodes", []) if d["node_id"] != detached_id
+                    ]
+                overrides = store.get("node_position_overrides", {})
+                way_ov = overrides.get(str(way_id_int), {})
+                way_ov.pop(str(node_id_int), None)
+                way_ov.pop(str(detached_id), None)
+                if str(way_id_int) in overrides and not way_ov:
+                    del overrides[str(way_id_int)]
+                    _log_remove(store, "move", id=way_id_int)
 
                 path = _safe_data_path(filename)
                 md = load_mapdata_cached(str(path))
@@ -2118,8 +2146,7 @@ def add_way_node() -> Response:
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
-        existing_ids = [a["id"] for a in store.get("added_nodes", []) if a["id"] < 0]
-        synth_id = (min(existing_ids) - 1) if existing_ids else -1
+        synth_id = next_synthetic_node_id(store)
 
         store.setdefault("added_nodes", []).append(
             {
@@ -2184,8 +2211,9 @@ def delete_way_node() -> Response:
     with annotation_store(ann_path) as store:
         migrate_change_log(store)
 
-        # Synthetic nodes (negative IDs) live in added_nodes, not in the OSM node list
-        if node_id < 0:
+        # Added nodes (negative IDs) live in added_nodes, not in the OSM node list;
+        # a detached split end is deleted per segment like a real node.
+        if node_id < 0 and node_id not in get_detached_node_ids(store, way_id_int).values():
             store["added_nodes"] = [
                 a
                 for a in store.get("added_nodes", [])

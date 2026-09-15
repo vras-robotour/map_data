@@ -79,6 +79,7 @@ Annotation files are written alongside the `.mapdata` file as `<stem>.annotation
 | `hidden_ways` | list | Ways temporarily hidden but not deleted |
 | `tag_overrides` | object | Per-way OSM tag edits |
 | `split_ways` | object | Node IDs at which a way is split into segments |
+| `detached_nodes` | list | Synthetic node that starts the segment after a split |
 | `deleted_nodes` | object | Node IDs deleted from specific ways |
 | `node_position_overrides` | object | Dragged node position corrections |
 | `change_log` | list | Audit log of all user-initiated changes |
@@ -134,6 +135,23 @@ Keys are way IDs as strings; values are lists of OSM node IDs at which the way i
   "123456789": [9876543, 9876544]
 }
 ```
+
+### `detached_nodes` list
+
+A split made in the viewer detaches the segments. The segment after the split
+starts at its own copy of the split node, with a negative synthetic `id`. This
+means each end can be moved on its own, and the planner does not route across
+the split. Splits without an entry (older stores) keep sharing the node.
+Undoing the split removes the entry and the position overrides of both ends.
+
+```json
+[
+  {"way_id": 123456789, "node_id": 9876543, "id": -3}
+]
+```
+
+Positions of moved nodes, including detached ends, are also what the graph
+planner uses.
 
 ### `deleted_nodes` object
 

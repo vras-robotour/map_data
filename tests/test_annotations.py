@@ -287,6 +287,58 @@ def test_loader_folds_exclude_highway_into_the_rules(footway_network_mapdata):
     assert [w.id for w in md.footways_list] == [1, 2, 3]
 
 
+def _plan_with_store(path, lat0, lon0, store, start, goal):
+    annotation_path_for(path).write_text(json.dumps({"version": 1, "annotations": [], **store}))
+    md, _ = load_mapdata_with_annotations(path)
+    return plan_route(md, [_latlon(lat0, lon0, *start), _latlon(lat0, lon0, *goal)])
+
+
+def test_moved_node_is_where_the_planner_routes(footway_network_mapdata):
+    """Node 103 dragged from (200,0) to (200,60): the route has to reach it there."""
+    path, lat0, lon0 = footway_network_mapdata
+    lat, lon = _latlon(lat0, lon0, 200.0, 60.0)
+    store = {"node_position_overrides": {"1": {"103": {"lat": lat, "lon": lon}}}}
+    res = _plan_with_store(path, lat0, lon0, store, (0.0, 0.0), (200.0, 60.0))
+    assert res.length_m == pytest.approx(100.0 + (100.0**2 + 60.0**2) ** 0.5, abs=5.0)
+
+
+def test_added_node_is_routable(footway_network_mapdata):
+    """A node inserted after 101 at (50,30) bends way 1 through it on the way to 102."""
+    path, lat0, lon0 = footway_network_mapdata
+    lat, lon = _latlon(lat0, lon0, 50.0, 30.0)
+    store = {"added_nodes": [{"id": -1, "way_id": 1, "after_node_id": 101, "lat": lat, "lon": lon}]}
+    res = _plan_with_store(path, lat0, lon0, store, (0.0, 0.0), (200.0, 0.0))
+    assert res.length_m == pytest.approx(2 * (50.0**2 + 30.0**2) ** 0.5 + 100.0, abs=5.0)
+
+
+def test_detached_split_disconnects_the_segments(footway_network_mapdata):
+    """Way 1 split at 102 with the far end detached: 103 is no longer reachable from 101."""
+    path, lat0, lon0 = footway_network_mapdata
+    split = {"split_ways": {"1": [102]}}
+    detached = {**split, "detached_nodes": [{"way_id": 1, "node_id": 102, "id": -1}]}
+
+    res = _plan_with_store(path, lat0, lon0, split, (0.0, 0.0), (200.0, 0.0))
+    assert res.length_m == pytest.approx(200.0, abs=5.0), "a plain split stays connected"
+
+    with pytest.raises(RoutePlanningError):
+        _plan_with_store(path, lat0, lon0, detached, (0.0, 0.0), (200.0, 0.0))
+
+
+def test_detached_end_moves_on_its_own(footway_network_mapdata):
+    """Dragging the detached copy of 102 to (130,0) leaves 102 itself where it was."""
+    path, lat0, lon0 = footway_network_mapdata
+    lat, lon = _latlon(lat0, lon0, 130.0, 0.0)
+    store = {
+        "split_ways": {"1": [102]},
+        "detached_nodes": [{"way_id": 1, "node_id": 102, "id": -1}],
+        "node_position_overrides": {"1": {"-1": {"lat": lat, "lon": lon}}},
+    }
+    res = _plan_with_store(path, lat0, lon0, store, (200.0, 0.0), (130.0, 0.0))
+    assert res.length_m == pytest.approx(70.0, abs=5.0)
+    res = _plan_with_store(path, lat0, lon0, store, (0.0, 0.0), (100.0, 100.0))
+    assert res.length_m == pytest.approx(200.0, abs=5.0)
+
+
 @pytest.mark.skipif(not KRALOVSKA.is_file(), reason="kralovska_obora.mapdata is not in the repo")
 def test_shipped_rules_on_the_stromovka_map():
     """

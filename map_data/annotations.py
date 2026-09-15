@@ -29,9 +29,11 @@ from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES, Way
 from map_data.viewer.helpers import (
     apply_added_nodes,
     apply_node_position_overrides,
+    edited_nodes_cache,
     geojson_geom_to_utm,
     get_deleted_node_ids,
     get_deleted_way_ids,
+    get_detached_node_ids,
     get_node_position_overrides,
     get_split_node_ids,
     load_annotations,
@@ -66,9 +68,13 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
     Reassigns ``roads_list``/``footways_list``/``barriers_list`` (and
     ``crossroads_list`` when a way list changed); individual ``Way`` objects
     of the input lists are never mutated, so this is safe on a shallow copy.
+
+    ``md.nodes_cache`` is replaced (not mutated) by one that also holds added
+    nodes, detached split ends and moved positions, since the graph planner
+    takes node positions from it.
     """
     zn, zl = md.zone_number, md.zone_letter
-    nodes_cache = getattr(md, "nodes_cache", {})
+    nodes_cache = md.nodes_cache = edited_nodes_cache(store, getattr(md, "nodes_cache", None))
 
     deleted_way_ids = get_deleted_way_ids(store)
     has_node_dels = bool(store.get("deleted_nodes"))
@@ -92,7 +98,9 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
 
                 split_nids = get_split_node_ids(store, w.id)
                 if split_nids:
-                    segments = split_way(w, split_nids, zn, zl, nodes_cache)
+                    segments = split_way(
+                        w, split_nids, zn, zl, nodes_cache, get_detached_node_ids(store, w.id)
+                    )
                     for i, seg in enumerate(segments):
                         virtual_id = f"{w.id}:{i}"
                         seg.id = virtual_id
@@ -179,10 +187,11 @@ def merge_annotations(md: MapData, store: dict[str, Any]) -> None:
     """
     zn, zl = md.zone_number, md.zone_letter
     ann_id = -1
-    node_id = -1
     ann_lines: list[tuple[Way, Any]] = []  # annotated path ways with their centre lines
     if not hasattr(md, "nodes_cache") or md.nodes_cache is None:
         md.nodes_cache = {}
+    # Below the synthetic ids apply_way_edits may already have put in the cache.
+    node_id = min([0, *md.nodes_cache]) - 1
     for ann in store.get("annotations", []):
         geom = geojson_geom_to_utm(ann["geometry"], zn, zl)
         if geom is None:

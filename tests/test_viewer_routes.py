@@ -461,6 +461,70 @@ def test_split_undo_moves_segment_deletion_to_plain_id(app_client_3node, tmp_pat
     assert 2 not in _mapdata_way_ids(client, filename)
 
 
+def _way_nodes(client, filename, way_id):
+    return client.get(f"/api/way_nodes?file={filename}&way_id={way_id}").get_json()["nodes"]
+
+
+def _move_node(client, filename, way_id, node_id, lat, lon):
+    resp = client.put(
+        f"/api/way_nodes/move?file={filename}&way_id={way_id}",
+        json={"nodes": [{"id": node_id, "lat": lat, "lon": lon}]},
+    )
+    assert resp.status_code == 204
+
+
+def _split_at_202(client, filename):
+    client.post(f"/api/ways/split?file={filename}", json={"way_id": 2, "node_id": 202})
+    return _way_nodes(client, filename, "2:1")[0]["id"]
+
+
+def test_split_detaches_the_ends_so_they_move_independently(app_client_3node):
+    client, _, filename = app_client_3node
+    orig = _way_nodes(client, filename, 2)[1]
+    detached_id = _split_at_202(client, filename)
+    assert detached_id < 0, "the second segment starts at its own copy of node 202"
+    assert _way_nodes(client, filename, "2:0")[-1]["id"] == 202
+
+    _move_node(client, filename, "2:1", detached_id, orig["lat"] + 1e-4, orig["lon"])
+
+    assert _way_nodes(client, filename, "2:0")[-1]["lat"] == pytest.approx(orig["lat"])
+    assert _way_nodes(client, filename, "2:1")[0]["lat"] == pytest.approx(orig["lat"] + 1e-4)
+    seg1 = client.get(f"/api/ways/2:1?file={filename}").get_json()
+    assert seg1["geometry"]["coordinates"][0][1] == pytest.approx(orig["lat"] + 1e-4)
+
+
+def test_split_undo_drops_the_moves_of_both_ends(app_client_3node, tmp_path):
+    client, _, filename = app_client_3node
+    orig = _way_nodes(client, filename, 2)[1]
+    detached_id = _split_at_202(client, filename)
+    _move_node(client, filename, "2:0", 202, orig["lat"] - 1e-4, orig["lon"])
+    _move_node(client, filename, "2:1", detached_id, orig["lat"] + 1e-4, orig["lon"])
+
+    resp = client.delete(f"/api/ways/split?file={filename}&way_id=2&node_id=202")
+    assert len(resp.get_json()["segments"]) == 1
+
+    store = json.loads((tmp_path / "three.annotations.json").read_text())
+    assert not store.get("detached_nodes")
+    assert not store.get("node_position_overrides", {}).get("2")
+    assert not any(e["type"] == "move" for e in store["change_log"])
+    nodes = _way_nodes(client, filename, 2)
+    assert [n["id"] for n in nodes] == [201, 202, 203]
+    assert nodes[1]["lat"] == pytest.approx(orig["lat"])
+
+
+def test_split_undo_keeps_moves_of_other_nodes(app_client_3node, tmp_path):
+    client, _, filename = app_client_3node
+    orig = _way_nodes(client, filename, 2)[0]
+    _split_at_202(client, filename)
+    _move_node(client, filename, "2:0", 201, orig["lat"] - 1e-4, orig["lon"])
+
+    client.delete(f"/api/ways/split?file={filename}&way_id=2&node_id=202")
+
+    assert _way_nodes(client, filename, 2)[0]["lat"] == pytest.approx(orig["lat"] - 1e-4)
+    store = json.loads((tmp_path / "three.annotations.json").read_text())
+    assert any(e["type"] == "move" for e in store["change_log"])
+
+
 # ── fetch_area / upload_gpx area limit ──────────────────────────────────────
 
 

@@ -438,6 +438,66 @@ def get_split_node_ids(store: dict[str, Any], way_id: int | str) -> list[int]:
     return [int(nid) for nid in way_splits]
 
 
+def get_detached_node_ids(store: dict[str, Any], way_id: int | str) -> dict[int, int]:
+    """
+    Map each detached split node of a way to the node that starts the next segment.
+
+    A split made in the viewer detaches the segments: the one after the split
+    starts at its own synthetic copy of the split node (``store["detached_nodes"]``
+    entries ``{"way_id", "node_id", "id"}``), so each end can be moved alone and
+    the planner no longer joins them. Splits without an entry (older stores)
+    keep sharing the node. *way_id* may carry a ``":<segment_index>"`` suffix.
+    """
+    original_id = int(str(way_id).split(":")[0])
+    return {
+        d["node_id"]: d["id"] for d in store.get("detached_nodes", []) if d["way_id"] == original_id
+    }
+
+
+def next_synthetic_node_id(store: dict[str, Any]) -> int:
+    """Next free negative node ID, shared by added nodes and detached split ends."""
+    ids = [a["id"] for a in store.get("added_nodes", [])]
+    ids += [d["id"] for d in store.get("detached_nodes", [])]
+    return min([0, *ids]) - 1
+
+
+def edited_nodes_cache(
+    store: dict[str, Any],
+    nodes_cache: dict[int, dict[str, Any]] | None,
+    way_id: int | str | None = None,
+) -> dict[int, dict[str, Any]]:
+    """
+    Return *nodes_cache* plus the store's synthetic nodes, with moved positions applied.
+
+    Adds user-added nodes and detached split ends, then overlays
+    ``node_position_overrides`` -- for *way_id* only (segment suffix
+    stripped), or for every way when ``None``. *nodes_cache* is not mutated.
+    """
+    base = nodes_cache or {}
+    wanted = None if way_id is None else int(str(way_id).split(":")[0])
+    extra: dict[int, dict[str, Any]] = {}
+
+    for a in store.get("added_nodes", []):
+        if wanted in (None, a.get("way_id")):
+            extra[a["id"]] = {"lat": float(a["lat"]), "lon": float(a["lon"]), "tags": {}}
+    for d in store.get("detached_nodes", []):
+        src = extra.get(d["node_id"]) or base.get(d["node_id"])
+        if wanted in (None, d["way_id"]) and src:
+            extra[d["id"]] = {"lat": src["lat"], "lon": src["lon"], "tags": {}}
+    # ponytail: overrides are per way but the cache is per node, so a junction node
+    # moved differently in two ways keeps the last one; key the cache by (way, node) if that bites.
+    for wid, way_ov in store.get("node_position_overrides", {}).items():
+        if wanted not in (None, int(wid)):
+            continue
+        for nid_str, pos in way_ov.items():
+            nid = int(nid_str)
+            src = extra.get(nid) or base.get(nid)
+            if src:
+                extra[nid] = {**src, "lat": float(pos["lat"]), "lon": float(pos["lon"])}
+
+    return {**base, **extra} if extra else base
+
+
 def _buffer_radius(geom: "BaseGeometry", min_radius: float = 0.0) -> float:
     """
     Recover a buffered way's original buffer radius from its polygon.
@@ -513,6 +573,7 @@ def split_way(
     zone_number: int | None = None,
     zone_letter: str | None = None,
     nodes_cache: dict[int, dict[str, Any]] | None = None,
+    detached: dict[int, int] | None = None,
 ) -> list["Way"]:
     """
     Split a way into segments at the given interior node IDs.
@@ -554,6 +615,10 @@ def split_way(
     nodes_cache : dict, optional
         Fallback ``{node_id: {"lat": ..., "lon": ...}}`` lookup used when a
         node object in ``way.nodes`` doesn't carry its own coordinates.
+    detached : dict of {int: int}, optional
+        Split node ID -> synthetic node ID starting the following segment
+        instead (see :func:`get_detached_node_ids`). Its position comes from
+        *nodes_cache* when *zone_number*/*zone_letter* are given.
 
     Returns
     -------
@@ -634,9 +699,21 @@ def split_way(
                 w.line = ls.buffer(radius) if is_buffered else ls
                 segments.append(w)
 
-            # Start new segment with the split node
+            # Start new segment with the split node, or its detached copy
             current_nodes = [way.nodes[i]]
             current_coords = [raw_coords[i]]
+            did = (detached or {}).get(nid)
+            if did is not None:
+                current_nodes = [did]
+                pos = (nodes_cache or {}).get(did)
+                if pos and zone_number is not None and zone_letter is not None:
+                    e, nn, _, _ = utm.from_latlon(
+                        float(pos["lat"]),
+                        float(pos["lon"]),
+                        force_zone_number=zone_number,
+                        force_zone_letter=zone_letter,
+                    )
+                    current_coords = [(e, nn)]
 
     # Last segment
     if len(current_nodes) >= 2:
