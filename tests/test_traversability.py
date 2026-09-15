@@ -237,7 +237,8 @@ def test_shipped_defaults_refuse_what_the_robot_cannot_drive():
 
     assert not rules.is_traversable(_way(highway="steps"))
     assert not rules.is_traversable(_way(highway="footway", surface="grass"))
-    assert not rules.is_traversable(_way(highway="footway", bridge="yes"))
+    assert not rules.is_traversable(_way(highway="footway", bridge="boardwalk"))
+    assert rules.is_traversable(_way(highway="footway", bridge="yes"))
     assert not rules.is_traversable(_way(highway="footway", smoothness="very_bad"))
     assert not rules.is_traversable(_way(highway="footway", access="private"))
     assert rules.is_traversable(_way(highway="footway", surface="asphalt"))

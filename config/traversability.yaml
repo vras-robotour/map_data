@@ -37,7 +37,7 @@ rules:
   #   traversable: false
   #   reason: tunnel (GNSS loss)
 
-  - match: { bridge: "*" }
+  - match: { bridge: boardwalk }
     traversable: false
     reason: bridge
 
@@ -49,6 +49,6 @@ rules:
     traversable: false
     reason: no access
 
-  - match: { informal: "yes" }
+  - match: { informal: yes }
     cost: 1.0
     reason: informal path
