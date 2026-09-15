@@ -1252,6 +1252,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#detached_nodes-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        detached_nodes list
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#deleted_nodes-object" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1621,6 +1632,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#detached_nodes-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        detached_nodes list
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#deleted_nodes-object" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1849,6 +1871,11 @@ use in QGIS, geojson.io, or other GIS tools.</p>
 <td>Node IDs at which a way is split into segments</td>
 </tr>
 <tr>
+<td><code>detached_nodes</code></td>
+<td>list</td>
+<td>Synthetic node that starts the segment after a split</td>
+</tr>
+<tr>
 <td><code>deleted_nodes</code></td>
 <td>object</td>
 <td>Node IDs deleted from specific ways</td>
@@ -1903,39 +1930,51 @@ use in QGIS, geojson.io, or other GIS tools.</p>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">"123456789"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">9876543</span><span class="p">,</span><span class="w"> </span><span class="mi">9876544</span><span class="p">]</span>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="p">}</span>
 </span></code></pre></div>
+<h3 id="detached_nodes-list"><code>detached_nodes</code> list</h3>
+<p>A split made in the viewer detaches the segments. The segment after the split
+starts at its own copy of the split node, with a negative synthetic <code>id</code>. This
+means each end can be moved on its own, and the planner does not route across
+the split. Splits without an entry (older stores) keep sharing the node.
+Undoing the split removes the entry and the position overrides of both ends.</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p">[</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="p">{</span><span class="nt">"way_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">123456789</span><span class="p">,</span><span class="w"> </span><span class="nt">"node_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">9876543</span><span class="p">,</span><span class="w"> </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">-3</span><span class="p">}</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="p">]</span>
+</span></code></pre></div>
+<p>Positions of moved nodes, including detached ends, are also what the graph
+planner uses.</p>
 <h3 id="deleted_nodes-object"><code>deleted_nodes</code> object</h3>
 <p>Keys are way IDs as strings; values are lists of OSM node IDs deleted from that way:</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p">{</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">"123456789"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">9876540</span><span class="p">,</span><span class="w"> </span><span class="mi">9876541</span><span class="p">]</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="p">}</span>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">"123456789"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="mi">9876540</span><span class="p">,</span><span class="w"> </span><span class="mi">9876541</span><span class="p">]</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="p">}</span>
 </span></code></pre></div>
 <h3 id="node_position_overrides-object"><code>node_position_overrides</code> object</h3>
 <p>Keys are way IDs as strings; values are dicts mapping node IDs (as strings) to corrected <code>{lat, lon}</code> positions:</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">"123456789"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="nt">"9876542"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"lat"</span><span class="p">:</span><span class="w"> </span><span class="mf">50.1235</span><span class="p">,</span><span class="w"> </span><span class="nt">"lon"</span><span class="p">:</span><span class="w"> </span><span class="mf">14.5679</span><span class="p">}</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span><span class="p">}</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="p">}</span>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="nt">"123456789"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="nt">"9876542"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"lat"</span><span class="p">:</span><span class="w"> </span><span class="mf">50.1235</span><span class="p">,</span><span class="w"> </span><span class="nt">"lon"</span><span class="p">:</span><span class="w"> </span><span class="mf">14.5679</span><span class="p">}</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="p">}</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="p">}</span>
 </span></code></pre></div>
 <h3 id="change_log-list"><code>change_log</code> list</h3>
 <p>An ordered audit log. Each entry has a <code>type</code> field and optional <code>ts</code> (ISO timestamp for user-initiated changes):</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">[</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"way"</span><span class="p">,</span><span class="w">  </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">123456789</span><span class="p">,</span><span class="w"> </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"barrier"</span><span class="p">,</span><span class="w"> </span><span class="nt">"label"</span><span class="p">:</span><span class="w"> </span><span class="s2">"building"</span><span class="p">,</span><span class="w"> </span><span class="nt">"ts"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2025-11-01T10:00:00Z"</span><span class="p">},</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"node"</span><span class="p">,</span><span class="w"> </span><span class="nt">"way_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">123456789</span><span class="p">,</span><span class="w"> </span><span class="nt">"node_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">9876540</span><span class="p">,</span><span class="w"> </span><span class="nt">"ts"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2025-11-01T10:01:00Z"</span><span class="p">},</span>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tag"</span><span class="p">,</span><span class="w">  </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">987654321</span><span class="p">},</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">  </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"move"</span><span class="p">,</span><span class="w"> </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">123456789</span><span class="p">,</span><span class="w"> </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"footway"</span><span class="p">,</span><span class="w"> </span><span class="nt">"label"</span><span class="p">:</span><span class="w"> </span><span class="s2">""</span><span class="p">},</span>
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">  </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"split"</span><span class="p">,</span><span class="nt">"way_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">123456789</span><span class="p">,</span><span class="w"> </span><span class="nt">"node_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">9876543</span><span class="p">}</span>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="p">]</span>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p">[</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"way"</span><span class="p">,</span><span class="w">  </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">123456789</span><span class="p">,</span><span class="w"> </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"barrier"</span><span class="p">,</span><span class="w"> </span><span class="nt">"label"</span><span class="p">:</span><span class="w"> </span><span class="s2">"building"</span><span class="p">,</span><span class="w"> </span><span class="nt">"ts"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2025-11-01T10:00:00Z"</span><span class="p">},</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"node"</span><span class="p">,</span><span class="w"> </span><span class="nt">"way_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">123456789</span><span class="p">,</span><span class="w"> </span><span class="nt">"node_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">9876540</span><span class="p">,</span><span class="w"> </span><span class="nt">"ts"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2025-11-01T10:01:00Z"</span><span class="p">},</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">  </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"tag"</span><span class="p">,</span><span class="w">  </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">987654321</span><span class="p">},</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">  </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"move"</span><span class="p">,</span><span class="w"> </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">123456789</span><span class="p">,</span><span class="w"> </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"footway"</span><span class="p">,</span><span class="w"> </span><span class="nt">"label"</span><span class="p">:</span><span class="w"> </span><span class="s2">""</span><span class="p">},</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">  </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"split"</span><span class="p">,</span><span class="nt">"way_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">123456789</span><span class="p">,</span><span class="w"> </span><span class="nt">"node_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">9876543</span><span class="p">}</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="p">]</span>
 </span></code></pre></div>
 <hr />
 <h2 id="gpx-waypoint-format">GPX waypoint format</h2>
 <p><code>MapData</code> reads standard <strong>GPX 1.1</strong> files (used for map creation, e.g. <code>create_mapdata</code> and <code>osm_cloud</code>'s <code>gpx_file</code> parameter). It reads <code>&lt;wpt&gt;</code> elements if the file has any; otherwise it falls back to track points (<code>&lt;trkpt&gt;</code>) from <code>&lt;trk&gt;</code> elements, and then to route points (<code>&lt;rtept&gt;</code>) from <code>&lt;rte&gt;</code> elements. Loading fails if none of the three are present.</p>
-<div class="language-xml highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="cp">&lt;?xml version="1.0" encoding="UTF-8"?&gt;</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nt">&lt;gpx</span><span class="w"> </span><span class="na">xmlns=</span><span class="s">"http://www.topografix.com/GPX/1/1"</span><span class="w"> </span><span class="na">version=</span><span class="s">"1.1"</span><span class="w"> </span><span class="na">creator=</span><span class="s">"MapData Planner"</span><span class="nt">&gt;</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="nt">&lt;wpt</span><span class="w"> </span><span class="na">lat=</span><span class="s">"50.1234"</span><span class="w"> </span><span class="na">lon=</span><span class="s">"14.5678"</span><span class="nt">&gt;&lt;/wpt&gt;</span>
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">  </span><span class="nt">&lt;wpt</span><span class="w"> </span><span class="na">lat=</span><span class="s">"50.1240"</span><span class="w"> </span><span class="na">lon=</span><span class="s">"14.5690"</span><span class="nt">&gt;&lt;/wpt&gt;</span>
-</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">  </span><span class="nt">&lt;wpt</span><span class="w"> </span><span class="na">lat=</span><span class="s">"50.1250"</span><span class="w"> </span><span class="na">lon=</span><span class="s">"14.5700"</span><span class="nt">&gt;&lt;/wpt&gt;</span>
-</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="nt">&lt;/gpx&gt;</span>
+<div class="language-xml highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="cp">&lt;?xml version="1.0" encoding="UTF-8"?&gt;</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="nt">&lt;gpx</span><span class="w"> </span><span class="na">xmlns=</span><span class="s">"http://www.topografix.com/GPX/1/1"</span><span class="w"> </span><span class="na">version=</span><span class="s">"1.1"</span><span class="w"> </span><span class="na">creator=</span><span class="s">"MapData Planner"</span><span class="nt">&gt;</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">  </span><span class="nt">&lt;wpt</span><span class="w"> </span><span class="na">lat=</span><span class="s">"50.1234"</span><span class="w"> </span><span class="na">lon=</span><span class="s">"14.5678"</span><span class="nt">&gt;&lt;/wpt&gt;</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">  </span><span class="nt">&lt;wpt</span><span class="w"> </span><span class="na">lat=</span><span class="s">"50.1240"</span><span class="w"> </span><span class="na">lon=</span><span class="s">"14.5690"</span><span class="nt">&gt;&lt;/wpt&gt;</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">  </span><span class="nt">&lt;wpt</span><span class="w"> </span><span class="na">lat=</span><span class="s">"50.1250"</span><span class="w"> </span><span class="na">lon=</span><span class="s">"14.5700"</span><span class="nt">&gt;&lt;/wpt&gt;</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="nt">&lt;/gpx&gt;</span>
 </span></code></pre></div>
 <p>YAML waypoint files are not supported.</p>
 
