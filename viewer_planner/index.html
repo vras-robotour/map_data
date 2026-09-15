@@ -1628,8 +1628,8 @@ preferred during <strong>all-terrain</strong> planning (do not apply to paths on
 <p>The <strong>Traversability Rules</strong> button opens <code>config/traversability.yaml</code> (see
 <a href="../planning/#traversability-rules">Traversability rules</a>) in an editor. <strong>Apply</strong> checks
 the rules and uses them for <strong>Paths only</strong> planning in this browser tab. <strong>Save to file</strong>
-also writes them to the file, comments included. The ROS nodes read the file only at
-startup, so restart them after saving. <strong>Reload from file</strong> throws away the edits.</p>
+also writes them to the file, comments included. <code>route_planner</code> picks up the saved
+file on its next goal; <code>osm_cloud</code> reads it only at startup, so restart it after saving. <strong>Reload from file</strong> throws away the edits.</p>
 <p><strong>Show only plannable ways</strong> hides the ways that <strong>Paths only</strong> will not route over:
 ways the rules refuse, stairs, and roads or footways whose checkbox is off. The ways
 come back when you leave the planner or clear the checkbox.</p>

@@ -2058,8 +2058,9 @@ removing the two tunnels turned a 751 m route into 2495 m.</p>
 </tr>
 </tbody>
 </table>
-<p>The nodes read the file once at startup and include it (with its mtime) in their map and
-planner caches: edit the file, restart the node. Both nodes must be given the same file,
+<p><code>route_planner</code> includes the file's mtime in its map and planner caches, so an edit is
+picked up by the next goal. <code>osm_cloud</code> reads it once at startup: edit the file, restart
+that node. Both nodes must be given the same file,
 or <code>osm_cloud</code> publishes rings on ways the planner refuses.</p>
 <h2 id="python-library">Python Library</h2>
 <p>All planners work standalone — no ROS2 context required.</p>
