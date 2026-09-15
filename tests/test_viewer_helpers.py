@@ -97,6 +97,19 @@ def test_save_and_load_annotations_roundtrip(tmp_path):
     assert loaded == store
 
 
+def test_save_annotations_writes_through_symlink(tmp_path):
+    # colcon symlink-install: install/.../data/x.annotations.json -> src/.../data/x.annotations.json
+    target = tmp_path / "src" / "ann.json"
+    target.parent.mkdir()
+    target.write_text("{}")
+    link = tmp_path / "ann.json"
+    link.symlink_to(target)
+    store = {"version": 1, "annotations": [], "deleted_ways": [{"id": 5}]}
+    save_annotations(str(link), store)
+    assert link.is_symlink()
+    assert json.loads(target.read_text()) == store
+
+
 # ── get_deleted_way_ids ───────────────────────────────────────────────────────
 
 

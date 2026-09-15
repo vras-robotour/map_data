@@ -63,8 +63,9 @@ def map_data_to_dict(md: "MapData") -> dict[str, Any]:
 
 def atomic_write_json(path: str | Path, data: Any, **dump_kwargs: Any) -> None:
     """Dump JSON to a temp file next to ``path``, then replace it, so a crash or
-    full disk mid-dump cannot truncate a previously good file."""
-    p = Path(path)
+    full disk mid-dump cannot truncate a previously good file. A symlinked ``path``
+    is written through to its target (colcon symlink-install data files)."""
+    p = Path(path).resolve()
     fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=p.name + ".", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
