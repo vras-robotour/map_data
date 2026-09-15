@@ -15,7 +15,6 @@
 
 route_planner:
   ros__parameters:
-
     # --- map -------------------------------------------------------------------------
     # Name in data_dir or an absolute path. Empty = every PlanRoute goal must name its map.
     mapdata_file: ""
@@ -67,11 +66,11 @@ route_planner:
     # --- interfaces ------------------------------------------------------------------
     # NavSatFix used by goals with start_from_robot and by the ~/goal shortcut.
     gps_fix_topic: "/fixposition/odometry_llh"
-    fix_max_age: 10.0                     # s after which the last fix counts as stale
-    goal_topic: "~/goal"                  # GeoPointStamped -> plan from the robot's fix
-    route_topic: "~/route"                # latched GeoPath (wgs84)
-    route_path_topic: "~/route_path"      # latched nav_msgs/Path in local_frame
-    status_topic: "~/status"              # latched String
-    mission_dir: "~/missions"             # planned routes are written here as GPX
-    earth_frame: "FP_ECEF"                # the ECEF -> local transform places route_local
+    fix_max_age: 10.0 # s after which the last fix counts as stale
+    goal_topic: "~/goal" # GeoPointStamped -> plan from the robot's fix
+    route_topic: "~/route" # latched GeoPath (wgs84)
+    route_path_topic: "~/route_path" # latched nav_msgs/Path in local_frame
+    status_topic: "~/status" # latched String
+    mission_dir: "~/missions" # planned routes are written here as GPX
+    earth_frame: "FP_ECEF" # the ECEF -> local transform places route_local
     local_frame: "FP_ENU0"
