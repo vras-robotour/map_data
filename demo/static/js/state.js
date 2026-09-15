@@ -23,6 +23,7 @@ let tagOverrides = [];            // [{id, category, label, tags}, ...] from ann
 let hiddenWays = [];            // [{id, category, label}, ...] from annotations store
 let changeLog = [];            // [{type:'way'|'node'|'tag', ...data}] in insertion order
 let hiddenWayIds = new Set();     // Set<number> for O(1) lookup
+let plannerBlockedIds = new Set(); // way IDs the Paths-only planner won't use, hidden in planner mode
 let editSelectedLayer = null;   // annotation layer selected in edit mode
 let annVertexLayer = null;      // LayerGroup for annotation vertex/midpoint markers in edit mode
 let annVertexMarkers_ann = [];   // vertex circle markers for the selected annotation

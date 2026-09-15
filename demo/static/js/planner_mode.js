@@ -17,6 +17,7 @@ class PlannerMode {
     this.highwayCosts = {};
     this.surfaceCosts = {};
     this.defaults = {};
+    this.rulesYaml = null; // applied, unsaved traversability rules; null = the rule file
     this._mapDragListeners = [];
 
     this.init();
@@ -82,10 +83,12 @@ class PlannerMode {
     this.updateUI(); // Ensure UI state is correct
     // Enable map click for adding points
     map.on('click', this.handleMapClick, this);
+    this._refilter();
   }
 
   disable() {
     this.active = false;
+    this._refilter();
     map.off('click', this.handleMapClick, this);
     this.clearMarkers();
     map.removeLayer(this.markerLayer);
@@ -130,6 +133,105 @@ class PlannerMode {
     document.getElementById('planner-costs-btn').addEventListener('click', () => this.showCostsModal());
     document.getElementById('planner-costs-save').addEventListener('click', () => this.saveCosts());
     document.getElementById('planner-costs-reset').addEventListener('click', () => this.resetCosts());
+
+    document.getElementById('planner-rules-btn').addEventListener('click', () => this.showRulesModal());
+    document.getElementById('planner-rules-reload').addEventListener('click', () => this.loadRulesFile());
+    document.getElementById('planner-rules-apply').addEventListener('click', () => this.applyRules(false));
+    document.getElementById('planner-rules-save').addEventListener('click', () => this.applyRules(true));
+    for (const id of ['planner-hide-blocked', 'plan-footways', 'plan-roads']) {
+      document.getElementById(id).addEventListener('change', () => this.refreshBlocked());
+    }
+  }
+
+  _allowedWays() {
+    const allowed = [];
+    if (document.getElementById('plan-footways').checked) allowed.push('footway');
+    if (document.getElementById('plan-roads').checked) allowed.push('road');
+    return allowed;
+  }
+
+  // Flask's abort() answers with an HTML page; pull the message out of it.
+  async _errorText(res) {
+    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+    return (doc.querySelector('p') || doc.body).textContent.trim();
+  }
+
+  _rulesError(msg) {
+    const el = document.getElementById('planner-rules-error');
+    el.textContent = msg || '';
+    el.hidden = !msg;
+  }
+
+  async showRulesModal() {
+    if (STATIC_BASE) {
+      setStatus('Traversability rules need the backend — run map_data_viewer locally', 'text-warning');
+      return;
+    }
+    this._rulesError('');
+    await this.loadRulesFile();
+    if (this.rulesYaml !== null) document.getElementById('planner-rules-text').value = this.rulesYaml;
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('planner-rules-modal')).show();
+  }
+
+  async loadRulesFile() {
+    try {
+      const res = await api('GET', '/api/traversability');
+      if (!res.ok) throw new Error(await this._errorText(res));
+      const data = await res.json();
+      document.getElementById('planner-rules-text').value = data.yaml;
+      document.getElementById('planner-rules-path').textContent = data.path;
+    } catch (err) {
+      this._rulesError(`Failed to load rules: ${err.message}`);
+    }
+  }
+
+  async _fetchBlocked(rulesYaml) {
+    const res = await api('POST', '/api/traversability/blocked', {
+      body: { file: currentFile, traversability: rulesYaml ?? undefined, allowed_ways: this._allowedWays() },
+    });
+    if (!res.ok) throw new Error(await this._errorText(res));
+    return (await res.json()).blocked;
+  }
+
+  async applyRules(save) {
+    const text = document.getElementById('planner-rules-text').value;
+    try {
+      if (save) {
+        const res = await api('PUT', '/api/traversability', { body: { traversability: text } });
+        if (!res.ok) throw new Error(await this._errorText(res));
+        this.rulesYaml = null;
+        setStatus(`Rules saved to ${(await res.json()).path}`, 'text-success');
+      } else {
+        // Without a map there is nothing to evaluate against; replanning reports bad rules instead.
+        if (currentFile) await this._fetchBlocked(text);
+        this.rulesYaml = text;
+        setStatus('Rules applied (not saved)', 'text-success');
+      }
+    } catch (err) {
+      this._rulesError(err.message);
+      return;
+    }
+    this._rulesError('');
+    bootstrap.Modal.getInstance(document.getElementById('planner-rules-modal')).hide();
+    this.refreshBlocked();
+  }
+
+  async refreshBlocked() {
+    plannerBlockedIds = new Set();
+    if (document.getElementById('planner-hide-blocked').checked && currentFile && !STATIC_BASE) {
+      try {
+        const blocked = await this._fetchBlocked(this.rulesYaml);
+        plannerBlockedIds = new Set(blocked.map(([id]) => id));
+        setStatus(`Hiding ${blocked.length} ways the planner won't use`, 'text-info');
+      } catch (err) {
+        setStatus(`Failed to evaluate rules: ${err.message}`, 'text-danger');
+      }
+    }
+    this._refilter();
+  }
+
+  _refilter() {
+    filterLayers(document.getElementById('feature-search')?.value || '');
   }
 
   showCostsModal() {
@@ -613,9 +715,7 @@ class PlannerMode {
     this.updateProcessingUI(true);
     setStatus('Replanning path...', 'text-warning');
 
-    const allowedWays = [];
-    if (document.getElementById('plan-footways').checked) allowedWays.push('footway');
-    if (document.getElementById('plan-roads').checked) allowedWays.push('road');
+    const allowedWays = this._allowedWays();
 
     const algorithm = document.querySelector('input[name="plan-mode"]:checked').value;
     const subAlgorithm = document.getElementById('sub-algorithm-select').value;
@@ -643,6 +743,7 @@ class PlannerMode {
           smooth_path: smooth,
           highway_costs: this.highwayCosts,
           surface_costs: this.surfaceCosts,
+          traversability: this.rulesYaml ?? undefined,
           transfer_id: this.currentReplanId
         })
       });
