@@ -2093,6 +2093,11 @@
 <h2 id="unreleased">[Unreleased]</h2>
 <h3 id="added">Added</h3>
 <ul>
+<li><code>plan_route()</code> and <code>route_planner</code> reject a start or goal more than
+  <code>outside_map_tolerance</code> (100 m) outside the map's area with <code>start_outside_map</code> /
+  <code>goal_outside_map</code> (any algorithm, checked before the snap distances; <code>route_planner</code> names
+  the loaded file), so a wrong map file or a QR code for another map fails at once instead of
+  planning towards the map's edge</li>
 <li>The viewer's tracker topics can be changed without a restart: <strong>Topics…</strong> in the Tracker
   sidebar resubscribes the running tracker and can save the topics back to its config file,
   comments kept (<code>GET</code>/<code>PUT /api/tracker/settings</code>). <code>map_data_viewer --config &lt;file&gt;</code> names

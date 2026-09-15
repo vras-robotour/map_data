@@ -1843,7 +1843,10 @@ caption off - the viewer draws its own as HTML text under the code.</p>
 <code>config/traversability.yaml</code> and <code>--no-traversability</code> with none at all (stairs are still
 excluded); see <a href="#traversability-rules">Traversability rules</a>.</p>
 <p><code>--goal</code> accepts the <code>geo:lat,lon</code> URI printed on a Robotour QR code. Failures are
-reported with a reason: <code>snap_too_far</code> (a point is farther than <code>--max-snap-distance</code>
+reported with a reason: <code>start_outside_map</code> / <code>goal_outside_map</code> (the first / last point
+lies more than 100 m outside the map's downloaded area; for the start nearly always the
+wrong map file),
+<code>snap_too_far</code> (a point is farther than <code>--max-snap-distance</code>
 from every allowed way), <code>unreachable</code> (disconnected network), <code>no_path</code>,
 <code>grid_too_large</code>, <code>too_few_points</code>.</p>
 <p>The graph planner returns on-network vertices only: a requested point that sits
@@ -1877,7 +1880,9 @@ single goal is enough; that fix is kept verbatim as the route's first point (the
 is where it is), and the leading leg is its way onto the network. The goal is kept
 verbatim too (<code>keep_goal</code>), so the route ends at the requested coordinate and its last
 leg leaves the network; a goal farther than <code>goal_max_snap_distance</code> from every allowed
-way fails with <code>snap_too_far</code> rather than being planned to somewhere else. The result carries
+way fails with <code>snap_too_far</code> rather than being planned to somewhere else. A start or goal
+more than <code>outside_map_tolerance</code> outside the map's area fails first (any algorithm) with
+<code>start_outside_map</code> / <code>goal_outside_map</code>, the message naming the loaded map file. The result carries
 the route as <code>geographic_msgs/GeoPath</code>, the
 same route as <code>nav_msgs/Path</code> in <code>local_frame</code> (through the <code>earth_frame -&gt; local_frame</code>
 transform, exactly as <code>osm_cloud</code> places the map), the length, the snap distances and the
@@ -1943,6 +1948,11 @@ robot's position with the default parameters.</p>
 <td><code>goal_max_snap_distance</code></td>
 <td><code>30.0</code></td>
 <td>graph: the goal's limit (m); farther fails with <code>snap_too_far</code></td>
+</tr>
+<tr>
+<td><code>outside_map_tolerance</code></td>
+<td><code>100.0</code></td>
+<td>m a start or goal may lie outside the map's area; farther fails with <code>start_outside_map</code> / <code>goal_outside_map</code></td>
 </tr>
 <tr>
 <td><code>keep_goal</code></td>
