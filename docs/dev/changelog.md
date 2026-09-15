@@ -4,6 +4,11 @@
 
 ### Added
 
+- `plan_route()` and `route_planner` reject a start or goal more than
+  `outside_map_tolerance` (100 m) outside the map's area with `start_outside_map` /
+  `goal_outside_map` (any algorithm, checked before the snap distances; `route_planner` names
+  the loaded file), so a wrong map file or a QR code for another map fails at once instead of
+  planning towards the map's edge
 - The viewer's tracker topics can be changed without a restart: **Topics…** in the Tracker
   sidebar resubscribes the running tracker and can save the topics back to its config file,
   comments kept (`GET`/`PUT /api/tracker/settings`). `map_data_viewer --config <file>` names

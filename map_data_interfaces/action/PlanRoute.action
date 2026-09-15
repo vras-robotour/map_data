@@ -30,8 +30,9 @@ string save_gpx
 ---
 # --- Result ---
 bool success
-# Failure reason on failure (too_few_points, snap_too_far, unreachable, no_path,
-# grid_too_large, no_fix, file_not_found, ...) or a summary on success.
+# Failure reason on failure (too_few_points, start_outside_map, goal_outside_map,
+# snap_too_far, unreachable, no_path, grid_too_large, no_fix, file_not_found, ...) or a
+# summary on success.
 string message
 string reason
 # The route in WGS84, header.frame_id = "wgs84".

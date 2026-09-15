@@ -48,6 +48,10 @@ keep_goal : bool
 goal_max_snap_distance : float
     Reject a goal farther than this (m) from every allowed way with
     ``snap_too_far`` (default 30 m). The start keeps ``max_snap_distance``.
+outside_map_tolerance : float
+    Reject a start or goal farther than this (m) outside the map's area with
+    ``start_outside_map`` / ``goal_outside_map`` (default 100 m); the message names the
+    loaded file, as a start off the map usually means the wrong one.
 fix_max_age : float
     Seconds after which the last fix is considered stale (0 = never).
 """
@@ -80,8 +84,10 @@ from map_data.annotations import NO_ANNOTATIONS, annotation_path_for, load_mapda
 from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE, GraphPlanner
 from map_data.pathsolver.route import (
     GRAPH_ALGORITHM,
+    OUTSIDE_MAP_TOLERANCE_M,
     RoutePlanningError,
     RouteResult,
+    check_in_map,
     latlon_to_utm_path,
     plan_route,
 )
@@ -145,6 +151,9 @@ class RoutePlanner(Node):
         # route. Off-network goals are driven as a final straight leg (keep_goal).
         self.default_keep_goal = bool(p("keep_goal", True).value)
         self.default_goal_max_snap = float(p("goal_max_snap_distance", 30.0).value)
+        self.outside_map_tolerance = float(
+            p("outside_map_tolerance", OUTSIDE_MAP_TOLERANCE_M).value
+        )
         self.default_cell_size = float(p("cell_size", 0.25).value)
         self.default_inflate = float(p("inflate_obstacles", 0.25).value)
         self.default_simplify = bool(p("simplify_path", True).value)
@@ -393,10 +402,19 @@ class RoutePlanner(Node):
             highway_types = list(goal.highway_types) or self.default_highway_types
             spacing = self.default_spacing if goal.spacing == 0.0 else max(goal.spacing, 0.0)
             max_snap = goal.max_snap_distance or self.default_max_snap
+            start_utm, goal_utm = latlon_to_utm_path(
+                [points[0], points[-1]], md.zone_number, md.zone_letter
+            )
+            # Before the snap check, so a point off the map is reported as such; the file is
+            # named because a start off the map is nearly always the wrong one loaded.
+            try:
+                check_in_map(md, start_utm, "start", self.outside_map_tolerance)
+                check_in_map(md, goal_utm, "goal", self.outside_map_tolerance)
+            except RoutePlanningError as e:
+                return fail(e.reason, f"{e.message}: {path}")
             planner = None
             if algorithm == GRAPH_ALGORITHM:
                 planner = self._graph_planner(path, md, highway_types, max_snap)
-                goal_utm = latlon_to_utm_path(points[-1:], md.zone_number, md.zone_letter)[0]
                 goal_snap = planner.snap_distance(goal_utm)
                 if goal_snap > self.default_goal_max_snap:
                     return fail(
@@ -427,6 +445,7 @@ class RoutePlanner(Node):
                     # ... and end at the goal itself: its projection can be tens of
                     # metres short of the coordinate the mission asks for.
                     keep_goal=self.default_keep_goal,
+                    outside_map_tolerance=self.outside_map_tolerance,
                 )
             except RoutePlanningError as e:
                 return fail(e.reason, e.message)

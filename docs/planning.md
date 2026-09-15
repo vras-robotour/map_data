@@ -47,7 +47,10 @@ map_data_plan -f stromovka.mapdata -p 50.1038,14.4294 -p 50.1050,14.4250 -p 50.1
 excluded); see [Traversability rules](#traversability-rules).
 
 `--goal` accepts the `geo:lat,lon` URI printed on a Robotour QR code. Failures are
-reported with a reason: `snap_too_far` (a point is farther than `--max-snap-distance`
+reported with a reason: `start_outside_map` / `goal_outside_map` (the first / last point
+lies more than 100 m outside the map's downloaded area; for the start nearly always the
+wrong map file),
+`snap_too_far` (a point is farther than `--max-snap-distance`
 from every allowed way), `unreachable` (disconnected network), `no_path`,
 `grid_too_large`, `too_few_points`.
 
@@ -88,7 +91,9 @@ single goal is enough; that fix is kept verbatim as the route's first point (the
 is where it is), and the leading leg is its way onto the network. The goal is kept
 verbatim too (`keep_goal`), so the route ends at the requested coordinate and its last
 leg leaves the network; a goal farther than `goal_max_snap_distance` from every allowed
-way fails with `snap_too_far` rather than being planned to somewhere else. The result carries
+way fails with `snap_too_far` rather than being planned to somewhere else. A start or goal
+more than `outside_map_tolerance` outside the map's area fails first (any algorithm) with
+`start_outside_map` / `goal_outside_map`, the message naming the loaded map file. The result carries
 the route as `geographic_msgs/GeoPath`, the
 same route as `nav_msgs/Path` in `local_frame` (through the `earth_frame -> local_frame`
 transform, exactly as `osm_cloud` places the map), the length, the snap distances and the
@@ -109,6 +114,7 @@ robot's position with the default parameters.
 | `spacing` | `3.0` | max metres between output waypoints (0 = planner vertices) |
 | `max_snap_distance` | `100.0` | graph: waypoint-to-way limit (m), the start's own |
 | `goal_max_snap_distance` | `30.0` | graph: the goal's limit (m); farther fails with `snap_too_far` |
+| `outside_map_tolerance` | `100.0` | m a start or goal may lie outside the map's area; farther fails with `start_outside_map` / `goal_outside_map` |
 | `keep_goal` | `true` | end the route at the goal coordinate, not at its projection |
 | `exclude_highway` | `["steps"]` | `highway=` values never routed over (stairs) |
 | `traversability_file` | `""` | tag rule file deciding what may be driven on (`""` = the package's `config/traversability.yaml`, see [Traversability rules](#traversability-rules)); launch argument `traversability:=` |

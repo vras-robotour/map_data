@@ -133,11 +133,28 @@ def test_plan_route_graph_unreachable(footway_network_mapdata):
 def test_plan_route_graph_snap_too_far(footway_network_mapdata):
     path, lat0, lon0 = footway_network_mapdata
     md, _ = load_mapdata_with_annotations(path)
-    far = _latlon(lat0, lon0, 100.0, -300.0)
+    far = _latlon(lat0, lon0, 100.0, -150.0)  # inside the map (y >= -200), 150 m off the ways
     with pytest.raises(RoutePlanningError) as e:
         plan_route(md, [_latlon(lat0, lon0, 0.0, 0.0), far], max_snap_distance=50.0)
     assert e.value.reason == "snap_too_far"
     assert "waypoint 1" in e.value.message
+
+
+@pytest.mark.parametrize("algorithm", ["graph", "astar"])
+def test_plan_route_start_or_goal_outside_map(footway_network_mapdata, algorithm):
+    """The map spans -200..700 m east, -200..300 m north of the origin (waypoints + margin)."""
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    inside, outside = _latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 100.0, -400.0)
+    for points, reason in (([inside, outside], "goal"), ([outside, inside], "start")):
+        with pytest.raises(RoutePlanningError) as e:
+            plan_route(md, points, algorithm=algorithm)  # 200 m out, tolerance 100 m
+        assert e.value.reason == f"{reason}_outside_map"
+        assert f"the {reason} is 200 m outside" in e.value.message
+        try:  # within the tolerance: plans, or fails for another reason (graph: snap_too_far)
+            plan_route(md, points, algorithm=algorithm, outside_map_tolerance=250.0)
+        except RoutePlanningError as err:
+            assert not err.reason.endswith("_outside_map")
 
 
 def test_plan_route_too_few_points(footway_network_mapdata):

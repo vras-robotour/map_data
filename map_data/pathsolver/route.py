@@ -149,6 +149,36 @@ def _grid_bbox(
     return p_low, p_high
 
 
+#: How far (m) past the map's area a start or goal may lie: the robot can start just outside
+#: the downloaded box (Stromovka 2026-09-08: 33 m), a wrong map file puts it kilometres off.
+OUTSIDE_MAP_TOLERANCE_M = 100.0
+
+
+def check_in_map(
+    md: MapData,
+    point_utm: Sequence[float],
+    what: str,
+    tolerance: float = OUTSIDE_MAP_TOLERANCE_M,
+) -> None:
+    """
+    Raise ``<what>_outside_map`` (``start`` / ``goal``) when the point lies more than
+    ``tolerance`` metres outside the map's area (the downloaded box, ``min_x..max_x`` /
+    ``min_y..max_y``). A start that far off almost always means the wrong map file is
+    loaded; a goal, the wrong file or a code meant for another map.
+    """
+    x, y = float(point_utm[0]), float(point_utm[1])
+    dx = max(md.min_x - x, 0.0, x - md.max_x)
+    dy = max(md.min_y - y, 0.0, y - md.max_y)
+    distance = float(np.hypot(dx, dy))
+    if distance <= tolerance:
+        return
+    raise RoutePlanningError(
+        f"{what}_outside_map",
+        f"the {what} is {distance:.0f} m outside the map area "
+        f"(limit {tolerance:.0f} m; wrong map file?)",
+    )
+
+
 def plan_route(
     md: MapData,
     points_latlon: Sequence[Sequence[float]],
@@ -172,6 +202,7 @@ def plan_route(
     keep_goal: bool = False,
     exclude_highway: Iterable[str] = NON_ROUTABLE_HIGHWAY_VALUES,
     traversability: TraversabilityRules | str | Path | None = None,
+    outside_map_tolerance: float = OUTSIDE_MAP_TOLERANCE_M,
 ) -> RouteResult:
     """
     Plan a route through ``points_latlon`` (``[(lat, lon), ...]``, at least two).
@@ -211,6 +242,9 @@ def plan_route(
     weights (``length * (1 + cost)``). ``None`` takes
     ``config/planner_defaults.yaml``.
 
+    A first or last point more than ``outside_map_tolerance`` metres outside the map's
+    area fails with ``start_outside_map`` / ``goal_outside_map`` (see :func:`check_in_map`).
+
     Raises :class:`RoutePlanningError` on failure.
     """
     highway_types = list(highway_types) if highway_types else ["footway"]
@@ -219,6 +253,8 @@ def plan_route(
 
     zn, zl = md.zone_number, md.zone_letter
     utm_path = latlon_to_utm_path(points_latlon, zn, zl)
+    check_in_map(md, utm_path[0], "start", outside_map_tolerance)
+    check_in_map(md, utm_path[-1], "goal", outside_map_tolerance)
 
     if algorithm == GRAPH_ALGORITHM:
         if planner is None:
