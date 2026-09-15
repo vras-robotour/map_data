@@ -31,8 +31,8 @@ route_planner:
     exclude_highway: ["steps"]
     # Tag rules deciding which ways the robot may drive on at all (stairs, grass, bridges,
     # tunnels, ...) and what an awkward one costs extra: an absolute path, or "" for the
-    # package's config/traversability.yaml, which is the file to edit. Read once at
-    # startup - edit it, then restart the node. osm_cloud must be given the same file, or
+    # package's config/traversability.yaml, which is the file to edit. Edits are
+    # picked up by the next goal (osm_cloud needs a restart). osm_cloud must be given the same file, or
     # it publishes intersection rings on ways the planner refuses.
     # The launch argument is traversability:=<file>.
     traversability_file: ""

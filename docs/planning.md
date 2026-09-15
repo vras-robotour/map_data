@@ -191,8 +191,9 @@ Where the file is chosen:
 | `map_data_plan` | `--traversability FILE`, `--no-traversability` |
 | library | `load_mapdata_with_annotations(..., traversability=...)`, `plan_route(..., traversability=...)`, `GraphPlanner(..., traversability=...)` — a `TraversabilityRules`, a path, or `None` for the package file |
 
-The nodes read the file once at startup and include it (with its mtime) in their map and
-planner caches: edit the file, restart the node. Both nodes must be given the same file,
+`route_planner` includes the file's mtime in its map and planner caches, so an edit is
+picked up by the next goal. `osm_cloud` reads it once at startup: edit the file, restart
+that node. Both nodes must be given the same file,
 or `osm_cloud` publishes rings on ways the planner refuses.
 
 ## Python Library

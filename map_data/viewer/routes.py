@@ -247,8 +247,8 @@ def save_traversability() -> Response:
     """
     Validate the body's ``traversability`` YAML text and write it to the rule file.
 
-    The text is written verbatim, so comments survive. Nodes that read the
-    file (route_planner, osm_cloud) still need a restart to pick it up.
+    The text is written verbatim, so comments survive. route_planner picks it
+    up on its next goal; osm_cloud reads it only at startup and needs a restart.
     """
     body = request.get_json(force=True) or {}
     if body.get("traversability") is None:

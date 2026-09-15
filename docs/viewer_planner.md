@@ -64,8 +64,8 @@ preferred during **all-terrain** planning (do not apply to paths only).
 The **Traversability Rules** button opens `config/traversability.yaml` (see
 [Traversability rules](planning.md#traversability-rules)) in an editor. **Apply** checks
 the rules and uses them for **Paths only** planning in this browser tab. **Save to file**
-also writes them to the file, comments included. The ROS nodes read the file only at
-startup, so restart them after saving. **Reload from file** throws away the edits.
+also writes them to the file, comments included. `route_planner` picks up the saved
+file on its next goal; `osm_cloud` reads it only at startup, so restart it after saving. **Reload from file** throws away the edits.
 
 **Show only plannable ways** hides the ways that **Paths only** will not route over:
 ways the rules refuse, stairs, and roads or footways whose checkbox is off. The ways

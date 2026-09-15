@@ -18,7 +18,8 @@
 # Used by the route_planner and osm_cloud nodes (parameter `traversability_file`, empty =
 # this file), by `ros2 launch ... traversability:=<file>` and by
 # `map_data_plan --traversability <file>` (`--no-traversability` switches the rules off).
-# A node reads the file once at startup: edit it, then restart the node.
+# route_planner picks up edits on its next goal; osm_cloud reads the file once at startup,
+# so restart it after an edit.
 
 default:
   traversable: true

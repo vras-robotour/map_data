@@ -40,8 +40,8 @@ exclude_highway : str[]
     robot cannot take stairs).
 traversability_file : str
     Tag rules deciding which ways may be driven on and what they cost
-    (``""`` = the package's ``config/traversability.yaml``). Read once at
-    startup: edit the file, then restart the node.
+    (``""`` = the package's ``config/traversability.yaml``). The parameter is
+    read at startup; edits to the file are picked up by the next goal.
 keep_goal : bool
     End the route at the requested goal coordinate rather than at its projection
     onto the network (default ``True``).
@@ -119,7 +119,7 @@ class RoutePlanner(Node):
         # in OSM and in the saved .mapdata, but a wheeled robot cannot take them.
         self.exclude_highway = list(p("exclude_highway", sorted(NON_ROUTABLE_HIGHWAY_VALUES)).value)
         # Tag rules (stairs, grass, bridges, ...) deciding what may be driven on and what
-        # it costs; "" = the package's config/traversability.yaml. Read at startup only.
+        # it costs; "" = the package's config/traversability.yaml. File edits reload on the next goal.
         self.traversability_file = p("traversability_file", "").value
         # Load mapdata_file and build its footway graph at startup (~20 MB) so the first
         # goal does not pay for it; graph planners are cached per map / way set anyway.
