@@ -85,12 +85,45 @@ and convert with the UTM zone of the current fix.
 ## ROS2 Topic Configuration
 
 The `TrackerNode` subscribes to a set of configurable topics. Set a topic parameter to an empty
-string to disable the corresponding feature and hide its UI row. `config/helhest.yaml` is the
-full configuration for the Helhest field stack (Fixposition + crl_commander + road_follower):
+string to disable the corresponding feature and hide its UI row.
+
+### Config file
+
+The topics come from a ROS 2 parameter file with a `map_data_tracker` section. By default the
+viewer reads the package's `config/tracker.yaml` (generic nav2-style topics); `--config` picks
+another one. `config/helhest_jr.yaml` holds helhest-jr's topics (Fixposition, `helhest_llc`,
+crl_commander, road_follower, `path_centerline`, no Nav2), with every tracker parameter set
+explicitly:
 
 ```bash
-map_data_viewer --ros-args --params-file config/helhest.yaml
+map_data_viewer --config config/helhest_jr.yaml
 ```
+
+The file is an ordinary parameter file, so `--ros-args --params-file` still works; values given
+with `--ros-args` take precedence over `--config`. A config file that cannot be read stops the
+viewer at startup. A `--config` file that does not exist yet means default topics (Save creates
+it).
+
+!!! note "New config files need a rebuild"
+    After adding a file to `config/` (such as `tracker.yaml`), run `colcon build` again so the
+    install space links to it.
+
+### Changing topics in the web app
+
+**Topics…** in the Tracker sidebar opens a dialog listing every topic setting (plus
+`heading_type`, `earth_frame` and `utm_frame`), grouped like the table below. Each topic field
+suggests the topics currently on the ROS graph with the matching message type, and a dot shows
+its state: green = published with the expected type, yellow = published with another type,
+grey = not published, hollow = disabled.
+
+| Button | Effect |
+|--------|--------|
+| **Apply** | Resubscribes the running tracker to the new topics. Its telemetry (trail, path, status) starts over. Not saved. |
+| **Save to file** | Applies, then writes the settings into the config file the viewer was started with. Only changed values are rewritten; comments and layout stay. With a `--symlink-install` build the source file is updated. |
+| **Reload from file** | Fills the dialog with the file's values (defaults for keys the file does not set). |
+
+The numeric parameters (`battery_low_voltage`, `stale_after`, `trail_*`,
+`intersection_*_threshold`) are only read from the config file at startup.
 
 | Parameter | Default topic | Description |
 |-----------|--------------|-------------|

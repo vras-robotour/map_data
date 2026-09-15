@@ -4,7 +4,8 @@ ROS 2 side of the viewer's Tracker mode.
 ``TrackerNode`` subscribes to a configurable set of robot topics and turns them into one
 JSON-serialisable telemetry snapshot (``get_telemetry``) that ``app.py`` pushes to the
 browser over a WebSocket. Every topic is a parameter; an empty topic disables the feature
-and hides its UI row.
+and hides its UI row. The parameters come from a config file (see :mod:`.tracker_config`)
+and the topics and frames can be switched at runtime with ``apply_settings``.
 
 Geometry (paths, goals) may arrive in any TF frame. With ``earth_frame`` set (e.g.
 ``FP_ECEF`` on a Fixposition stack) poses are transformed into that ECEF frame through TF
@@ -18,13 +19,20 @@ import math
 import threading
 import time
 from collections import deque
-from collections.abc import Callable
-from typing import Any, ClassVar
+from collections.abc import Callable, Mapping
+from typing import Any
 
 import numpy as np
 import utm
 
 from ..utils.geodesy import ecef_to_latlon_array
+from .tracker_config import (
+    NODE_NAME,
+    SETTING_DEFAULTS,
+    TrackerConfigError,
+    node_parameters,
+    validate_settings,
+)
 
 try:
     import rclpy
@@ -38,13 +46,17 @@ try:
     )
     from nav2_msgs.msg import BehaviorTreeLog, CollisionMonitorState, SpeedLimit
     from nav_msgs.msg import Odometry, Path
+    from rclpy.exceptions import NameValidationException
+    from rclpy.expand_topic_name import expand_topic_name
     from rclpy.node import Node
+    from rclpy.parameter import Parameter
     from rclpy.qos import (
         DurabilityPolicy,
         HistoryPolicy,
         QoSProfile,
         ReliabilityPolicy,
     )
+    from rclpy.validate_full_topic_name import validate_full_topic_name
     from ros2_numpy import numpify
     from sensor_msgs.msg import BatteryState, Imu, Joy, NavSatFix, Temperature
     from std_msgs.msg import Bool, Float32, Header, String, UInt64
@@ -108,81 +120,66 @@ def subsample(points: list[Any], every: int) -> list[Any]:
 
 
 class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dynamic base class depending on optional rclpy availability; not statically resolvable
-    _TOPIC_DEFAULTS: ClassVar[dict[str, str]] = {
-        # --- position / heading
-        "gps_fix_topic": "/gps/fix",
-        "gps_filtered_topic": "/gps/filtered",
-        "heading_topic": "",  # see heading_type
-        "azimuth_topic": "/gps/azimuth_imu",  # legacy alias: heading_topic + heading_type imu
-        "odom_topic": "/odom_2d",
-        # --- hardware
-        "bus_voltage_topic": "/bus_voltage",
-        "bus_current_topic": "/bus_current",
-        "battery_state_topic": "",
-        "teensy_temp_topic": "/teensy_temp",
-        "temperature_topic": "",
-        "odrv_error_topic": "/odrv_error",
-        "motors_enabled_topic": "/motors_enabled",
-        "estop_topic": "",
-        "diagnostics_topic": "",
-        # --- navigation
-        "speed_limit_topic": "/speed_limit",
-        "collision_monitor_state_topic": "/collision_monitor_state",
-        "recovery_heartbeat_topic": "/recovery/heartbeat",
-        "bt_log_topic": "/behavior_tree_log",
-        "commander_state_topic": "",
-        "follower_state_topic": "",
-        "teleop_topic": "/cmd_vel_teleop",
-        "joy_topic": "",
-        "speak_info_topic": "/speak/info",
-        "speak_warn_topic": "/speak/warn",
-        "speak_error_topic": "/speak/err",
-        # --- geometry drawn on the map
-        "path_topic": "/path",
-        "goal_topic": "",
-        "sequence_path_topic": "",
-        "sequence_poses_topic": "",
-        "road_path_topic": "",
-        "intersections_topic": "",
-        "active_intersection_topic": "",
-        "nav_through_poses_feedback_topic": "/navigate_through_poses/_action/feedback",
-        "follow_gps_waypoints_feedback_topic": "/follow_gps_waypoints/_action/feedback",
-        "follow_waypoints_feedback_topic": "/follow_waypoints/_action/feedback",
-    }
+    def __init__(self, config: Mapping[str, Any] | None = None) -> None:
+        """
+        ``config`` holds parameter values, e.g. from the viewer's ``--config`` file; values
+        given with ``--ros-args`` still take precedence.
+        """
+        super().__init__(NODE_NAME)
 
-    def __init__(self) -> None:
-        super().__init__("map_data_tracker")
-
-        for name, default in self._TOPIC_DEFAULTS.items():
+        # See tracker_config.SETTINGS for the topics. heading_type: "imu" (sensor_msgs/Imu
+        # orientation), "yaw_vector3" (Vector3Stamped, x = yaw rad, e.g. Fixposition
+        # /fixposition/ypr) or "odometry" (nav_msgs/Odometry orientation). earth_frame: ECEF
+        # frame for exact pose -> lat/lon conversion; empty = legacy utm_frame path.
+        # Robot trail: last trail_length fixes, appended when the robot moved trail_min_step.
+        # A fix older than stale_after (s) is flagged stale in the UI. The intersection
+        # thresholds are drawn around the active intersection (match road_follower's).
+        for name, default in node_parameters(config or {}).items():
             self.declare_parameter(name, default)
-        # "imu" (sensor_msgs/Imu orientation), "yaw_vector3" (Vector3Stamped, x = yaw rad,
-        # e.g. Fixposition /fixposition/ypr) or "odometry" (nav_msgs/Odometry orientation)
-        self.declare_parameter("heading_type", "imu")
-        # ECEF frame for exact pose -> lat/lon conversion; empty = legacy utm_frame path
-        self.declare_parameter("earth_frame", "")
-        self.declare_parameter("utm_frame", "utm")
-        self.declare_parameter("battery_low_voltage", 22.0)
-        # Robot trail: last trail_length fixes, appended when the robot moved trail_min_step
-        self.declare_parameter("trail_length", 500)
-        self.declare_parameter("trail_min_step", 0.5)
-        # Fix older than this (s) is flagged stale in the UI
-        self.declare_parameter("stale_after", 3.0)
-        # Drawn around the active intersection (match road_follower's thresholds)
-        self.declare_parameter("intersection_enter_threshold", 5.0)
-        self.declare_parameter("intersection_exit_threshold", 6.0)
 
-        self.earth_frame: str = self.get_parameter("earth_frame").value
-        self.utm_frame: str = self.get_parameter("utm_frame").value
         self.battery_low_voltage: float = float(self.get_parameter("battery_low_voltage").value)
         self.trail_min_step: float = float(self.get_parameter("trail_min_step").value)
+        self.trail_length: int = max(1, int(self.get_parameter("trail_length").value))
         self.stale_after: float = float(self.get_parameter("stale_after").value)
         self.intersection_thresholds = {
             "enter": float(self.get_parameter("intersection_enter_threshold").value),
             "exit": float(self.get_parameter("intersection_exit_threshold").value),
         }
-        self.trail: deque[dict[str, float]] = deque(
-            maxlen=max(1, int(self.get_parameter("trail_length").value))
+
+        # Guards all state fields against concurrent access from ROS spin and broadcaster threads
+        self._lock = threading.Lock()
+        # Serialises apply_settings calls (web requests)
+        self._reconfigure_lock = threading.Lock()
+        with self._lock:
+            self._reset_state_locked()
+
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+
+        # Use Best Effort QoS for telemetry to match bags and typical sensor publishers
+        self._qos_best_effort = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10,
         )
+        # Latched publishers (goal, sequence): receive the last message when starting late
+        self._qos_latched = QoSProfile(
+            depth=1,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            reliability=ReliabilityPolicy.RELIABLE,
+        )
+        self._tracker_subscriptions: list[Any] = []
+        self._subscribe()
+
+        enabled = [k for k, v in self.enabled_features.items() if v]
+        self.get_logger().info(
+            f"Tracker ready: earth_frame={self.earth_frame!r}, utm_frame={self.utm_frame!r}, "
+            f"enabled={enabled}"
+        )
+
+    def _reset_state_locked(self) -> None:
+        """Forget all telemetry (at start and when the topics change). Caller must hold self._lock."""
+        self.trail: deque[dict[str, float]] = deque(maxlen=self.trail_length)
         self._last_fix_time: float | None = None
         self._stale_reported = False
 
@@ -222,25 +219,23 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         self.last_speech: dict[str, str] | None = None
         self.diagnostics: dict[str, Any] | None = None
 
-        # Guards all state fields against concurrent access from ROS spin and broadcaster threads
-        self._lock = threading.Lock()
         self._dirty = True  # start dirty so the first poll always emits
 
-        self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
+    # ------------------------------------------------------------------ subscriptions
+    def _subscribe(self) -> None:
+        """Subscribe to every configured topic and publish the resulting feature flags."""
+        self.earth_frame: str = self.get_parameter("earth_frame").value
+        self.utm_frame: str = self.get_parameter("utm_frame").value
+        qos_best_effort = self._qos_best_effort
+        qos_latched = self._qos_latched
+        features: dict[str, bool] = {}
 
-        # Use Best Effort QoS for telemetry to match bags and typical sensor publishers
-        qos_best_effort = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=10,
-        )
-        # Latched publishers (goal, sequence): receive the last message when starting late
-        qos_latched = QoSProfile(
-            depth=1,
-            durability=DurabilityPolicy.TRANSIENT_LOCAL,
-            reliability=ReliabilityPolicy.RELIABLE,
-        )
+        def subscribe(
+            msg_type: type, topic: str, callback: Callable[..., Any], qos: int | QoSProfile
+        ) -> None:
+            self._tracker_subscriptions.append(
+                self.create_subscription(msg_type, topic, callback, qos)
+            )
 
         def subscribe_if_enabled(
             topic_param: str,
@@ -251,12 +246,12 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         ) -> bool:
             topic = self.get_parameter(topic_param).value
             if topic:
-                self.create_subscription(msg_type, topic, callback, qos)
+                subscribe(msg_type, topic, callback, qos)
                 if feature_name:
-                    self.enabled_features[feature_name] = True
+                    features[feature_name] = True
                 return True
             if feature_name:
-                self.enabled_features[feature_name] = False
+                features[feature_name] = False
             return False
 
         # ---------------------------------------------------------------- position / heading
@@ -271,18 +266,12 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         heading_topic = self.get_parameter("heading_topic").value
         if heading_topic:
             if heading_type == "yaw_vector3":
-                self.create_subscription(
-                    Vector3Stamped, heading_topic, self._yaw_vector_callback, qos_best_effort
-                )
+                subscribe(Vector3Stamped, heading_topic, self._yaw_vector_callback, qos_best_effort)
             elif heading_type == "odometry":
-                self.create_subscription(
-                    Odometry, heading_topic, self._odom_heading_callback, qos_best_effort
-                )
+                subscribe(Odometry, heading_topic, self._odom_heading_callback, qos_best_effort)
             else:
-                self.create_subscription(
-                    Imu, heading_topic, self._azimuth_callback, qos_best_effort
-                )
-            self.enabled_features["heading"] = True
+                subscribe(Imu, heading_topic, self._azimuth_callback, qos_best_effort)
+            features["heading"] = True
         else:
             subscribe_if_enabled(
                 "azimuth_topic", Imu, self._azimuth_callback, qos_best_effort, "heading"
@@ -300,9 +289,9 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             qos_best_effort,
             "battery",
         ):
-            self.enabled_features["battery_percentage"] = True
+            features["battery_percentage"] = True
         else:
-            self.enabled_features["battery_percentage"] = False
+            features["battery_percentage"] = False
             subscribe_if_enabled(
                 "bus_voltage_topic", Float32, self._voltage_callback, qos_best_effort, "battery"
             )
@@ -365,7 +354,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             "teleop_topic", TwistStamped, self._teleop_callback, qos_best_effort, "teleop"
         )
         if subscribe_if_enabled("joy_topic", Joy, self._joy_callback, qos_best_effort) or teleop:
-            self.enabled_features["teleop"] = True
+            features["teleop"] = True
 
         if subscribe_if_enabled(
             "speak_info_topic",
@@ -435,11 +424,57 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             "follow_waypoints_feedback_topic", FollowWaypoints.Feedback, self._feedback_callback, 10
         )
 
+        with self._lock:
+            self.enabled_features = features
+            self._dirty = True
+
+    def settings(self) -> dict[str, str]:
+        """Current topics, frames and heading_type (see ``tracker_config.SETTINGS``)."""
+        return {name: self.get_parameter(name).value for name in SETTING_DEFAULTS}
+
+    def apply_settings(self, values: Mapping[str, Any]) -> bool:
+        """
+        Switch topics / frames at runtime: resubscribe and restart the telemetry.
+
+        ``values`` may be a subset of :meth:`settings`. Everything is validated before
+        anything changes. Returns whether anything changed.
+
+        Raises
+        ------
+        TrackerConfigError
+            On an unknown setting, a non-string value or an invalid topic name.
+
+        """
+        new = validate_settings(values)
+        for name, topic in new.items():
+            if not name.endswith("_topic") or not topic:
+                continue
+            try:
+                validate_full_topic_name(
+                    expand_topic_name(topic, self.get_name(), self.get_namespace())
+                )
+            except (ValueError, NameValidationException) as ex:
+                raise TrackerConfigError(f"{name}: {ex}") from ex
+
+        with self._reconfigure_lock:
+            current = self.settings()
+            changed = {name: value for name, value in new.items() if current[name] != value}
+            if not changed:
+                return False
+            self.set_parameters([Parameter(name, value=value) for name, value in changed.items()])
+            for sub in self._tracker_subscriptions:
+                self.destroy_subscription(sub)
+            self._tracker_subscriptions = []
+            with self._lock:
+                self._reset_state_locked()
+            self._subscribe()
         enabled = [k for k, v in self.enabled_features.items() if v]
-        self.get_logger().info(
-            f"Tracker ready: earth_frame={self.earth_frame!r}, utm_frame={self.utm_frame!r}, "
-            f"enabled={enabled}"
-        )
+        self.get_logger().info(f"Tracker reconfigured: {changed}, enabled={enabled}")
+        return True
+
+    def available_topics(self) -> dict[str, list[str]]:
+        """Topics currently on the ROS graph -> their message types."""
+        return {name: list(types) for name, types in self.get_topic_names_and_types()}
 
     # ------------------------------------------------------------------ telemetry snapshot
     def _build_status_locked(self) -> dict[str, Any]:
@@ -488,7 +523,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             self._dirty = False
             self._stale_reported = stale
             return {
-                "enabled_features": self.enabled_features,
+                "enabled_features": dict(self.enabled_features),
                 "position": {
                     "gps": dict(self.pose_gps) if self.pose_gps else {},
                     "ekf": dict(self.pose_ekf) if self.pose_ekf else {},

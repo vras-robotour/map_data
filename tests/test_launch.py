@@ -105,6 +105,22 @@ def test_no_launch_configuration_references_undeclared_argument():
     )
 
 
+def test_default_config_files_exist():
+    """A ``default_value="<name>.yaml"`` must name a file in config/, or launching fails."""
+    config_dir = _LAUNCH_FILE.parents[1] / "config"
+    defaults = []
+    for node in ast.walk(_parse_launch_file()):
+        if isinstance(node, ast.Call) and _call_name(node) == "DeclareLaunchArgument":
+            for keyword in node.keywords:
+                value = _string_literal(keyword.value) if keyword.arg == "default_value" else None
+                if value and value.endswith(".yaml"):
+                    defaults.append(value)
+
+    assert defaults, "expected yaml defaults (config_file, osm_grid_params)"
+    missing = [name for name in defaults if not (config_dir / name).is_file()]
+    assert not missing, f"launch argument defaults name missing config files: {missing}"
+
+
 def test_generate_launch_description_is_defined():
     tree = _parse_launch_file()
     top_level_funcs = {

@@ -1,0 +1,81 @@
+# helhest-jr: ROS 2 Kilted + rmw_zenoh, Fixposition GNSS/INS, helhest_llc, crl_commander +
+# robot_mission_planner road_follower, no Nav2 (see mission_reporter/config/helhest_jr.yaml and
+# helhest_bringup tmuxinator/nuc/robotour.yml).
+#
+#   map_data_viewer --config config/helhest_jr.yaml   (TRACKER > Topics saves changes back here)
+#   ros2 launch map_data osm_cloud.launch.py          (its default config_file; grid parameters
+#                                                      come from config/osm_grid.yaml)
+#
+# Every *_topic can be set to "" to disable the feature and hide its UI row. Every tracker
+# parameter is spelled out so no nav2-style default of tracker.yaml leaks in.
+
+map_data_tracker:
+  ros__parameters:
+    # --- geometry: Fixposition publishes FP_ECEF -> FP_ENU0 on /tf_static; there is no utm frame
+    earth_frame: "FP_ECEF"
+    utm_frame: ""
+
+    # --- position / heading (Fixposition driver, qos_type sensor_short = best effort)
+    gps_fix_topic: "/fixposition/odometry_llh"       # fused NavSatFix, what road_follower and route_planner plan from
+    gps_filtered_topic: ""                           # already fused; /fixposition/gnss1 (raw) would zigzag the trail
+    stale_after: 3.0                                 # s without a fix -> STALE (marker greyed)
+    trail_length: 500                                # last fixes drawn as the robot trail
+    trail_min_step: 0.5                              # m moved before a fix is added to the trail
+    heading_type: "yaw_vector3"                      # imu | yaw_vector3 | odometry
+    heading_topic: "/fixposition/ypr"                # Vector3Stamped, x = yaw [rad] in FP_ENU0
+    azimuth_topic: ""
+    odom_topic: "/odom_2d"                           # helhest_llc wheel odometry -> speed
+
+    # --- hardware (helhest_llc)
+    battery_state_topic: "/battery_state"            # sensor_msgs/BatteryState (52 V pack)
+    battery_low_voltage: 46.0
+    bus_voltage_topic: ""
+    bus_current_topic: ""
+    temperature_topic: "/temperatures"               # Temperature per frame_id: mcu, odrive_{1,2,3}_{fet,motor}
+    teensy_temp_topic: ""
+    odrv_error_topic: ""                             # no /odrv_error on this robot
+    motors_enabled_topic: ""                         # no motor-enable topic; the E-STOP row covers it
+    estop_topic: "/estop_active"                     # std_msgs/Bool
+    diagnostics_topic: "/diagnostics"
+
+    # --- navigation state
+    commander_state_topic: "/crl_commander/state"    # STOP/GOTO/SEQUENCE/STUCK/...
+    follower_state_topic: "/road_follower/state"     # IDLE, PLANNING, ROAD, GPS:<reason>, ARRIVED (+ fix quality)
+    bt_log_topic: ""                                 # no Nav2
+    speed_limit_topic: ""                            # no nav2_msgs/SpeedLimit publisher
+    collision_monitor_state_topic: ""
+    recovery_heartbeat_topic: ""
+    teleop_topic: ""                                 # teleop drives the same /cmd_vel as the autonomous stack
+    joy_topic: "/joy"                                # helhest_llc republishes the RC receiver; any input -> TELEOP ACTIVE
+    speak_info_topic: "/speak/info"                  # mission_signal announcements (info must be set for warn/err)
+    speak_warn_topic: "/speak/warn"
+    speak_error_topic: "/speak/err"
+
+    # --- geometry drawn on the map
+    path_topic: "/crl_commander/plan"                # planner path (FP_ENU0), green dashed
+    goal_topic: "/crl_commander/goal"                # current commander goal (FP_ENU0)
+    sequence_path_topic: "/crl_commander/goal_sequence"    # loaded sequence (nav_msgs/Path, FP_ECEF), blue
+    sequence_poses_topic: "/goal_sequence"           # road_follower's current waypoint window (PoseArray, FP_ECEF)
+    road_path_topic: "/predicted_path_ls"            # path_centerline on the jetson, cyan
+    intersections_topic: "/intersections"            # osm_cloud crossroads (FP_ENU0), magenta rings
+    active_intersection_topic: "/road_follower/active_intersection"   # enter/exit circles
+    intersection_enter_threshold: 5.0                # keep equal to road_and_gps_follower.yaml
+    intersection_exit_threshold: 6.0
+    nav_through_poses_feedback_topic: ""             # no Nav2 actions
+    follow_gps_waypoints_feedback_topic: ""
+    follow_waypoints_feedback_topic: ""
+
+osm_cloud:
+  ros__parameters:
+    grid_topic: "grid"
+    # Same map as route_planner: the annotation store is merged and stairs are dropped,
+    # so the rings on /intersections sit on ways the planner actually routes over.
+    # osm_cloud.launch.py forwards its annotations:= argument (default "auto") on top of
+    # this file, so override it there rather than here when using the launch file.
+    annotations: "auto"
+    exclude_highway: ["steps"]
+    # Tag rules deciding which ways the robot may drive on; "" = the package's
+    # config/traversability.yaml. Keep it equal to route_planner's traversability_file.
+    traversability_file: ""
+    intersections_topic: "intersections"
+    intersection_markers_topic: "intersection_markers"

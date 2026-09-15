@@ -40,6 +40,7 @@ Then open `http://127.0.0.1:5000` in a browser.
 | `--host <address>` | `127.0.0.1` | Address the Flask server binds to |
 | `--port <port>` | `5000` | Port the Flask server binds to |
 | `--telemetry-rate <Hz>` | `2.0` | Tracker telemetry broadcast rate; see [Tracker](viewer_tracker.md) |
+| `--config <path>` | package `config/tracker.yaml` | Tracker topics (ROS 2 parameter file); the web app saves topic changes to it. See [Tracker](viewer_tracker.md#config-file) |
 
 ### Deployment Security
 
