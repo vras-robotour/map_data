@@ -4,8 +4,8 @@ import pytest
 
 from map_data.viewer.app import create_app
 from map_data.viewer.tracker_config import (
-    SETTINGS,
     SETTING_DEFAULTS,
+    SETTINGS,
     load_tracker_config,
     validate_settings,
 )
@@ -88,7 +88,12 @@ def test_put_save_writes_the_live_settings(client):
 
 @pytest.mark.parametrize(
     "body",
-    [{}, {"settings": "x"}, {"settings": {"nope_topic": "/x"}}, {"settings": {"path_topic": "/a b"}}],
+    [
+        {},
+        {"settings": "x"},
+        {"settings": {"nope_topic": "/x"}},
+        {"settings": {"path_topic": "/a b"}},
+    ],
 )
 def test_put_rejects_bad_settings(client, body):
     c, _, tracker, config = client

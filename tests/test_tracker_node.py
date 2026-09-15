@@ -90,7 +90,12 @@ def test_apply_settings_resubscribes_and_restarts_telemetry(make_node):
 
 @pytest.mark.parametrize(
     "bad",
-    [{"path_topic": "/1bad"}, {"goal_topic": "/a//b"}, {"heading_type": "gps"}, {"trail_length": "3"}],
+    [
+        {"path_topic": "/1bad"},
+        {"goal_topic": "/a//b"},
+        {"heading_type": "gps"},
+        {"trail_length": "3"},
+    ],
 )
 def test_apply_settings_changes_nothing_when_invalid(make_node, bad):
     node = make_node({"path_topic": "/p"})

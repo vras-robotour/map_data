@@ -158,7 +158,11 @@ class TestSave:
         assert [i for i, (a, b) in enumerate(zip(old, new, strict=True)) if a != b] == [4]
         assert new[4].startswith('    gps_fix_topic: "/fp/llh" ')
         assert new[4].index("#") == old[4].index("#")
-        assert node_parameters(load_tracker_config(path)) == {**DEFAULTS, **settings, "battery_low_voltage": 46.0}
+        assert node_parameters(load_tracker_config(path)) == {
+            **DEFAULTS,
+            **settings,
+            "battery_low_voltage": 46.0,
+        }
 
     def test_long_value_pushes_the_comment_right(self, tmp_path):
         path = _write(tmp_path, HELHEST_LIKE)
@@ -179,7 +183,9 @@ class TestSave:
         path = _write(tmp_path, "osm_cloud:\n  ros__parameters:\n    grid_topic: grid\n")
         save_tracker_config(path, {"path_topic": "/p"})
         assert load_tracker_config(path) == {"path_topic": "/p"}
-        assert yaml.safe_load(path.read_text())["osm_cloud"]["ros__parameters"] == {"grid_topic": "grid"}
+        assert yaml.safe_load(path.read_text())["osm_cloud"]["ros__parameters"] == {
+            "grid_topic": "grid"
+        }
 
     def test_creates_the_file(self, tmp_path):
         path = tmp_path / "new" / "tracker.yaml"

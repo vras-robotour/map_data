@@ -178,7 +178,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         )
 
     def _reset_state_locked(self) -> None:
-        """Forget all telemetry (at start and when the topics change). Caller must hold self._lock."""
+        """Forget all telemetry (at start and when the topics change); hold self._lock."""
         self.trail: deque[dict[str, float]] = deque(maxlen=self.trail_length)
         self._last_fix_time: float | None = None
         self._stale_reported = False

@@ -264,7 +264,11 @@ def _set_parameter_line(lines: list[str], name: str, value: Any) -> list[str]:
 
     # The node block ends at the next top-level key
     end = next(
-        (i for i in range(header + 1, len(lines)) if _is_content(lines[i]) and not _indent(lines[i])),
+        (
+            i
+            for i in range(header + 1, len(lines))
+            if _is_content(lines[i]) and not _indent(lines[i])
+        ),
         len(lines),
     )
     rp = next((i for i in range(header + 1, end) if _ROS_PARAMETERS.match(lines[i])), None)
