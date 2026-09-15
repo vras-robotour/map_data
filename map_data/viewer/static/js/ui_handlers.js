@@ -701,7 +701,6 @@ function renderChangesPanel() {
     if (!panel || !list || !count) return;
     if (!changeLog.length || currentAppMode === 'planner') { panel.hidden = true; return; }
     panel.hidden = false;
-    count.textContent = `(${changeLog.length})`;
     list.textContent = '';
     [...changeLog].reverse().forEach(d => {
         const wayId = d.id || d.way_id;
@@ -736,8 +735,15 @@ function renderChangesPanel() {
             idHtml: `#${escHtml(d.way_id)} @ node #${escHtml(d.node_id)}`,
             btnTitle: 'Undo split', onBtnClick: () => undoWaySplit(wayId, d.node_id),
         });
+        if (d.type === 'add_node') row = _buildPanelRow({
+            ...base, labelHtml: 'add node in way',
+            idHtml: `#${escHtml(d.node_id)} &rarr; #${escHtml(d.way_id)}`,
+            btnTitle: 'Undo node addition', onBtnClick: () => undoNodeAddition(wayId, d.node_id),
+        });
         if (row) list.appendChild(row);
     });
+    // Count what is listed, so an entry type without a row cannot inflate it.
+    count.textContent = `(${list.children.length})`;
 }
 
 async function undoWaySplit(wayId, nodeId) {
