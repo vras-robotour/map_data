@@ -503,7 +503,8 @@ map_data/                          # repository root
 ├── config/                        # YAML configuration
 │   ├── planner_defaults.yaml      # planner cost & buffer defaults
 │   ├── osm_grid.yaml              # osm_cloud grid parameters
-│   └── helhest.yaml               # robot-specific parameter overrides
+│   ├── tracker.yaml               # viewer tracker topics (generic defaults)
+│   └── helhest_jr.yaml            # helhest-jr topics (viewer tracker, osm_cloud)
 ├── data/                          # default location for .mapdata files
 ├── docs/                          # MkDocs documentation source
 ├── launch/                        # ROS2 launch files

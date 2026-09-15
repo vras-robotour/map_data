@@ -434,6 +434,66 @@ Cancel an in-progress planning request.
 
 ---
 
+## Tracker
+
+Both endpoints answer **503** when the tracker is not running (no ROS 2 context).
+
+### `GET /api/tracker/settings`
+
+The tracker's topic settings, what its config file holds, and the topics on the ROS graph.
+
+**Response**
+
+```json
+{
+  "path": "/.../config/tracker.yaml",
+  "exists": true,
+  "file_error": null,
+  "heading_types": { "imu": "sensor_msgs/msg/Imu", "...": "..." },
+  "topics": { "/gps/fix": ["sensor_msgs/msg/NavSatFix"] },
+  "settings": [
+    {
+      "name": "gps_fix_topic",
+      "section": "Position / heading",
+      "description": "Raw GPS fix",
+      "msg_type": "sensor_msgs/msg/NavSatFix",
+      "choices": [],
+      "default": "/gps/fix",
+      "value": "/gps/fix",
+      "saved": "/fixposition/odometry_llh"
+    }
+  ]
+}
+```
+
+`value` is the live setting and `saved` is the config file's value (the default when the file
+does not set it). `file_error` is set, and `saved` falls back to the defaults, when the file
+cannot be read.
+
+---
+
+### `PUT /api/tracker/settings`
+
+Apply settings to the running tracker, which resubscribes and restarts its telemetry, and
+optionally save them to the config file with its comments kept.
+
+**Request body**
+
+```json
+{ "settings": { "gps_fix_topic": "/fixposition/odometry_llh", "heading_type": "yaw_vector3" }, "save": true }
+```
+
+`settings` may be a subset. With `save`, all of the tracker's current settings are written.
+
+**Response 200** — `{"changed": true, "path": "/.../config/tracker.yaml"}` (`path` is `null` without `save`).
+
+**Error 400** — unknown setting, non-string value, whitespace, invalid topic name or `heading_type`.
+Nothing is applied.
+
+**Error 500** — applied, but the config file could not be written.
+
+---
+
 ## Wormhole (Robot File Transfer)
 
 Wormhole endpoints use [magic-wormhole](https://magic-wormhole.readthedocs.io/) to transfer

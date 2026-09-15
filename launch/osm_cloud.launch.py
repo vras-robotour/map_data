@@ -149,7 +149,7 @@ def generate_launch_description():
     )
     config_file_arg = DeclareLaunchArgument(
         "config_file",
-        default_value="helhest.yaml",
+        default_value="helhest_jr.yaml",
         description="Path or name (in config/) of the yaml file with topic names.",
     )
     osm_grid_params_arg = DeclareLaunchArgument(

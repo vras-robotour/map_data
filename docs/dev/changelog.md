@@ -4,6 +4,12 @@
 
 ### Added
 
+- The viewer's tracker topics can be changed without a restart: **Topics…** in the Tracker
+  sidebar resubscribes the running tracker and can save the topics back to its config file,
+  comments kept (`GET`/`PUT /api/tracker/settings`). `map_data_viewer --config <file>` names
+  that file, a ROS 2 parameter file with a `map_data_tracker` section. The default is the new
+  `config/tracker.yaml`, which holds the built-in defaults, so nothing changes for existing setups
+- `config/helhest_jr.yaml`: tracker topics of helhest-jr (`map_data_viewer --config config/helhest_jr.yaml`)
 - `osm_cloud` takes a `highway_types` parameter (and `highway_types:=` launch
   argument), as `route_planner` does: the grid can be drawn from roads as well
   as footways, so it shows the network the graph planner routes on when roads
@@ -15,8 +21,18 @@
   its rim, and one snapped onto (or within 1 m of) an area crosses it from there. The crossings live with the area (`map_data.pathsolver.walkable_area`)
   and add no graph edges
 
+### Removed
+
+- `config/helhest.yaml`: helhest-jr is the only Fixposition robot, and its topics (tracker and
+  `osm_cloud`) are in `config/helhest_jr.yaml`, now the default `config_file` of
+  `osm_cloud.launch.py`
+
 ### Fixed
 
+- The viewer's telemetry Socket.IO connection failed with `property 'session' of
+  'RequestContext' object has no setter` on Flask 3.0.2 with Flask-SocketIO 5.3 (Ubuntu
+  24.04 packages), so the tracker received nothing. The Socket.IO server no longer manages
+  a Flask session
 - Route relations (hiking, bike, bus) are no longer merged like multipolygons.
   Their member ways were chained into one negative-id way carrying every
   member's tags, so a single bridge or stairs member made the whole route

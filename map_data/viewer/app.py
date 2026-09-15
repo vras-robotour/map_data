@@ -11,9 +11,17 @@ from typing import Any
 from flask import Flask, Response, abort, request
 from flask_socketio import SocketIO
 
-from ..utils.config import setup_logging
+from ..utils.config import config_path, setup_logging
 from .ros_node import ROS_AVAILABLE, TrackerNode
 from .routes import bp
+from .tracker_config import (
+    DEFAULT_CONFIG_NAME,
+    TrackerConfigError,
+    load_tracker_config,
+    node_parameters,
+)
+from .tracker_routes import TRACKER_EXTENSION
+from .tracker_routes import bp as tracker_bp
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +44,10 @@ def _resolve_cors_origins() -> str | list[str] | None:
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
-socketio = SocketIO()
+# manage_session=False: the Socket.IO handlers never use the Flask session, and a managed
+# one breaks connecting on Flask >= 3.0.2 with Flask-SocketIO 5.3 (it assigns
+# RequestContext.session, which became a read-only property).
+socketio = SocketIO(manage_session=False)
 tracker_node = None
 
 # Upper bound on any request body (uploads included). Keeps a single oversized
@@ -124,7 +135,11 @@ def telemetry_broadcaster(interval: float) -> None:
         time.sleep(interval)
 
 
-def create_app(data_dir: str | None = None, telemetry_hz: float = 2.0) -> Flask:
+def create_app(
+    data_dir: str | None = None,
+    telemetry_hz: float = 2.0,
+    tracker_config: str | Path | None = None,
+) -> Flask:
     # Explicitly set paths relative to this file
     base_dir = Path(__file__).parent
     template_dir = base_dir / "templates"
@@ -136,7 +151,12 @@ def create_app(data_dir: str | None = None, telemetry_hz: float = 2.0) -> Flask:
     if data_dir:
         app.config["DATA_DIR"] = data_dir
 
+    # Tracker topics come from this ROS 2 parameter file (the package's config/tracker.yaml
+    # unless --config names another); the web app saves topic changes back to it.
+    app.config["TRACKER_CONFIG"] = str(tracker_config or config_path(DEFAULT_CONFIG_NAME))
+
     app.register_blueprint(bp)
+    app.register_blueprint(tracker_bp)
     socketio.init_app(app, cors_allowed_origins=_resolve_cors_origins())
 
     # Optional access-token gate (opt-in via MAP_DATA_ACCESS_TOKEN, see above).
@@ -169,6 +189,9 @@ def create_app(data_dir: str | None = None, telemetry_hz: float = 2.0) -> Flask:
 
     global tracker_node
     if ROS_AVAILABLE:
+        # Outside the try below: a broken config file must stop the viewer, not silently
+        # start a tracker on default topics.
+        tracker_params = node_parameters(load_tracker_config(app.config["TRACKER_CONFIG"]))
         try:
             import rclpy
             from rclpy.signals import SignalHandlerOptions
@@ -178,7 +201,8 @@ def create_app(data_dir: str | None = None, telemetry_hz: float = 2.0) -> Flask:
                 # the ROS context down and would leave the web server running (port 5000
                 # stays busy after Ctrl-C / kill).
                 rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
-            tracker_node = TrackerNode()
+            tracker_node = TrackerNode(tracker_params)
+            app.extensions[TRACKER_EXTENSION] = tracker_node
 
             # Start ROS2 spin in a separate thread
             def ros_spin() -> None:
@@ -193,7 +217,10 @@ def create_app(data_dir: str | None = None, telemetry_hz: float = 2.0) -> Flask:
             )
             broadcaster_thread.start()
 
-            logger.info("ROS2 TrackerNode initialized and spinning.")
+            logger.info(
+                "ROS2 TrackerNode initialized and spinning (config %s).",
+                app.config["TRACKER_CONFIG"],
+            )
         except Exception:
             logger.exception("Failed to initialize ROS2")
             tracker_node = None
@@ -211,6 +238,12 @@ def main() -> None:
         type=float,
         default=2.0,
         help="Tracker telemetry broadcast rate in Hz (default: 2)",
+    )
+    parser.add_argument(
+        "--config",
+        help="Tracker topics: a ROS 2 parameter file with a map_data_tracker section, e.g. "
+        "config/helhest_jr.yaml. The web app saves topic changes to it "
+        f"(default: the package's config/{DEFAULT_CONFIG_NAME})",
     )
 
     # Filter out ROS-specific arguments before parsing
@@ -231,9 +264,20 @@ def main() -> None:
     if args.data_dir:
         data_dir = str(Path(args.data_dir).resolve())
 
-    app = create_app(data_dir=data_dir, telemetry_hz=args.telemetry_rate)
-
     setup_logging()
+    tracker_config = None
+    if args.config:
+        tracker_config = Path(args.config).resolve()
+        if not tracker_config.is_file():
+            logger.warning("%s does not exist yet: default topics, Save creates it", tracker_config)
+
+    try:
+        app = create_app(
+            data_dir=data_dir, telemetry_hz=args.telemetry_rate, tracker_config=tracker_config
+        )
+    except TrackerConfigError as e:
+        parser.error(str(e))
+
     # Using socketio.run instead of app.run
     # Disable debug mode to prevent the Flask reloader from initializing the ROS node twice
     socketio.run(app, host=args.host, port=args.port, debug=False, allow_unsafe_werkzeug=True)

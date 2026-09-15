@@ -1,0 +1,67 @@
+# Default topics of the viewer's Tracker (generic nav2-style robot).
+#
+#   map_data_viewer                               # reads this file
+#   map_data_viewer --config config/helhest_jr.yaml  # or any file with a map_data_tracker section
+#
+# TRACKER > Topics in the web app switches topics and frames live; "Save to file" writes them
+# back to the file the viewer was started with, keeping comments. Values given with
+# --ros-args still take precedence over the file.
+#
+# Every *_topic can be set to "" to disable the feature and hide its UI row.
+
+map_data_tracker:
+  ros__parameters:
+    # --- geometry: paths/goals are transformed into earth_frame (ECEF) through TF and
+    #     converted to lat/lon exactly; an empty earth_frame falls back to utm_frame.
+    earth_frame: ""
+    utm_frame: "utm"
+
+    # --- position / heading
+    gps_fix_topic: "/gps/fix"                        # NavSatFix
+    gps_filtered_topic: "/gps/filtered"              # NavSatFix, EKF-fused
+    heading_type: "imu"                              # imu | yaw_vector3 | odometry
+    heading_topic: ""                                # typed by heading_type
+    azimuth_topic: "/gps/azimuth_imu"                # Imu, used when heading_topic is empty
+    odom_topic: "/odom_2d"                           # Odometry -> speed
+    stale_after: 3.0                                 # s without a fix -> STALE (marker greyed)
+    trail_length: 500                                # last fixes drawn as the robot trail
+    trail_min_step: 0.5                              # m moved before a fix is added to the trail
+
+    # --- hardware
+    battery_state_topic: ""                          # BatteryState; replaces the Float32 pair
+    bus_voltage_topic: "/bus_voltage"                # Float32
+    bus_current_topic: "/bus_current"                # Float32
+    battery_low_voltage: 22.0
+    temperature_topic: ""                            # Temperature per frame_id; replaces teensy_temp_topic
+    teensy_temp_topic: "/teensy_temp"                # Float32
+    odrv_error_topic: "/odrv_error"                  # UInt64
+    motors_enabled_topic: "/motors_enabled"          # Bool
+    estop_topic: ""                                  # Bool
+    diagnostics_topic: ""                            # DiagnosticArray
+
+    # --- navigation state
+    commander_state_topic: ""                        # String; replaces bt_log_topic
+    bt_log_topic: "/behavior_tree_log"               # nav2 BehaviorTreeLog
+    follower_state_topic: ""                         # String (latched)
+    speed_limit_topic: "/speed_limit"                # nav2 SpeedLimit
+    collision_monitor_state_topic: "/collision_monitor_state"
+    recovery_heartbeat_topic: "/recovery/heartbeat"  # Header
+    teleop_topic: "/cmd_vel_teleop"                  # TwistStamped
+    joy_topic: ""                                    # Joy; any input counts as teleop
+    speak_info_topic: "/speak/info"                  # String
+    speak_warn_topic: "/speak/warn"
+    speak_error_topic: "/speak/err"
+
+    # --- geometry drawn on the map
+    path_topic: "/path"                              # Path
+    goal_topic: ""                                   # PoseStamped
+    sequence_path_topic: ""                          # Path (latched)
+    sequence_poses_topic: ""                         # PoseArray (latched)
+    road_path_topic: ""                              # Path
+    intersections_topic: ""                          # PoseArray (latched)
+    active_intersection_topic: ""                    # PoseStamped (latched)
+    intersection_enter_threshold: 5.0
+    intersection_exit_threshold: 6.0
+    nav_through_poses_feedback_topic: "/navigate_through_poses/_action/feedback"
+    follow_gps_waypoints_feedback_topic: "/follow_gps_waypoints/_action/feedback"
+    follow_waypoints_feedback_topic: "/follow_waypoints/_action/feedback"

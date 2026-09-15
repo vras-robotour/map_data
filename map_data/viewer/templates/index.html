@@ -291,7 +291,10 @@
       <div id="tracker-sidebar-panel" class="panel" style="flex: 1; display:none; flex-direction: column;">
         <div class="panel-title">ROBOT STATUS</div>
         <div class="d-flex align-items-center justify-content-between mb-2">
-          <button id="tracker-center-robot" class="btn btn-sm btn-outline-info py-0 px-2" style="font-size: 0.7rem;">Center Robot</button>
+          <div class="d-flex gap-1">
+            <button id="tracker-center-robot" class="btn btn-sm btn-outline-info py-0 px-2" style="font-size: 0.7rem;">Center Robot</button>
+            <button id="tracker-topics-btn" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size: 0.7rem;" title="Change the topics the tracker subscribes to">Topics…</button>
+          </div>
           <div class="form-check mb-0">
             <input class="form-check-input bg-dark border-secondary" type="checkbox" id="tracker-follow-robot">
             <label class="form-check-label text-secondary" for="tracker-follow-robot" style="font-size: 0.7rem;">Follow</label>
@@ -585,6 +588,38 @@
         <button type="button" id="planner-rules-reload" class="btn btn-outline-warning btn-sm">Reload from file</button>
         <button type="button" id="planner-rules-apply" class="btn btn-outline-primary btn-sm">Apply</button>
         <button type="button" id="planner-rules-save" class="btn btn-primary btn-sm">Save to file</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tracker Topics Modal -->
+<div class="modal fade" id="tracker-topics-modal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content bg-dark text-light border-secondary">
+      <div class="modal-header border-secondary py-2">
+        <h6 class="modal-title">Tracker Topics</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body py-2">
+        <p class="mb-2" style="font-size:0.7rem; color:#888;">
+          <b>Apply</b> resubscribes the tracker now (its telemetry starts over); <b>Save</b> also
+          writes the settings to <code id="tracker-topics-path"></code>, keeping its comments.
+          An empty topic turns its feature off. Hover a name for what it feeds.
+          <span style="color:#22c55e">●</span> published with the expected type,
+          <span style="color:#facc15">●</span> published with another type,
+          <span style="color:#6b7280">●</span> not published.
+        </p>
+        <div id="tracker-topics-file-error" class="text-warning mb-2" style="font-size:0.72rem;" hidden></div>
+        <div id="tracker-topics-error" class="text-danger mb-2" style="font-size:0.72rem; white-space:pre-wrap;" hidden></div>
+        <div id="tracker-topics-form" style="font-size:0.75rem;"></div>
+        <div id="tracker-topics-lists"></div>
+      </div>
+      <div class="modal-footer border-secondary py-2">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" id="tracker-topics-reload" class="btn btn-outline-warning btn-sm">Reload from file</button>
+        <button type="button" id="tracker-topics-apply" class="btn btn-outline-primary btn-sm">Apply</button>
+        <button type="button" id="tracker-topics-save" class="btn btn-primary btn-sm">Save to file</button>
       </div>
     </div>
   </div>
