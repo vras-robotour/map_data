@@ -170,6 +170,8 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         )
         self._tracker_subscriptions: list[Any] = []
         self._subscribe()
+        # A plan and goal are volatile: a planner that exits takes them with it
+        self.create_timer(1.0, self._drop_orphaned_plan)
 
         enabled = [k for k, v in self.enabled_features.items() if v]
         self.get_logger().info(
@@ -656,9 +658,27 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             self._dirty = True
 
     # ------------------------------------------------------------------ callbacks: geometry
+    def _drop_orphaned_plan(self) -> None:
+        """Forget the path / goal once no node publishes them (planner stopped or restarted)."""
+        orphaned = {
+            name: not topic or self.count_publishers(topic) == 0
+            for name, topic in (
+                ("path", self.get_parameter("path_topic").value),
+                ("goal", self.get_parameter("goal_topic").value),
+            )
+        }
+        with self._lock:
+            if orphaned["path"] and self.waypoints_gps:
+                self.waypoints_gps = []
+                self.num_waypoints = self.current_waypoint = 0
+                self._dirty = True
+            if orphaned["goal"] and self.goal_gps:
+                self.goal_gps = None
+                self._dirty = True
+
     def _path_callback(self, msg: Path) -> None:
         waypoints = self._points_to_latlon(msg.header.frame_id, self._poses_xyz(msg.poses))
-        if waypoints:
+        if waypoints is not None:  # an empty path clears the plan
             with self._lock:
                 self.waypoints_gps = subsample(waypoints, PATH_SUBSAMPLE)
                 self.num_waypoints = len(msg.poses)

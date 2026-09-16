@@ -17,7 +17,6 @@ const trackerMode = (() => {
     let _robotCb = null;
     let _followCb = null;
     let _robotSvg = null;
-    let _lastWaypointKey = null;
 
     const ROBOT_ICON_HTML = `
     <div class="robot-marker-container">
@@ -100,27 +99,9 @@ const trackerMode = (() => {
             }
         }
 
-        // Update planned path only when the waypoint set actually changes
-        if (data.mission && data.mission.waypoints && data.mission.waypoints.length > 0) {
-            const wps = data.mission.waypoints;
-            const key = `${wps.length}:${wps[0].lat},${wps[0].lon}:${wps[wps.length - 1].lat},${wps[wps.length - 1].lon}`;
-            if (!robotPathLayer) {
-                robotPathLayer = L.polyline(wps.map(w => [w.lat, w.lon]), {
-                    color: '#00ff00',
-                    weight: 3,
-                    opacity: 0.6,
-                    dashArray: '5, 10'
-                }).addTo(map);
-                _lastWaypointKey = key;
-            } else if (key !== _lastWaypointKey) {
-                robotPathLayer.setLatLngs(wps.map(w => [w.lat, w.lon]));
-                _lastWaypointKey = key;
-            }
-        } else if (robotPathLayer) {
-            map.removeLayer(robotPathLayer);
-            robotPathLayer = null;
-            _lastWaypointKey = null;
-        }
+        // Planned path; a key of length and end points missed replans that keep them
+        robotPathLayer = updatePolyline(robotPathLayer, data.mission && data.mission.waypoints,
+            { color: '#00ff00', weight: 3, opacity: 0.6, dashArray: '5, 10' });
 
         // Waypoint sequence handed to the commander (blue) and the visual road path (cyan)
         sequenceLayer = updatePolyline(sequenceLayer, data.mission && data.mission.sequence,

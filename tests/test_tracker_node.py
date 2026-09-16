@@ -104,3 +104,24 @@ def test_apply_settings_changes_nothing_when_invalid(make_node, bad):
         node.apply_settings({"joy_topic": "/joy", **bad})
     assert _subscribed(node) == before
     assert node.settings()["joy_topic"] == ""
+
+
+def test_plan_clears_on_empty_path_and_when_the_planner_exits(make_node):
+    from nav_msgs.msg import Path
+
+    node = make_node({"path_topic": "/plan", "goal_topic": "/goal", "earth_frame": ""})
+    with node._lock:
+        node.waypoints_gps = [{"lat": 50.0, "lon": 14.0}]
+        node.goal_gps = {"lat": 50.0, "lon": 14.0}
+    node._path_callback(Path())
+    assert node.waypoints_gps == []
+
+    with node._lock:
+        node.waypoints_gps = [{"lat": 50.0, "lon": 14.0}]
+    pub = node.create_publisher(Path, "/plan", 10)
+    node._drop_orphaned_plan()
+    assert node.waypoints_gps  # still published
+    assert node.goal_gps is None  # nobody publishes /goal
+    node.destroy_publisher(pub)
+    node._drop_orphaned_plan()
+    assert node.waypoints_gps == []
