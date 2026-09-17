@@ -7,6 +7,7 @@ OpenStreetMap ways and finds paths using Dijkstra or A*.
 
 import itertools
 import logging
+import math
 from collections import Counter
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
@@ -443,8 +444,11 @@ class GraphPlanner:
             neighs.extend(extra_adj.get(u, []))
             return neighs
 
+        goal_x, goal_y = get_pos(id_g)
+
         def heuristic(u: int | str) -> float:
-            return float(np.linalg.norm(get_pos(u) - get_pos(id_g)))
+            pos = get_pos(u)
+            return math.hypot(pos[0] - goal_x, pos[1] - goal_y)
 
         node_path = astar_search(id_s, id_g, get_neighbors, heuristic)
         if node_path is None:
@@ -568,7 +572,8 @@ class GraphPlanner:
                 snapped[tid] = (n1, n2, factor)
                 for node in (n1, n2):
                     # Distance from the projection to one end of its edge, priced like the way.
-                    cost = float(np.linalg.norm(proj - self.nodes[node].ravel()[:2])) * factor
+                    end = self.nodes[node].ravel()[:2]
+                    cost = math.hypot(proj[0] - end[0], proj[1] - end[1]) * factor
                     _link(extra_adj, extra_via, tid, node, cost, None)
 
             # A node inside a walkable area, or snapped onto or next to one (its
@@ -592,7 +597,8 @@ class GraphPlanner:
             if id_s in snapped and id_g in snapped:
                 n_s1, n_s2, f_s = snapped[id_s]
                 if {n_s1, n_s2} == set(snapped[id_g][:2]):
-                    cost = float(np.linalg.norm(positions[id_s] - positions[id_g])) * f_s
+                    p_s, p_g = positions[id_s], positions[id_g]
+                    cost = math.hypot(p_s[0] - p_g[0], p_s[1] - p_g[1]) * f_s
                     _link(extra_adj, extra_via, id_s, id_g, cost, None)
 
             # Route between temporary nodes
@@ -651,14 +657,14 @@ def _drop_stacked_points(points: list[np.ndarray]) -> np.ndarray:
     """
     out: list[np.ndarray] = []
     for p in points:
-        if out and np.linalg.norm(p - out[-1]) <= TOLERANCE:
+        if out and math.hypot(p[0] - out[-1][0], p[1] - out[-1][1]) <= TOLERANCE:
             continue
         # p returns to out[-2] after a short hop out to out[-1]: drop the hop,
         # which also makes p coincident with the new last point.
         if (
             len(out) >= 2
-            and np.linalg.norm(p - out[-2]) <= TOLERANCE
-            and np.linalg.norm(out[-1] - out[-2]) <= MAX_SPUR_LENGTH
+            and math.hypot(p[0] - out[-2][0], p[1] - out[-2][1]) <= TOLERANCE
+            and math.hypot(out[-1][0] - out[-2][0], out[-1][1] - out[-2][1]) <= MAX_SPUR_LENGTH
         ):
             out.pop()
             continue

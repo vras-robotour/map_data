@@ -117,11 +117,9 @@ def latlon_to_utm_path(
     zone_letter: str,
 ) -> np.ndarray:
     """``[(lat, lon), ...]`` -> ``(N, 2)`` UTM array forced into the map's zone."""
-    out = []
-    for lat, lon in points:
-        e, n, _, _ = utm.from_latlon(float(lat), float(lon), zone_number, zone_letter)
-        out.append([e, n])
-    return np.array(out, dtype=np.float64).reshape(-1, 2)
+    pts = np.asarray(points, dtype=np.float64).reshape(-1, 2)
+    e, n, _, _ = utm.from_latlon(pts[:, 0], pts[:, 1], zone_number, zone_letter)
+    return np.stack([e, n], axis=-1).reshape(-1, 2)
 
 
 def utm_path_to_latlon_pairs(
@@ -129,9 +127,9 @@ def utm_path_to_latlon_pairs(
     zone_number: int,
     zone_letter: str,
 ) -> list[tuple[float, float]]:
-    return [
-        tuple(utm.to_latlon(float(p[0]), float(p[1]), zone_number, zone_letter)) for p in path_utm
-    ]
+    pts = np.asarray(path_utm, dtype=np.float64).reshape(-1, 2)
+    lat, lon = utm.to_latlon(pts[:, 0], pts[:, 1], zone_number, zone_letter)
+    return list(zip(lat.tolist(), lon.tolist()))
 
 
 def _grid_bbox(
