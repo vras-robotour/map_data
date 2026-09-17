@@ -229,14 +229,16 @@ result = planner.plan(np.array([start, goal]))  # np.ndarray or None
 Grid-based local replanning around OSM barriers. See the [ReplanPath API reference](api/pathsolver.md#replanpath) for full details.
 
 ```python
+import copy
+
 import numpy as np
 from map_data.map_data import MapData
-from map_data.pathsolver.replan import ReplanPath, parse_args
+from map_data.pathsolver.replan import DEFAULT_ARGS, ReplanPath
 from map_data.utils.parsing import ways_to_shapely
 
 md = MapData.load("coords.mapdata")
 
-args = parse_args([])
+args = copy.copy(DEFAULT_ARGS)
 args.low = (md.min_x, md.min_y)
 args.high = (md.max_x, md.max_y)
 args.cell_size = 0.25

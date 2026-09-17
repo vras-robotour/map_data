@@ -29,13 +29,11 @@ function _applyDeltaInPlace(lls, orig, dlat, dlng) {
 }
 
 function escHtml(s) {
+    // textContent -> innerHTML escapes &, <, > but not quotes; the two fixups
+    // keep attribute values (value="${escHtml(v)}") safe as before.
     if (s === null || s === undefined) return '';
-    return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+    return Object.assign(document.createElement('span'), { textContent: String(s) }).innerHTML
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // Builds one "key / value / delete" row for the way-edit and annotation

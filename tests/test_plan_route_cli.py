@@ -74,7 +74,7 @@ def test_cli_annotations_switch(footway_network_mapdata, capsys):
     """``--annotations none`` ignores a store that would delete the needed way."""
     path, lat0, lon0 = footway_network_mapdata
     path.with_name(path.stem + ".annotations.json").write_text(
-        json.dumps({"version": 1, "annotations": [], "deleted_ways": [2]})
+        json.dumps({"version": 1, "annotations": [], "deleted_ways": [{"id": 2}]})
     )
     args = [
         "-f",

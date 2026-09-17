@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-import argparse
 import logging
 import threading
-from typing import TYPE_CHECKING, Any
+from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import numpy as np
 import shapely as sh
@@ -48,17 +48,22 @@ def _discard_cancelled(transfer_id: str | None) -> None:
             _cancelled_transfers.discard(transfer_id)
 
 
-def load_planner_defaults() -> dict[str, Any]:
-    """
-    Load default planner configuration from config/planner_defaults.yaml.
-    """
-    return load_config("planner_defaults.yaml")
+# Default parameter set for :class:`ReplanPath`; callers ``copy.copy`` it and override
+# the fields they care about (``low``, ``high``, ``cell_size``, ...).
+DEFAULT_ARGS = SimpleNamespace(
+    low=(0.0, 0.0),
+    high=(0.0, 0.0),
+    cell_size=0.25,
+    inflate_obstacles=0.25,
+    simplify_path=True,
+    smooth_path=False,
+)
 
 
 class ReplanPath:
     def __init__(
         self,
-        args: argparse.Namespace,
+        args: SimpleNamespace,
         obstacles: list[sh.geometry.base.BaseGeometry] | None = None,
         transfer_id: str | None = None,
         grid_cost_weight: float | None = None,
@@ -67,7 +72,7 @@ class ReplanPath:
     ) -> None:
         self.args = args
         self.transfer_id = transfer_id
-        defaults = load_planner_defaults()
+        defaults = load_config("planner_defaults.yaml")
         self.grid_cost_weight = (
             grid_cost_weight if grid_cost_weight is not None else GRID_COST_WEIGHT
         )
@@ -269,25 +274,3 @@ class ReplanPath:
             highway_types=highway_types,
             max_path_dist=max_path_dist,
         )
-
-
-def parse_args(args: list[str] | None = None) -> argparse.Namespace:
-    """
-    Default parameter namespace for :class:`ReplanPath`.
-
-    Not a CLI parser — the standalone ``replan`` script this once served no
-    longer exists (see ``map_data_plan`` / :mod:`map_data.plan_route_cli`
-    instead). This is just the shared way callers (the viewer, and
-    :func:`~map_data.pathsolver.route.plan_route`) build a defaults object
-    and override the fields they care about (``low``, ``high``,
-    ``cell_size``, ...).
-    """
-    del args  # nothing left parses real CLI arguments here
-    return argparse.Namespace(
-        low=(0.0, 0.0),
-        high=(0.0, 0.0),
-        cell_size=0.25,
-        inflate_obstacles=0.25,
-        simplify_path=True,
-        smooth_path=False,
-    )

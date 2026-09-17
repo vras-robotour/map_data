@@ -530,7 +530,7 @@ class TestOSMCloudMapLoading:
         path = tmp_path / "network.mapdata"
         build_footway_network_mapdata(path)
         annotation_path_for(path).write_text(
-            json.dumps({"version": 1, "annotations": [], "deleted_ways": [2]})
+            json.dumps({"version": 1, "annotations": [], "deleted_ways": [{"id": 2}]})
         )
         node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
 

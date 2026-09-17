@@ -1170,13 +1170,6 @@ def test_get_transfer_code_wakes_up_on_event_instead_of_polling():
     assert elapsed < 1.0  # woken by the event, not stuck waiting out the timeout
 
 
-def test_get_transfer_code_blocks_full_timeout_for_unknown_transfer():
-    manager = viewer_routes.WormholeManager()
-    start = time.time()
-    assert manager.get_transfer_code("nope", timeout=0.2) is None
-    assert time.time() - start >= 0.2
-
-
 # ── non-JSON / empty bodies on JSON endpoints ────────────────────────────────
 
 

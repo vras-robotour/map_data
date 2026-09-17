@@ -138,9 +138,11 @@ The viewer exposes a modal panel where `highway_costs` values can be edited per 
 ### Programmatic override
 
 ```python
-from map_data.pathsolver.replan import ReplanPath, parse_args
+import copy
 
-args = parse_args([])
+from map_data.pathsolver.replan import DEFAULT_ARGS, ReplanPath
+
+args = copy.copy(DEFAULT_ARGS)
 args.cell_size = 0.5  # coarser grid for faster planning
 args.inflate_obstacles = 0.5  # wider obstacle clearance
 

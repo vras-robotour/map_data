@@ -60,7 +60,6 @@ import logging
 import math
 import os
 import re
-import select
 import shutil
 import subprocess
 import tempfile
@@ -89,12 +88,7 @@ from werkzeug.exceptions import HTTPException
 
 from map_data.annotations import apply_tag_overrides, apply_way_edits, merge_annotations
 from map_data.map_data import MapData
-from map_data.pathsolver.replan import (
-    ReplanPath,
-    cancel_replan_backend,
-    load_planner_defaults,
-    parse_args,
-)
+from map_data.pathsolver.replan import DEFAULT_ARGS, ReplanPath, cancel_replan_backend
 from map_data.pathsolver.route import (
     GRAPH_ALGORITHM,
     RoutePlanningError,
@@ -106,7 +100,7 @@ from map_data.traversability import (
     TraversabilityRules,
     load_traversability,
 )
-from map_data.utils.config import config_path, package_share
+from map_data.utils.config import config_path, load_config, package_share
 from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.qr import geo_uri, qr_png, qr_svg
 from map_data.utils.serialization import map_data_to_dict
@@ -126,7 +120,6 @@ from .helpers import (
     get_split_node_ids,
     load_annotations,
     mapdata_to_geojson,
-    migrate_change_log,
     next_synthetic_node_id,
     rebuild_way_without_nodes,
     split_way,
@@ -202,11 +195,10 @@ def get_planner_defaults() -> Response:
     Returns
     -------
     Response
-        JSON dict of planner defaults, as loaded by
-        :func:`~map_data.pathsolver.replan.load_planner_defaults`.
+        JSON dict of planner defaults from ``config/planner_defaults.yaml``.
 
     """
-    return jsonify(load_planner_defaults())
+    return jsonify(load_config("planner_defaults.yaml"))
 
 
 def _traversability_path() -> Path:
@@ -1726,7 +1718,6 @@ def delete_way(way_id: str) -> Response:
     body = request.get_json(force=True) or {}
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
-        migrate_change_log(store)
         if stored_id not in get_deleted_way_ids(store):
             store.setdefault("deleted_ways", []).append(
                 {
@@ -1771,7 +1762,6 @@ def update_way_tags(way_id: str) -> Response:
         abort(400, "Request body must include 'tags' dict")
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
-        migrate_change_log(store)
         store.setdefault("tag_overrides", {})[original_way_id_str] = tags
         store.setdefault("tag_override_meta", {})[original_way_id_str] = {
             "category": body.get("category", "unknown"),
@@ -1980,7 +1970,6 @@ def split_way_endpoint() -> Response:
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
-        migrate_change_log(store)
         splits = store.setdefault("split_ways", {})
         way_splits = splits.setdefault(original_way_id, [])
 
@@ -2300,8 +2289,6 @@ def delete_way_node() -> Response:
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
-        migrate_change_log(store)
-
         # Added nodes (negative IDs) live in added_nodes, not in the OSM node list;
         # a detached split end is deleted per segment like a real node.
         if node_id < 0 and node_id not in get_detached_node_ids(store, way_id_int).values():
@@ -2414,7 +2401,6 @@ def move_way_nodes() -> Response:
                 "lat": float(n["lat"]),
                 "lon": float(n["lon"]),
             }
-        migrate_change_log(store)
         _log_add(
             store,
             "move",
@@ -2675,7 +2661,7 @@ def get_cost_grid() -> Response:
     low = (min(p1[0], p2[0]), min(p1[1], p2[1]))
     high = (max(p1[0], p2[0]), max(p1[1], p2[1]))
 
-    args = parse_args([])
+    args = copy.copy(DEFAULT_ARGS)
     args.low = low
     args.high = high
     args.cell_size = cell_size
@@ -2731,7 +2717,7 @@ class WormholeManager:
     Manage ``magic-wormhole`` subprocesses that send a GPX file to a companion app.
 
     Each transfer runs an actual ``wormhole send`` subprocess against a
-    temp file; a background thread scrapes its stdout for the generated
+    temp file; a background thread scrapes its output for the generated
     wormhole code, and cleans up the process and temp directory once the
     transfer finishes, fails, or is cancelled. State for all in-flight
     transfers lives in ``active_transfers``, keyed by a generated
@@ -2753,62 +2739,43 @@ class WormholeManager:
         Writes *gpx_data* to a fresh temp directory, spawns ``wormhole
         send`` on it, and starts :meth:`_capture_wormhole_code_thread` in
         the background to scrape the resulting wormhole code from the
-        process's output. The temp directory is *not* cleaned up here on
-        success -- that happens in :meth:`_cleanup_transfer` once the
-        background thread observes the process finish; it *is* cleaned
-        up immediately if the subprocess fails to even start.
-
-        Parameters
-        ----------
-        gpx_data : str
-            Raw GPX file contents to send.
-
-        Returns
-        -------
-        str
-            Newly generated transfer ID, registered in ``active_transfers``.
+        process's output. The temp directory lives until
+        :meth:`_cleanup_transfer` runs, once the background thread observes
+        the process finish; it is removed immediately if the subprocess
+        fails to even start.
 
         Raises
         ------
         RuntimeError
             If the ``wormhole`` subprocess fails to start.
-
         """
         transfer_id = str(uuid.uuid4())
-        temp_dir = Path(tempfile.mkdtemp())
-        file_path = temp_dir / "path.gpx"
-
-        with file_path.open("w") as f:
-            f.write(gpx_data)
+        temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        file_path = Path(temp_dir.name) / "path.gpx"
+        file_path.write_text(gpx_data)
 
         cmd = ["wormhole", "send", str(file_path)]
-        env = os.environ.copy()
-        env["PYTHONUNBUFFERED"] = "1"
-
         try:
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
-                env=env,
+                env={**os.environ, "PYTHONUNBUFFERED": "1"},
             )
         except Exception as e:
-            shutil.rmtree(temp_dir)
+            temp_dir.cleanup()
             msg = f"Failed to start wormhole process: {e}"
             raise RuntimeError(msg) from e
 
-        logger.info("Starting wormhole transfer %s: %s", transfer_id, " ".join(cmd))
-        logger.info("Process ID for transfer %s: %s", transfer_id, process.pid)
-
+        logger.info("Starting wormhole transfer %s (pid %s): %s", transfer_id, process.pid, cmd)
         self.active_transfers[transfer_id] = {
             "process": process,
             "temp_dir": temp_dir,
             "code": None,
             "code_ready": threading.Event(),
         }
-
         threading.Thread(
             target=self._capture_wormhole_code_thread,
             args=(transfer_id,),
@@ -2820,52 +2787,26 @@ class WormholeManager:
         """
         Background-thread target: scrape the wormhole code and await process exit.
 
-        Polls the subprocess's stdout/stderr for the ``"Wormhole code
-        is: ..."`` line, records it on ``active_transfers[transfer_id]["code"]``
-        and sets its ``"code_ready"`` event as soon as found (waking up
-        :meth:`get_transfer_code`), then waits (up to 60s) for the process
-        to exit. Always calls :meth:`_cleanup_transfer` on exit (success,
-        failure, or exception), which removes the transfer's temp
-        directory and its ``active_transfers`` entry.
-
-        Parameters
-        ----------
-        transfer_id : str
-            Transfer to monitor; a no-op if it's no longer in
-            ``active_transfers``.
-
+        Reads the subprocess's output until the ``"Wormhole code is: ..."``
+        line, records it on ``active_transfers[transfer_id]["code"]`` and
+        sets its ``"code_ready"`` event (waking up :meth:`get_transfer_code`),
+        then waits (up to 60s) for the process to exit. Always calls
+        :meth:`_cleanup_transfer` on exit (success, failure, or exception).
         """
         transfer_info = self.active_transfers.get(transfer_id)
         if not transfer_info:
             return
-
         process = transfer_info["process"]
-        wormhole_code = None
         try:
-            while True:
-                readable, _, _ = select.select([process.stdout, process.stderr], [], [], 0.1)
-                for stream in readable:
-                    line = stream.readline().strip()
-                    if line:
-                        match = re.search(r"Wormhole code is: (\S+-\S+-\S+)", line)
-                        if match:
-                            wormhole_code = match.group(1)
-                            logger.info(
-                                "Wormhole code for transfer %s: %s",
-                                transfer_id,
-                                wormhole_code,
-                            )
-                        elif stream == process.stderr:
-                            logger.warning("Wormhole stderr (%s): %s", transfer_id, line)
-
-                if wormhole_code:
-                    transfer_info["code"] = wormhole_code
+            for line in process.stdout:
+                match = re.search(r"Wormhole code is: (\S+-\S+-\S+)", line)
+                if match:
+                    transfer_info["code"] = match.group(1)
                     transfer_info["code_ready"].set()
+                    logger.info("Wormhole code for transfer %s: %s", transfer_id, match.group(1))
                     break
-
-                if process.poll() is not None:
-                    break
-
+                if line.strip():
+                    logger.warning("Wormhole output (%s): %s", transfer_id, line.strip())
             process.wait(timeout=60)
         except Exception:
             logger.exception("Error in wormhole thread for %s", transfer_id)
@@ -2878,28 +2819,11 @@ class WormholeManager:
         """
         Block until a transfer's wormhole code is available, or *timeout* elapses.
 
-        Woken up by :meth:`_capture_wormhole_code_thread` setting the
-        transfer's ``"code_ready"`` event as soon as it scrapes the code,
-        rather than polling.
-
-        Parameters
-        ----------
-        transfer_id : str
-            Transfer to wait on.
-        timeout : float, default 10
-            Maximum seconds to wait.
-
-        Returns
-        -------
-        str or None
-            The wormhole code, or ``None`` if it wasn't captured within
-            *timeout* (including if *transfer_id* is unknown throughout --
-            in which case this blocks for the full *timeout* regardless).
-
+        Returns the code, or ``None`` if *transfer_id* is unknown or the code
+        was not captured within *timeout*.
         """
         transfer_info = self.active_transfers.get(transfer_id)
-        ready = transfer_info["code_ready"] if transfer_info else threading.Event()
-        if ready.wait(timeout) and transfer_info is not None:
+        if transfer_info and transfer_info["code_ready"].wait(timeout):
             return str(transfer_info["code"])
         return None
 
@@ -2907,54 +2831,28 @@ class WormholeManager:
         """
         Kill an active transfer's ``wormhole`` subprocess.
 
-        Does not remove the transfer from ``active_transfers`` or clean up
-        its temp directory here -- that still happens via
-        :meth:`_capture_wormhole_code_thread` observing the process exit
-        and calling :meth:`_cleanup_transfer`.
-
-        Parameters
-        ----------
-        transfer_id : str
-            Transfer to cancel.
+        Bookkeeping and the temp directory are still cleaned up by
+        :meth:`_capture_wormhole_code_thread` observing the process exit.
 
         Returns
         -------
         tuple of (bool, str)
             ``(True, "Transfer cancelled")`` on success, or ``(False,
             "Invalid or unknown transfer ID")`` if *transfer_id* isn't active.
-
         """
         if transfer_id not in self.active_transfers:
             return False, "Invalid or unknown transfer ID"
-
         logger.info("Cancelling wormhole transfer %s", transfer_id)
         process = self.active_transfers[transfer_id]["process"]
         if process.poll() is None:
             process.kill()
-
         return True, "Transfer cancelled"
 
     def _cleanup_transfer(self, transfer_id: str) -> None:
-        """
-        Remove a finished transfer's bookkeeping entry and delete its temp directory.
-
-        Parameters
-        ----------
-        transfer_id : str
-            Transfer to remove; a no-op if already removed.
-
-        Side Effects
-        ------------
-        Deletes the transfer's temp directory tree on disk (errors are
-        logged, not raised).
-
-        """
+        """Remove a finished transfer's bookkeeping entry and delete its temp directory."""
         transfer = self.active_transfers.pop(transfer_id, None)
-        if transfer and transfer.get("temp_dir"):
-            try:
-                shutil.rmtree(transfer["temp_dir"])
-            except Exception:
-                logger.exception("Error cleaning temp dir for %s", transfer_id)
+        if transfer:
+            transfer["temp_dir"].cleanup()
 
 
 wormhole_manager = WormholeManager()

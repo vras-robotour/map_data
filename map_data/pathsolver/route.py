@@ -27,6 +27,7 @@ readable ``reason`` instead of a bare ``None``:
 
 from __future__ import annotations
 
+import copy
 import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
@@ -39,7 +40,7 @@ import utm
 from shapely import geometry
 
 from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE, GraphPlanner
-from map_data.pathsolver.replan import ReplanPath, parse_args
+from map_data.pathsolver.replan import DEFAULT_ARGS, ReplanPath
 from map_data.traversability import TraversabilityRules
 from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
@@ -293,7 +294,7 @@ def plan_route(
                 f"cell_size={cell_size} m, exceeding the {max_grid_cells / 1e6:.0f} million "
                 "cell limit. Request a smaller area or a larger cell size.",
             )
-        args = parse_args([])
+        args = copy.copy(DEFAULT_ARGS)
         args.simplify_path = simplify_path
         args.smooth_path = smooth_path
         args.cell_size = cell_size

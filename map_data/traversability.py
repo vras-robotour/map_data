@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from map_data.utils.config import find_config, load_config
+from map_data.utils.config import config_path, load_config
 
 if TYPE_CHECKING:
     from map_data.utils.way import Way
@@ -346,7 +346,8 @@ def resolve_traversability_path(path: str | Path | None = None) -> Path | None:
     if path:
         p = Path(path).expanduser()
         return p if p.is_file() else None
-    return find_config(DEFAULT_CONFIG_NAME)
+    p = config_path(DEFAULT_CONFIG_NAME)
+    return p if p.is_file() else None
 
 
 def load_traversability(

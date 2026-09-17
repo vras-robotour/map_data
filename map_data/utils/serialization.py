@@ -77,10 +77,6 @@ def atomic_write_json(path: str | Path, data: Any, **dump_kwargs: Any) -> None:
         raise
 
 
-def save_mapdata(md: "MapData", path: str | Path) -> None:
-    atomic_write_json(path, map_data_to_dict(md), indent=2)
-
-
 def load_mapdata(md_class: type["MapData"], path: str | Path) -> "MapData":
     p = Path(path)
     # A legacy pickle file (starts with 0x80) is invalid UTF-8, so json.load
@@ -89,20 +85,8 @@ def load_mapdata(md_class: type["MapData"], path: str | Path) -> "MapData":
     with p.open(encoding="utf-8") as f:
         data = json.load(f)
 
-    meta = data["metadata"]
     md = md_class.__new__(md_class)
-
-    md.zone_number = meta["zone_number"]
-    md.zone_letter = meta["zone_letter"]
-    md.min_x = meta["min_x"]
-    md.max_x = meta["max_x"]
-    md.min_y = meta["min_y"]
-    md.max_y = meta["max_y"]
-    md.min_lat = meta["min_lat"]
-    md.max_lat = meta["max_lat"]
-    md.min_long = meta["min_long"]
-    md.max_long = meta["max_long"]
-    md.coords_file = meta["coords_file"]
+    md.__dict__.update(data["metadata"])  # zone_number/letter, min_/max_ x/y/lat/long, coords_file
 
     md.osm_ways_data = None
     md.osm_rels_data = None

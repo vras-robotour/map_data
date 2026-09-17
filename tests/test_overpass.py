@@ -1,8 +1,7 @@
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import overpy
-import requests
 
 from map_data.utils.overpass import OverpassClient
 
@@ -22,17 +21,14 @@ HTML_ERROR_BODY = "<html><body>Overpass is too busy</body></html>"
 
 
 def _resp(status_code, text=""):
-    r = MagicMock()
-    r.status_code = status_code
-    r.text = text
-    return r
+    return (status_code, text)
 
 
 def test_query_raw_success():
     client = OverpassClient()
     with (
-        patch.object(client.session, "get", return_value=_resp(200, "")),
-        patch.object(client.session, "post", return_value=_resp(200, MINIMAL_OVERPASS_JSON)),
+        patch.object(client, "_wait_for_slot"),
+        patch.object(client, "_http", return_value=_resp(200, MINIMAL_OVERPASS_JSON)),
         patch("map_data.utils.overpass.time.sleep"),
     ):
         result = client.query_raw("test query")
@@ -42,8 +38,8 @@ def test_query_raw_success():
 def test_query_raw_result_parses_to_overpy_result():
     client = OverpassClient()
     with (
-        patch.object(client.session, "get", return_value=_resp(200, "")),
-        patch.object(client.session, "post", return_value=_resp(200, MINIMAL_OVERPASS_JSON)),
+        patch.object(client, "_wait_for_slot"),
+        patch.object(client, "_http", return_value=_resp(200, MINIMAL_OVERPASS_JSON)),
         patch("map_data.utils.overpass.time.sleep"),
     ):
         raw = client.query_raw("test query")
@@ -54,8 +50,8 @@ def test_query_raw_rate_limited_rotates_endpoint():
     client = OverpassClient()
     side_effects = [_resp(429), _resp(200, MINIMAL_OVERPASS_JSON)]
     with (
-        patch.object(client.session, "get", return_value=_resp(200, "")),
-        patch.object(client.session, "post", side_effect=side_effects),
+        patch.object(client, "_wait_for_slot"),
+        patch.object(client, "_http", side_effect=side_effects),
         patch("map_data.utils.overpass.time.sleep"),
     ):
         result = client.query_raw("test query", retries=2)
@@ -67,8 +63,8 @@ def test_query_raw_server_error_retries():
     client = OverpassClient()
     side_effects = [_resp(500, "error"), _resp(200, MINIMAL_OVERPASS_JSON)]
     with (
-        patch.object(client.session, "get", return_value=_resp(200, "")),
-        patch.object(client.session, "post", side_effect=side_effects),
+        patch.object(client, "_wait_for_slot"),
+        patch.object(client, "_http", side_effect=side_effects),
         patch("map_data.utils.overpass.time.sleep"),
     ):
         result = client.query_raw("test query", retries=2)
@@ -79,8 +75,8 @@ def test_query_raw_remark_error_body_retries():
     client = OverpassClient()
     side_effects = [_resp(200, REMARK_ERROR_JSON), _resp(200, MINIMAL_OVERPASS_JSON)]
     with (
-        patch.object(client.session, "get", return_value=_resp(200, "")),
-        patch.object(client.session, "post", side_effect=side_effects),
+        patch.object(client, "_wait_for_slot"),
+        patch.object(client, "_http", side_effect=side_effects),
         patch("map_data.utils.overpass.time.sleep"),
     ):
         result = client.query_raw("test query", retries=2)
@@ -92,8 +88,8 @@ def test_query_raw_html_body_retries():
     client = OverpassClient()
     side_effects = [_resp(200, HTML_ERROR_BODY), _resp(200, MINIMAL_OVERPASS_JSON)]
     with (
-        patch.object(client.session, "get", return_value=_resp(200, "")),
-        patch.object(client.session, "post", side_effect=side_effects),
+        patch.object(client, "_wait_for_slot"),
+        patch.object(client, "_http", side_effect=side_effects),
         patch("map_data.utils.overpass.time.sleep"),
     ):
         result = client.query_raw("test query", retries=2)
@@ -104,8 +100,8 @@ def test_query_raw_html_body_retries():
 def test_query_raw_persistent_remark_errors_return_none():
     client = OverpassClient()
     with (
-        patch.object(client.session, "get", return_value=_resp(200, "")),
-        patch.object(client.session, "post", return_value=_resp(200, REMARK_ERROR_JSON)),
+        patch.object(client, "_wait_for_slot"),
+        patch.object(client, "_http", return_value=_resp(200, REMARK_ERROR_JSON)),
         patch("map_data.utils.overpass.time.sleep"),
     ):
         result = client.query_raw("test query")
@@ -115,8 +111,8 @@ def test_query_raw_persistent_remark_errors_return_none():
 def test_query_raw_exhausts_retries():
     client = OverpassClient()
     with (
-        patch.object(client.session, "get", return_value=_resp(200, "")),
-        patch.object(client.session, "post", return_value=_resp(500, "error")),
+        patch.object(client, "_wait_for_slot"),
+        patch.object(client, "_http", return_value=_resp(500, "error")),
         patch("map_data.utils.overpass.time.sleep"),
     ):
         result = client.query_raw("test query", retries=3)
@@ -126,8 +122,8 @@ def test_query_raw_exhausts_retries():
 def test_query_raw_request_exception():
     client = OverpassClient()
     with (
-        patch.object(client.session, "get", return_value=_resp(200, "")),
-        patch.object(client.session, "post", side_effect=requests.Timeout("timeout")),
+        patch.object(client, "_wait_for_slot"),
+        patch.object(client, "_http", side_effect=TimeoutError("timeout")),
         patch("map_data.utils.overpass.time.sleep"),
     ):
         result = client.query_raw("test query", retries=3)
@@ -137,8 +133,8 @@ def test_query_raw_request_exception():
 def test_query_raw_default_retries_covers_every_endpoint_twice():
     client = OverpassClient()
     with (
-        patch.object(client.session, "get", return_value=_resp(200, "")),
-        patch.object(client.session, "post", return_value=_resp(500, "error")) as mock_post,
+        patch.object(client, "_wait_for_slot"),
+        patch.object(client, "_http", return_value=_resp(500, "error")) as mock_post,
         patch("map_data.utils.overpass.time.sleep"),
     ):
         result = client.query_raw("test query")
@@ -150,8 +146,8 @@ def test_query_raw_calls_on_attempt_with_endpoint_and_counts():
     client = OverpassClient()
     calls = []
     with (
-        patch.object(client.session, "get", return_value=_resp(200, "")),
-        patch.object(client.session, "post", return_value=_resp(200, MINIMAL_OVERPASS_JSON)),
+        patch.object(client, "_wait_for_slot"),
+        patch.object(client, "_http", return_value=_resp(200, MINIMAL_OVERPASS_JSON)),
         patch("map_data.utils.overpass.time.sleep"),
     ):
         client.query_raw("test query", retries=2, on_attempt=lambda *args: calls.append(args))
@@ -161,7 +157,7 @@ def test_query_raw_calls_on_attempt_with_endpoint_and_counts():
 def test_wait_for_slot_skips_non_overpass_endpoint():
     client = OverpassClient()
     with (
-        patch.object(client.session, "get") as mock_get,
+        patch.object(client, "_http") as mock_get,
         patch("map_data.utils.overpass.time.sleep") as mock_sleep,
     ):
         client._wait_for_slot("https://overpass.private.coffee/api/interpreter")
@@ -173,7 +169,7 @@ def test_wait_for_slot_returns_immediately_if_slots_available():
     client = OverpassClient()
     status_text = "2 slots available now\n"
     with (
-        patch.object(client.session, "get", return_value=_resp(200, status_text)),
+        patch.object(client, "_http", return_value=_resp(200, status_text)),
         patch("map_data.utils.overpass.time.sleep") as mock_sleep,
     ):
         client._wait_for_slot("https://overpass-api.de/api/interpreter")
@@ -184,7 +180,7 @@ def test_wait_for_slot_sleeps_when_no_slots():
     client = OverpassClient()
     status_text = "0 slots available now\nin 30 seconds\n"
     with (
-        patch.object(client.session, "get", return_value=_resp(200, status_text)),
+        patch.object(client, "_http", return_value=_resp(200, status_text)),
         patch("map_data.utils.overpass.time.sleep") as mock_sleep,
     ):
         client._wait_for_slot("https://overpass-api.de/api/interpreter")

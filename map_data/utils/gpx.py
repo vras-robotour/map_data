@@ -10,27 +10,17 @@ def create_gpx_content(
     waypoints_data: Sequence[Mapping[str, str | float]],
     creator_name: str = "MapData Planner",
 ) -> str:
-    """
-    Generates the XML content for a GPX file from a list of waypoint dictionaries.
-    """
-    gpx_waypoints = []
+    """GPX 1.1 file of bare ``<wpt>`` elements from ``{"latitude", "longitude"}`` dicts."""
+    gpx = gpxpy.gpx.GPX()
+    gpx.creator = creator_name
     for point in waypoints_data:
         try:
-            lat = point["latitude"]
-            lon = point["longitude"]
-            gpx_waypoints.append(f'  <wpt lat="{lat}" lon="{lon}"></wpt>')
+            lat, lon = float(point["latitude"]), float(point["longitude"])
         except KeyError as e:
             logger.warning("Skipping a waypoint due to missing key: %s", e)
             continue
-
-    waypoints_xml = "\n".join(gpx_waypoints)
-
-    gpx_template = f"""<?xml version="1.0" encoding="UTF-8"?>
-<gpx xmlns="http://www.topografix.com/GPX/1/1" version="1.1" creator="{creator_name}">
-{waypoints_xml}
-</gpx>
-    """
-    return gpx_template.strip()
+        gpx.waypoints.append(gpxpy.gpx.GPXWaypoint(latitude=lat, longitude=lon))
+    return gpx.to_xml()
 
 
 def create_gpx_track(

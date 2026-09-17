@@ -1,10 +1,9 @@
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import gpxpy
 import numpy as np
 import pytest
-import requests
 import utm
 
 from map_data.map_data import MapData
@@ -52,8 +51,8 @@ def test_load_mapdata_legacy_pickle_raises(tmp_path):
 def test_overpass_timeout_returns_none():
     client = OverpassClient()
     with (
-        patch.object(client.session, "get", return_value=MagicMock(status_code=200, text="")),
-        patch.object(client.session, "post", side_effect=requests.Timeout("timeout")),
+        patch.object(client, "_wait_for_slot"),
+        patch.object(client, "_http", side_effect=TimeoutError("timeout")),
         patch("map_data.utils.overpass.time.sleep"),
     ):
         result = client.query_raw("test query", retries=3)

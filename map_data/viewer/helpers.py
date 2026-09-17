@@ -16,6 +16,7 @@ import copy
 import json
 import logging
 import threading
+from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -219,58 +220,7 @@ def mapdata_to_geojson(map_data: "MapData") -> dict[str, Any]:
 # Per-file lock for thread-safe annotation access. Re-entrant so that
 # annotation_store() can hold it across a whole load -> mutate -> save cycle
 # while save_annotations() re-acquires it internally.
-_annotation_locks: dict[str, threading.RLock] = {}
-_locks_lock = threading.Lock()
-
-
-def _get_annotation_lock(path: str) -> threading.RLock:
-    """
-    Return the process-wide lock guarding writes to a given annotation file.
-
-    Locks are created lazily and keyed by *path* (as given, not resolved),
-    so callers should pass a consistent path string for the same file to
-    actually serialize on the same lock. Locks are never removed, so the
-    ``_annotation_locks`` dict grows by one entry per distinct path for the
-    life of the process.
-
-    Parameters
-    ----------
-    path : str
-        Path to the annotation JSON file, used as the lock dict key.
-
-    Returns
-    -------
-    threading.RLock
-        The lock instance associated with *path*.
-
-    """
-    with _locks_lock:
-        if path not in _annotation_locks:
-            _annotation_locks[path] = threading.RLock()
-        return _annotation_locks[path]
-
-
-def _normalize_legacy_store(store: dict[str, Any]) -> dict[str, Any]:
-    """
-    Upgrade one-off legacy annotation-store shapes to the current one, in place.
-
-    Nothing writes these shapes any more, but old files on disk may still
-    have them: ``deleted_ways``/``hidden_ways`` as a flat list of raw IDs
-    (now a list of ``{"id": ...}`` dicts), and ``deleted_nodes`` as a
-    ``{str(way_id): [node_id, ...]}`` dict (now a flat list of
-    ``{"way_id": ..., "node_id": ...}`` dicts). Normalizing once here lets
-    every other reader assume the current shape.
-    """
-    for key in ("deleted_ways", "hidden_ways"):
-        items = store.get(key)
-        if items:
-            store[key] = [d if isinstance(d, dict) else {"id": d} for d in items]
-    dn = store.get("deleted_nodes")
-    if isinstance(dn, dict):
-        store["deleted_nodes"] = [
-            {"way_id": int(k), "node_id": v} for k, vs in dn.items() for v in vs
-        ]
-    return store
+_annotation_locks: defaultdict[str, threading.RLock] = defaultdict(threading.RLock)
 
 
 def load_annotations(path: str) -> dict[str, Any]:
@@ -280,8 +230,7 @@ def load_annotations(path: str) -> dict[str, Any]:
     An empty/default store (``{"version": 1, "annotations": []}``) is
     returned both when *path* does not exist and when it exists but
     contains invalid JSON (in the latter case a warning is logged; the
-    corrupt file itself is left untouched on disk). Legacy on-disk shapes
-    are upgraded via :func:`_normalize_legacy_store` before returning.
+    corrupt file itself is left untouched on disk).
 
     Parameters
     ----------
@@ -298,7 +247,7 @@ def load_annotations(path: str) -> dict[str, Any]:
     if p.is_file():
         try:
             with p.open() as f:
-                return _normalize_legacy_store(json.load(f))
+                return json.load(f)
         except json.JSONDecodeError:
             logger.warning("Corrupt annotation file %s, returning empty store", path)
     return {"version": 1, "annotations": []}
@@ -308,7 +257,7 @@ def save_annotations(path: str, data: dict[str, Any]) -> None:
     """
     Atomically write the annotation store to *path*.
 
-    Writes are serialized per-path via :func:`_get_annotation_lock` to
+    Writes are serialized per-path via ``_annotation_locks`` to
     guard against concurrent writers in the same process; the actual
     tempfile-plus-``os.replace`` write is
     :func:`~map_data.utils.serialization.atomic_write_json`.
@@ -321,8 +270,7 @@ def save_annotations(path: str, data: dict[str, Any]) -> None:
         Annotation store to serialize.
 
     """
-    lock = _get_annotation_lock(path)
-    with lock:
+    with _annotation_locks[path]:
         atomic_write_json(path, data, indent=2)
 
 
@@ -331,7 +279,7 @@ def annotation_store(path: str) -> Iterator[dict[str, Any]]:
     """
     Context manager for a whole load -> mutate -> save cycle on the store.
 
-    Holds the per-path lock from :func:`_get_annotation_lock` across the
+    Holds the per-path lock from ``_annotation_locks`` across the
     entire cycle, so concurrent mutators serialize their read-modify-write
     sequences instead of silently overwriting each other's edits (the
     lost-update race that plain ``load_annotations`` + ``save_annotations``
@@ -356,8 +304,7 @@ def annotation_store(path: str) -> Iterator[dict[str, Any]]:
         normal exit.
 
     """
-    lock = _get_annotation_lock(path)
-    with lock:
+    with _annotation_locks[path]:
         store = load_annotations(path)
         yield store
         save_annotations(path, store)
@@ -375,8 +322,7 @@ def get_deleted_way_ids(store: dict[str, Any]) -> set[int | str]:
     ----------
     store : dict
         Annotation store, as returned by :func:`load_annotations`
-        (``store["deleted_ways"]`` entries are dicts with an ``"id"`` key;
-        legacy raw-ID entries are upgraded on load).
+        (``store["deleted_ways"]`` entries are dicts with an ``"id"`` key).
 
     Returns
     -------
@@ -731,80 +677,6 @@ def split_way(
         seg.id = f"{way.id}:{i}"
 
     return segments
-
-
-_MIGRATION_VERSION = "v2"
-
-
-def migrate_change_log(store: dict[str, Any]) -> None:
-    """
-    Ensure change_log covers all existing changes with proportional way/node interleaving.
-
-    On first call (or when migration is outdated): entries without a "ts" key are
-    considered legacy and are replaced by a fresh proportionally-interleaved block.
-    Entries that carry a "ts" (recorded by user actions) are preserved as-is.
-    Idempotent once migration_version matches.
-    """
-    if store.get("change_log_migration") != _MIGRATION_VERSION:
-        # Drop legacy entries (no "ts") added by a previous grouped-order migration;
-        # keep user-action entries that already have a timestamp.
-        cl_kept = [e for e in store.get("change_log", []) if "ts" in e]
-        store["change_log"] = cl_kept
-
-    cl = store.setdefault("change_log", [])
-    tracked_ways = {e["id"] for e in cl if e.get("type") == "way"}
-    tracked_tags = {e["id"] for e in cl if e.get("type") == "tag"}
-    tracked_nodes = {(e["way_id"], e["node_id"]) for e in cl if e.get("type") == "node"}
-
-    untracked_ways = [
-        {"type": "way", "id": d["id"]}
-        for d in store.get("deleted_ways", [])
-        if d["id"] not in tracked_ways
-    ]
-
-    untracked_nodes = [
-        {"type": "node", "way_id": d["way_id"], "node_id": d["node_id"]}
-        for d in store.get("deleted_nodes", [])
-        if (d["way_id"], d["node_id"]) not in tracked_nodes
-    ]
-
-    untracked_tags = []
-    for wid_str in store.get("tag_overrides", {}):
-        wid = int(wid_str)
-        if wid not in tracked_tags:
-            untracked_tags.append({"type": "tag", "id": wid})
-
-    tracked_moves = {e["id"] for e in cl if e.get("type") == "move"}
-    untracked_moves = []
-    for wid_str in store.get("node_position_overrides", {}):
-        wid = int(wid_str)
-        if wid not in tracked_moves:
-            untracked_moves.append({"type": "move", "id": wid, "category": "unknown", "label": ""})
-
-    tracked_splits = {(e.get("way_id"), e.get("node_id")) for e in cl if e.get("type") == "split"}
-    untracked_splits: list[dict[str, Any]] = []
-    for wid_str, nids in store.get("split_ways", {}).items():
-        wid = int(wid_str)
-        untracked_splits.extend(
-            {"type": "split", "way_id": wid, "node_id": nid}
-            for nid in nids
-            if (wid, nid) not in tracked_splits
-        )
-
-    if untracked_ways or untracked_nodes or untracked_tags or untracked_moves or untracked_splits:
-        nw, nn = len(untracked_ways), len(untracked_nodes)
-        if nw == 0 or nn == 0:
-            interleaved = untracked_ways + untracked_nodes
-        else:
-            # Spread ways and nodes uniformly using normalised midpoint positions.
-            items = [((i + 0.5) / nw, e) for i, e in enumerate(untracked_ways)] + [
-                ((j + 0.5) / nn, e) for j, e in enumerate(untracked_nodes)
-            ]
-            items.sort(key=lambda x: x[0])
-            interleaved = [e for _, e in items]
-        store["change_log"] = interleaved + untracked_tags + untracked_moves + untracked_splits + cl
-
-    store["change_log_migration"] = _MIGRATION_VERSION
 
 
 def get_node_position_overrides(

@@ -1,3 +1,5 @@
+import copy
+
 import numpy as np
 import pytest
 import shapely.geometry as geom
@@ -5,7 +7,7 @@ import utm
 from shapely.geometry import LineString
 
 from map_data.map_data import MapData
-from map_data.pathsolver.replan import ReplanPath, parse_args
+from map_data.pathsolver.replan import DEFAULT_ARGS, ReplanPath
 from map_data.utils.way import Way
 
 _ZN, _ZL = 33, "U"
@@ -38,7 +40,7 @@ def _make_md_with_footway():
 
 
 def _make_args(low, high, cell_size=0.5):
-    args = parse_args([])
+    args = copy.copy(DEFAULT_ARGS)
     args.low = low
     args.high = high
     args.cell_size = cell_size

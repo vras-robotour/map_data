@@ -77,7 +77,7 @@ def test_annotated_path_bridges_a_gap(footway_network_mapdata):
 def test_deleted_way_is_removed(footway_network_mapdata):
     path, lat0, lon0 = footway_network_mapdata
     annotation_path_for(path).write_text(
-        json.dumps({"version": 1, "annotations": [], "deleted_ways": [2]})
+        json.dumps({"version": 1, "annotations": [], "deleted_ways": [{"id": 2}]})
     )
     md, _ = load_mapdata_with_annotations(path)
     assert [w.id for w in md.footways_list] == [1, 3]

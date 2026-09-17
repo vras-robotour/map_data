@@ -108,16 +108,12 @@ def _removed_summary(removed: dict[str, int]) -> str:
     return ", ".join(f"{reason} {count}" for reason, count in removed.items())
 
 
-def _default_data_dir() -> str:
-    return str(package_share("data"))
-
-
 class RoutePlanner(Node):
     def __init__(self) -> None:
         super().__init__("route_planner")
         p = self.declare_parameter
         self.mapdata_file = p("mapdata_file", "").value
-        self.data_dir = p("data_dir", _default_data_dir()).value
+        self.data_dir = p("data_dir", str(package_share("data"))).value
         # "auto" = <mapdata>.annotations.json next to the map, "none" = the unedited map,
         # or an explicit store file.
         self.annotations = p("annotations", "auto").value

@@ -26,7 +26,7 @@ from map_data.utils.parsing import (
     parse_osm_ways,
     separate_ways,
 )
-from map_data.utils.serialization import atomic_write_json, load_mapdata, save_mapdata
+from map_data.utils.serialization import atomic_write_json, load_mapdata, map_data_to_dict
 from map_data.utils.way import Way
 
 logger = logging.getLogger(__name__)
@@ -678,7 +678,7 @@ class MapData:
             else:
                 logger.error("No save path provided and no source file available.")
                 return
-        save_mapdata(self, path)
+        atomic_write_json(path, map_data_to_dict(self), indent=2)
         logger.info("Map data saved to %s", path)
 
     @classmethod

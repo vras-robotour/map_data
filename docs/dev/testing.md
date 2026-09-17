@@ -28,17 +28,17 @@ pytest tests/ -k "overpass" -v
 | `test_astar.py` | Grid A* planner | — |
 | `test_rrt.py` | RRT* planner — path found, collision avoidance, edge cases | — |
 | `test_graph_planner.py` | Graph-based planner | — |
-| `test_overpass.py` | `OverpassClient` — retry logic, rate limiting, status polling | `requests.Session`, `time.sleep` |
+| `test_overpass.py` | `OverpassClient` — retry logic, rate limiting, status polling | `OverpassClient._http`, `time.sleep` |
 | `test_parsing.py` | `parse_osm_ways`, `separate_ways`, `parse_osm_nodes` — OSM element classification and buffering | `overpy.Overpass` (fixture JSON) |
 | `test_fill_grid.py` | `ReplanPath.fill_grid` — footway cost assignment, barrier cell marking | — |
 | `test_viewer_helpers.py` | `helpers.py` — GeoJSON conversion, way splitting, node overrides, annotation I/O, change log migration | — |
 | `test_viewer_routes.py` | Flask REST API — annotation CRUD, file listing, mapdata fetch, way operations, path-traversal security | Filesystem (temp dir) |
 | `test_integration.py` | Full pipeline — GPX parse, save/reload roundtrip, OSM cache, mocked Overpass query, `parse_intersections` | `OverpassClient` |
-| `test_errors.py` | Error paths — malformed GPX, corrupt files, Overpass timeouts, planning failures | `requests.Session`, `time.sleep` |
+| `test_errors.py` | Error paths — malformed GPX, corrupt files, Overpass timeouts, planning failures | `OverpassClient._http`, `time.sleep` |
 
 ## Test design principles
 
-**No network.** Every test that would otherwise reach the Overpass API patches `requests.Session.post` / `requests.Session.get` via `unittest.mock.patch`. `time.sleep` is patched alongside so retries complete instantly.
+**No network.** Every test that would otherwise reach the Overpass API patches `OverpassClient._http` (and `_wait_for_slot`) via `unittest.mock.patch`. `time.sleep` is patched alongside so retries complete instantly.
 
 **No ROS2.** The Flask app is created via `create_app(data_dir=...)` which bypasses the ROS2 node initialisation (guarded by `ROS_AVAILABLE`).
 
@@ -86,7 +86,7 @@ Tests `ReplanPath.fill_grid` with a hand-built `MapData` containing a 16 m footw
 - 429/406 response rotating the active endpoint
 - 500 response triggering a retry on the same endpoint
 - All retries exhausted → `None`
-- `requests.Timeout` → `None`
+- `TimeoutError` → `None`
 - `_wait_for_slot` short-circuiting for non-`overpass-api.de` endpoints
 - `_wait_for_slot` returning immediately when slots are available
 - `_wait_for_slot` sleeping the correct number of seconds when no slots are available
@@ -98,7 +98,6 @@ Pure functions in `helpers.py` are tested in isolation using hand-constructed `W
 - **GeoJSON roundtrip** — `geom_to_geojson` followed by `geojson_geom_to_utm` must recover the original geometry within 2 m (`equals_exact(tolerance=2.0)`).
 - **Way splitting** — a five-node `LineString` way split at its middle node must yield two segments with virtual IDs `"{id}:0"` and `"{id}:1"` and the correct node subsets.
 - **Node deletion** — removing a node from a four-node way must return a three-node way; removing a node from a two-node way must return `None`.
-- **Change log migration** — `migrate_change_log` populates the log for untracked deletions, is idempotent once the migration version matches, drops legacy entries without a `ts` key on re-migration, and preserves entries that carry a timestamp.
 
 ### `test_viewer_routes.py`
 
@@ -133,6 +132,6 @@ Additional coverage:
 
 1. Place the test file in `tests/`.
 2. Import only from `map_data.*` — do not import from neighbouring test modules.
-3. Mock any external I/O at the lowest sensible level (`requests.Session`, not the whole `requests` module).
+3. Mock any external I/O at the lowest sensible level (`OverpassClient._http`, not the whole `urllib` module).
 4. Use `tmp_path` for any test that reads or writes files.
 5. Run `pytest tests/ -v` before opening a pull request.

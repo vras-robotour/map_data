@@ -33,14 +33,8 @@ def package_share(subdir: str, package: str = "map_data") -> Path:
 
 
 def config_path(filename: str) -> Path:
-    """Where a config file of the package would live (need not exist; see :func:`find_config`)."""
+    """Where a config file of the package would live (need not exist)."""
     return package_share("config") / filename
-
-
-def find_config(filename: str) -> Path | None:
-    """The package's config file of that name, or ``None`` if it is not installed."""
-    path = config_path(filename)
-    return path if path.is_file() else None
 
 
 def load_config(filename: str) -> dict[str, Any]:

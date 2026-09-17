@@ -18,7 +18,6 @@ dependencies = [
     "overpy",
     "shapely",
     "utm",
-    "requests",
     "PyYAML",
     "scipy",
     # utils.qr renders goal QR codes with cv2.QRCodeEncoder; headless keeps the
