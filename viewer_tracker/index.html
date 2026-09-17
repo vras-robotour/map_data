@@ -1820,6 +1820,11 @@ grey = not published, hollow = disabled.</p>
 <td>UTM TF frame used when <code>earth_frame</code> is empty</td>
 </tr>
 <tr>
+<td><code>tf_static_only</code></td>
+<td><code>true</code></td>
+<td>Read frames from <code>/tf_static</code> only; set to <code>false</code> when a frame above is published on <code>/tf</code> (costs a lot of CPU)</td>
+</tr>
+<tr>
 <td><code>gps_fix_topic</code></td>
 <td><code>/gps/fix</code></td>
 <td>Raw GPS fix (<code>NavSatFix</code>)</td>
