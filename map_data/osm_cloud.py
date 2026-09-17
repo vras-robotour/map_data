@@ -453,18 +453,14 @@ class OSMCloud(Node):
 
         """
         points = self._to_local(self.map_data.get_points())
-        grid = np.pad(
-            create_grid(tuple(self.grid_min), tuple(self.grid_max), self.grid_res),
-            ((0, 0), (0, 1)),
-        )
-        waypoints = np.pad(
-            split_ways_to_points(
-                points, self.map_data.get_ways(), self.grid_res, self.highway_types
-            ),
-            ((0, 0), (0, 1)),
+        grid = create_grid(tuple(self.grid_min), tuple(self.grid_max), self.grid_res)
+        waypoints = split_ways_to_points(
+            points, self.map_data.get_ways(), self.grid_res, self.highway_types
         )
 
-        grid = points_near_ref(grid, waypoints, self.max_path_dist)
+        # The nearest-neighbour search is 2-D (a third all-zero column only slows the
+        # kd-tree down); the z=0 column create_cloud expects is put back afterwards.
+        grid = np.insert(points_near_ref(grid, waypoints, self.max_path_dist), 2, 0.0, axis=1)
         if self.neighbor_cost == "linear":
             pass
         elif self.neighbor_cost == "quadratic":
@@ -625,7 +621,7 @@ def points_near_ref(points: np.ndarray, reference: np.ndarray, max_dist: float =
         reference = np.array(reference)
 
     tree = cKDTree(reference, compact_nodes=False, balanced_tree=False)
-    dists, _ = tree.query(points, distance_upper_bound=max_dist)
+    dists, _ = tree.query(points, distance_upper_bound=max_dist, workers=-1)
     mask = dists < max_dist
     filtered_points = points[mask]
     filtered_dists = dists[mask]
@@ -703,27 +699,24 @@ def split_ways_to_points(
         for way in ways.get(HIGHWAY_TYPE_KEYS[highway_type], [])
     ]
     for way in selected:
-        for i, (n0, n1) in enumerate(zip(way.nodes, way.nodes[1:])):
-            id0 = getattr(n0, "id", n0)
-            id1 = getattr(n1, "id", n1)
-            point0 = points[id0].ravel()[:2]
-            point1 = points[id1].ravel()[:2]
+        ids = [getattr(n, "id", n) for n in way.nodes]
+        if len(ids) < 2:
+            continue
+        nodes = np.array([points[i].ravel()[:2] for i in ids])
+        starts, ends = nodes[:-1], nodes[1:]
+        dists = np.linalg.norm(ends - starts, axis=1)
 
-            if i == 0:
-                waypoints.append(point0)
-
-            dist = float(np.linalg.norm(point1 - point0))
-
+        waypoints.append(nodes[:1])
+        for point0, point1, dist in zip(starts, ends, dists):
             if dist <= TOLERANCE:
-                waypoints.append(point1)
+                waypoints.append(point1[None])
                 continue
 
-            vec = (point1 - point0) / dist
             num = int(np.ceil(dist / max_dist))
-            step = dist / num
-            waypoints.extend(point0 + (j + 1) * step * vec for j in range(num))
+            steps = np.arange(1, num + 1) / num
+            waypoints.append(point0 + steps[:, None] * (point1 - point0))
 
-    return np.array(waypoints) if waypoints else np.empty((0, 2))
+    return np.concatenate(waypoints) if waypoints else np.empty((0, 2))
 
 
 def main() -> None:

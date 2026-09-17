@@ -237,6 +237,45 @@ class TestSplitWaysToPoints:
         )
         assert result.shape == (3, 2)
 
+    def test_matches_the_reference_implementation(self):
+        """The vectorised split must reproduce the plain per-segment loop exactly."""
+        rng = np.random.default_rng(0)
+        coords = rng.uniform(-50.0, 50.0, size=(40, 2))
+        coords[7] = coords[6]  # a duplicated node => a zero-length segment
+        points = {i: np.array([[x], [y], [0.0]]) for i, (x, y) in enumerate(coords)}
+        ways = {
+            "footways": [
+                Way(id=1, nodes=[0, 1, 2, 3, 4, 5], tags={"highway": "footway"}),
+                Way(id=2, nodes=[6, 7, 8], tags={"highway": "footway"}),
+                Way(id=3, nodes=[9], tags={"highway": "footway"}),  # single node: no segment
+                Way(id=4, nodes=list(range(10, 40)), tags={"highway": "footway"}),
+            ],
+        }
+
+        def reference(points, ways, max_dist):
+            waypoints = []
+            for way in ways["footways"]:
+                for i, (id0, id1) in enumerate(zip(way.nodes, way.nodes[1:])):
+                    point0 = points[id0].ravel()[:2]
+                    point1 = points[id1].ravel()[:2]
+                    if i == 0:
+                        waypoints.append(point0)
+                    dist = float(np.linalg.norm(point1 - point0))
+                    if dist <= 1e-3:
+                        waypoints.append(point1)
+                        continue
+                    vec = (point1 - point0) / dist
+                    num = int(np.ceil(dist / max_dist))
+                    step = dist / num
+                    waypoints.extend(point0 + (j + 1) * step * vec for j in range(num))
+            return np.array(waypoints)
+
+        for max_dist in (0.25, 3.0, 1000.0):
+            result = split_ways_to_points(points, ways, max_dist=max_dist)
+            expected = reference(points, ways, max_dist)
+            assert result.shape == expected.shape
+            np.testing.assert_allclose(result, expected, rtol=0, atol=1e-9)
+
 
 # ── OSMCloud node construction ──────────────────────────────────────────────
 
@@ -299,6 +338,8 @@ class TestOSMCloudInit:
         assert node.grid_res == pytest.approx(0.25)
         assert node.grid_topic == "grid"
         assert node.publish_intersections is False
+        # "auto" needs no TF at all, so the node subscribes to nothing.
+        assert node.tf_sub is None
 
     def test_construction_registers_parameter_callback(self):
         node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
@@ -338,8 +379,6 @@ class TestOSMCloudInit:
         assert node_with_intersections.intersections_topic in topics
         assert node_with_intersections.intersection_markers_topic in topics
 
-        # "auto" needs no TF at all, so the node subscribes to nothing.
-        assert node.tf_sub is None
     def test_construction_publishes_once_and_registers_no_timer_by_default(self):
         node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
 
