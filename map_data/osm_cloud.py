@@ -21,11 +21,11 @@ from rclpy.qos import QoSDurabilityPolicy, QoSProfile
 from ros2_numpy import msgify, numpify
 from scipy.spatial import cKDTree
 from sensor_msgs.msg import PointCloud2
+from tf2_msgs.msg import TFMessage
 from tf2_ros import (
     Buffer,
     StaticTransformBroadcaster,
     TransformException,
-    TransformListener,
 )
 from visualization_msgs.msg import Marker, MarkerArray
 
@@ -44,9 +44,6 @@ TOLERANCE = 1e-3
 TRANSFORM_MODES = ("tf", "auto", "geodetic")
 # highway_types value -> MapData.get_ways() key, as in route_planner's graph planner.
 HIGHWAY_TYPE_KEYS = {"footway": "footways", "road": "roads"}
-# lookup_transform() does not spin the node, so TF messages only arrive in the
-# spin_once() between attempts; keep the blocking wait short.
-TF_POLL_TIMEOUT = 0.5
 
 
 class OSMCloud(Node):
@@ -135,7 +132,7 @@ class OSMCloud(Node):
             )
 
         self.tf = Buffer()
-        self.tf_sub = TransformListener(self.tf, self, spin_thread=True)
+        self.tf_sub = None
         self.tf_static_pub = StaticTransformBroadcaster(self)
 
         self.utm_to_local: np.ndarray | None = None
@@ -158,6 +155,19 @@ class OSMCloud(Node):
                 f"Unknown transform_mode '{self.transform_mode}', falling back to 'tf'"
             )
             self.transform_mode = "tf"
+
+        # Both transforms this node looks up are static and needed once, at startup:
+        # a full TransformListener would also digest the /tf firehose (hundreds of Hz
+        # on Helhest) for the node's whole life. The subscription is destroyed again
+        # below, so the node has no callbacks left once the map is published.
+        if self.transform_mode != "auto":
+            static_qos = QoSProfile(depth=100, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+            self.tf_sub = self.create_subscription(
+                TFMessage,
+                "/tf_static",
+                self._tf_static_cb,
+                static_qos,
+            )
 
         if self.transform_mode == "geodetic":
             self.get_ecef_to_local()
@@ -184,6 +194,10 @@ class OSMCloud(Node):
             self.tf_static_pub.sendTransform(t)
         else:
             self.get_utm_to_local()
+
+        if self.tf_sub is not None:
+            self.destroy_subscription(self.tf_sub)
+            self.tf_sub = None
 
         if self.transform_mode == "geodetic":
             self.get_logger().info(
@@ -353,6 +367,10 @@ class OSMCloud(Node):
 
         self.get_logger().info("Published OSM data", throttle_duration_sec=60.0)
 
+    def _tf_static_cb(self, msg: TFMessage) -> None:
+        for t in msg.transforms:
+            self.tf.set_transform_static(t, "osm_cloud")
+
     def _poll_tf(self, target: str, source: str) -> np.ndarray | None:
         """
         Block until the ``source -> target`` TF transform is available.
@@ -362,12 +380,9 @@ class OSMCloud(Node):
         """
         while rclpy.ok():
             try:
-                tf_msg = self.tf.lookup_transform(
-                    target,
-                    source,
-                    rclpy.time.Time(),
-                    rclpy.duration.Duration(seconds=TF_POLL_TIMEOUT),
-                )
+                # Zero timeout: the spin_once() below is what delivers /tf_static,
+                # so a blocking wait here would only sleep.
+                tf_msg = self.tf.lookup_transform(target, source, rclpy.time.Time())
                 return numpify(tf_msg.transform)
             except (TransformException, RuntimeError, TypeError, ValueError) as e:
                 self.get_logger().warning(

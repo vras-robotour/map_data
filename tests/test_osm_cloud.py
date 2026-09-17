@@ -11,6 +11,7 @@ sys.modules["geometry_msgs.msg"] = MagicMock()
 sys.modules["rcl_interfaces.msg"] = MagicMock()
 sys.modules["ros2_numpy"] = MagicMock()
 sys.modules["sensor_msgs.msg"] = MagicMock()
+sys.modules["tf2_msgs.msg"] = MagicMock()
 sys.modules["tf2_ros"] = MagicMock()
 sys.modules["visualization_msgs.msg"] = MagicMock()
 
@@ -337,6 +338,8 @@ class TestOSMCloudInit:
         assert node_with_intersections.intersections_topic in topics
         assert node_with_intersections.intersection_markers_topic in topics
 
+        # "auto" needs no TF at all, so the node subscribes to nothing.
+        assert node.tf_sub is None
     def test_construction_publishes_once_and_registers_no_timer_by_default(self):
         node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
 
