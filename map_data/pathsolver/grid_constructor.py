@@ -247,26 +247,32 @@ class PathGrid:
                         new_obstacles.append(diff)
             effective_obstacles = new_obstacles
 
-        # 2. Mark hard obstacles in the point grid
-        if effective_obstacles:
+        # 2. Mark hard obstacles in the point grid. The flat grid is the regular
+        # lattice of create_empty_grid (row-major, x fastest), so each obstacle's
+        # bounds become an index range and only that sub-block is tested.
+        if effective_obstacles and len(path_grid):
+            num_x = len(np.arange(self.low[0], self.high[0], self.cell_size))
+            num_y = len(path_grid) // num_x
+            grid_x = path_grid[:, 0].reshape(num_y, num_x)
+            grid_y = path_grid[:, 1].reshape(num_y, num_x)
+            grid_cost = path_grid[:, 3].reshape(num_y, num_x)
             for obstacle in effective_obstacles:
+                if obstacle.geom_type not in ("Polygon", "MultiPolygon"):
+                    continue
                 minx, miny, maxx, maxy = obstacle.bounds
-                mask_bbox = (
-                    (path_grid[:, 0] >= minx)
-                    & (path_grid[:, 0] <= maxx)
-                    & (path_grid[:, 1] >= miny)
-                    & (path_grid[:, 1] <= maxy)
-                )
-                if not np.any(mask_bbox):
+                i0 = max(0, int(np.floor((minx - self.low[0]) / self.cell_size)))
+                i1 = min(num_x, int(np.ceil((maxx - self.low[0]) / self.cell_size)) + 1)
+                j0 = max(0, int(np.floor((miny - self.low[1]) / self.cell_size)))
+                j1 = min(num_y, int(np.ceil((maxy - self.low[1]) / self.cell_size)) + 1)
+                if i0 >= i1 or j0 >= j1:
                     continue
 
-                if obstacle.geom_type in ("Polygon", "MultiPolygon"):
-                    mask_inside = sh.contains_xy(
-                        obstacle,
-                        path_grid[mask_bbox, 0],
-                        path_grid[mask_bbox, 1],
-                    )
-                    path_grid[mask_bbox, 3] = np.where(mask_inside, 1.0, path_grid[mask_bbox, 3])
+                mask_inside = sh.contains_xy(
+                    obstacle,
+                    grid_x[j0:j1, i0:i1],
+                    grid_y[j0:j1, i0:i1],
+                )
+                np.copyto(grid_cost[j0:j1, i0:i1], 1.0, where=mask_inside)
 
         # 3. Process ways to set their costs
         path_points = []

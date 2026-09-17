@@ -1,5 +1,7 @@
+import array
 import heapq
 import logging
+import math
 from collections.abc import Callable, Iterator
 
 import numpy as np
@@ -195,7 +197,12 @@ def grid_astar(
     p_nx = nx + 2
     p_ny = ny + 2
 
-    g_scores = np.full(p_ny * p_nx, np.inf, dtype=np.float32)
+    # Plain Python floats: numpy scalar arithmetic dominates this inner loop.
+    # The costs are float32, and every g score is rounded back to float32 through
+    # _f32 so the expansion order (and the path) stays bit-identical to the
+    # previous all-numpy version.
+    _f32 = array.array("f", [0.0])
+    g_scores = array.array("f", [math.inf]) * (p_ny * p_nx)
     parents = np.full(p_ny * p_nx, -1, dtype=np.int32)
 
     start_flat = (start_iy + 1) * p_nx + (start_ix + 1)
@@ -203,7 +210,7 @@ def grid_astar(
     g_scores[start_flat] = 0.0
 
     # Priority queue: (f_score, g_score, ix, iy)
-    h0 = np.sqrt((start_ix - goal_ix) ** 2 + (start_iy - goal_iy) ** 2)
+    h0 = math.sqrt((start_ix - goal_ix) ** 2 + (start_iy - goal_iy) ** 2)
     pq = [(h0, 0.0, start_ix, start_iy)]
 
     # Neighbor offsets in flattened padded grid (dy * p_nx + dx, dist, ortho_offsets).
@@ -216,9 +223,10 @@ def grid_astar(
             if dx == 0 and dy == 0:
                 continue
             ortho_offsets = (dy * p_nx, dx) if dx != 0 and dy != 0 else ()
-            neighbors_data.append((dy * p_nx + dx, float(np.sqrt(dx**2 + dy**2)), ortho_offsets))
+            dist = float(np.float32(math.sqrt(dx**2 + dy**2)))
+            neighbors_data.append((dy * p_nx + dx, dist, ortho_offsets))
 
-    flat_costs = padded_costs.ravel()
+    flat_costs = padded_costs.ravel().tolist()
 
     while pq:
         _f, g_pushed, ix, iy = heapq.heappop(pq)
@@ -258,20 +266,22 @@ def grid_astar(
             v_flat = u_flat + offset
             cost_val = flat_costs[v_flat]
 
-            if np.isinf(cost_val):
+            if cost_val == math.inf:
                 continue
 
             # Diagonal moves must not slip between two corner-touching
             # blocked cells: both edge-adjacent cells have to be free.
-            if ortho_offsets and any(np.isinf(flat_costs[u_flat + o]) for o in ortho_offsets):
+            if ortho_offsets and any(flat_costs[u_flat + o] == math.inf for o in ortho_offsets):
                 continue
 
-            new_g = current_g + dist * cost_val
+            _f32[0] = dist * cost_val
+            _f32[0] = current_g + _f32[0]
+            new_g = _f32[0]
             if new_g < g_scores[v_flat]:
                 g_scores[v_flat] = new_g
                 parents[v_flat] = u_flat
                 v_iy, v_ix = divmod(v_flat, p_nx)
-                h = np.sqrt((v_ix - 1 - goal_ix) ** 2 + (v_iy - 1 - goal_iy) ** 2)
+                h = math.sqrt((v_ix - 1 - goal_ix) ** 2 + (v_iy - 1 - goal_iy) ** 2)
                 heapq.heappush(pq, (new_g + h, new_g, v_ix - 1, v_iy - 1))
 
     return None
