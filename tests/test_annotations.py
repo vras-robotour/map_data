@@ -1,5 +1,6 @@
 """Tests for the headless annotation merge (``map_data.annotations``)."""
 
+import copy
 import json
 from pathlib import Path
 
@@ -10,12 +11,14 @@ from shapely.geometry import LineString
 from map_data.annotations import (
     NO_ANNOTATIONS,
     annotation_path_for,
+    apply_store,
     load_mapdata_with_annotations,
 )
 from map_data.map_data import MapData
 from map_data.pathsolver.route import RoutePlanningError, plan_route
 from map_data.traversability import TraversabilityRules, load_traversability
 from map_data.utils.way import Way
+from map_data.viewer.helpers import load_annotations
 
 
 def _latlon(lat0, lon0, dx, dy):
@@ -406,3 +409,60 @@ def test_shipped_rules_keep_the_driven_routes_plannable():
         assert length <= MAX_DETOUR_FACTOR * plain[name], (
             f"{name}: {length:.0f} m with the shipped rules, {plain[name]:.0f} m without"
         )
+
+
+# ── apply_store copies, it does not deep-copy ──────────────────────────────
+
+#: The full Stromovka map with the robot's real annotation store next to it.
+STROMOVKA = Path(__file__).resolve().parents[1] / "data" / "stromovka.mapdata"
+
+
+def _snapshot(md):
+    """Everything about *md* the annotation passes could plausibly clobber."""
+    return (
+        [str(w.id) for w in md.roads_list],
+        [str(w.id) for w in md.footways_list],
+        [str(w.id) for w in md.barriers_list],
+        [dict(w.tags or {}) for w in md.footways_list + md.roads_list + md.barriers_list],
+        [len(w.nodes) for w in md.footways_list + md.roads_list],
+        sorted(md.nodes_cache),
+        len(md.crossroads_list),
+    )
+
+
+@pytest.mark.skipif(not STROMOVKA.is_file(), reason="stromovka.mapdata is not in the repo")
+def test_apply_store_leaves_the_original_map_untouched():
+    """
+    ``apply_store`` shallow-copies (deep-copying a whole map cost ~370 ms of
+    every load), so the caller's ``MapData`` and its ``Way`` objects must come
+    out of a merge exactly as they went in.
+    """
+    md = MapData.load(str(STROMOVKA))
+    store = load_annotations(str(annotation_path_for(STROMOVKA)))
+    assert store["deleted_ways"], "expected the shipped store to delete ways"
+    # The shipped store has no tag overrides; retag a surviving way so that pass runs too.
+    deleted = {str(d["id"]) for d in store["deleted_ways"]}
+    victim = next(w for w in md.footways_list if str(w.id) not in deleted)
+    store["tag_overrides"] = {str(victim.id): {"highway": "steps", "surface": "gravel"}}
+
+    before = copy.deepcopy(_snapshot(md))
+    victim_tags = copy.deepcopy(victim.tags)
+
+    merged = apply_store(md, store)
+
+    assert _snapshot(md) == before
+    assert any(w is victim for w in md.footways_list)
+    assert victim.tags == victim_tags
+
+    # ... and the merge did happen.
+    assert len(merged.footways_list) < len(md.footways_list)
+    overridden = [
+        w
+        for w in merged.footways_list + merged.roads_list
+        if str(w.id).split(":")[0] == str(victim.id)
+    ]
+    assert overridden and all(w.tags["surface"] == "gravel" for w in overridden)
+    assert sorted(merged.nodes_cache) != before[5]  # annotation/added nodes
+
+    # No state leaks into the original, so a second merge gives the same map.
+    assert _snapshot(apply_store(md, store)) == _snapshot(merged)

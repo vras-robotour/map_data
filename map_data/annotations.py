@@ -103,6 +103,8 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                     )
                     for i, seg in enumerate(segments):
                         virtual_id = f"{w.id}:{i}"
+                        if seg is w:  # split_way declined; don't rename the caller's way
+                            seg = copy.copy(seg)  # noqa: PLW2901
                         seg.id = virtual_id
                         if virtual_id in deleted_way_ids:
                             continue
@@ -150,19 +152,26 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
 
 def apply_tag_overrides(md: MapData, store: dict[str, Any]) -> None:
     """
-    Merge ``store["tag_overrides"]`` into the ways (mutating them in place, so
-    call this on a deep copy), re-sort roads/footways in case a ``highway``
-    tag changed category, and recompute the crossroads.
+    Merge ``store["tag_overrides"]`` into the ways, re-sort roads/footways in
+    case a ``highway`` tag changed category, and recompute the crossroads.
+
+    An overridden way is replaced by a shallow copy carrying the merged tags,
+    so the input ``Way`` objects are never mutated and the three way lists are
+    reassigned; this is safe on a shallow copy of the map.
     """
     tag_overrides = store.get("tag_overrides", {})
     if not tag_overrides:
         return
     for lst_name in ("roads_list", "footways_list", "barriers_list"):
+        new_lst = []
         for w in getattr(md, lst_name):
             original_id = str(w.id).split(":")[0]
             ov = tag_overrides.get(original_id)
             if ov:
+                w = copy.copy(w)  # noqa: PLW2901
                 w.tags = {**(w.tags or {}), **ov}
+            new_lst.append(w)
+        setattr(md, lst_name, new_lst)
     new_roads: list[Way] = []
     new_footways: list[Way] = []
     for w in md.roads_list:
@@ -246,8 +255,22 @@ def merge_annotations(md: MapData, store: dict[str, Any]) -> None:
 
 
 def apply_store(md: MapData, store: dict[str, Any]) -> MapData:
-    """Apply every kind of edit in *store* to *md* (deep-copied first) and return it."""
-    md = copy.deepcopy(md)
+    """
+    Apply every kind of edit in *store* to *md* (copied first) and return it.
+
+    The copy is shallow: no pass mutates a ``Way``, a node entry or the
+    waypoints, they only rebind the map's attributes — except
+    :func:`merge_annotations`, which appends to the way lists and writes the
+    annotated paths' synthetic nodes into ``nodes_cache``. Giving the copy its
+    own containers is therefore enough to leave *md* untouched, and costs ~1 ms
+    against the ~280 ms of deep-copying every geometry (Stromovka).
+    """
+    md = copy.copy(md)
+    md.nodes_cache = dict(getattr(md, "nodes_cache", None) or {})
+    md.roads_list = list(md.roads_list)
+    md.footways_list = list(md.footways_list)
+    md.barriers_list = list(md.barriers_list)
+    md.crossroads_list = list(md.crossroads_list)
     apply_way_edits(md, store)
     apply_tag_overrides(md, store)
     merge_annotations(md, store)
