@@ -1,5 +1,7 @@
 """TrackerNode in a real rclpy context: config, subscription types, live reconfiguration."""
 
+import time
+
 import pytest
 
 from map_data.viewer import ros_node
@@ -107,21 +109,39 @@ def test_apply_settings_changes_nothing_when_invalid(make_node, bad):
 
 
 def test_plan_clears_on_empty_path_and_when_the_planner_exits(make_node):
+    from geometry_msgs.msg import PoseStamped
     from nav_msgs.msg import Path
 
     node = make_node({"path_topic": "/plan", "goal_topic": "/goal", "earth_frame": ""})
+    pub = node.create_publisher(Path, "/plan", 10)
+    goal_pub = node.create_publisher(PoseStamped, "/goal", 10)
+    stale = ros_node.PLAN_STALE_TIMEOUT + 1
     with node._lock:
         node.waypoints_gps = [{"lat": 50.0, "lon": 14.0}]
         node.goal_gps = {"lat": 50.0, "lon": 14.0}
+        node._last_plan_time = node._last_goal_time = time.time()
+    # crl_commander sends empty plans at 20 Hz between goals: one does not clear the plan
     node._path_callback(Path())
+    node._drop_orphaned_plan()
+    assert node.waypoints_gps and node.goal_gps
+    # ... but empties persisting past PLAN_STALE_TIMEOUT do, and take a quiet goal with them
+    with node._lock:
+        node._last_plan_time -= stale
+    node._drop_orphaned_plan()
     assert node.waypoints_gps == []
+    assert node.goal_gps  # goal still republished
+    with node._lock:
+        node._last_goal_time -= stale
+    node._drop_orphaned_plan()
+    assert node.goal_gps is None
 
+    # silence alone (nav2 publishes a plan once) never clears it
     with node._lock:
         node.waypoints_gps = [{"lat": 50.0, "lon": 14.0}]
-    pub = node.create_publisher(Path, "/plan", 10)
+        node._last_plan_time = node._last_empty_plan_time = 0.0
     node._drop_orphaned_plan()
     assert node.waypoints_gps  # still published
-    assert node.goal_gps is None  # nobody publishes /goal
     node.destroy_publisher(pub)
+    node.destroy_publisher(goal_pub)
     node._drop_orphaned_plan()
     assert node.waypoints_gps == []

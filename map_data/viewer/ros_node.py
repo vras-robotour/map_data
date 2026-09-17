@@ -71,6 +71,11 @@ except ImportError:
 
 RECOVERY_TIMEOUT = 5.0
 TELEOP_TIMEOUT = 2.0
+# crl_commander republishes its plan and goal every tick (20 Hz) while it has them, and
+# publishes an *empty* plan while it has no goal; a planner that publishes once (nav2)
+# never sends empties. So: empties for this long drop the plan, and the goal with it when
+# it went quiet too. Silence alone never clears anything.
+PLAN_STALE_TIMEOUT = 3.0
 PATH_SUBSAMPLE = 10  # keep every n-th pose of long paths (plus the last one)
 ROAD_PATH_SUBSAMPLE = 5
 
@@ -214,6 +219,9 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         self.intersections_gps: list[dict[str, float]] = []
         self.active_intersection_gps: dict[str, float] | None = None
         self.goal_gps: dict[str, float] | None = None
+        self._last_plan_time = 0.0  # last non-empty plan
+        self._last_empty_plan_time = 0.0
+        self._last_goal_time = 0.0
         self.pose_gps: dict[str, float] | None = None
         self.pose_ekf: dict[str, float] | None = None
         self.current_heading: float | None = None
@@ -684,7 +692,11 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
 
     # ------------------------------------------------------------------ callbacks: geometry
     def _drop_orphaned_plan(self) -> None:
-        """Forget the path / goal once no node publishes them (planner stopped or restarted)."""
+        """
+        Forget the path / goal once no node publishes them (planner stopped or restarted),
+        or once the planner has been sending empty plans for PLAN_STALE_TIMEOUT (crl_commander
+        with no goal: STOP, goal reached, goal aborted).
+        """
         orphaned = {
             name: not topic or self.count_publishers(topic) == 0
             for name, topic in (
@@ -692,7 +704,14 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
                 ("goal", self.get_parameter("goal_topic").value),
             )
         }
+        now = time.time()
         with self._lock:
+            stale = (
+                self._last_empty_plan_time > self._last_plan_time
+                and now - self._last_plan_time > PLAN_STALE_TIMEOUT
+            )
+            orphaned["path"] |= stale
+            orphaned["goal"] |= stale and now - self._last_goal_time > PLAN_STALE_TIMEOUT
             if orphaned["path"] and self.waypoints_gps:
                 self.waypoints_gps = []
                 self.num_waypoints = self.current_waypoint = 0
@@ -702,12 +721,17 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
                 self._dirty = True
 
     def _path_callback(self, msg: Path) -> None:
+        if not msg.poses:  # cleared by _drop_orphaned_plan once empties persist
+            with self._lock:
+                self._last_empty_plan_time = time.time()
+            return
         poses = subsample(msg.poses, PATH_SUBSAMPLE)
         waypoints = self._points_to_latlon(msg.header.frame_id, self._poses_xyz(poses))
-        if waypoints is not None:  # an empty path clears the plan
+        if waypoints is not None:
             with self._lock:
                 self.waypoints_gps = waypoints
                 self.num_waypoints = len(msg.poses)
+                self._last_plan_time = time.time()
                 self._dirty = True
 
     def _goal_callback(self, msg: PoseStamped) -> None:
@@ -715,6 +739,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         if pts:
             with self._lock:
                 self.goal_gps = pts[0]
+                self._last_goal_time = time.time()
                 self._dirty = True
 
     def _sequence_path_callback(self, msg: Path) -> None:
