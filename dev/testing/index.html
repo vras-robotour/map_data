@@ -1655,7 +1655,7 @@
 <tr>
 <td><code>test_overpass.py</code></td>
 <td><code>OverpassClient</code> — retry logic, rate limiting, status polling</td>
-<td><code>requests.Session</code>, <code>time.sleep</code></td>
+<td><code>OverpassClient._http</code>, <code>time.sleep</code></td>
 </tr>
 <tr>
 <td><code>test_parsing.py</code></td>
@@ -1685,12 +1685,12 @@
 <tr>
 <td><code>test_errors.py</code></td>
 <td>Error paths — malformed GPX, corrupt files, Overpass timeouts, planning failures</td>
-<td><code>requests.Session</code>, <code>time.sleep</code></td>
+<td><code>OverpassClient._http</code>, <code>time.sleep</code></td>
 </tr>
 </tbody>
 </table>
 <h2 id="test-design-principles">Test design principles</h2>
-<p><strong>No network.</strong> Every test that would otherwise reach the Overpass API patches <code>requests.Session.post</code> / <code>requests.Session.get</code> via <code>unittest.mock.patch</code>. <code>time.sleep</code> is patched alongside so retries complete instantly.</p>
+<p><strong>No network.</strong> Every test that would otherwise reach the Overpass API patches <code>OverpassClient._http</code> (and <code>_wait_for_slot</code>) via <code>unittest.mock.patch</code>. <code>time.sleep</code> is patched alongside so retries complete instantly.</p>
 <p><strong>No ROS2.</strong> The Flask app is created via <code>create_app(data_dir=...)</code> which bypasses the ROS2 node initialisation (guarded by <code>ROS_AVAILABLE</code>).</p>
 <p><strong>Real filesystem, isolated.</strong> Route tests use pytest's <code>tmp_path</code> fixture, giving each test function its own directory. The <code>load_mapdata_cached</code> cache keys on <code>(path, mtime)</code> so cross-test contamination cannot occur.</p>
 <p><strong>Minimal fixtures.</strong> Shared helper functions (e.g. <code>_make_mapdata</code>) are plain functions defined in the test module, not conftest fixtures, to keep test files self-contained.</p>
@@ -1726,7 +1726,7 @@
 <li>429/406 response rotating the active endpoint</li>
 <li>500 response triggering a retry on the same endpoint</li>
 <li>All retries exhausted → <code>None</code></li>
-<li><code>requests.Timeout</code> → <code>None</code></li>
+<li><code>TimeoutError</code> → <code>None</code></li>
 <li><code>_wait_for_slot</code> short-circuiting for non-<code>overpass-api.de</code> endpoints</li>
 <li><code>_wait_for_slot</code> returning immediately when slots are available</li>
 <li><code>_wait_for_slot</code> sleeping the correct number of seconds when no slots are available</li>
@@ -1737,7 +1737,6 @@
 <li><strong>GeoJSON roundtrip</strong> — <code>geom_to_geojson</code> followed by <code>geojson_geom_to_utm</code> must recover the original geometry within 2 m (<code>equals_exact(tolerance=2.0)</code>).</li>
 <li><strong>Way splitting</strong> — a five-node <code>LineString</code> way split at its middle node must yield two segments with virtual IDs <code>"{id}:0"</code> and <code>"{id}:1"</code> and the correct node subsets.</li>
 <li><strong>Node deletion</strong> — removing a node from a four-node way must return a three-node way; removing a node from a two-node way must return <code>None</code>.</li>
-<li><strong>Change log migration</strong> — <code>migrate_change_log</code> populates the log for untracked deletions, is idempotent once the migration version matches, drops legacy entries without a <code>ts</code> key on re-migration, and preserves entries that carry a timestamp.</li>
 </ul>
 <h3 id="test_viewer_routespy"><code>test_viewer_routes.py</code></h3>
 <p>A <code>_make_mapdata</code> helper creates a minimal <code>.mapdata</code> file (one footway <code>Way</code>, two entries in <code>nodes_cache</code>) and writes it to a <code>tmp_path</code>. Two fixtures build on this:</p>
@@ -1767,7 +1766,7 @@
 <ol>
 <li>Place the test file in <code>tests/</code>.</li>
 <li>Import only from <code>map_data.*</code> — do not import from neighbouring test modules.</li>
-<li>Mock any external I/O at the lowest sensible level (<code>requests.Session</code>, not the whole <code>requests</code> module).</li>
+<li>Mock any external I/O at the lowest sensible level (<code>OverpassClient._http</code>, not the whole <code>urllib</code> module).</li>
 <li>Use <code>tmp_path</code> for any test that reads or writes files.</li>
 <li>Run <code>pytest tests/ -v</code> before opening a pull request.</li>
 </ol>
