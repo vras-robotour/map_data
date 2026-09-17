@@ -253,6 +253,7 @@ class RoutePlanner(Node):
     def _preload_once(self) -> None:
         """One-shot timer: load the default map and build its default graph planner."""
         self._preload_timer.cancel()
+        self.destroy_timer(self._preload_timer)
         path = self._resolve_mapdata("")
         if path is None:
             self.get_logger().warning(
@@ -495,11 +496,13 @@ class RoutePlanner(Node):
                 self.local_frame,
                 self.earth_frame,
                 rclpy.time.Time(),
-                rclpy.duration.Duration(seconds=0.5),
+                rclpy.duration.Duration(seconds=0),
             )
         except (TransformException, RuntimeError, TypeError, ValueError) as e:
             self.get_logger().warning(
-                f"{self.earth_frame} -> {self.local_frame} unavailable, route_local left empty: {e}"
+                f"{self.earth_frame} -> {self.local_frame} unavailable, "
+                f"route_local left empty: {e}",
+                throttle_duration_sec=30.0,
             )
             return msg
         m = numpify(tf_msg.transform)
