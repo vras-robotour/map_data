@@ -14,6 +14,7 @@ map_data_tracker:
     # --- geometry: Fixposition publishes FP_ECEF -> FP_ENU0 on /tf_static; there is no utm frame
     earth_frame: "FP_ECEF"
     utm_frame: ""
+    tf_static_only: true                             # FP_ECEF -> FP_ENU0 is static, so skip /tf
 
     # --- position / heading (Fixposition driver, qos_type sensor_short = best effort)
     gps_fix_topic: "/fixposition/odometry_llh"       # fused NavSatFix, what road_follower and route_planner plan from

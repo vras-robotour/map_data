@@ -96,9 +96,13 @@ class TestNodeParameters:
         assert value == 5.0
         assert isinstance(value, float)
 
+    def test_bool_parameter(self):
+        assert node_parameters({"tf_static_only": False})["tf_static_only"] is False
+
     @pytest.mark.parametrize(
         "config",
         [
+            {"tf_static_only": 0},
             {"trail_length": 2.5},
             {"trail_length": True},
             {"stale_after": "3"},

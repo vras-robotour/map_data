@@ -60,6 +60,7 @@ try:
     from ros2_numpy import numpify
     from sensor_msgs.msg import BatteryState, Imu, Joy, NavSatFix, Temperature
     from std_msgs.msg import Bool, Float32, Header, String, UInt64
+    from tf2_msgs.msg import TFMessage
     from tf2_ros import TransformException
     from tf2_ros.buffer import Buffer
     from tf2_ros.transform_listener import TransformListener
@@ -154,7 +155,23 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             self._reset_state_locked()
 
         self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
+        if self.get_parameter("tf_static_only").value:
+            # A TransformListener digests the whole /tf firehose (250 Hz on helhest_jr); when
+            # every frame we look up is static, one /tf_static subscription is enough.
+            # (TransformListener(static_only=True) would do it but is kilted-only.) Kept out
+            # of _tracker_subscriptions so apply_settings does not destroy it.
+            self._tf_static_sub = self.create_subscription(
+                TFMessage,
+                "/tf_static",
+                self._tf_static_callback,
+                QoSProfile(
+                    depth=100,
+                    durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                    reliability=ReliabilityPolicy.RELIABLE,
+                ),
+            )
+        else:
+            self.tf_listener = TransformListener(self.tf_buffer, self)
 
         # Use Best Effort QoS for telemetry to match bags and typical sensor publishers
         self._qos_best_effort = QoSProfile(
@@ -551,6 +568,10 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             }
 
     # ------------------------------------------------------------------ geometry -> lat/lon
+    def _tf_static_callback(self, msg: TFMessage) -> None:
+        for t in msg.transforms:
+            self.tf_buffer.set_transform_static(t, NODE_NAME)
+
     def _lookup_matrix(self, target: str, source: str) -> np.ndarray | None:
         """Latest 4x4 ``target <- source`` transform, or None (non-blocking)."""
         try:
@@ -630,7 +651,10 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         self.trail.append({"lat": lat, "lon": lon})
 
     def _set_heading(self, heading: float) -> None:
+        heading = round(heading, 1)
         with self._lock:
+            if heading == self.current_heading:
+                return
             self.current_heading = heading
             # Keep heading in sync with existing pose dicts immediately
             if self.pose_gps is not None:
@@ -653,9 +677,10 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
     def _odom_speed_callback(self, msg: Odometry) -> None:
         vx = msg.twist.twist.linear.x
         vy = msg.twist.twist.linear.y
+        speed = round(math.sqrt(vx * vx + vy * vy), 2)
         with self._lock:
-            self.speed = round(math.sqrt(vx * vx + vy * vy), 2)
-            self._dirty = True
+            self._dirty = self._dirty or speed != self.speed
+            self.speed = speed
 
     # ------------------------------------------------------------------ callbacks: geometry
     def _drop_orphaned_plan(self) -> None:
@@ -677,10 +702,11 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
                 self._dirty = True
 
     def _path_callback(self, msg: Path) -> None:
-        waypoints = self._points_to_latlon(msg.header.frame_id, self._poses_xyz(msg.poses))
+        poses = subsample(msg.poses, PATH_SUBSAMPLE)
+        waypoints = self._points_to_latlon(msg.header.frame_id, self._poses_xyz(poses))
         if waypoints is not None:  # an empty path clears the plan
             with self._lock:
-                self.waypoints_gps = subsample(waypoints, PATH_SUBSAMPLE)
+                self.waypoints_gps = waypoints
                 self.num_waypoints = len(msg.poses)
                 self._dirty = True
 
@@ -692,7 +718,8 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
                 self._dirty = True
 
     def _sequence_path_callback(self, msg: Path) -> None:
-        pts = self._points_to_latlon(msg.header.frame_id, self._poses_xyz(msg.poses))
+        poses = subsample(msg.poses, PATH_SUBSAMPLE)
+        pts = self._points_to_latlon(msg.header.frame_id, self._poses_xyz(poses))
         if pts is not None:
             with self._lock:
                 self.sequence_gps = pts
@@ -731,10 +758,11 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             self._dirty = True
 
     def _road_path_callback(self, msg: Path) -> None:
-        pts = self._points_to_latlon(msg.header.frame_id, self._poses_xyz(msg.poses))
+        poses = subsample(msg.poses, ROAD_PATH_SUBSAMPLE)
+        pts = self._points_to_latlon(msg.header.frame_id, self._poses_xyz(poses))
         if pts is not None:
             with self._lock:
-                self.road_path_gps = subsample(pts, ROAD_PATH_SUBSAMPLE)
+                self.road_path_gps = pts
                 self._dirty = True
 
     def _feedback_callback(

@@ -206,7 +206,16 @@ def create_app(
 
             # Start ROS2 spin in a separate thread
             def ros_spin() -> None:
-                rclpy.spin(tracker_node)
+                # The C++ events executor costs a fraction of rclpy.spin's Python wait set
+                # (measured 6 % vs 60 % CPU on a 250 Hz robot); not in every distro yet.
+                try:
+                    from rclpy.experimental.events_executor import EventsExecutor
+                except ImportError:
+                    rclpy.spin(tracker_node)
+                    return
+                executor = EventsExecutor()
+                executor.add_node(tracker_node)
+                executor.spin()
 
             spin_thread = threading.Thread(target=ros_spin, daemon=True)
             spin_thread.start()

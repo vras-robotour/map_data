@@ -129,6 +129,7 @@ The numeric parameters (`battery_low_voltage`, `stale_after`, `trail_*`,
 |-----------|--------------|-------------|
 | `earth_frame` | `""` | ECEF TF frame for exact pose conversion (`FP_ECEF`); empty = UTM fallback |
 | `utm_frame` | `utm` | UTM TF frame used when `earth_frame` is empty |
+| `tf_static_only` | `true` | Read frames from `/tf_static` only; set to `false` when a frame above is published on `/tf` (costs a lot of CPU) |
 | `gps_fix_topic` | `/gps/fix` | Raw GPS fix (`NavSatFix`) |
 | `gps_filtered_topic` | `/gps/filtered` | EKF-fused GPS position (`NavSatFix`) |
 | `heading_topic` / `heading_type` | `""` / `imu` | Heading source: `imu` (`Imu`), `yaw_vector3` (`Vector3Stamped`, x = yaw rad, e.g. `/fixposition/ypr`), `odometry` (`Odometry`) |

@@ -98,8 +98,9 @@ SETTINGS: tuple[Setting, ...] = (
 SETTING_DEFAULTS: dict[str, str] = {s.name: s.default for s in SETTINGS}
 
 # Parameters only the config file sets (not editable in the web app)
-TUNING_DEFAULTS: dict[str, float | int] = {
+TUNING_DEFAULTS: dict[str, float | int | bool] = {
     "battery_low_voltage": 22.0,
+    "tf_static_only": True,
     "stale_after": 3.0,
     "trail_length": 500,
     "trail_min_step": 0.5,
@@ -174,6 +175,8 @@ def node_parameters(config: Mapping[str, Any]) -> dict[str, Any]:
         if isinstance(default, str):
             value = "" if value is None else value
             ok = isinstance(value, str)
+        elif isinstance(default, bool):
+            ok = isinstance(value, bool)
         elif isinstance(default, float):
             ok = isinstance(value, int | float) and not isinstance(value, bool)
             value = float(value) if ok else value
