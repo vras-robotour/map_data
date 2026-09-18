@@ -74,7 +74,8 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
     takes node positions from it.
     """
     zn, zl = md.zone_number, md.zone_letter
-    nodes_cache = md.nodes_cache = edited_nodes_cache(store, getattr(md, "nodes_cache", None))
+    base_nodes_cache = getattr(md, "nodes_cache", None) or {}
+    nodes_cache = md.nodes_cache = edited_nodes_cache(store, base_nodes_cache)
 
     deleted_way_ids = get_deleted_way_ids(store)
     has_node_dels = bool(store.get("deleted_nodes"))
@@ -131,7 +132,37 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
 
     node_pos_store = store.get("node_position_overrides", {})
     if node_pos_store:
-        for lst_name in ("roads_list", "footways_list", "barriers_list"):
+        # Moves are recorded per way, node ids are global: a node moved in one way
+        # but used by another becomes that way's own copy (fresh negative id), so
+        # the planner sees the geometry the viewer draws and the other ways stay put.
+        # Segments of one split way share their overrides, hence also the copy.
+        lists = ("roads_list", "footways_list", "barriers_list")
+        users: dict[int, set[str]] = {}
+        for lst_name in lists:
+            for w in getattr(md, lst_name):
+                for n in w.nodes:
+                    users.setdefault(getattr(n, "id", n), set()).add(str(w.id).split(":")[0])
+        nodes_cache = md.nodes_cache = dict(nodes_cache)
+        next_id = min([0, *nodes_cache]) - 1
+        copies: dict[str, dict[int, int]] = {}  # original way id -> {node id: copy id}
+        for wid, way_ov in node_pos_store.items():
+            for nid_str, pos in way_ov.items():
+                nid = int(nid_str)
+                if len(users.get(nid, ())) < 2 or wid not in users[nid] or nid not in nodes_cache:
+                    continue
+                copies.setdefault(wid, {})[nid] = next_id
+                nodes_cache[next_id] = {
+                    **nodes_cache[nid],
+                    "lat": float(pos["lat"]),
+                    "lon": float(pos["lon"]),
+                }
+                next_id -= 1
+        for remap in copies.values():
+            for nid in remap:  # the ways left on the original node keep its unmoved position
+                if nid in base_nodes_cache:
+                    nodes_cache[nid] = base_nodes_cache[nid]
+
+        for lst_name in lists:
             new_lst = []
             for w in getattr(md, lst_name):
                 ov = get_node_position_overrides(store, w.id)
@@ -144,10 +175,17 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                         nodes_cache,
                         category=_CAT_FOR_LIST[lst_name],
                     )
-                    new_lst.append(result or w)
-                else:
-                    new_lst.append(w)
+                    w = result or w  # noqa: PLW2901
+                    remap = copies.get(str(w.id).split(":")[0])
+                    if remap:
+                        w = copy.copy(w)  # noqa: PLW2901
+                        w.nodes = [remap.get(getattr(n, "id", n), n) for n in w.nodes]
+                new_lst.append(w)
             setattr(md, lst_name, new_lst)
+        if copies:
+            md.crossroads_list = md.parse_intersections(
+                {str(w.id): w for w in md.footways_list + md.roads_list},
+            )
 
 
 def apply_tag_overrides(md: MapData, store: dict[str, Any]) -> None:

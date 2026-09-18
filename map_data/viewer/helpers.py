@@ -430,8 +430,9 @@ def edited_nodes_cache(
         src = extra.get(d["node_id"]) or base.get(d["node_id"])
         if wanted in (None, d["way_id"]) and src:
             extra[d["id"]] = {"lat": src["lat"], "lon": src["lon"], "tags": {}}
-    # ponytail: overrides are per way but the cache is per node, so a junction node
-    # moved differently in two ways keeps the last one; key the cache by (way, node) if that bites.
+    # Overrides are per way but the cache is per node: with way_id=None a node moved
+    # in several ways keeps the last one here; apply_way_edits gives such a node a
+    # copy per way and restores the original position.
     for wid, way_ov in store.get("node_position_overrides", {}).items():
         if wanted not in (None, int(wid)):
             continue
