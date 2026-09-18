@@ -45,6 +45,27 @@
   The merge (`apply_way_edits`) now gives the moved way its own copy of the node (a fresh
   negative id) and leaves the original where it was, so the junction is broken exactly where
   the viewer shows a gap; undoing the move joins it again. Nothing changes in the store
+- Ways that meet on the map now meet in the graph. The graph planner connects ways by node id
+  only, and an edit never produced a shared id by itself. The annotation merge now ends with
+  `join_ways()`, which gives such ways a real node to meet at:
+    - an **end node dragged onto another way** (within 5 m, `JOIN_DISTANCE_M`) joins it there:
+      at a node of that way when one is within 1 m, else at a new node on the edge. Before, the
+      end kept the junctions it had and gained none; since the shared-node fix above it was
+      left loose
+    - a **drawn path** joins every way it **crosses**, and a way that ends on it. Only its two
+      ends were connected before, and only by the planner, so a path drawn across a footway
+      showed a crossroad the planner could not turn at
+    - splitting a drawn path that an export had baked into the map no longer cuts it off the
+      network (the planner's own stitching skipped the `-18:1` style ids of its segments), and a
+      path drawn on such a map no longer reuses the baked path's way id
+  The junction is only added to the node lists, so no geometry moves; being real nodes, the
+  junctions survive an export. The planner's own stitching of drawn-path ends stays for maps
+  merged elsewhere and skips an end that is already a node of another way
+- A junction node moved to the same spot (0.5 m) in every way that uses it stays one junction,
+  instead of one copy per way lying on top of each other, unconnected
+- A move in one way no longer leaks into the others: a way rebuilt for a deleted node or a
+  split took a shared node's position from the way that had moved it, and a move recorded on a
+  way deleted afterwards still moved the node for everyone
 - `osm_cloud` published an empty grid that only a restart cured. A Fixposition unit without
   a fusion fix publishes `FP_ECEF -> FP_ENU0` as all zeros, and the node latched it at
   start-up: `utm_to_local_via_ecef` then worked at an altitude of -6378 km and collapsed the

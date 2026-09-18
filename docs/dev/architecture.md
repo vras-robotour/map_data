@@ -383,7 +383,7 @@ The package provides two independent path-planning back-ends.
 
 Builds an undirected weighted graph directly from the OSM way network (`roads_list` and/or `footways_list`). Edge weights are Euclidean distances in metres. Planning uses A* with a straight-line distance heuristic.
 
-Waypoints passed to `GraphPlanner.plan()` are first snapped to the nearest graph edge using an STRtree spatial index. Viewer-drawn annotation paths (negative-ID ways) are spliced into the graph by projecting their endpoints onto the nearest existing OSM edge and inserting synthetic junction nodes at the projection points.
+Waypoints passed to `GraphPlanner.plan()` are first snapped to the nearest graph edge using an STRtree spatial index. Ways connect by shared node id only. The annotation merge (`join_ways` in `map_data/annotations.py`) therefore gives viewer-drawn paths (negative-ID ways) and moved end nodes real junction nodes: where an end lies within 5 m of another way, and where a drawn path crosses one. For a map that was not merged there, the planner still splices a drawn path's loose ends into the graph itself, by projecting them onto the nearest edge within 5 m and inserting synthetic junction nodes (ids from -2000000 down).
 
 This planner is well-suited for route planning on well-mapped pedestrian or road networks where staying on designated paths is required.
 

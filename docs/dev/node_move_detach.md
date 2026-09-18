@@ -4,8 +4,9 @@ Investigation of why dragging a node that several ways share does not split it
 into two independent nodes, and what it would take to make it do so.
 
 Status: **fixed at merge time** in `apply_way_edits` (`map_data/annotations.py`), see
-[What was implemented](#what-was-implemented). The store-level proposal further down was not
-needed and is kept for the record.
+[What was implemented](#what-was-implemented); a moved end node is then joined to the way it
+lands on, see [the follow-up](#follow-up-joining-instead-of-only-detaching). The store-level
+proposal further down was not needed and is kept for the record.
 
 ---
 
@@ -76,8 +77,9 @@ and that way's own overrides. Only the full merge collapsed them. So the fix liv
 merge alone, in the `node_position_overrides` block of `apply_way_edits`:
 
 1. index which (original) ways use each node in the already deleted/split way lists;
-2. for every override on a node that another way also uses, mint a fresh negative id, put the
-   moved position in `nodes_cache` under it, and restore the original node's position;
+2. for every override on a node that another way also uses, mint a fresh negative id and put
+   the moved position in `nodes_cache` under it; the original node keeps its position (the
+   cache the merge works on holds no moves, a node only one way uses is moved in place);
 3. substitute the copy into (a copy of) the moved way's `nodes`, after its geometry is rebuilt;
 4. recompute the crossroads when anything was detached.
 
@@ -90,9 +92,39 @@ move re-joins the junction. Copy ids are not stable across store edits; nothing 
 Tests: `test_moving_a_shared_node_in_one_way_detaches_that_way` and
 `test_shared_node_moved_in_both_ways_honours_both` in `tests/test_annotations.py`.
 
-Still open: dragging a **whole way** writes an override for each of its nodes, so it now
-detaches the way from every junction it has, as drawn. The viewer does not signal that a move
-breaks a junction (see the decisions below).
+### Follow-up: joining instead of only detaching
+
+Detaching alone left the moved end loose: connectivity is by node id, and a move never
+produces a shared id. What was wanted is that an end dragged onto another way connects there.
+`join_ways` (end of `merge_annotations`, so both `apply_store` and the viewer's
+`get_merged_mapdata` run it) does that at merge time, for moved end nodes and for drawn paths
+alike:
+
+- an end (moved, or of a drawn path) within `JOIN_DISTANCE_M` = 5 m of another way, and not
+  already a node of one, gets the junction put before/after it in its node list. The junction
+  is a node of the other way within `JOIN_NODE_M` = 1 m of the nearest point, else a new node
+  inserted on that edge. A way of the same kind (footway/road) is preferred, since a
+  footway-only plan never sees the roads;
+- a drawn path gets a shared node wherever its centre line crosses another way, or another
+  way ends on it;
+- segments of one original way are never joined, so a detached split stays detached.
+
+Only node lists change, no geometry, and the moved node stays where the user put it. A moved
+end is recognised by its position being one the store recorded for that way, so nothing has to
+be passed from `apply_way_edits`. The viewer has no snapping when a node is dragged, which is
+why the reach is as generous as 5 m.
+
+The same revision fixed three things in the detach itself: ways that move a shared node to the
+same spot (`SAME_SPOT_DEG`, 0.5 m) keep sharing it; the first pass of `apply_way_edits` works on
+a cache without the moves, so a way rebuilt there is not drawn through another way's move; and
+a move recorded on a way that no longer uses the node is ignored.
+
+Still open: only **end** nodes join. A moved interior node does not, deliberately: dragging a
+whole way writes an override for every node, and a way dragged alongside another would be
+joined to it at each of them. The viewer still does not signal that a move breaks or makes a
+junction, and its way-edit view cannot show the junction (it resolves one way at a time).
+`next_synthetic_node_id` looks at the store only, so a node added on an *exported* map can
+take an id the export already uses.
 
 ---
 

@@ -178,6 +178,12 @@ Keys are way IDs as strings; values are dicts mapping node IDs (as strings) to c
 A move applies to that way only. When the node is also used by another way, the merged map
 gives the moved way its own copy of the node under a fresh negative id (minted at merge time,
 not stored) and the other ways keep the original position, so the ways no longer join there.
+Ways that put the node within 0.5 m of each other keep sharing it; when all of them do, the
+node simply moves. A move recorded on a way that no longer uses the node is ignored.
+
+A moved **end** node that lands within 5 m of another way is joined to it at merge time
+(`join_ways` in `map_data/annotations.py`): the junction, a node of that way or a new one on
+its edge, is put after the end in the way's node list. The stored position is not changed.
 
 ### `change_log` list
 
