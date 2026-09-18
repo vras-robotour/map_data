@@ -342,6 +342,44 @@ def test_detached_end_moves_on_its_own(footway_network_mapdata):
     assert res.length_m == pytest.approx(200.0, abs=5.0)
 
 
+def test_moving_a_shared_node_in_one_way_detaches_that_way(footway_network_mapdata):
+    """Junction 102 dragged to (100,40) in way 2 only: way 1 stays put, the junction is gone."""
+    path, lat0, lon0 = footway_network_mapdata
+    lat, lon = _latlon(lat0, lon0, 100.0, 40.0)
+    store = {"node_position_overrides": {"2": {"102": {"lat": lat, "lon": lon}}}}
+    res = _plan_with_store(path, lat0, lon0, store, (0.0, 0.0), (200.0, 0.0))
+    assert res.length_m == pytest.approx(200.0, abs=5.0), "way 1 must not follow way 2's move"
+
+    md, _ = load_mapdata_with_annotations(path)
+    way1, way2 = md.footways_list[:2]
+    assert way1.nodes == [101, 102, 103]
+    assert way2.nodes[0] < 0 and way2.nodes[1] == 104
+    assert md.nodes_cache[way2.nodes[0]]["lat"] == pytest.approx(lat)
+    assert md.crossroads_list == []
+    with pytest.raises(RoutePlanningError):
+        plan_route(
+            md,
+            [_latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 100.0, 100.0)],
+            max_snap_distance=5.0,
+        )
+
+
+def test_shared_node_moved_in_both_ways_honours_both(footway_network_mapdata):
+    """102 moved to (100,-30) in way 1 and (100,40) in way 2: neither override is dropped."""
+    path, lat0, lon0 = footway_network_mapdata
+    p1, p2 = _latlon(lat0, lon0, 100.0, -30.0), _latlon(lat0, lon0, 100.0, 40.0)
+    store = {
+        "node_position_overrides": {
+            "1": {"102": {"lat": p1[0], "lon": p1[1]}},
+            "2": {"102": {"lat": p2[0], "lon": p2[1]}},
+        }
+    }
+    res = _plan_with_store(path, lat0, lon0, store, (0.0, 0.0), (200.0, 0.0))
+    assert res.length_m == pytest.approx(2 * (100.0**2 + 30.0**2) ** 0.5, abs=5.0)
+    res = _plan_with_store(path, lat0, lon0, store, (100.0, 40.0), (100.0, 100.0))
+    assert res.length_m == pytest.approx(60.0, abs=5.0)
+
+
 @pytest.mark.skipif(not KRALOVSKA.is_file(), reason="kralovska_obora.mapdata is not in the repo")
 def test_shipped_rules_on_the_stromovka_map():
     """
