@@ -35,9 +35,10 @@ def _make_mapdata(path):
         in_out="",
     )
     md.footways_list.append(way)
+    lat2, lon2 = utm.to_latlon(e + 50, n + 50, int(zn), zl)  # where the line ends
     md.nodes_cache = {
         101: {"lat": lat, "lon": lon, "tags": {}},
-        102: {"lat": lat + 0.0005, "lon": lon + 0.0005, "tags": {}},
+        102: {"lat": lat2, "lon": lon2, "tags": {}},
     }
     md.save(str(path))
 

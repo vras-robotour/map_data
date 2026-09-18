@@ -15,6 +15,7 @@ from map_data.annotations import (
     load_mapdata_with_annotations,
 )
 from map_data.map_data import MapData
+from map_data.pathsolver.graph_planner import GraphPlanner
 from map_data.pathsolver.route import RoutePlanningError, plan_route
 from map_data.traversability import TraversabilityRules, load_traversability
 from map_data.utils.way import Way
@@ -64,7 +65,9 @@ def test_annotated_path_bridges_a_gap(footway_network_mapdata):
     assert loaded["annotations"][0]["id"] == "ann-1"
     assert len(md.footways_list) == 4
     ann = [w for w in md.footways_list if isinstance(w.id, int) and w.id < 0]
-    assert len(ann) == 1 and all(n < 0 for n in ann[0].nodes)
+    # Its own synthetic nodes, joined to the network by the nodes it ends on.
+    assert len(ann) == 1 and ann[0].nodes[0] == 103 and ann[0].nodes[-1] == 201
+    assert all(n < 0 for n in ann[0].nodes[1:-1])
     assert any(w.tags.get("type") == "annotation_intersection" for w in md.crossroads_list), (
         "the annotated path should create crossroads where it touches the network"
     )
@@ -378,6 +381,145 @@ def test_shared_node_moved_in_both_ways_honours_both(footway_network_mapdata):
     assert res.length_m == pytest.approx(2 * (100.0**2 + 30.0**2) ** 0.5, abs=5.0)
     res = _plan_with_store(path, lat0, lon0, store, (100.0, 40.0), (100.0, 100.0))
     assert res.length_m == pytest.approx(60.0, abs=5.0)
+
+
+def test_shared_node_moved_to_one_spot_in_every_way_stays_a_junction(footway_network_mapdata):
+    """102 moved to (100,30) in way 1 and in way 2: the junction moved, it was not pulled apart."""
+    path, lat0, lon0 = footway_network_mapdata
+    lat, lon = _latlon(lat0, lon0, 100.0, 30.0)
+    pos = {"102": {"lat": lat, "lon": lon}}
+    store = {"node_position_overrides": {"1": pos, "2": pos}}
+    res = _plan_with_store(path, lat0, lon0, store, (0.0, 0.0), (100.0, 100.0))
+    assert res.length_m == pytest.approx((100.0**2 + 30.0**2) ** 0.5 + 70.0, abs=5.0)
+    md, _ = load_mapdata_with_annotations(path)
+    assert md.footways_list[0].nodes == [101, 102, 103] and md.footways_list[1].nodes == [102, 104]
+
+
+def test_a_move_in_one_way_does_not_redraw_the_others(footway_network_mapdata):
+    """
+    102 moved in way 2 while way 1 loses node 103: way 1 is rebuilt, and must be rebuilt
+    through 102 where way 1 has it, not where way 2 put it.
+    """
+    path, lat0, lon0 = footway_network_mapdata
+    lat, lon = _latlon(lat0, lon0, 100.0, 40.0)
+    store = {
+        "node_position_overrides": {"2": {"102": {"lat": lat, "lon": lon}}},
+        "deleted_nodes": [{"way_id": 1, "node_id": 103}],
+    }
+    _plan_with_store(path, lat0, lon0, store, (0.0, 0.0), (100.0, 0.0))
+    md, _ = load_mapdata_with_annotations(path)
+    e0, n0, _, _ = utm.from_latlon(lat0, lon0)
+    assert md.footways_list[0].line.bounds[3] - n0 < 2.0, "way 1 bent towards way 2's move"
+
+
+def test_a_move_recorded_on_a_deleted_way_moves_nothing(footway_network_mapdata):
+    path, lat0, lon0 = footway_network_mapdata
+    lat, lon = _latlon(lat0, lon0, 100.0, 40.0)
+    store = {
+        "node_position_overrides": {"2": {"102": {"lat": lat, "lon": lon}}},
+        "deleted_ways": [{"id": 2}],
+    }
+    res = _plan_with_store(path, lat0, lon0, store, (0.0, 0.0), (200.0, 0.0))
+    assert res.length_m == pytest.approx(200.0, abs=1.0)
+
+
+@pytest.mark.parametrize(
+    ("way", "node", "to", "start", "goal", "length", "joined_at"),
+    [
+        # free end of way 2 dropped on the middle of way 3's edge: a new node on that edge
+        ("2", 104, (450.0, 0.0), (100.0, 0.0), (500.0, 0.0), 400.0, None),
+        # free end of way 1 dropped 1 m from node 201: joined at that node
+        ("1", 103, (399.0, 0.0), (0.0, 0.0), (500.0, 0.0), 500.0, 201),
+        # junction end of way 2 slid along way 1: detached from 102, joined again at (150,0)
+        ("2", 102, (150.0, 0.0), (0.0, 0.0), (100.0, 100.0), 150.0 + 111.8, None),
+    ],
+)
+def test_moved_end_node_joins_the_way_it_is_dropped_on(
+    footway_network_mapdata, way, node, to, start, goal, length, joined_at
+):
+    path, lat0, lon0 = footway_network_mapdata
+    lat, lon = _latlon(lat0, lon0, *to)
+    store = {"node_position_overrides": {way: {str(node): {"lat": lat, "lon": lon}}}}
+    res = _plan_with_store(path, lat0, lon0, store, start, goal)
+    assert res.length_m == pytest.approx(length, abs=5.0)
+
+    md, _ = load_mapdata_with_annotations(path)
+    moved = next(w for w in md.footways_list if str(w.id) == way)
+    junction = moved.nodes[0] if node == 102 else moved.nodes[-1]
+    assert junction == joined_at if joined_at else junction < 0
+    assert sum(junction in w.nodes for w in md.footways_list) == 2, "a node of both ways"
+    # a real node: the junction is still there after an export
+    exported = path.with_name("exported.mapdata")
+    md.save(str(exported))
+    md2, _ = load_mapdata_with_annotations(exported, NO_ANNOTATIONS)
+    res = plan_route(md2, [_latlon(lat0, lon0, *start), _latlon(lat0, lon0, *goal)])
+    assert res.length_m == pytest.approx(length, abs=5.0)
+
+
+def test_moved_end_node_out_of_reach_stays_loose(footway_network_mapdata):
+    """6 m from way 3 is not on it (JOIN_DISTANCE_M is 5)."""
+    path, lat0, lon0 = footway_network_mapdata
+    lat, lon = _latlon(lat0, lon0, 450.0, 6.0)
+    store = {"node_position_overrides": {"2": {"104": {"lat": lat, "lon": lon}}}}
+    with pytest.raises(RoutePlanningError):
+        _plan_with_store(path, lat0, lon0, store, (100.0, 0.0), (500.0, 0.0))
+
+
+def _path_annotation(lat0, lon0, points, ann_id="ann-1"):
+    coords = [list(_latlon(lat0, lon0, *p))[::-1] for p in points]
+    return {
+        "id": ann_id,
+        "type": "path",
+        "geometry": {"type": "LineString", "coordinates": coords},
+        "properties": {"highway": "footway"},
+    }
+
+
+def test_drawn_path_joins_the_way_it_crosses(footway_network_mapdata):
+    """Drawn across way 1 at (150,0), both ends 50 m away: the crossing is the junction."""
+    path, lat0, lon0 = footway_network_mapdata
+    store = {"annotations": [_path_annotation(lat0, lon0, [(150.0, -50.0), (150.0, 50.0)])]}
+    res = _plan_with_store(path, lat0, lon0, store, (0.0, 0.0), (150.0, 50.0))
+    assert res.length_m == pytest.approx(200.0, abs=5.0)
+    md, _ = load_mapdata_with_annotations(path)
+    assert len(md.crossroads_list) == 2, "the crossing is listed once, not per detector"
+    planner = GraphPlanner(md)
+    assert not [n for n in planner.graph if n <= -2000000], "nothing left for the planner to stitch"
+
+
+def test_way_ending_on_a_drawn_path_joins_it(footway_network_mapdata):
+    """Way 1 ends at (200,0), in the middle of a path drawn from (200,-50) to (200,50)."""
+    path, lat0, lon0 = footway_network_mapdata
+    store = {"annotations": [_path_annotation(lat0, lon0, [(200.0, -50.0), (200.0, 50.0)])]}
+    res = _plan_with_store(path, lat0, lon0, store, (0.0, 0.0), (200.0, 50.0))
+    assert res.length_m == pytest.approx(250.0, abs=5.0)
+
+
+def test_drawn_path_baked_into_an_export_survives_a_split_and_a_new_path(footway_network_mapdata):
+    """
+    On an exported map the drawn path is a way of its own: splitting it must not cut it
+    off the network, and a path drawn afterwards must not reuse its id.
+    """
+    path, lat0, lon0 = footway_network_mapdata
+    bridge = _path_annotation(lat0, lon0, [(200.0, 0.0), (300.0, 0.0), (400.0, 0.0)])
+    _plan_with_store(path, lat0, lon0, {"annotations": [bridge]}, (0.0, 0.0), (500.0, 0.0))
+    md, _ = load_mapdata_with_annotations(path)
+    exported = path.with_name("exported.mapdata")
+    md.save(str(exported))
+    baked = next(w for w in md.footways_list if w.id == -1)
+
+    store = {
+        "split_ways": {"-1": [baked.nodes[2]]},
+        "annotations": [_path_annotation(lat0, lon0, [(500.0, 0.0), (500.0, 50.0)], "ann-2")],
+    }
+    res = _plan_with_store(exported, lat0, lon0, store, (0.0, 0.0), (500.0, 50.0))
+    assert res.length_m == pytest.approx(550.0, abs=5.0)
+    md2, _ = load_mapdata_with_annotations(exported)
+    assert sorted(str(w.id) for w in md2.footways_list if str(w.id).startswith("-")) == [
+        "-1:0",
+        "-1:1",
+        "-2",
+    ]
 
 
 @pytest.mark.skipif(not KRALOVSKA.is_file(), reason="kralovska_obora.mapdata is not in the repo")
