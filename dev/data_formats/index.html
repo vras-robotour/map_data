@@ -1383,6 +1383,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../node_move_detach/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moving a Shared Node
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../todo/" class="md-nav__link">
         
   
@@ -1956,6 +1984,14 @@ planner uses.</p>
 </span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="p">}</span>
 </span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="p">}</span>
 </span></code></pre></div>
+<p>A move applies to that way only. When the node is also used by another way, the merged map
+gives the moved way its own copy of the node under a fresh negative id (minted at merge time,
+not stored) and the other ways keep the original position, so the ways no longer join there.
+Ways that put the node within 0.5 m of each other keep sharing it; when all of them do, the
+node simply moves. A move recorded on a way that no longer uses the node is ignored.</p>
+<p>A moved <strong>end</strong> node that lands within 5 m of another way is joined to it at merge time
+(<code>join_ways</code> in <code>map_data/annotations.py</code>): the junction, a node of that way or a new one on
+its edge, is put after the end in the way's node list. The stored position is not changed.</p>
 <h3 id="change_log-list"><code>change_log</code> list</h3>
 <p>An ordered audit log. Each entry has a <code>type</code> field and optional <code>ts</code> (ISO timestamp for user-initiated changes):</p>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p">[</span>

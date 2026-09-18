@@ -1350,6 +1350,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#delete-apitrackertrail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/tracker/trail
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1646,6 +1657,34 @@
     
   
     Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/node_move_detach/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moving a Shared Node
   
 
     
@@ -2213,6 +2252,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#delete-apitrackertrail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/tracker/trail
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2669,7 +2719,7 @@ in the Planner. Cells have cost 0.0 (free path) to 1.0 (obstacle boundary); valu
 <p><strong>Response</strong> — <code>{"success": true}</code></p>
 <hr />
 <h2 id="tracker">Tracker</h2>
-<p>Both endpoints answer <strong>503</strong> when the tracker is not running (no ROS 2 context).</p>
+<p>Every tracker endpoint answers <strong>503</strong> when the tracker is not running (no ROS 2 context).</p>
 <h3 id="get-apitrackersettings"><code>GET /api/tracker/settings</code></h3>
 <p>The tracker's topic settings, what its config file holds, and the topics on the ROS graph.</p>
 <p><strong>Response</strong></p>
@@ -2708,6 +2758,10 @@ optionally save them to the config file with its comments kept.</p>
 <p><strong>Error 400</strong> — unknown setting, non-string value, whitespace, invalid topic name or <code>heading_type</code>.
 Nothing is applied.</p>
 <p><strong>Error 500</strong> — applied, but the config file could not be written.</p>
+<h3 id="delete-apitrackertrail"><code>DELETE /api/tracker/trail</code></h3>
+<p>Forget the robot trail recorded so far. The trail lives on the tracker node, so clearing it
+only in the browser would bring it back with the next telemetry frame.</p>
+<p><strong>Response 200</strong> — <code>{"dropped": 137}</code>, the number of fixes discarded.</p>
 <hr />
 <h2 id="wormhole-robot-file-transfer">Wormhole (Robot File Transfer)</h2>
 <p>Wormhole endpoints use <a href="https://magic-wormhole.readthedocs.io/">magic-wormhole</a> to transfer

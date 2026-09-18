@@ -1281,6 +1281,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../dev/node_move_detach/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moving a Shared Node
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../dev/todo/" class="md-nav__link">
         
   
@@ -1510,7 +1538,8 @@ browser, using the same algorithms as the <code>replan</code> <a href="../planni
 <h2 id="workflow">Workflow</h2>
 <ol>
 <li>Switch to <strong>PLANNER</strong> using the tab in the top-right corner.</li>
-<li>Click on the map to place waypoints. Drag any waypoint to adjust it.</li>
+<li>Click on the map to place waypoints. Drag any waypoint to adjust it. With <strong>Start at
+   robot</strong> ticked the first waypoint is the robot itself, so you only click the goals.</li>
 <li>Select a planning mode and configure parameters in the sidebar.</li>
 <li>Click <strong>Replan Path</strong> to compute the path between the placed waypoints.</li>
 <li>Download the result as a GPX file or send it directly to the robot via <strong>Wormhole</strong>.</li>
@@ -1545,8 +1574,22 @@ browser, using the same algorithms as the <code>replan</code> <a href="../planni
 <td><strong>Keep Endpoints</strong></td>
 <td>Remove intermediate waypoints, keeping only start and end.</td>
 </tr>
+<tr>
+<td><strong>Start at robot</strong></td>
+<td>Pin the first waypoint to the robot's live position and plan from there.</td>
+</tr>
 </tbody>
 </table>
+<div class="admonition info">
+<p class="admonition-title">Start at robot</p>
+<p>The toggle needs a robot position, so it stays disabled until the tracker reports one
+(it needs no Tracker tab — the telemetry arrives in every mode, and the toggle works
+with the Robot layer switched off). While it is on, waypoint 0 follows the robot and
+<strong>Replan Path</strong> refreshes it first, so the route is planned from where the robot is at
+that moment. A planned path is left alone — its first pose is a result, not a waypoint —
+until the next replan re-pins it. Switching the toggle off leaves the waypoint behind as
+an ordinary one.</p>
+</div>
 <h3 id="planning-mode">Planning Mode</h3>
 <table>
 <thead>

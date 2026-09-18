@@ -1309,6 +1309,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../dev/node_move_detach/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moving a Shared Node
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../dev/todo/" class="md-nav__link">
         
   
@@ -1589,6 +1617,10 @@ the Layers panel.</p>
 <td>Pan and zoom the map to the robot's current position.</td>
 </tr>
 <tr>
+<td><strong>Clear Trail</strong></td>
+<td>Forget the trail recorded so far (it is dropped on the tracker node, not just in the browser, so it does not come back with the next fix). Useful after the robot was carried or driven somewhere that is not part of the run.</td>
+</tr>
+<tr>
 <td><strong>Follow</strong></td>
 <td>Continuously pan the map to keep the robot centered as it moves.</td>
 </tr>
@@ -1690,8 +1722,8 @@ if the corresponding ROS2 topic is not configured.</p>
 </tr>
 </tbody>
 </table>
-<p>The sidebar also shows the robot's <strong>last speech message</strong> (info / warn / error level) when the
-speech topics are configured.</p>
+<p>The sidebar also shows the <strong>last five speech messages</strong> (info / warn / error level, newest
+first) when the speech topics are configured.</p>
 <h2 id="map-layers">Map Layers</h2>
 <p>All robot geometry is part of the <strong>Robot</strong> layer; the Tracker sidebar shows a <strong>Map legend</strong>
 listing only the layers that are configured:</p>
@@ -1710,8 +1742,8 @@ listing only the layers that are configured:</p>
 <td>green dashed polyline</td>
 </tr>
 <tr>
-<td>Waypoint sequence</td>
-<td><code>sequence_path_topic</code> (<code>Path</code>, e.g. the commander's loaded sequence)</td>
+<td>Route / waypoint sequence</td>
+<td><code>sequence_path_topic</code> (<code>Path</code>, e.g. <code>road_follower</code>'s <code>~/route_path</code> — the route being driven, or the commander's loaded sequence)</td>
 <td>blue dotted polyline</td>
 </tr>
 <tr>
@@ -1967,7 +1999,7 @@ grey = not published, hollow = disabled.</p>
 <tr>
 <td><code>sequence_path_topic</code></td>
 <td><code>""</code></td>
-<td>Waypoint sequence (<code>Path</code>, latched)</td>
+<td>Route being followed or waypoint sequence (<code>Path</code>, latched); kept at full resolution up to 200 poses</td>
 </tr>
 <tr>
 <td><code>sequence_poses_topic</code></td>

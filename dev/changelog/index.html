@@ -1135,6 +1135,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../node_move_detach/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moving a Shared Node
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../todo/" class="md-nav__link">
         
   
@@ -2104,6 +2132,11 @@
   that file, a ROS 2 parameter file with a <code>map_data_tracker</code> section. The default is the new
   <code>config/tracker.yaml</code>, which holds the built-in defaults, so nothing changes for existing setups</li>
 <li><code>config/helhest_jr.yaml</code>: tracker topics of helhest-jr (<code>map_data_viewer --config config/helhest_jr.yaml</code>)</li>
+<li>Tracker <strong>Clear Trail</strong>: drops the recorded trail on the node
+  (<code>DELETE /api/tracker/trail</code>), so it stays gone instead of coming back with the next fix</li>
+<li>Planner <strong>Start at robot</strong>: with a robot position on the tracker's telemetry, the toggle
+  pins waypoint 0 to the robot and refreshes it when <strong>Replan Path</strong> runs, so a route is
+  planned from where the robot actually is instead of a clicked start</li>
 <li><code>osm_cloud</code> takes a <code>highway_types</code> parameter (and <code>highway_types:=</code> launch
   argument), as <code>route_planner</code> does: the grid can be drawn from roads as well
   as footways, so it shows the network the graph planner routes on when roads
@@ -2123,6 +2156,51 @@
 </ul>
 <h3 id="fixed">Fixed</h3>
 <ul>
+<li>Moving a node that several ways share now moves it for the planner the way the viewer draws
+  it. Moves are stored per way, but the merged map resolved them per node id: the last
+  override won, the other ways were dragged along in the graph and the junction survived.
+  The merge (<code>apply_way_edits</code>) now gives the moved way its own copy of the node (a fresh
+  negative id) and leaves the original where it was, so the junction is broken exactly where
+  the viewer shows a gap; undoing the move joins it again. Nothing changes in the store</li>
+<li>Ways that meet on the map now meet in the graph. The graph planner connects ways by node id
+  only, and an edit never produced a shared id by itself. The annotation merge now ends with
+  <code>join_ways()</code>, which gives such ways a real node to meet at:<ul>
+<li>an <strong>end node dragged onto another way</strong> (within 5 m, <code>JOIN_DISTANCE_M</code>) joins it there:
+  at a node of that way when one is within 1 m, else at a new node on the edge. Before, the
+  end kept the junctions it had and gained none; since the shared-node fix above it was
+  left loose</li>
+<li>a <strong>drawn path</strong> joins every way it <strong>crosses</strong>, and a way that ends on it. Only its two
+  ends were connected before, and only by the planner, so a path drawn across a footway
+  showed a crossroad the planner could not turn at</li>
+<li>splitting a drawn path that an export had baked into the map no longer cuts it off the
+  network (the planner's own stitching skipped the <code>-18:1</code> style ids of its segments), and a
+  path drawn on such a map no longer reuses the baked path's way id
+  The junction is only added to the node lists, so no geometry moves; being real nodes, the
+  junctions survive an export. The planner's own stitching of drawn-path ends stays for maps
+  merged elsewhere and skips an end that is already a node of another way</li>
+</ul>
+</li>
+<li>A junction node moved to the same spot (0.5 m) in every way that uses it stays one junction,
+  instead of one copy per way lying on top of each other, unconnected</li>
+<li>A move in one way no longer leaks into the others: a way rebuilt for a deleted node or a
+  split took a shared node's position from the way that had moved it, and a move recorded on a
+  way deleted afterwards still moved the node for everyone</li>
+<li><code>osm_cloud</code> published an empty grid that only a restart cured. A Fixposition unit without
+  a fusion fix publishes <code>FP_ECEF -&gt; FP_ENU0</code> as all zeros, and the node latched it at
+  start-up: <code>utm_to_local_via_ecef</code> then worked at an altitude of -6378 km and collapsed the
+  whole map into a metre-wide box, so no grid cell landed within <code>max_path_dist</code> of a way
+  (7 of the last 25 field runs, <code>(0, 4)</code> or <code>(30, 4)</code> points, <code>FP_ENU0 origin at lat=180.0</code>
+  in the log). Such a transform is now rejected and waited out; the <code>/tf_static</code> subscription
+  is kept for the node's life, so a placement transform that arrives late or moves (the ENU0
+  origin changes whenever the GNSS/INS driver restarts) rebuilds and re-publishes the grid and
+  the intersections instead of needing the node restarted; and a grid that comes out empty over
+  a map that has ways is logged as an error rather than latched onto every late subscriber</li>
+<li>The tracker drew no high-level route on helhest-jr: <code>config/helhest_jr.yaml</code> pointed
+  <code>sequence_path_topic</code> at <code>/crl_commander/goal_sequence</code>, which the commander only publishes
+  in SEQUENCE mode, while <code>road_follower</code> drives it goal by goal. It now reads
+  <code>/road_follower/route_path</code>, the route actually being followed whatever its source. A route
+  is also no longer decimated to every 10th pose (which cut every corner of a waypoint route);
+  it is thinned only above 200 poses</li>
 <li>The viewer's telemetry Socket.IO connection failed with <code>property 'session' of
   'RequestContext' object has no setter</code> on Flask 3.0.2 with Flask-SocketIO 5.3 (Ubuntu
   24.04 packages), so the tracker received nothing. The Socket.IO server no longer manages

@@ -1276,6 +1276,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../dev/node_move_detach/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moving a Shared Node
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../dev/todo/" class="md-nav__link">
         
   
@@ -1733,10 +1761,11 @@ optionally publishes intersections as a
 <tr>
 <td><code>republish_period</code></td>
 <td><code>0.0</code></td>
-<td>Publishers are latched and publish once at start-up (and after parameter changes); set &gt; 0 s to additionally re-publish periodically</td>
+<td>Publishers are latched and publish once at start-up (and after parameter changes, or when the placement transform changes); set &gt; 0 s to additionally re-publish periodically</td>
 </tr>
 </tbody>
 </table>
+<p>The <code>earth_frame → local_frame</code> (or <code>utm_frame → local_frame</code>) transform is followed for the node's whole life: when it appears late, or moves because the GNSS/INS driver restarted with a new ENU0 origin, the grid and the intersections are rebuilt and re-published. In <code>geodetic</code> mode an all-zero transform (a Fixposition unit publishes <code>FP_ECEF → FP_ENU0</code> as zeros until it has a fusion fix) is rejected and waited out, and a grid that comes out empty over a map that has ways is logged as an error instead of being published.</p>
 <h3 id="launching">Launching</h3>
 <p>The recommended way to run the node is via the provided launch file, which also sets
 up the required static transforms and enables intersection publishing by default:</p>

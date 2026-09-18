@@ -1156,6 +1156,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#osm_cloud-publishes-an-empty-cloud" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        osm_cloud publishes an empty cloud
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1417,6 +1428,34 @@
     
   
     Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev/node_move_detach/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Moving a Shared Node
   
 
     
@@ -1758,6 +1797,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#osm_cloud-publishes-an-empty-cloud" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        osm_cloud publishes an empty cloud
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1883,9 +1933,13 @@ your <code>PATH</code> directly. In a ROS2 workspace, build with <code>colcon</c
 <h3 id="osm_cloud-does-not-publish"><code>osm_cloud</code> does not publish</h3>
 <ol>
 <li>Check that a <code>.mapdata</code> file path is set via the <code>mapdata_file</code> ROS2 parameter.</li>
-<li>Verify the UTM frame is correct — the node transforms the point cloud from UTM to <code>local_frame</code>. If no static transform between <code>utm</code> and <code>local_frame</code> is available in TF, the cloud will not be published.</li>
+<li>Verify the placement frames are correct — the node transforms the point cloud into <code>local_frame</code>. Until that transform is available in TF (<code>utm → local_frame</code> for <code>transform_mode</code> <code>tf</code>, <code>earth_frame → local_frame</code> for <code>geodetic</code>), the node logs <code>Failed to get ... transform</code> every 10 s and publishes nothing. It picks the transform up as soon as it arrives; no restart is needed.</li>
 <li>Run <code>ros2 topic list</code> and confirm the <code>grid</code> topic (or whatever <code>grid_topic</code> is set to) is present.</li>
 </ol>
+<h3 id="osm_cloud-publishes-an-empty-cloud"><code>osm_cloud</code> publishes an empty cloud</h3>
+<p>The log says <code>Grid is empty although the map has N way points</code> or, in older versions, printed a <code>(0, 4)</code> shape and an <code>FP_ENU0 origin at lat=180.0000000 lon=0.0000000 alt=-6378137.0</code>.</p>
+<p>That origin is the centre of the Earth: the <code>earth_frame → local_frame</code> transform was all zeros. A Fixposition unit publishes <code>FP_ECEF → FP_ENU0</code> as zeros until it has a fusion fix, and <code>transform_mode: geodetic</code> then works at an altitude of -6378 km, which collapses the whole map into a metre-wide box — no grid cell ends up within <code>max_path_dist</code> of a way.</p>
+<p>The node now rejects such a transform and waits for a real one, and never publishes an empty cloud over a map that has ways. If you see it on an older build, restart <code>osm_cloud</code> once the GNSS/INS unit has a fix (<code>ros2 topic echo /tf_static</code> should show a <code>FP_ECEF → FP_ENU0</code> translation of several million metres, not zeros).</p>
 <hr />
 <h2 id="mapdata-file-issues"><code>.mapdata</code> file issues</h2>
 <h3 id="mapdataload-raises-valueerror-or-jsondecodeerror"><code>MapData.load()</code> raises <code>ValueError</code> or <code>JSONDecodeError</code></h3>
