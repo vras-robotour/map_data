@@ -12,6 +12,7 @@ const trackerMode = (() => {
     let activeExitCircle = null;
     let goalMarker = null;
     let enabled = false;
+    let _lastPos = null; // last known robot position, for the planner's "Start at robot"
 
     // Cached DOM/element references — resolved lazily on first use
     let _robotCb = null;
@@ -55,6 +56,15 @@ const trackerMode = (() => {
     function updateMap(data) {
         if (!map) return;
 
+        // The position is published before the layer check: the planner's "Start at robot"
+        // needs it even when the Robot layer is switched off.
+        const pos = data.position.ekf.lat ? data.position.ekf : data.position.gps;
+        const havePos = !!(pos && pos.lat && pos.lon);
+        if (havePos) {
+            _lastPos = { lat: pos.lat, lon: pos.lon };
+            document.dispatchEvent(new CustomEvent('robot-position', { detail: _lastPos }));
+        }
+
         // Check robot layer visibility — cache the checkbox element
         if (!_robotCb) _robotCb = document.querySelector('[data-layer="robot"]');
         if (_robotCb && !_robotCb.checked) {
@@ -62,8 +72,7 @@ const trackerMode = (() => {
             return;
         }
 
-        const pos = data.position.ekf.lat ? data.position.ekf : data.position.gps;
-        if (pos && pos.lat && pos.lon) {
+        if (havePos) {
             const latlng = [pos.lat, pos.lon];
             const heading = pos.heading || 0;
 
@@ -396,15 +405,21 @@ const trackerMode = (() => {
         $('tsi-leg-intersections').hidden = feat.intersections !== true;
         $('tsi-leg-active').hidden = feat.active_intersection !== true;
 
-        // Last speech
+        // Spoken messages, newest first
         const speechBox = $('tsi-speech-box');
-        if (feat.speech !== false && s.last_speech) {
-            const levelClass = s.last_speech.level === 'error' ? 'text-danger'
-                : (s.last_speech.level === 'warn' ? 'text-warning' : 'text-info');
-            $('tsi-speech-level').textContent = s.last_speech.level;
-            const speechText = $('tsi-speech-text');
-            speechText.textContent = s.last_speech.text;
-            speechText.className = levelClass;
+        const speechLog = s.speech_log || [];
+        if (feat.speech !== false && speechLog.length) {
+            const log = $('tsi-speech-log');
+            log.textContent = '';
+            speechLog.forEach((entry, i) => {
+                const levelClass = entry.level === 'error' ? 'text-danger'
+                    : (entry.level === 'warn' ? 'text-warning' : 'text-info');
+                const row = document.createElement('div');
+                // The newest message stays readable; the older ones fade into the background
+                row.className = `${levelClass}${i ? ' opacity-50' : ''}`;
+                row.textContent = `${entry.level}: ${entry.text}`;
+                log.appendChild(row);
+            });
             speechBox.hidden = false;
         } else {
             speechBox.hidden = true;
@@ -588,6 +603,27 @@ const trackerMode = (() => {
         initSocket();
     }
 
+    // The trail is recorded on the node, so it has to be cleared there: dropping only the
+    // polyline would bring the old fixes back with the next telemetry frame.
+    $('tracker-clear-trail')?.addEventListener('click', async () => {
+        if (STATIC_BASE) {
+            setStatus('Clearing the trail needs the backend — run map_data_viewer locally', 'text-warning');
+            return;
+        }
+        try {
+            const res = await api('DELETE', '/api/tracker/trail');
+            if (!res.ok) throw new Error(await errorText(res));
+            const { dropped } = await res.json();
+            if (trailLayer) {
+                map.removeLayer(trailLayer);
+                trailLayer = null;
+            }
+            setStatus(`Trail cleared (${dropped} fixes)`, 'text-success');
+        } catch (err) {
+            setStatus(`Failed to clear the trail: ${err.message}`, 'text-danger');
+        }
+    });
+
     document.getElementById('tracker-center-robot')?.addEventListener('click', () => {
         if (robotMarker) {
             const currentZoom = map.getZoom();
@@ -611,6 +647,7 @@ const trackerMode = (() => {
             // Note: We don't remove the layer here because it's now globally visible
         },
         showRobot: showRobot,
-        hideRobot: hideRobot
+        hideRobot: hideRobot,
+        position: () => (_lastPos ? { ..._lastPos } : null)
     };
 })();

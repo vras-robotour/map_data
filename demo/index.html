@@ -191,6 +191,11 @@
             </button>
           </div>
 
+          <div class="form-check mt-2" title="Waiting for the robot's position">
+            <input class="form-check-input bg-dark border-secondary" type="checkbox" id="planner-start-at-robot" disabled>
+            <label class="form-check-label text-secondary" for="planner-start-at-robot" style="font-size: 0.75rem;">Start at robot</label>
+          </div>
+
           <button class="btn btn-primary btn-sm mt-2" id="replan-btn">
             ✏️ Replan Path
           </button>
@@ -285,6 +290,7 @@
         <div class="d-flex align-items-center justify-content-between mb-2">
           <div class="d-flex gap-1">
             <button id="tracker-center-robot" class="btn btn-sm btn-outline-info py-0 px-2" style="font-size: 0.7rem;">Center Robot</button>
+            <button id="tracker-clear-trail" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size: 0.7rem;" title="Forget the trail recorded so far">Clear Trail</button>
             <button id="tracker-topics-btn" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size: 0.7rem;" title="Change the topics the tracker subscribes to">Topics…</button>
           </div>
           <div class="form-check mb-0">
@@ -347,7 +353,7 @@
               <div id="tsi-leg-robot">Robot (heading arrow, greyed = stale fix)</div>
               <div id="tsi-leg-trail">Robot trail</div>
               <div id="tsi-leg-path">Planner path</div>
-              <div id="tsi-leg-sequence">Waypoint sequence (commander)</div>
+              <div id="tsi-leg-sequence">Route / waypoint sequence</div>
               <div id="tsi-leg-window">Waypoint window (road_follower)</div>
               <div id="tsi-leg-road">Visual road path</div>
               <div id="tsi-leg-goal">Current goal</div>
@@ -357,8 +363,8 @@
             </div>
           </div>
           <div id="tsi-speech-box" class="mt-3 p-2 bg-dark border border-secondary rounded" hidden>
-            <div class="small text-secondary mb-1">LAST SPEECH (<span id="tsi-speech-level"></span>)</div>
-            <div id="tsi-speech-text"></div>
+            <div class="small text-secondary mb-1">SPEECH (newest first)</div>
+            <div id="tsi-speech-log" class="small"></div>
           </div>
         </div>
       </div>
