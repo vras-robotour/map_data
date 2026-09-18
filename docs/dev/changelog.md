@@ -15,6 +15,9 @@
   that file, a ROS 2 parameter file with a `map_data_tracker` section. The default is the new
   `config/tracker.yaml`, which holds the built-in defaults, so nothing changes for existing setups
 - `config/helhest_jr.yaml`: tracker topics of helhest-jr (`map_data_viewer --config config/helhest_jr.yaml`)
+- Planner **Start at robot**: with a robot position on the tracker's telemetry, the toggle
+  pins waypoint 0 to the robot and refreshes it when **Replan Path** runs, so a route is
+  planned from where the robot actually is instead of a clicked start
 - `osm_cloud` takes a `highway_types` parameter (and `highway_types:=` launch
   argument), as `route_planner` does: the grid can be drawn from roads as well
   as footways, so it shows the network the graph planner routes on when roads

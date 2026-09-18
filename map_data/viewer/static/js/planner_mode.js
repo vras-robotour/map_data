@@ -18,6 +18,8 @@ class PlannerMode {
     this.surfaceCosts = {};
     this.defaults = {};
     this.rulesYaml = null; // applied, unsaved traversability rules; null = the rule file
+    this.startAtRobot = false; // waypoint 0 pinned to the robot (see onRobotPosition)
+    this.robotPos = null;      // last position trackerMode published
     this._mapDragListeners = [];
 
     this.init();
@@ -80,6 +82,7 @@ class PlannerMode {
     this.active = true;
     this.markerLayer.addTo(map);
     this.redraw();
+    if (this.startAtRobot) this._moveStartToRobot();
     this.updateUI(); // Ensure UI state is correct
     // Enable map click for adding points
     map.on('click', this.handleMapClick, this);
@@ -141,6 +144,67 @@ class PlannerMode {
     for (const id of ['planner-hide-blocked', 'plan-footways', 'plan-roads']) {
       document.getElementById(id).addEventListener('change', () => this.refreshBlocked());
     }
+
+    document.getElementById('planner-start-at-robot')
+      .addEventListener('change', (e) => this.toggleStartAtRobot(e.target.checked));
+    // trackerMode publishes the robot position with every telemetry frame, in every mode
+    document.addEventListener('robot-position', (e) => this.onRobotPosition(e.detail));
+  }
+
+  // ── Start at the robot ──────────────────────────────────────────────────────
+  // The toggle pins waypoint 0 to the robot: it follows the live position while the path
+  // is being drawn, and Replan Path refreshes it once more, so the route is planned from
+  // where the robot is at that moment. It stops following a planned path, whose first
+  // pose is a result, not a waypoint; replanning re-pins it.
+  onRobotPosition(pos) {
+    this.robotPos = pos;
+    const toggle = document.getElementById('planner-start-at-robot');
+    if (toggle.disabled) {
+      toggle.disabled = false;
+      toggle.parentElement.title = "Plan from the robot's current position";
+    }
+    if (this.active && this.startAtRobot && !this.isProcessing && !this.isDragging
+        && !this.hasPlannedPath) {
+      this._moveStartToRobot();
+    }
+  }
+
+  /** Put waypoint 0 on the robot. Returns false when no position has arrived yet. */
+  _moveStartToRobot() {
+    const pos = this.robotPos;
+    if (!pos) return false;
+    if (!this.points.length) {
+      this.addPoint(pos.lat, pos.lon);
+      return true;
+    }
+    const start = this.points[0];
+    if (start.lat === pos.lat && start.lon === pos.lon) return true;
+    start.lat = pos.lat;
+    start.lon = pos.lon;
+    // Move the existing markers rather than redraw(): that rebuilds every marker and its
+    // drag handlers, which at telemetry rate would fight with dragging a waypoint.
+    start.marker?.setLatLng([pos.lat, pos.lon]);
+    start.hit?.setLatLng([pos.lat, pos.lon]);
+    this.hasPlannedPath = false;
+    this.drawPathLine();
+    this.updateUI();
+    return true;
+  }
+
+  toggleStartAtRobot(on) {
+    this.startAtRobot = on;
+    if (!on) {
+      this.redraw(); // drop the tooltip; the waypoint stays as an ordinary one
+      return;
+    }
+    if (!this._moveStartToRobot()) {
+      document.getElementById('planner-start-at-robot').checked = false;
+      this.startAtRobot = false;
+      setStatus('No robot position yet', 'text-warning');
+      return;
+    }
+    this.redraw();
+    setStatus('Planning from the robot position', 'text-info');
   }
 
   _allowedWays() {
@@ -494,8 +558,10 @@ class PlannerMode {
       marker.on('contextmenu', onWpContext);
       wpHit.on('contextmenu', onWpContext);
 
+      if (isStart && this.startAtRobot) marker.bindTooltip('Robot (start)');
       this.markerLayer.addLayer(marker);
       p.marker = marker;
+      p.hit = wpHit;
     });
 
     this.drawPathLine();
@@ -589,8 +655,10 @@ class PlannerMode {
     this.points = [];
     if (this.pathPolyline) map.removeLayer(this.pathPolyline);
     this.pathPolyline = null;
+    this.hasPlannedPath = false;
+    const seeded = this.startAtRobot && this._moveStartToRobot();
     this.updateUI();
-    setStatus('Path cleared', 'text-info');
+    setStatus(seeded ? 'Path cleared; start back at the robot' : 'Path cleared', 'text-info');
   }
 
   clearMiddle() {
@@ -699,6 +767,9 @@ class PlannerMode {
       this.cancelReplan();
       return;
     }
+
+    // Plan from where the robot is now, not where it was when the toggle went on
+    if (this.startAtRobot) this._moveStartToRobot();
 
     if (this.points.length < 2) {
       setStatus('At least 2 points required', 'text-warning');

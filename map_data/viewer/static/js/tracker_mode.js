@@ -12,6 +12,7 @@ const trackerMode = (() => {
     let activeExitCircle = null;
     let goalMarker = null;
     let enabled = false;
+    let _lastPos = null; // last known robot position, for the planner's "Start at robot"
 
     // Cached DOM/element references — resolved lazily on first use
     let _robotCb = null;
@@ -55,6 +56,15 @@ const trackerMode = (() => {
     function updateMap(data) {
         if (!map) return;
 
+        // The position is published before the layer check: the planner's "Start at robot"
+        // needs it even when the Robot layer is switched off.
+        const pos = data.position.ekf.lat ? data.position.ekf : data.position.gps;
+        const havePos = !!(pos && pos.lat && pos.lon);
+        if (havePos) {
+            _lastPos = { lat: pos.lat, lon: pos.lon };
+            document.dispatchEvent(new CustomEvent('robot-position', { detail: _lastPos }));
+        }
+
         // Check robot layer visibility — cache the checkbox element
         if (!_robotCb) _robotCb = document.querySelector('[data-layer="robot"]');
         if (_robotCb && !_robotCb.checked) {
@@ -62,8 +72,7 @@ const trackerMode = (() => {
             return;
         }
 
-        const pos = data.position.ekf.lat ? data.position.ekf : data.position.gps;
-        if (pos && pos.lat && pos.lon) {
+        if (havePos) {
             const latlng = [pos.lat, pos.lon];
             const heading = pos.heading || 0;
 
@@ -611,6 +620,7 @@ const trackerMode = (() => {
             // Note: We don't remove the layer here because it's now globally visible
         },
         showRobot: showRobot,
-        hideRobot: hideRobot
+        hideRobot: hideRobot,
+        position: () => (_lastPos ? { ..._lastPos } : null)
     };
 })();

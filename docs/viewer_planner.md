@@ -6,7 +6,8 @@ browser, using the same algorithms as the `replan` [CLI tool](planning.md).
 ## Workflow
 
 1. Switch to **PLANNER** using the tab in the top-right corner.
-2. Click on the map to place waypoints. Drag any waypoint to adjust it.
+2. Click on the map to place waypoints. Drag any waypoint to adjust it. With **Start at
+   robot** ticked the first waypoint is the robot itself, so you only click the goals.
 3. Select a planning mode and configure parameters in the sidebar.
 4. Click **Replan Path** to compute the path between the placed waypoints.
 5. Download the result as a GPX file or send it directly to the robot via **Wormhole**.
@@ -22,6 +23,16 @@ browser, using the same algorithms as the `replan` [CLI tool](planning.md).
 | **Wormhole** | Send the planned path directly to the robot over the network. |
 | **Delete All** | Remove all placed waypoints. |
 | **Keep Endpoints** | Remove intermediate waypoints, keeping only start and end. |
+| **Start at robot** | Pin the first waypoint to the robot's live position and plan from there. |
+
+!!! info "Start at robot"
+    The toggle needs a robot position, so it stays disabled until the tracker reports one
+    (it needs no Tracker tab — the telemetry arrives in every mode, and the toggle works
+    with the Robot layer switched off). While it is on, waypoint 0 follows the robot and
+    **Replan Path** refreshes it first, so the route is planned from where the robot is at
+    that moment. A planned path is left alone — its first pose is a result, not a waypoint —
+    until the next replan re-pins it. Switching the toggle off leaves the waypoint behind as
+    an ordinary one.
 
 ### Planning Mode
 
