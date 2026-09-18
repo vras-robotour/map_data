@@ -193,6 +193,12 @@ class GraphPlanner:
 
             tree = STRtree(edge_segments) if edge_segments else None
             threshold = 5.0
+            # An end that is a node of another way already has its junction (the
+            # annotation merge joins drawn paths by real nodes, map_data.annotations.join_ways).
+            uses: dict[int, int] = {}
+            for nodes in way_nodes:
+                for n in set(nodes):
+                    uses[n] = uses.get(n, 0) + 1
             if tree:
                 for way in self._allowed_ways:
                     # way.id >= 0 check fails if way.id is a string (virtual ID for split ways).
@@ -204,6 +210,8 @@ class GraphPlanner:
 
                     # Check endpoints of annotation way
                     for node_id in [way.nodes[0], way.nodes[-1]]:
+                        if uses[node_id] > 1:
+                            continue
                         p_node = self.nodes[node_id].ravel()[:2]
                         p_sh = Point(p_node)
 

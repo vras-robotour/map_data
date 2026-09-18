@@ -22,6 +22,8 @@ from pathlib import Path
 from typing import Any
 
 import utm
+from shapely import STRtree
+from shapely.geometry import LineString, Point
 
 from map_data.map_data import MapData
 from map_data.traversability import TraversabilityRules, load_traversability
@@ -51,8 +53,21 @@ _CAT_FOR_LIST = {
 
 #: Default width (m) of an annotated path without a ``width`` property.
 DEFAULT_ANNOTATION_WIDTH_M = 1.5
+#: Ways that moved a shared node to within this many degrees (~0.5 m) of each other keep sharing it.
+SAME_SPOT_DEG = 5e-6
+#: An end of a drawn path, or a moved end of any way, this close (m) to another way is
+#: joined to it (:func:`join_ways`). The viewer does not snap a dragged node, so this is
+#: how exactly the user has to aim; the same 5 m the graph planner's own stitching uses.
+JOIN_DISTANCE_M = 5.0
+#: The junction is an existing node of that way when one is this close (m) to the nearest
+#: point, else a new node on the edge.
+JOIN_NODE_M = 1.0
 #: Pass as ``annotations_path`` to load the map without any annotation store.
 NO_ANNOTATIONS = "none"
+
+
+def _same_spot(a: tuple[float, float], b: tuple[float, float]) -> bool:
+    return abs(a[0] - b[0]) < SAME_SPOT_DEG and abs(a[1] - b[1]) < SAME_SPOT_DEG
 
 
 def annotation_path_for(mapdata_path: str | Path) -> Path:
@@ -74,8 +89,11 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
     takes node positions from it.
     """
     zn, zl = md.zone_number, md.zone_letter
-    base_nodes_cache = getattr(md, "nodes_cache", None) or {}
-    nodes_cache = md.nodes_cache = edited_nodes_cache(store, base_nodes_cache)
+    # Without the moves: they are per way, so the second pass places them, and the
+    # first one must not rebuild a way from a position another way moved its node to.
+    nodes_cache = md.nodes_cache = edited_nodes_cache(
+        {**store, "node_position_overrides": {}}, getattr(md, "nodes_cache", None)
+    )
 
     deleted_way_ids = get_deleted_way_ids(store)
     has_node_dels = bool(store.get("deleted_nodes"))
@@ -145,22 +163,35 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
         nodes_cache = md.nodes_cache = dict(nodes_cache)
         next_id = min([0, *nodes_cache]) - 1
         copies: dict[str, dict[int, int]] = {}  # original way id -> {node id: copy id}
+        moves: dict[int, dict[str, tuple[float, float]]] = {}  # node id -> {way id: (lat, lon)}
         for wid, way_ov in node_pos_store.items():
             for nid_str, pos in way_ov.items():
-                nid = int(nid_str)
-                if len(users.get(nid, ())) < 2 or wid not in users[nid] or nid not in nodes_cache:
+                # An override of a way that no longer uses the node (deleted way/node) is stale.
+                if wid in users.get(int(nid_str), ()) and int(nid_str) in nodes_cache:
+                    moves.setdefault(int(nid_str), {})[wid] = (float(pos["lat"]), float(pos["lon"]))
+        for nid, by_way in moves.items():
+            spots: list[
+                tuple[tuple[float, float], list[str]]
+            ] = []  # ways grouped by where they put it
+            for wid, pos in by_way.items():
+                for spot, wids in spots:
+                    if _same_spot(spot, pos):
+                        wids.append(wid)
+                        break
+                else:
+                    spots.append((pos, [wid]))
+            for (lat, lon), wids in spots:
+                if len(spots) == 1 and len(wids) == len(users[nid]):
+                    nodes_cache[nid] = {
+                        **nodes_cache[nid],
+                        "lat": lat,
+                        "lon": lon,
+                    }  # moved as a whole
                     continue
-                copies.setdefault(wid, {})[nid] = next_id
-                nodes_cache[next_id] = {
-                    **nodes_cache[nid],
-                    "lat": float(pos["lat"]),
-                    "lon": float(pos["lon"]),
-                }
+                nodes_cache[next_id] = {**nodes_cache[nid], "lat": lat, "lon": lon}
+                for wid in wids:
+                    copies.setdefault(wid, {})[nid] = next_id
                 next_id -= 1
-        for remap in copies.values():
-            for nid in remap:  # the ways left on the original node keep its unmoved position
-                if nid in base_nodes_cache:
-                    nodes_cache[nid] = base_nodes_cache[nid]
 
         for lst_name in lists:
             new_lst = []
@@ -182,7 +213,7 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                         w.nodes = [remap.get(getattr(n, "id", n), n) for n in w.nodes]
                 new_lst.append(w)
             setattr(md, lst_name, new_lst)
-        if copies:
+        if moves:
             md.crossroads_list = md.parse_intersections(
                 {str(w.id): w for w in md.footways_list + md.roads_list},
             )
@@ -230,10 +261,13 @@ def merge_annotations(md: MapData, store: dict[str, Any]) -> None:
     by half its ``width``), with synthetic negative node ids registered in
     ``md.nodes_cache`` so the graph planner can route over it; anything else
     becomes a barrier. Crossroads where annotated paths meet other ways are
-    appended to ``md.crossroads_list``. Mutates *md* in place.
+    appended to ``md.crossroads_list``. Ends with :func:`join_ways`, which gives the
+    drawn paths (and moved end nodes) real nodes to meet the network at. Mutates *md* in place.
     """
     zn, zl = md.zone_number, md.zone_letter
-    ann_id = -1
+    # Below the drawn paths an exported map already carries: an id names one way.
+    all_ways = md.footways_list + md.roads_list + md.barriers_list
+    ann_id = min([0, *(int(str(w.id).split(":")[0]) for w in all_ways)]) - 1
     ann_lines: list[tuple[Way, Any]] = []  # annotated path ways with their centre lines
     if not hasattr(md, "nodes_cache") or md.nodes_cache is None:
         md.nodes_cache = {}
@@ -290,6 +324,136 @@ def merge_annotations(md: MapData, store: dict[str, Any]) -> None:
         md.crossroads_list = list(md.crossroads_list) + MapData.geometric_intersections(
             ann_lines, others
         )
+    join_ways(md, store)
+
+
+def join_ways(md: MapData, store: dict[str, Any]) -> None:
+    """
+    Give ways that meet on the map, but share no node id, a node to meet at.
+
+    The graph planner connects ways by node id only, which an edit never produces by
+    itself: a drawn path has synthetic nodes of its own, and a dragged node keeps (or, if
+    it was shared, loses) the junctions it had. Joined here are
+
+    - an end of a drawn path (negative way id: drawn in *store*, baked into an exported
+      map, or a split segment of one) and an end node of any way that *store* moved, when
+      it is within :data:`JOIN_DISTANCE_M` of another way — preferably one of its own kind,
+      as a footway-only plan never sees the roads — and not already shared with one;
+    - a drawn path and every way its centre line crosses or that ends on it.
+
+    The junction is a node of the other way (:data:`JOIN_NODE_M`), or a new one inserted on
+    its edge. It is added to the node lists only — put before/after the end, inserted at a
+    crossing — so no geometry changes and nothing the user placed is moved. Segments of one
+    original way are never joined: a detached split stays detached. Being real shared
+    nodes, the junctions survive an export. Way lists are reassigned with copies of the
+    changed ways; ``md.nodes_cache`` gains the new nodes in place.
+    """
+    ways = md.footways_list + md.roads_list
+    n_foot = len(md.footways_list)
+    origin = [str(w.id).split(":")[0] for w in ways]
+    drawn = [o.startswith("-") for o in origin]
+    moved_to = {
+        wid: {(float(p["lat"]), float(p["lon"])) for p in way_ov.values()}
+        for wid, way_ov in store.get("node_position_overrides", {}).items()
+    }
+    users: dict[int, set[str]] = {}
+    for o, w in zip(origin, ways, strict=True):
+        for n in w.nodes:
+            users.setdefault(n, set()).add(o)
+
+    def looks_for_a_way(wi: int, n: int) -> bool:
+        c = md.nodes_cache.get(n)
+        if c is None or len(users[n]) > 1:
+            return False
+        return drawn[wi] or (c["lat"], c["lon"]) in moved_to.get(origin[wi], ())
+
+    ends = [
+        (wi, k)
+        for wi, w in enumerate(ways)
+        if len(w.nodes) >= 2 and w.nodes[0] != w.nodes[-1]
+        for k in (0, -1)
+        if looks_for_a_way(wi, w.nodes[k])
+    ]
+    if not ends and not any(drawn):
+        return
+
+    xy = {n: p.ravel()[:2] for n, p in md.get_points().items()}
+    segments, owner = [], []  # every edge of every way, and its (way index, edge index)
+    for wi, w in enumerate(ways):
+        for i in range(len(w.nodes) - 1):
+            if w.nodes[i] in xy and w.nodes[i + 1] in xy:
+                segments.append(LineString([xy[w.nodes[i]], xy[w.nodes[i + 1]]]))
+                owner.append((wi, i))
+    if not segments:
+        return
+    tree = STRtree(segments)
+    inserts: dict[tuple[int, int], list[tuple[float, int]]] = {}  # (way, edge) -> [(along, id)]
+    next_id = min([0, *md.nodes_cache]) - 1
+
+    def node_on(j: int, along: float) -> int:
+        """The node *along* metres into edge *j*: one of its own when close, else a new one."""
+        nonlocal next_id
+        vi, i = owner[j]
+        if along <= JOIN_NODE_M:
+            return ways[vi].nodes[i]
+        if segments[j].length - along <= JOIN_NODE_M:
+            return ways[vi].nodes[i + 1]
+        nid, next_id = next_id, next_id - 1
+        e, n = segments[j].interpolate(along).coords[0]
+        lat, lon = utm.to_latlon(e, n, md.zone_number, md.zone_letter)
+        md.nodes_cache[nid] = {"lat": lat, "lon": lon, "tags": {}}
+        inserts.setdefault((vi, i), []).append((along, nid))
+        return nid
+
+    joined: list[tuple[int, int, int]] = []  # (way, which end, junction)
+    for wi, k in ends:
+        end = Point(xy[ways[wi].nodes[k]])
+        near = [
+            ((owner[j][0] >= n_foot) != (wi >= n_foot), segments[j].distance(end), j)
+            for j in tree.query(end.buffer(JOIN_DISTANCE_M), predicate="intersects")
+            if origin[owner[j][0]] != origin[wi]
+        ]
+        if near:
+            j = min(near)[2]
+            joined.append((wi, k, node_on(j, segments[j].project(end))))
+
+    end_nodes = {ways[wi].nodes[k] for wi, k in ends}  # those are joined above, not as crossings
+    for j, (wi, i) in enumerate(owner):
+        if not drawn[wi]:
+            continue
+        for h in tree.query(segments[j], predicate="intersects"):
+            vi = owner[h][0]
+            if origin[vi] == origin[wi] or (drawn[vi] and h < j):  # a drawn pair comes up twice
+                continue
+            mine, theirs = ways[wi].nodes[i : i + 2], ways[vi].nodes[owner[h][1] : owner[h][1] + 2]
+            if set(mine) & set(theirs):
+                continue
+            pt = segments[j].intersection(segments[h])
+            if pt.geom_type != "Point":  # they run together: not a crossing
+                continue
+            along = segments[j].project(pt)
+            if along <= JOIN_NODE_M and mine[0] in end_nodes:
+                continue
+            if segments[j].length - along <= JOIN_NODE_M and mine[1] in end_nodes:
+                continue
+            inserts.setdefault((wi, i), []).append((along, node_on(h, segments[h].project(pt))))
+
+    chains: dict[int, list[int]] = {}  # way index -> its new node list
+    # Last edge first, so an insert does not shift the edges still to come.
+    for (wi, i), new in sorted(inserts.items(), reverse=True):
+        chain = chains.setdefault(wi, list(ways[wi].nodes))
+        ids = dict.fromkeys(n for _, n in sorted(new))  # in order along the edge, each once
+        chain[i + 1 : i + 1] = [n for n in ids if n not in chain]
+    for wi, k, junction in joined:
+        chain = chains.setdefault(wi, list(ways[wi].nodes))
+        chain.insert(0 if k == 0 else len(chain), junction)
+    if not chains:
+        return
+    for wi, chain in chains.items():
+        ways[wi] = copy.copy(ways[wi])
+        ways[wi].nodes = chain
+    md.footways_list, md.roads_list = ways[:n_foot], ways[n_foot:]
+    md.recompute_crossroads()
 
 
 def apply_store(md: MapData, store: dict[str, Any]) -> MapData:

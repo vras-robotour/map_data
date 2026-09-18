@@ -15,7 +15,7 @@ import numpy as np
 import overpy
 import utm
 from gpxpy import parse as gpxparse
-from shapely import geometry
+from shapely import STRtree, geometry
 
 from map_data.traversability import TraversabilityRules
 from map_data.utils.config import load_config, package_share
@@ -705,14 +705,28 @@ class MapData:
 
         """
         md = load_mapdata(cls, path)
-        geometric = [
-            c for c in md.crossroads_list if c.tags.get("type") == "annotation_intersection"
-        ]
-        md.crossroads_list = (
-            md.parse_intersections({str(w.id): w for w in md.footways_list + md.roads_list})
-            + geometric
-        )
+        md.recompute_crossroads()
         return md
+
+    def recompute_crossroads(self) -> None:
+        """
+        Recompute the node-based crossroads and keep the drawn-path ones.
+
+        The ``annotation_intersection`` crossroads cannot be recomputed from node
+        ids, so they are kept as they are. A drawn path joined to the network by a
+        real node (:func:`map_data.annotations.join_ways`) forks at that node too;
+        that recomputed crossroad is dropped, the junction is already listed.
+        """
+        node_based = self.parse_intersections(
+            {str(w.id): w for w in self.footways_list + self.roads_list}
+        )
+        geometric = [
+            c for c in self.crossroads_list if c.tags.get("type") == "annotation_intersection"
+        ]
+        if node_based and geometric:
+            tree = STRtree([c.line for c in geometric])
+            node_based = [c for c in node_based if not len(tree.query(c.line, "intersects"))]
+        self.crossroads_list = node_based + geometric
 
     def __str__(self) -> str:
         source = f"File: {self.coords_file}" if self.coords_file else "Array"
