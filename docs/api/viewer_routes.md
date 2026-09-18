@@ -436,7 +436,7 @@ Cancel an in-progress planning request.
 
 ## Tracker
 
-Both endpoints answer **503** when the tracker is not running (no ROS 2 context).
+Every tracker endpoint answers **503** when the tracker is not running (no ROS 2 context).
 
 ### `GET /api/tracker/settings`
 
@@ -491,6 +491,13 @@ optionally save them to the config file with its comments kept.
 Nothing is applied.
 
 **Error 500** — applied, but the config file could not be written.
+
+### `DELETE /api/tracker/trail`
+
+Forget the robot trail recorded so far. The trail lives on the tracker node, so clearing it
+only in the browser would bring it back with the next telemetry frame.
+
+**Response 200** — `{"dropped": 137}`, the number of fixes discarded.
 
 ---
 

@@ -21,6 +21,7 @@ the Layers panel.
 | Control | Description |
 |---------|-------------|
 | **Center Robot** | Pan and zoom the map to the robot's current position. |
+| **Clear Trail** | Forget the trail recorded so far (it is dropped on the tracker node, not just in the browser, so it does not come back with the next fix). Useful after the robot was carried or driven somewhere that is not part of the run. |
 | **Follow** | Continuously pan the map to keep the robot centered as it moves. |
 
 ## Status Display

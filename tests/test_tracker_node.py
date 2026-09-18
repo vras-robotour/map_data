@@ -167,3 +167,15 @@ def test_route_keeps_its_shape_and_long_ones_are_thinned(make_node):
     assert len(node.sequence_gps) == 98
     node._sequence_path_callback(route(5000))
     assert 200 <= len(node.sequence_gps) <= 201  # thinned, last point kept
+
+
+def test_clear_trail_forgets_the_fixes_and_marks_the_telemetry_dirty(make_node):
+    node = make_node({"gps_fix_topic": "/fix", "earth_frame": ""})
+    with node._lock:
+        node.trail.extend([{"lat": 50.0, "lon": 14.0}, {"lat": 50.1, "lon": 14.1}])
+        node._dirty = False
+
+    assert node.clear_trail() == 2
+    assert list(node.trail) == []
+    assert node._dirty  # the browser is told at once, not only on the next fix
+    assert node.clear_trail() == 0

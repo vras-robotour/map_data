@@ -502,6 +502,14 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         self.get_logger().info(f"Tracker reconfigured: {changed}, enabled={enabled}")
         return True
 
+    def clear_trail(self) -> int:
+        """Forget the recorded trail; returns how many fixes were dropped."""
+        with self._lock:
+            dropped = len(self.trail)
+            self.trail.clear()
+            self._dirty = True
+        return dropped
+
     def available_topics(self) -> dict[str, list[str]]:
         """Topics currently on the ROS graph -> their message types."""
         return {name: list(types) for name, types in self.get_topic_names_and_types()}

@@ -19,6 +19,7 @@ class FakeTracker:
 
     def __init__(self):
         self.values = dict(SETTING_DEFAULTS)
+        self.trail = [{"lat": 50.0, "lon": 14.0}, {"lat": 50.1, "lon": 14.1}]
 
     def settings(self):
         return dict(self.values)
@@ -31,6 +32,10 @@ class FakeTracker:
 
     def available_topics(self):
         return {"/fix": ["sensor_msgs/msg/NavSatFix"]}
+
+    def clear_trail(self):
+        dropped, self.trail = len(self.trail), []
+        return dropped
 
 
 @pytest.fixture
@@ -116,3 +121,10 @@ def test_without_a_tracker(client):
     app.extensions.pop(TRACKER_EXTENSION)
     assert c.get("/api/tracker/settings").status_code == 503
     assert c.put("/api/tracker/settings", json={"settings": {}}).status_code == 503
+
+
+def test_delete_trail_clears_it_on_the_node(client):
+    c, _, tracker, _ = client
+    assert c.delete("/api/tracker/trail").get_json() == {"dropped": 2}
+    assert tracker.trail == []  # cleared where it is recorded, not just in the browser
+    assert c.delete("/api/tracker/trail").get_json() == {"dropped": 0}

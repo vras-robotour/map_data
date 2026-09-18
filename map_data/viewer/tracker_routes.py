@@ -70,6 +70,17 @@ def get_tracker_settings() -> Response:
     )
 
 
+@bp.route("/api/tracker/trail", methods=["DELETE"])
+def delete_tracker_trail() -> Response:
+    """
+    Forget the robot trail drawn on the map, e.g. after the robot was carried somewhere.
+
+    The trail lives on the node, so clearing it only in the browser would bring it back
+    with the next telemetry frame. Returns ``{"dropped": int}``.
+    """
+    return jsonify({"dropped": _tracker_node().clear_trail()})
+
+
 @bp.route("/api/tracker/settings", methods=["PUT"])
 def put_tracker_settings() -> Response:
     """

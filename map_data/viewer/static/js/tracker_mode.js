@@ -597,6 +597,27 @@ const trackerMode = (() => {
         initSocket();
     }
 
+    // The trail is recorded on the node, so it has to be cleared there: dropping only the
+    // polyline would bring the old fixes back with the next telemetry frame.
+    $('tracker-clear-trail')?.addEventListener('click', async () => {
+        if (STATIC_BASE) {
+            setStatus('Clearing the trail needs the backend — run map_data_viewer locally', 'text-warning');
+            return;
+        }
+        try {
+            const res = await api('DELETE', '/api/tracker/trail');
+            if (!res.ok) throw new Error(await errorText(res));
+            const { dropped } = await res.json();
+            if (trailLayer) {
+                map.removeLayer(trailLayer);
+                trailLayer = null;
+            }
+            setStatus(`Trail cleared (${dropped} fixes)`, 'text-success');
+        } catch (err) {
+            setStatus(`Failed to clear the trail: ${err.message}`, 'text-danger');
+        }
+    });
+
     document.getElementById('tracker-center-robot')?.addEventListener('click', () => {
         if (robotMarker) {
             const currentZoom = map.getZoom();
