@@ -55,7 +55,10 @@ map_data_tracker:
     # --- geometry drawn on the map
     path_topic: "/crl_commander/plan"                # planner path (FP_ENU0), green dashed
     goal_topic: "/crl_commander/goal"                # current commander goal (FP_ENU0)
-    sequence_path_topic: "/crl_commander/goal_sequence"    # loaded sequence (nav_msgs/Path, FP_ECEF), blue
+    # The route being driven, whatever its source (file or route_planner): latched Path in
+    # FP_ENU0, blue. Not /crl_commander/goal_sequence: the commander only publishes that in
+    # SEQUENCE mode, and road_follower drives it goal by goal (goto), so it stays empty.
+    sequence_path_topic: "/road_follower/route_path"
     sequence_poses_topic: "/goal_sequence"           # road_follower's current waypoint window (PoseArray, FP_ECEF)
     road_path_topic: "/predicted_path_ls"            # path_centerline on the jetson, cyan
     intersections_topic: "/intersections"            # osm_cloud crossroads (FP_ENU0), magenta rings

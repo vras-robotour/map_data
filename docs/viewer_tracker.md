@@ -69,7 +69,7 @@ listing only the layers that are configured:
 | Layer | Source | Style |
 |-------|--------|-------|
 | Planned path | `path_topic` or an active Nav2 action | green dashed polyline |
-| Waypoint sequence | `sequence_path_topic` (`Path`, e.g. the commander's loaded sequence) | blue dotted polyline |
+| Route / waypoint sequence | `sequence_path_topic` (`Path`, e.g. `road_follower`'s `~/route_path` — the route being driven, or the commander's loaded sequence) | blue dotted polyline |
 | Waypoint window | `sequence_poses_topic` (`PoseArray`, e.g. `road_follower`'s `/goal_sequence`) | light-blue polyline |
 | Road path | `road_path_topic` (`path_centerline` prediction) | cyan polyline |
 | Goal | `goal_topic` | orange circle |
@@ -158,7 +158,7 @@ The numeric parameters (`battery_low_voltage`, `stale_after`, `trail_*`,
 | `speak_error_topic` | `/speak/err` | Error speech messages (`String`) |
 | `path_topic` | `/path` | Planned path for map overlay (`Path`) |
 | `goal_topic` | `""` | Current navigation goal (`PoseStamped`, latched) |
-| `sequence_path_topic` | `""` | Waypoint sequence (`Path`, latched) |
+| `sequence_path_topic` | `""` | Route being followed or waypoint sequence (`Path`, latched); kept at full resolution up to 200 poses |
 | `sequence_poses_topic` | `""` | Waypoint window (`PoseArray`, latched) |
 | `road_path_topic` | `""` | Visual road-following path (`Path`) |
 | `intersections_topic` | `""` | Intersections (`PoseArray`, latched) |

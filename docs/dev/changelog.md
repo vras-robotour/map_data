@@ -34,6 +34,12 @@
 
 ### Fixed
 
+- The tracker drew no high-level route on helhest-jr: `config/helhest_jr.yaml` pointed
+  `sequence_path_topic` at `/crl_commander/goal_sequence`, which the commander only publishes
+  in SEQUENCE mode, while `road_follower` drives it goal by goal. It now reads
+  `/road_follower/route_path`, the route actually being followed whatever its source. A route
+  is also no longer decimated to every 10th pose (which cut every corner of a waypoint route);
+  it is thinned only above 200 poses
 - The viewer's telemetry Socket.IO connection failed with `property 'session' of
   'RequestContext' object has no setter` on Flask 3.0.2 with Flask-SocketIO 5.3 (Ubuntu
   24.04 packages), so the tracker received nothing. The Socket.IO server no longer manages

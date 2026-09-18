@@ -78,6 +78,9 @@ TELEOP_TIMEOUT = 2.0
 PLAN_STALE_TIMEOUT = 3.0
 PATH_SUBSAMPLE = 10  # keep every n-th pose of long paths (plus the last one)
 ROAD_PATH_SUBSAMPLE = 5
+# A route is already sparse (road_follower spaces its waypoints ~3 m apart), so decimating it
+# like a planner path would cut every corner: thin it only once it gets long.
+SEQUENCE_MAX_POINTS = 200
 
 # Ordered like nav2's SpeedLimit / CollisionMonitor enums
 _COLLISION_ACTIONS: dict[int, str] = {0: "STOP", 1: "SLOWDOWN", 2: "LIMIT", 3: "PASSTHROUGH"}
@@ -743,7 +746,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
                 self._dirty = True
 
     def _sequence_path_callback(self, msg: Path) -> None:
-        poses = subsample(msg.poses, PATH_SUBSAMPLE)
+        poses = subsample(msg.poses, math.ceil(len(msg.poses) / SEQUENCE_MAX_POINTS) or 1)
         pts = self._points_to_latlon(msg.header.frame_id, self._poses_xyz(poses))
         if pts is not None:
             with self._lock:

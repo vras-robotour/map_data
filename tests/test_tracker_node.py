@@ -145,3 +145,25 @@ def test_plan_clears_on_empty_path_and_when_the_planner_exits(make_node):
     node.destroy_publisher(goal_pub)
     node._drop_orphaned_plan()
     assert node.waypoints_gps == []
+
+
+def test_route_keeps_its_shape_and_long_ones_are_thinned(make_node):
+    """A mission route is sparse already: drawing it must not cut its corners."""
+    from geometry_msgs.msg import PoseStamped
+    from nav_msgs.msg import Path
+
+    node = make_node({"sequence_path_topic": "/route", "earth_frame": "", "utm_frame": "utm"})
+
+    def route(n):
+        msg = Path()
+        msg.header.frame_id = "utm"  # no TF lookup needed
+        for i in range(n):
+            pose = PoseStamped()
+            pose.pose.position.x, pose.pose.position.y = 500000.0 + i, 5551000.0 + i
+            msg.poses.append(pose)
+        return msg
+
+    node._sequence_path_callback(route(98))  # a Stromovka-sized route: every waypoint kept
+    assert len(node.sequence_gps) == 98
+    node._sequence_path_callback(route(5000))
+    assert 200 <= len(node.sequence_gps) <= 201  # thinned, last point kept
