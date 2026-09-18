@@ -59,8 +59,8 @@ if the corresponding ROS2 topic is not configured.
 | Recovery Active | Shown in red when a recovery behavior is running. |
 | Teleop Active | Shown in yellow when a non-zero teleop twist or any joystick input arrived in the last 2 s. |
 
-The sidebar also shows the robot's **last speech message** (info / warn / error level) when the
-speech topics are configured.
+The sidebar also shows the **last five speech messages** (info / warn / error level, newest
+first) when the speech topics are configured.
 
 ## Map Layers
 

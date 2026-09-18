@@ -405,15 +405,21 @@ const trackerMode = (() => {
         $('tsi-leg-intersections').hidden = feat.intersections !== true;
         $('tsi-leg-active').hidden = feat.active_intersection !== true;
 
-        // Last speech
+        // Spoken messages, newest first
         const speechBox = $('tsi-speech-box');
-        if (feat.speech !== false && s.last_speech) {
-            const levelClass = s.last_speech.level === 'error' ? 'text-danger'
-                : (s.last_speech.level === 'warn' ? 'text-warning' : 'text-info');
-            $('tsi-speech-level').textContent = s.last_speech.level;
-            const speechText = $('tsi-speech-text');
-            speechText.textContent = s.last_speech.text;
-            speechText.className = levelClass;
+        const speechLog = s.speech_log || [];
+        if (feat.speech !== false && speechLog.length) {
+            const log = $('tsi-speech-log');
+            log.textContent = '';
+            speechLog.forEach((entry, i) => {
+                const levelClass = entry.level === 'error' ? 'text-danger'
+                    : (entry.level === 'warn' ? 'text-warning' : 'text-info');
+                const row = document.createElement('div');
+                // The newest message stays readable; the older ones fade into the background
+                row.className = `${levelClass}${i ? ' opacity-50' : ''}`;
+                row.textContent = `${entry.level}: ${entry.text}`;
+                log.appendChild(row);
+            });
             speechBox.hidden = false;
         } else {
             speechBox.hidden = true;

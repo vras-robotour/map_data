@@ -81,6 +81,7 @@ ROAD_PATH_SUBSAMPLE = 5
 # A route is already sparse (road_follower spaces its waypoints ~3 m apart), so decimating it
 # like a planner path would cut every corner: thin it only once it gets long.
 SEQUENCE_MAX_POINTS = 200
+SPEECH_HISTORY = 5  # spoken messages kept for the sidebar
 
 # Ordered like nav2's SpeedLimit / CollisionMonitor enums
 _COLLISION_ACTIONS: dict[int, str] = {0: "STOP", 1: "SLOWDOWN", 2: "LIMIT", 3: "PASSTHROUGH"}
@@ -246,7 +247,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         self._last_teleop_time = 0.0
         self.nav_state: str | None = None
         self.follower_state: str | None = None
-        self.last_speech: dict[str, str] | None = None
+        self.speech_log: deque[dict[str, str]] = deque(maxlen=SPEECH_HISTORY)
         self.diagnostics: dict[str, Any] | None = None
 
         self._dirty = True  # start dirty so the first poll always emits
@@ -547,7 +548,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             and (now - self._last_teleop_time) < TELEOP_TIMEOUT,
             "nav_state": self.nav_state,
             "follower_state": self.follower_state,
-            "last_speech": dict(self.last_speech) if self.last_speech else None,
+            "speech_log": [dict(entry) for entry in reversed(self.speech_log)],
             "diagnostics": dict(self.diagnostics) if self.diagnostics else None,
         }
 
@@ -930,5 +931,9 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
 
     def _speech_callback(self, msg: String, level: str) -> None:
         with self._lock:
-            self.last_speech = {"level": level, "text": msg.data}
+            entry = {"level": level, "text": msg.data}
+            # A message repeated back to back would just fill the history with itself
+            if self.speech_log and self.speech_log[-1] == entry:
+                return
+            self.speech_log.append(entry)
             self._dirty = True
