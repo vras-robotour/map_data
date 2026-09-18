@@ -175,6 +175,10 @@ Keys are way IDs as strings; values are dicts mapping node IDs (as strings) to c
 }
 ```
 
+A move applies to that way only. When the node is also used by another way, the merged map
+gives the moved way its own copy of the node under a fresh negative id (minted at merge time,
+not stored) and the other ways keep the original position, so the ways no longer join there.
+
 ### `change_log` list
 
 An ordered audit log. Each entry has a `type` field and optional `ts` (ISO timestamp for user-initiated changes):

@@ -3,7 +3,9 @@
 Investigation of why dragging a node that several ways share does not split it
 into two independent nodes, and what it would take to make it do so.
 
-Status: **finding only, nothing implemented.**
+Status: **fixed at merge time** in `apply_way_edits` (`map_data/annotations.py`), see
+[What was implemented](#what-was-implemented). The store-level proposal further down was not
+needed and is kept for the record.
 
 ---
 
@@ -62,6 +64,36 @@ overridden in two ways about 13 m apart:
 The merged cache resolves it to the `180216039` position; the `43907854`
 override is silently discarded.
 
+The `robotour.exported` store holds the same collision, and there it is benign: `388382619`
+is also deleted from way `43907854`, so after the merge only `180216039` uses it.
+
+---
+
+## What was implemented
+
+The viewer was never wrong: every viewer endpoint resolves one way at a time from the raw map
+and that way's own overrides. Only the full merge collapsed them. So the fix lives in the
+merge alone, in the `node_position_overrides` block of `apply_way_edits`:
+
+1. index which (original) ways use each node in the already deleted/split way lists;
+2. for every override on a node that another way also uses, mint a fresh negative id, put the
+   moved position in `nodes_cache` under it, and restore the original node's position;
+3. substitute the copy into (a copy of) the moved way's `nodes`, after its geometry is rebuilt;
+4. recompute the crossroads when anything was detached.
+
+Segments of a split way share their overrides and therefore one copy, so they stay joined.
+A node moved in several ways gets one copy per way. Nothing is stored: no schema change, no
+endpoint or frontend change, the viewer keeps addressing original node ids, and undoing the
+move re-joins the junction. Copy ids are not stable across store edits; nothing persists them
+(an exported `.mapdata` is self-consistent).
+
+Tests: `test_moving_a_shared_node_in_one_way_detaches_that_way` and
+`test_shared_node_moved_in_both_ways_honours_both` in `tests/test_annotations.py`.
+
+Still open: dragging a **whole way** writes an override for each of its nodes, so it now
+detaches the way from every junction it has, as drawn. The viewer does not signal that a move
+breaks a junction (see the decisions below).
+
 ---
 
 ## Side findings
@@ -80,7 +112,7 @@ override is silently discarded.
 
 ---
 
-## Proposed fix: detach-on-move
+## Original proposal: detach-on-move in the store (not implemented)
 
 The mechanism already exists for splits. A `detached_nodes` entry
 (`{way_id, node_id, id}`) means "this way uses its own synthetic copy of that

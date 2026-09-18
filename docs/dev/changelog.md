@@ -39,6 +39,12 @@
 
 ### Fixed
 
+- Moving a node that several ways share now moves it for the planner the way the viewer draws
+  it. Moves are stored per way, but the merged map resolved them per node id: the last
+  override won, the other ways were dragged along in the graph and the junction survived.
+  The merge (`apply_way_edits`) now gives the moved way its own copy of the node (a fresh
+  negative id) and leaves the original where it was, so the junction is broken exactly where
+  the viewer shows a gap; undoing the move joins it again. Nothing changes in the store
 - `osm_cloud` published an empty grid that only a restart cured. A Fixposition unit without
   a fusion fix publishes `FP_ECEF -> FP_ENU0` as all zeros, and the node latched it at
   start-up: `utm_to_local_via_ecef` then worked at an altitude of -6378 km and collapsed the
