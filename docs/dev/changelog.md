@@ -39,6 +39,16 @@
 
 ### Fixed
 
+- `osm_cloud` published an empty grid that only a restart cured. A Fixposition unit without
+  a fusion fix publishes `FP_ECEF -> FP_ENU0` as all zeros, and the node latched it at
+  start-up: `utm_to_local_via_ecef` then worked at an altitude of -6378 km and collapsed the
+  whole map into a metre-wide box, so no grid cell landed within `max_path_dist` of a way
+  (7 of the last 25 field runs, `(0, 4)` or `(30, 4)` points, `FP_ENU0 origin at lat=180.0`
+  in the log). Such a transform is now rejected and waited out; the `/tf_static` subscription
+  is kept for the node's life, so a placement transform that arrives late or moves (the ENU0
+  origin changes whenever the GNSS/INS driver restarts) rebuilds and re-publishes the grid and
+  the intersections instead of needing the node restarted; and a grid that comes out empty over
+  a map that has ways is logged as an error rather than latched onto every late subscriber
 - The tracker drew no high-level route on helhest-jr: `config/helhest_jr.yaml` pointed
   `sequence_path_topic` at `/crl_commander/goal_sequence`, which the commander only publishes
   in SEQUENCE mode, while `road_follower` drives it goal by goal. It now reads

@@ -7,7 +7,7 @@ into ROS2 PointCloud2 and MarkerArray messages for visualization.
 """
 
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +42,15 @@ from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 CLOUD_COLS = 4
 TOLERANCE = 1e-3
 TRANSFORM_MODES = ("tf", "auto", "geodetic")
+# Smallest plausible norm of an ECEF position [m]. Every point on Earth is ~6.37e6 m from
+# the ECEF origin, so a much smaller one means the earth_frame -> local_frame TF carries no
+# real origin yet: the Fixposition unit publishes FP_ECEF -> FP_ENU0 as all zeros until it
+# has a fusion fix, which puts FP_ENU0 at the centre of the Earth. Placing the map with
+# that transform shrinks the whole map to a metre-wide box and the grid comes out empty.
+MIN_ECEF_NORM = 1.0e6
+# How far the placement transform has to move before the map is rebuilt. /tf_static is
+# re-broadcast periodically on Helhest, so the common case is the very same numbers again.
+PLACEMENT_EPS = 1e-6
 # highway_types value -> MapData.get_ways() key, as in route_planner's graph planner.
 HIGHWAY_TYPE_KEYS = {"footway": "footways", "road": "roads"}
 
@@ -134,6 +143,13 @@ class OSMCloud(Node):
         self.tf = Buffer()
         self.tf_sub = None
         self.tf_static_pub = StaticTransformBroadcaster(self)
+        # True once the map has been built and published once, so that _tf_static_cb()
+        # rebuilds it rather than racing the start-up lookup that drives the callback.
+        self.initialized = False
+        # True when the grid came out empty although the map has ways, i.e. the map is
+        # misplaced. Nothing is published then: a latched empty cloud would hide the map
+        # from every late subscriber until the node was restarted.
+        self.cloud_degenerate = False
 
         self.utm_to_local: np.ndarray | None = None
         self.ecef_to_local: np.ndarray | None = None
@@ -156,10 +172,12 @@ class OSMCloud(Node):
             )
             self.transform_mode = "tf"
 
-        # Both transforms this node looks up are static and needed once, at startup:
-        # a full TransformListener would also digest the /tf firehose (hundreds of Hz
-        # on Helhest) for the node's whole life. The subscription is destroyed again
-        # below, so the node has no callbacks left once the map is published.
+        # Only the static placement transform is looked up here, so one /tf_static
+        # subscription is enough: a full TransformListener would also digest the /tf
+        # firehose (hundreds of Hz on Helhest). It is kept for the node's life, so that a
+        # placement transform published or corrected later rebuilds and re-publishes the
+        # map instead of needing the node restarted -- the ENU0 origin only exists once
+        # the GNSS/INS unit has a fusion fix, and moves whenever its driver restarts.
         if self.transform_mode != "auto":
             static_qos = QoSProfile(depth=100, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
             self.tf_sub = self.create_subscription(
@@ -195,10 +213,6 @@ class OSMCloud(Node):
         else:
             self.get_utm_to_local()
 
-        if self.tf_sub is not None:
-            self.destroy_subscription(self.tf_sub)
-            self.tf_sub = None
-
         if self.transform_mode == "geodetic":
             self.get_logger().info(
                 f"Using geodetic placement via {self.earth_frame} -> {self.local_frame}: "
@@ -208,30 +222,8 @@ class OSMCloud(Node):
             self.get_logger().info(f"Using UTM to local transform: {self.utm_to_local}")
 
         if all(v == 0.0 for v in self.grid_min) and all(v == 0.0 for v in self.grid_max):
-            self.get_logger().info("Auto-calculating grid bounds from map data")
             self.grid_bounds_auto = True
-            # Transform all four corners of the UTM bounding box to the local frame
-            # (the local frame may be rotated relative to UTM).
-            xs = (self.map_data.min_x, self.map_data.max_x)
-            ys = (self.map_data.min_y, self.map_data.max_y)
-            corners = {
-                i: np.array([x, y, 0.0]).reshape(3, 1)
-                for i, (x, y) in enumerate((x, y) for x in xs for y in ys)
-            }
-            # The transform is None only if its lookup was interrupted by rclpy
-            # shutdown mid-startup; skip the auto-calc (get_cloud() below raises a
-            # clear error in that case).
-            if not self._transform_ready():
-                self.get_logger().error(
-                    "Map placement transform unavailable; skipping grid-bounds auto-calc"
-                )
-            else:
-                bounds_arr = np.array([p.ravel() for p in self._to_local(corners).values()])
-                self.grid_min = [np.min(bounds_arr[:, 0]), np.min(bounds_arr[:, 1])]
-                self.grid_max = [np.max(bounds_arr[:, 0]), np.max(bounds_arr[:, 1])]
-                self.get_logger().info(
-                    f"Calculated grid bounds: min={self.grid_min}, max={self.grid_max}"
-                )
+            self._auto_grid_bounds()
 
         self.grid_cloud: PointCloud2 = self.get_cloud()
         if self.publish_intersections:
@@ -240,7 +232,33 @@ class OSMCloud(Node):
         self.publish_cb()
         if self.republish_period > 0:
             self.create_timer(self.republish_period, self.publish_cb)
+        # From here on a /tf_static message rebuilds the map, instead of only filling the
+        # buffer for the start-up lookup that drove the callback until now.
+        self.initialized = True
         self.get_logger().info("Initialized OSM cloud")
+
+    def _auto_grid_bounds(self) -> None:
+        """Set ``grid_min`` / ``grid_max`` from the map's bounding box in ``local_frame``."""
+        self.get_logger().info("Auto-calculating grid bounds from map data")
+        # Transform all four corners of the UTM bounding box to the local frame
+        # (the local frame may be rotated relative to UTM).
+        xs = (self.map_data.min_x, self.map_data.max_x)
+        ys = (self.map_data.min_y, self.map_data.max_y)
+        corners = {
+            i: np.array([x, y, 0.0]).reshape(3, 1)
+            for i, (x, y) in enumerate((x, y) for x in xs for y in ys)
+        }
+        # The transform is None only if its lookup was interrupted by rclpy shutdown
+        # mid-startup; skip the auto-calc (get_cloud() raises a clear error in that case).
+        if not self._transform_ready():
+            self.get_logger().error(
+                "Map placement transform unavailable; skipping grid-bounds auto-calc"
+            )
+            return
+        bounds_arr = np.array([p.ravel() for p in self._to_local(corners).values()])
+        self.grid_min = [np.min(bounds_arr[:, 0]), np.min(bounds_arr[:, 1])]
+        self.grid_max = [np.max(bounds_arr[:, 0]), np.max(bounds_arr[:, 1])]
+        self.get_logger().info(f"Calculated grid bounds: min={self.grid_min}, max={self.grid_max}")
 
     def load_map_data(self, path: str) -> "md.MapData":
         """
@@ -354,6 +372,17 @@ class OSMCloud(Node):
         """
         Timer callback to publish the grid cloud and intersections.
         """
+        # The crossroads come from the same placement as the grid, so a degenerate grid
+        # means their rings would be just as misplaced: hold everything back rather than
+        # latch it onto every late subscriber.
+        if self.cloud_degenerate:
+            self.get_logger().error(
+                "Not publishing an empty grid and its intersections; "
+                "waiting for a usable map placement",
+                throttle_duration_sec=30.0,
+            )
+            return
+
         now = self.get_clock().now().to_msg()
         self.grid_cloud.header.stamp = now
         self.pub_grid.publish(self.grid_cloud)
@@ -370,26 +399,118 @@ class OSMCloud(Node):
     def _tf_static_cb(self, msg: TFMessage) -> None:
         for t in msg.transforms:
             self.tf.set_transform_static(t, "osm_cloud")
+        # Before the map is published, _poll_tf() is what drives this callback and it
+        # picks the new transform up on its next lookup; only one arriving afterwards
+        # has to rebuild what was already published.
+        if self.initialized:
+            self._replace_placement()
 
-    def _poll_tf(self, target: str, source: str) -> np.ndarray | None:
+    def _replace_placement(self) -> None:
         """
-        Block until the ``source -> target`` TF transform is available.
+        Rebuild and re-publish the map if the placement transform has changed.
 
-        While rclpy is not shutdown, retry every second until successful;
-        returns ``None`` only if rclpy is shut down while waiting.
+        ``/tf_static`` is re-broadcast periodically on Helhest, so nearly every call sees
+        the same transform again and returns immediately. A genuinely different one means
+        the published map is now in the wrong place: the ENU0 origin appears only with the
+        GNSS/INS unit's first fusion fix, and moves whenever its driver restarts.
+        """
+        source = self.earth_frame if self.transform_mode == "geodetic" else self.utm_frame
+        try:
+            tf_msg = self.tf.lookup_transform(self.local_frame, source, rclpy.time.Time())
+        except (TransformException, RuntimeError, TypeError, ValueError):
+            return
+        matrix = numpify(tf_msg.transform)
+        reason = self._placement_error(matrix)
+        if reason:
+            self.get_logger().warning(
+                f"Ignoring {source} -> {self.local_frame} transform: {reason}",
+                throttle_duration_sec=10.0,
+            )
+            return
+        current = self.ecef_to_local if self.transform_mode == "geodetic" else self.utm_to_local
+        if current is not None and np.allclose(matrix, current, rtol=0.0, atol=PLACEMENT_EPS):
+            return
+        self.get_logger().info(f"{source} -> {self.local_frame} changed; rebuilding the map")
+        if self.transform_mode == "geodetic":
+            self.ecef_to_local = matrix
+            self._log_local_origin()
+        else:
+            self.utm_to_local = matrix
+            self.get_logger().info(f"Using UTM to local transform: {self.utm_to_local}")
+        if self.grid_bounds_auto:
+            self._auto_grid_bounds()
+        try:
+            self.grid_cloud = self.get_cloud()
+            if self.publish_intersections:
+                self.poses, self.markers = self.get_intersections()
+        except (ValueError, TypeError, RuntimeError) as e:
+            self.get_logger().error(f"Failed to rebuild the map: {e}")
+            return
+        self.publish_cb()
+
+    def _placement_error(self, matrix: np.ndarray) -> str:
+        """
+        Return why *matrix* cannot place the map yet, or ``""`` when it can.
+
+        Only the geodetic mode can tell: ``earth_frame`` is ECEF, so ``local_frame``'s
+        origin has to sit on the Earth's surface. A Fixposition unit without a fusion fix
+        publishes ``FP_ECEF -> FP_ENU0`` as all zeros, which puts that origin at the centre
+        of the Earth; ``utm_to_local_via_ecef`` then works at an altitude of -6378 km and
+        collapses the whole map into a metre-wide box, so the grid comes out empty.
+        """
+        if self.transform_mode != "geodetic":
+            return ""
+        try:
+            origin = np.linalg.inv(matrix)[:3, 3]
+        except np.linalg.LinAlgError:
+            return "the transform is singular"
+        norm = float(np.linalg.norm(origin))
+        if norm < MIN_ECEF_NORM:
+            return (
+                f"{self.local_frame} origin is only {norm:.0f} m from the centre of the "
+                f"Earth, so {self.earth_frame} does not carry a position yet"
+            )
+        return ""
+
+    def _log_local_origin(self) -> None:
+        """Log the ``local_frame`` origin of the geodetic placement as lat/lon/alt."""
+        origin = np.linalg.inv(self.ecef_to_local)[:3, 3]  # type: ignore[arg-type]
+        lat, lon, alt = ecef_to_latlon(*origin)
+        self.get_logger().info(
+            f"Got {self.earth_frame} -> {self.local_frame} transform; "
+            f"{self.local_frame} origin at lat={lat:.7f} lon={lon:.7f} alt={alt:.1f}"
+        )
+
+    def _poll_tf(
+        self,
+        target: str,
+        source: str,
+        validate: Callable[[np.ndarray], str] | None = None,
+    ) -> np.ndarray | None:
+        """
+        Block until a usable ``source -> target`` TF transform is available.
+
+        While rclpy is not shutdown, retry every second until successful. *validate*
+        returns why a transform cannot be used yet (``""`` when it can), so a placeholder
+        one is waited out rather than latched for the node's life.
+        Returns ``None`` only if rclpy is shut down while waiting.
         """
         while rclpy.ok():
             try:
                 # Zero timeout: the spin_once() below is what delivers /tf_static,
                 # so a blocking wait here would only sleep.
                 tf_msg = self.tf.lookup_transform(target, source, rclpy.time.Time())
-                return numpify(tf_msg.transform)
+                matrix = numpify(tf_msg.transform)
+                reason = "" if validate is None else validate(matrix)
+                if not reason:
+                    return matrix
             except (TransformException, RuntimeError, TypeError, ValueError) as e:
-                self.get_logger().warning(
-                    f"Failed to get {source} -> {target} transform: {e}",
-                    throttle_duration_sec=10.0,
-                )
-                rclpy.spin_once(self, timeout_sec=1.0)
+                reason = str(e)
+            self.get_logger().warning(
+                f"Failed to get {source} -> {target} transform: {reason}",
+                throttle_duration_sec=10.0,
+            )
+            rclpy.spin_once(self, timeout_sec=1.0)
         return None
 
     def get_utm_to_local(self) -> None:
@@ -403,14 +524,13 @@ class OSMCloud(Node):
 
         The result is stored as a 4x4 matrix mapping ECEF points into ``local_frame``.
         """
-        self.ecef_to_local = self._poll_tf(self.local_frame, self.earth_frame)
+        self.ecef_to_local = self._poll_tf(
+            self.local_frame,
+            self.earth_frame,
+            self._placement_error,
+        )
         if self.ecef_to_local is not None:
-            origin = np.linalg.inv(self.ecef_to_local)[:3, 3]
-            lat, lon, alt = ecef_to_latlon(*origin)
-            self.get_logger().info(
-                f"Got {self.earth_frame} -> {self.local_frame} transform; "
-                f"{self.local_frame} origin at lat={lat:.7f} lon={lon:.7f} alt={alt:.1f}"
-            )
+            self._log_local_origin()
 
     def _transform_ready(self) -> bool:
         if self.transform_mode == "geodetic":
@@ -469,6 +589,16 @@ class OSMCloud(Node):
             if self.neighbor_cost != "zero" and self.neighbor_cost != "linear":
                 self.get_logger().warning(f"Unknown neighbor cost: {self.neighbor_cost}")
             grid[:, 3] = 0.0
+        # An empty grid over a map that has ways means the bounds and the way points do
+        # not overlap, i.e. the map is misplaced -- publishing it would latch an empty
+        # cloud onto every late subscriber, so publish_cb() holds it back instead.
+        self.cloud_degenerate = grid.shape[0] == 0 and waypoints.shape[0] > 0
+        if self.cloud_degenerate:
+            self.get_logger().error(
+                f"Grid is empty although the map has {waypoints.shape[0]} way points: "
+                f"bounds min={self.grid_min} max={self.grid_max} do not cover it. "
+                f"Check the {self.local_frame} placement transform."
+            )
         cloud = create_cloud(grid)
         self.get_logger().info(str(grid.shape))
         cloud.header.frame_id = self.local_frame

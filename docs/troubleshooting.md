@@ -92,8 +92,16 @@ After that, use `ros2 run map_data create_mapdata ...`.
 ### `osm_cloud` does not publish
 
 1. Check that a `.mapdata` file path is set via the `mapdata_file` ROS2 parameter.
-2. Verify the UTM frame is correct — the node transforms the point cloud from UTM to `local_frame`. If no static transform between `utm` and `local_frame` is available in TF, the cloud will not be published.
+2. Verify the placement frames are correct — the node transforms the point cloud into `local_frame`. Until that transform is available in TF (`utm → local_frame` for `transform_mode` `tf`, `earth_frame → local_frame` for `geodetic`), the node logs `Failed to get ... transform` every 10 s and publishes nothing. It picks the transform up as soon as it arrives; no restart is needed.
 3. Run `ros2 topic list` and confirm the `grid` topic (or whatever `grid_topic` is set to) is present.
+
+### `osm_cloud` publishes an empty cloud
+
+The log says `Grid is empty although the map has N way points` or, in older versions, printed a `(0, 4)` shape and an `FP_ENU0 origin at lat=180.0000000 lon=0.0000000 alt=-6378137.0`.
+
+That origin is the centre of the Earth: the `earth_frame → local_frame` transform was all zeros. A Fixposition unit publishes `FP_ECEF → FP_ENU0` as zeros until it has a fusion fix, and `transform_mode: geodetic` then works at an altitude of -6378 km, which collapses the whole map into a metre-wide box — no grid cell ends up within `max_path_dist` of a way.
+
+The node now rejects such a transform and waits for a real one, and never publishes an empty cloud over a map that has ways. If you see it on an older build, restart `osm_cloud` once the GNSS/INS unit has a fix (`ros2 topic echo /tf_static` should show a `FP_ECEF → FP_ENU0` translation of several million metres, not zeros).
 
 ---
 

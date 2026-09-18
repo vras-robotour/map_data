@@ -146,7 +146,9 @@ optionally publishes intersections as a
 | `grid_max` | `[0.0, 0.0]` | Upper bounds of the local-frame grid (m). `[0, 0]` triggers auto-calc. |
 | `grid_min` | `[0.0, 0.0]` | Lower bounds of the local-frame grid (m). `[0, 0]` triggers auto-calc. |
 | `publish_intersections` | `true` | Whether to publish footway intersections |
-| `republish_period` | `0.0` | Publishers are latched and publish once at start-up (and after parameter changes); set > 0 s to additionally re-publish periodically |
+| `republish_period` | `0.0` | Publishers are latched and publish once at start-up (and after parameter changes, or when the placement transform changes); set > 0 s to additionally re-publish periodically |
+
+The `earth_frame → local_frame` (or `utm_frame → local_frame`) transform is followed for the node's whole life: when it appears late, or moves because the GNSS/INS driver restarted with a new ENU0 origin, the grid and the intersections are rebuilt and re-published. In `geodetic` mode an all-zero transform (a Fixposition unit publishes `FP_ECEF → FP_ENU0` as zeros until it has a fusion fix) is rejected and waited out, and a grid that comes out empty over a map that has ways is logged as an error instead of being published.
 
 ### Launching
 

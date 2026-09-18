@@ -539,3 +539,153 @@ class TestOSMCloudMapLoading:
 
         assert len(plain.footways_list) == 3
         assert [w.id for w in merged.footways_list] == [1, 3]
+
+
+class TestOSMCloudPlacementTransform:
+    """
+    The map is placed once at start-up, so a bad or late transform must not stick.
+
+    A Fixposition unit without a fusion fix publishes ``FP_ECEF -> FP_ENU0`` as all
+    zeros; accepting it put the whole map in a metre-wide box and latched an empty
+    cloud until the node was restarted by hand.
+    """
+
+    def _geodetic_node(self, **overrides) -> OSMCloud:
+        """A node built without TF ("auto"), then switched to the geodetic checks."""
+        node = _build_osm_cloud(
+            {"mapdata_file": "fake.mapdata", "transform_mode": "auto"} | overrides
+        )
+        node.transform_mode = "geodetic"
+        node.earth_frame, node.local_frame = "FP_ECEF", "FP_ENU0"
+        return node
+
+    def test_zero_ecef_transform_is_rejected(self):
+        node = self._geodetic_node()
+
+        # Identity: FP_ENU0 would sit at the centre of the Earth.
+        assert node._placement_error(np.eye(4)) != ""
+
+    def test_transform_to_a_point_on_earth_is_accepted(self):
+        node = self._geodetic_node()
+        ecef_to_local = np.eye(4)
+        ecef_to_local[:3, 3] = [-3969709.07, -1021645.15, -4870468.23]  # Prague
+
+        assert node._placement_error(ecef_to_local) == ""
+
+    def test_utm_modes_do_not_check_the_origin(self):
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
+
+        assert node._placement_error(np.eye(4)) == ""
+
+    def test_poll_tf_waits_out_an_invalid_transform(self):
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
+        node.tf = MagicMock()
+        good = np.eye(4)
+        good[0, 3] = 7.0
+        seen: list = []
+
+        def validate(matrix):
+            seen.append(matrix)
+            return "no fix yet" if len(seen) == 1 else ""
+
+        with (
+            patch("map_data.osm_cloud.numpify", side_effect=[np.eye(4), good]),
+            patch("map_data.osm_cloud.rclpy.ok", return_value=True),
+            patch("map_data.osm_cloud.rclpy.spin_once") as spin,
+        ):
+            result = node._poll_tf("FP_ENU0", "FP_ECEF", validate)
+
+        assert len(seen) == 2  # the placeholder was waited out, not returned
+        assert spin.call_count == 1
+        np.testing.assert_array_equal(result, good)
+
+    def test_changed_transform_rebuilds_and_republishes(self):
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
+        grid_pub = dict(node.created_publishers)[node.grid_topic]
+        assert grid_pub.publish.call_count == 1
+        node.tf = MagicMock()
+        moved = np.eye(4)
+        moved[0, 3] = 25.0
+
+        with patch("map_data.osm_cloud.numpify", return_value=moved):
+            node._replace_placement()
+
+        np.testing.assert_array_equal(node.utm_to_local, moved)
+        assert grid_pub.publish.call_count == 2
+
+    def test_repeated_transform_does_not_republish(self):
+        """/tf_static is re-broadcast periodically; the same numbers must be a no-op."""
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
+        grid_pub = dict(node.created_publishers)[node.grid_topic]
+        node.tf = MagicMock()
+
+        with patch("map_data.osm_cloud.numpify", return_value=node.utm_to_local.copy()):
+            node._replace_placement()
+
+        assert grid_pub.publish.call_count == 1
+
+    def test_invalid_transform_does_not_replace_a_good_one(self):
+        node = self._geodetic_node()
+        node.ecef_to_local = np.eye(4)
+        node.ecef_to_local[:3, 3] = [-3969709.07, -1021645.15, -4870468.23]
+        good = node.ecef_to_local.copy()
+        grid_pub = dict(node.created_publishers)[node.grid_topic]
+        node.tf = MagicMock()
+
+        with patch("map_data.osm_cloud.numpify", return_value=np.eye(4)):
+            node._replace_placement()
+
+        np.testing.assert_array_equal(node.ecef_to_local, good)
+        assert grid_pub.publish.call_count == 1
+
+    def test_tf_static_before_the_first_publish_does_not_rebuild(self):
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
+        node.initialized = False
+
+        with patch.object(node, "_replace_placement") as replace:
+            node._tf_static_cb(MagicMock(transforms=[]))
+
+        replace.assert_not_called()
+
+    def test_tf_static_after_the_first_publish_rebuilds(self):
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
+
+        assert node.initialized is True
+        with patch.object(node, "_replace_placement") as replace:
+            node._tf_static_cb(MagicMock(transforms=[]))
+
+        replace.assert_called_once()
+
+
+class TestOSMCloudDegenerateGrid:
+    def test_empty_grid_over_a_map_with_ways_is_not_published(self):
+        with patch("map_data.osm_cloud.create_grid", return_value=np.empty((0, 2))):
+            node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
+
+        assert node.cloud_degenerate is True
+        grid_pub = dict(node.created_publishers)[node.grid_topic]
+        assert grid_pub.publish.call_count == 0
+        node.get_logger().error.assert_called()
+
+    def test_normal_grid_is_published(self):
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
+
+        assert node.cloud_degenerate is False
+        grid_pub = dict(node.created_publishers)[node.grid_topic]
+        assert grid_pub.publish.call_count == 1
+
+    def test_degenerate_grid_holds_back_the_intersections_too(self):
+        """The rings come from the same placement, so they are just as misplaced."""
+        with patch("map_data.osm_cloud.create_grid", return_value=np.empty((0, 2))):
+            node = _build_osm_cloud(
+                {
+                    "mapdata_file": "fake.mapdata",
+                    "transform_mode": "auto",
+                    "publish_intersections": True,
+                },
+            )
+
+        assert node.cloud_degenerate is True
+        published = dict(node.created_publishers)
+        assert published[node.intersections_topic].publish.call_count == 0
+        assert published[node.intersection_markers_topic].publish.call_count == 0
