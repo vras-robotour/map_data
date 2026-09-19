@@ -417,7 +417,11 @@ class OSMCloud(Node):
         source = self.earth_frame if self.transform_mode == "geodetic" else self.utm_frame
         try:
             tf_msg = self.tf.lookup_transform(self.local_frame, source, rclpy.time.Time())
-        except (TransformException, RuntimeError, TypeError, ValueError):
+        except (TransformException, RuntimeError, TypeError, ValueError) as e:
+            self.get_logger().warning(
+                f"Placement check: {source} -> {self.local_frame} lookup failed: {e!r}",
+                throttle_duration_sec=10.0,
+            )
             return
         matrix = numpify(tf_msg.transform)
         reason = self._placement_error(matrix)

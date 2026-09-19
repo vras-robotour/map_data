@@ -863,15 +863,17 @@ def apply_node_position_overrides(
             )
         except _PolygonTooSmall:
             return way
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
             # Buffering the centerline failed; fall back to a flat polygon from the
             # (now-closed) ring, matching a genuine flat-area reconstruction.
+            logger.warning("Way %s: polygon rebuild failed (%r), using a flat ring", way.id, e)
             ring = utm_coords if utm_coords[0] == utm_coords[-1] else [*utm_coords, utm_coords[0]]
             if len(ring) < 4:
                 return None
             try:
                 w.line = _SPoly(ring)
-            except (ValueError, TypeError):
+            except (ValueError, TypeError) as e2:
+                logger.warning("Way %s: flat ring is invalid too (%r), dropping it", way.id, e2)
                 return None
     else:
         return way
@@ -1054,7 +1056,10 @@ def apply_added_nodes(
     if coords is not None:
         try:
             w.line = _LineString(coords)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
+            logger.warning(
+                "Way %s: added nodes left an invalid line (%r), ignoring them", way.id, e
+            )
             return way
 
     return w
@@ -1186,8 +1191,11 @@ def rebuild_way_without_nodes(
                 )
             except _PolygonTooSmall:
                 return None
-            except (ValueError, TypeError):
+            except (ValueError, TypeError) as e:
                 # Buffering the centerline failed; keep the (unbuffered) centerline itself.
+                logger.warning(
+                    "Way %s: polygon rebuild failed (%r), keeping the centerline", way.id, e
+                )
                 w.line = _LineString(utm_coords)
         else:
             coords = list(geom.exterior.coords)

@@ -1232,6 +1232,7 @@ def _run_fetch_task(
         )
         _fetch_tasks[task_id] = {"status": "done", "result": result}
     except _FetchFailed as e:
+        logger.warning("fetch task %s failed at %s: %s", task_id, e.stage, e.error)
         _fetch_tasks[task_id] = {"status": "failed", "error": e.error}
     except Exception:
         logger.exception("fetch task %s failed", task_id)
@@ -1449,6 +1450,7 @@ def upload_gpx() -> Response:
             try:
                 result = _query_parse_save(md, out_path)
             except _FetchFailed as e:
+                logger.warning("GPX upload fetch failed at %s: %s", e.stage, e.error)
                 abort(503 if e.stage == "query" else 500, e.error)
 
             return jsonify(result)
@@ -1503,7 +1505,8 @@ def upload_mapdata() -> Response:
 
     try:
         MapData.load(str(dest))
-    except Exception:
+    except Exception as e:
+        logger.warning("Rejected uploaded .mapdata %s: %r", dest.name, e)
         dest.unlink(missing_ok=True)
         abort(400, "Invalid .mapdata file")
 
