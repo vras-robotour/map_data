@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [3.0.0] — 2026-09-21
+
+A major version because public helpers and a config file are removed.
+
 ### Added
 
 - `.mapdata` files carry a `format_version` marker (`FORMAT_VERSION` in
@@ -20,6 +24,11 @@
   that file, a ROS 2 parameter file with a `map_data_tracker` section. The default is the new
   `config/tracker.yaml`, which holds the built-in defaults, so nothing changes for existing setups
 - `config/helhest_jr.yaml`: tracker topics of helhest-jr (`map_data_viewer --config config/helhest_jr.yaml`)
+- Tracker `tf_static_only` (config file only, default `true`): frames are read from
+  `/tf_static` alone. Set it to `false` when a frame above the robot is published on `/tf`,
+  which costs a lot of CPU
+- The Tracker sidebar keeps the last five speech messages instead of only the newest, so a
+  message that scrolls by while you look elsewhere is still readable
 - Tracker **Clear Trail**: drops the recorded trail on the node
   (`DELETE /api/tracker/trail`), so it stays gone instead of coming back with the next fix
 - Planner **Start at robot**: with a robot position on the tracker's telemetry, the toggle
@@ -41,6 +50,13 @@
 - `config/helhest.yaml`: helhest-jr is the only Fixposition robot, and its topics (tracker and
   `osm_cloud`) are in `config/helhest_jr.yaml`, now the default `config_file` of
   `osm_cloud.launch.py`
+- Migrations for annotation stores written before v2 (`migrate_change_log()` and the legacy
+  store normalization in `map_data/viewer/helpers.py`): a store from that era now loads as
+  whatever it literally contains. Re-export such a map from a v2 viewer before upgrading
+- `find_config()` (`map_data/utils/config.py`) and `save_mapdata()`
+  (`map_data/utils/serialization.py`), each with a single caller; use `MapData.save()`
+- The `requests` dependency (`python3-requests`). `map_data/utils/overpass.py` posts through
+  `urllib.request` and identifies itself as `map_data/<version>`
 
 ### Changed
 
@@ -53,6 +69,28 @@
   longer copy the map, re-apply every edit and rebuild the FeatureCollection. The response
   carries an `ETag` and honors `If-None-Match` with a 304. Any edit or a change to the file
   on disk invalidates the entry
+- Loading a map for planning no longer `deepcopy`s it. `apply_annotations` copies the map
+  shallowly and only the ways an edit touches, so an annotated map costs a copy of the edited
+  ways instead of the whole node table
+- The grid A* inner loop runs on plain Python floats and an `array("f")` of g scores instead
+  of numpy scalars, and `math` replaces `np.sqrt` for the heuristic. Every g score is rounded
+  back to float32, so the expansion order and the resulting path are bit-identical to before
+- Obstacles are marked in the point grid by index range: each obstacle's bounds become a
+  sub-block of the lattice and only that block is tested, instead of masking the whole grid
+  once per obstacle
+- The graph planner measures distances with `math.hypot` rather than `np.linalg.norm` (the
+  A* heuristic, the snap costs and the spur collapse), and `latlon_to_utm_path` /
+  `utm_path_to_latlon_pairs` convert whole arrays in one `utm` call instead of point by point
+- `osm_cloud` queries its kd-tree in 2-D over all cores at once and splits ways with numpy
+  instead of a per-node loop
+- The viewer's tracker spins on the C++ `EventsExecutor` when the distro has it (measured 6 %
+  vs 60 % CPU against a 250 Hz robot), falling back to `rclpy.spin`; TF comes from
+  `/tf_static` only (see `tf_static_only`), and telemetry updates less often
+- `route_planner` no longer blocks 0.5 s per goal waiting for the
+  `earth_frame -> local_frame` transform: the lookup does not wait, the warning is throttled
+  to 30 s, and the one-shot preload timer is destroyed instead of only cancelled
+- CI pins ruff to 0.16.6 (matching `pyproject.toml` and `.pre-commit-config.yaml`), builds the
+  docs with `--strict`, smoke-tests the demo on pull requests, and fails under 72 % coverage
 
 ### Fixed
 
@@ -98,6 +136,12 @@
   origin changes whenever the GNSS/INS driver restarts) rebuilds and re-publishes the grid and
   the intersections instead of needing the node restarted; and a grid that comes out empty over
   a map that has ways is logged as an error rather than latched onto every late subscriber
+- The tracker kept showing a plan and goal that no longer existed. The plan and the goal are
+  dropped once nothing publishes their topics (a planner that stopped or restarted), or once
+  the planner has been sending empty plans for 3 s (`PLAN_STALE_TIMEOUT`) — crl_commander
+  republishes at 20 Hz and publishes an empty plan while it has no goal, so STOP, goal reached
+  and goal aborted all clear the display. Silence alone never clears anything, so a
+  publish-once planner (nav2) keeps its plan
 - The tracker drew no high-level route on helhest-jr: `config/helhest_jr.yaml` pointed
   `sequence_path_topic` at `/crl_commander/goal_sequence`, which the commander only publishes
   in SEQUENCE mode, while `road_follower` drives it goal by goal. It now reads
