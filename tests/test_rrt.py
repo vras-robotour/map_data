@@ -162,15 +162,21 @@ def test_informed_best_cost_geq_c_min():
 def test_informed_ellipse_tighter_than_full_space():
     """With improve_after_goal=True and informed=True, the planner should produce
     a path no worse than with informed=False (same seed, more iterations)."""
-    import random as _random
-
     seed = 42
-    _random.seed(seed)
-    rrt_informed = _make_rrt(informed=True, improve_after_goal=True, max_iter=2000)
+    rrt_informed = _make_rrt(
+        informed=True,
+        improve_after_goal=True,
+        max_iter=2000,
+        rng=random.Random(seed),
+    )
     path_i = rrt_informed.find_path()
 
-    _random.seed(seed)
-    rrt_plain = _make_rrt(informed=False, improve_after_goal=True, max_iter=2000)
+    rrt_plain = _make_rrt(
+        informed=False,
+        improve_after_goal=True,
+        max_iter=2000,
+        rng=random.Random(seed),
+    )
     path_p = rrt_plain.find_path()
 
     assert path_i is not None
@@ -248,8 +254,7 @@ def test_tree_costs_consistent_after_seeded_run_with_rewiring():
     With improve_after_goal the tree keeps rewiring after the first solution,
     so stale descendant costs (the old bug) would break this invariant.
     """
-    random.seed(7)
-    rrt = _make_rrt(informed=True, improve_after_goal=True, max_iter=400)
+    rrt = _make_rrt(informed=True, improve_after_goal=True, max_iter=400, rng=random.Random(7))
     path = rrt.find_path()
     assert path is not None
 
@@ -264,8 +269,7 @@ def test_tree_costs_consistent_after_seeded_run_with_rewiring():
 
 
 def test_best_cost_tracks_goal_cost_after_rewiring():
-    random.seed(3)
-    rrt = _make_rrt(informed=True, improve_after_goal=True, max_iter=600)
+    rrt = _make_rrt(informed=True, improve_after_goal=True, max_iter=600, rng=random.Random(3))
     path = rrt.find_path()
     assert path is not None
 
@@ -298,23 +302,23 @@ def test_production_config_improves_on_or_matches_first_found_path():
     stopping early. Same seed for both runs, so the two trees are identical
     up to the point the first solution is found.
     """
-    random.seed(11)
     rrt_first_found = _make_rrt(
         informed=True,
         adaptive_radius=True,
         improve_after_goal=False,
         max_iter=1500,
+        rng=random.Random(11),
     )
     path_first = rrt_first_found.find_path()
     assert path_first is not None
     first_found_cost = rrt_first_found._best_cost
 
-    random.seed(11)
     rrt_production = _make_rrt(
         informed=True,
         adaptive_radius=True,
         improve_after_goal=True,
         max_iter=1500,
+        rng=random.Random(11),
     )
     path_production = rrt_production.find_path()
 
@@ -336,7 +340,6 @@ def test_production_config_exercises_the_informed_sampler():
         calls += 1
         return original(self)
 
-    random.seed(5)
     RRTStar._sample_informed = counting_sample_informed
     try:
         rrt = _make_rrt(
@@ -344,6 +347,7 @@ def test_production_config_exercises_the_informed_sampler():
             adaptive_radius=True,
             improve_after_goal=True,
             max_iter=1500,
+            rng=random.Random(5),
         )
         path = rrt.find_path()
     finally:
@@ -366,13 +370,54 @@ def test_improve_iter_caps_iterations_after_goal(monkeypatch):
 
     monkeypatch.setattr(RRTStar, "_nearest_node", counting_nearest_node)
 
-    random.seed(7)
-    assert _make_rrt(improve_after_goal=False, max_iter=3000).find_path() is not None
+    assert (
+        _make_rrt(improve_after_goal=False, max_iter=3000, rng=random.Random(7)).find_path()
+        is not None
+    )
     first_found = calls
 
     calls = 0
-    random.seed(7)
     assert (
-        _make_rrt(improve_after_goal=True, improve_iter=25, max_iter=3000).find_path() is not None
+        _make_rrt(
+            improve_after_goal=True,
+            improve_iter=25,
+            max_iter=3000,
+            rng=random.Random(7),
+        ).find_path()
+        is not None
     )
     assert calls == first_found + 25
+
+
+# ── injectable RNG: sampling is reproducible and per-planner ────────────────
+
+
+def test_same_seed_reproduces_the_path_and_different_seeds_diverge():
+    """
+    Every draw comes from the injected rng, so two planners built with the
+    same seed grow the same tree and return the very same path, while another
+    seed grows a different one.
+    """
+    kwargs = dict(informed=True, adaptive_radius=True, improve_after_goal=True, max_iter=1500)
+
+    path_a = _make_rrt(rng=random.Random(2024), **kwargs).find_path()
+    path_b = _make_rrt(rng=random.Random(2024), **kwargs).find_path()
+    path_c = _make_rrt(rng=random.Random(99), **kwargs).find_path()
+
+    assert path_a is not None
+    assert path_b is not None
+    assert path_c is not None
+    assert np.array_equal(path_a, path_b)
+    assert not np.array_equal(path_a, path_c)
+
+
+def test_default_rng_does_not_touch_the_global_random():
+    """
+    Without an injected rng a planner uses its own random.Random, so it
+    neither consumes nor is steered by the module-global stream (which
+    concurrent request threads share).
+    """
+    random.seed(4)
+    state_before = random.getstate()
+    assert _make_rrt(max_iter=500).find_path() is not None
+    assert random.getstate() == state_before

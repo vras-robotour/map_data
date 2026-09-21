@@ -42,6 +42,7 @@ rrt:
   improve_after_goal: true
   improve_iter: 200
   adaptive_radius: true
+  # seed: 0
 obstacle_radius: 2.0
 buffer_widths:
   road: 7.0
@@ -116,12 +117,15 @@ Surface values not listed receive a penalty of 0.0.
 
 RRT*-only settings, read by `ReplanPath` and passed to `RRTStar` (see [RRT* API reference](../api/pathsolver.md#rrt)). Once the goal is first reached, `improve_after_goal` keeps refining the path for at most `improve_iter` more iterations (and never past `max_iter`).
 
+Every `RRTStar` draws from its own `random.Random`, never the module-global one, so concurrent planners cannot interleave each other's draws. `seed` fixes that stream for the planners a `ReplanPath` builds; code can instead pass its own `random.Random` as `ReplanPath(..., rng=...)` or `RRTStar(..., rng=...)`.
+
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `informed` | bool | `true` | Once a solution exists, sample from the shrinking informed ellipse (Informed RRT*) instead of the full free space. |
 | `improve_after_goal` | bool | `true` | Keep iterating after the goal is first reached to find a lower-cost path, instead of returning immediately. |
 | `improve_iter` | int | `200` | Most extra iterations spent improving after the goal is first reached. Trades planning time for path cost. |
 | `adaptive_radius` | bool | `true` | Shrink the rewiring radius as the tree grows per the RRT* asymptotic-optimality formula, instead of using a fixed radius. |
+| `seed` | int | *(unset)* | Seed for the sampler, making a run reproducible. Unset (the default), every planner samples from its own unseeded stream. |
 
 ---
 

@@ -66,6 +66,7 @@ class RRTStar:
         improve_iter: int = 200,
         informed: bool = True,
         adaptive_radius: bool = True,
+        rng: random.Random | None = None,
     ) -> None:
         """
         Initialize the RRT* planner.
@@ -123,6 +124,12 @@ class RRTStar:
             If ``True`` (default), shrink the rewiring radius as the tree
             grows per the RRT* asymptotic-optimality formula, instead of
             using a fixed *neighbor_radius*.
+        rng : random.Random or None
+            Random source for every sampling draw. Defaults to a fresh
+            :class:`random.Random` per planner, so instances never share the
+            module-global stream and concurrent planners cannot interleave
+            each other's draws. Pass ``random.Random(seed)`` to make a run
+            reproducible.
 
         """
         self.start = start
@@ -155,6 +162,10 @@ class RRTStar:
         self.improve_iter = improve_iter
         self.informed = informed
         self.adaptive_radius = adaptive_radius
+        # Own random stream: a fresh Random() keeps each planner independent of
+        # the module-global one (and of other planners running in parallel
+        # request threads), while an injected one makes the run reproducible.
+        self._rng = rng if rng is not None else random.Random()
         self._best_cost: float = float("inf")
         self._kdtree: cKDTree | None = None
         self._kdtree_n: int = 0
@@ -259,8 +270,8 @@ class RRTStar:
         """
         a = self._best_cost / 2.0
         b = math.sqrt(max(self._best_cost**2 - self._c_min**2, 0.0)) / 2.0
-        angle = random.uniform(0.0, 2.0 * math.pi)
-        r = math.sqrt(random.random())
+        angle = self._rng.uniform(0.0, 2.0 * math.pi)
+        r = math.sqrt(self._rng.random())
         x_e = np.array([a * r * math.cos(angle), b * r * math.sin(angle)])
         point = self._ellipse_center + self._C_be @ x_e
         return np.clip(point, self._sample_min, self._sample_max)
@@ -275,18 +286,20 @@ class RRTStar:
         """
         if self.informed and self._best_cost < float("inf"):
             return self._sample_informed()
-        if self._trav_xs is not None and random.random() > GOAL_SAMPLE_BIAS:
-            idx = random.randrange(len(self._trav_xs))
+        if self._trav_xs is not None and self._rng.random() > GOAL_SAMPLE_BIAS:
+            idx = self._rng.randrange(len(self._trav_xs))
             return np.array(
                 [
-                    self._trav_xs[idx] + random.uniform(-self.grid_scale / 2, self.grid_scale / 2),
-                    self._trav_ys[idx] + random.uniform(-self.grid_scale / 2, self.grid_scale / 2),
+                    self._trav_xs[idx]
+                    + self._rng.uniform(-self.grid_scale / 2, self.grid_scale / 2),
+                    self._trav_ys[idx]
+                    + self._rng.uniform(-self.grid_scale / 2, self.grid_scale / 2),
                 ],
             )
         return np.array(
             [
-                random.uniform(self._sample_min[0], self._sample_max[0]),
-                random.uniform(self._sample_min[1], self._sample_max[1]),
+                self._rng.uniform(self._sample_min[0], self._sample_max[0]),
+                self._rng.uniform(self._sample_min[1], self._sample_max[1]),
             ],
         )
 
@@ -430,7 +443,9 @@ class RRTStar:
             if goal_idx is not None:
                 self._best_cost = self.cost.get(goal_idx, float("inf"))
 
-            rand_point = self.goal if random.random() < GOAL_SAMPLE_BIAS else self._sample_point()
+            rand_point = (
+                self.goal if self._rng.random() < GOAL_SAMPLE_BIAS else self._sample_point()
+            )
             nearest_idx = self._nearest_node(rand_point)
             new_point = self._steer(self.nodes[nearest_idx], rand_point)
 

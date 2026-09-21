@@ -44,6 +44,11 @@
 
 ### Fixed
 
+- RRT* no longer samples from the module-global `random`. Every `RRTStar` gets its own
+  `random.Random` (injectable as `RRTStar(..., rng=...)` / `ReplanPath(..., rng=...)`, or via a
+  `seed` under `rrt:` in `config/planner_defaults.yaml`), so concurrent planners in different
+  request threads cannot interleave each other's draws, a failing run can be replayed, and tests
+  no longer have to seed the global stream
 - Moving a node that several ways share now moves it for the planner the way the viewer draws
   it. Moves are stored per way, but the merged map resolved them per node id: the last
   override won, the other ways were dragged along in the graph and the junction survived.

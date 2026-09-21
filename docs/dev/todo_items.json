@@ -37,13 +37,6 @@
   {
     "type": "improvement",
     "sev": "minor",
-    "title": "Injectable RNG for RRT*",
-    "desc": "All sampling draws from the module-global <code>random</code>: planning failures from the viewer cannot be reproduced, concurrent Flask request threads interleave draws non-deterministically, and tests must hack the global seed. Fix: accept <code>rng: random.Random | None</code> in <code>__init__</code> and thread it through.",
-    "file": "map_data/pathsolver/rrt_star.py"
-  },
-  {
-    "type": "improvement",
-    "sev": "minor",
     "title": "Vectorize smooth_path hot loop",
     "desc": "<code>smooth_path</code> is a scalar triple-loop that vectorizes directly as a Jacobi iteration. Distinct from the backlogged native-extension item (which covers the RRT*/grid_astar raster loops).",
     "file": "map_data/pathsolver/smoothing.py"

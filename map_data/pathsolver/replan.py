@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import logging
+import random
 import threading
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -69,6 +70,7 @@ class ReplanPath:
         grid_cost_weight: float | None = None,
         highway_costs: dict[str, float] | None = None,
         surface_costs: dict[str, float] | None = None,
+        rng: random.Random | None = None,
     ) -> None:
         self.args = args
         self.transfer_id = transfer_id
@@ -94,6 +96,15 @@ class ReplanPath:
         self.rrt_improve_after_goal = bool(rrt_defaults.get("improve_after_goal", True))
         self.rrt_improve_iter = int(rrt_defaults.get("improve_iter", 200))
         self.rrt_adaptive_radius = bool(rrt_defaults.get("adaptive_radius", True))
+        # Random source handed to every RRTStar this replanner builds. Callers
+        # that need a reproducible run pass their own; otherwise an `rrt.seed`
+        # in planner_defaults.yaml makes runs repeatable without code changes
+        # (e.g. to reproduce a planning failure reported from the viewer), and
+        # with neither each planner keeps its own unseeded stream.
+        rrt_seed = rrt_defaults.get("seed")
+        if rng is None and rrt_seed is not None:
+            rng = random.Random(rrt_seed)
+        self.rrt_rng = rng
 
         # Use the decoupled PathGrid component
         self.path_grid = PathGrid(
@@ -237,6 +248,7 @@ class ReplanPath:
             improve_after_goal=self.rrt_improve_after_goal,
             improve_iter=self.rrt_improve_iter,
             adaptive_radius=self.rrt_adaptive_radius,
+            rng=self.rrt_rng,
         )
         return planner.find_path()
 
