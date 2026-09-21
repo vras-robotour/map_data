@@ -1590,11 +1590,12 @@
 </span><span id="__span-0-33"><a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a><span class="w">  </span><span class="nt">improve_after_goal</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </span><span id="__span-0-34"><a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a><span class="w">  </span><span class="nt">improve_iter</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200</span>
 </span><span id="__span-0-35"><a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a><span class="w">  </span><span class="nt">adaptive_radius</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
-</span><span id="__span-0-36"><a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a><span class="nt">obstacle_radius</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
-</span><span id="__span-0-37"><a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a><span class="nt">buffer_widths</span><span class="p">:</span>
-</span><span id="__span-0-38"><a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a><span class="w">  </span><span class="nt">road</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7.0</span>
-</span><span id="__span-0-39"><a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a><span class="w">  </span><span class="nt">footway</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3.0</span>
-</span><span id="__span-0-40"><a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a><span class="w">  </span><span class="nt">barrier</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+</span><span id="__span-0-36"><a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a><span class="w">  </span><span class="c1"># seed: 0</span>
+</span><span id="__span-0-37"><a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a><span class="nt">obstacle_radius</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+</span><span id="__span-0-38"><a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a><span class="nt">buffer_widths</span><span class="p">:</span>
+</span><span id="__span-0-39"><a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a><span class="w">  </span><span class="nt">road</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7.0</span>
+</span><span id="__span-0-40"><a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a><span class="w">  </span><span class="nt">footway</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3.0</span>
+</span><span id="__span-0-41"><a id="__codelineno-0-41" name="__codelineno-0-41" href="#__codelineno-0-41"></a><span class="w">  </span><span class="nt">barrier</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
 </span></code></pre></div>
 <hr />
 <h2 id="highway_costs"><code>highway_costs</code></h2>
@@ -1805,6 +1806,7 @@
 <hr />
 <h2 id="rrt"><code>rrt</code></h2>
 <p>RRT*-only settings, read by <code>ReplanPath</code> and passed to <code>RRTStar</code> (see <a href="../../api/pathsolver/#rrt">RRT* API reference</a>). Once the goal is first reached, <code>improve_after_goal</code> keeps refining the path for at most <code>improve_iter</code> more iterations (and never past <code>max_iter</code>).</p>
+<p>Every <code>RRTStar</code> draws from its own <code>random.Random</code>, never the module-global one, so concurrent planners cannot interleave each other's draws. <code>seed</code> fixes that stream for the planners a <code>ReplanPath</code> builds; code can instead pass its own <code>random.Random</code> as <code>ReplanPath(..., rng=...)</code> or <code>RRTStar(..., rng=...)</code>.</p>
 <table>
 <thead>
 <tr>
@@ -1838,6 +1840,12 @@
 <td>bool</td>
 <td><code>true</code></td>
 <td>Shrink the rewiring radius as the tree grows per the RRT* asymptotic-optimality formula, instead of using a fixed radius.</td>
+</tr>
+<tr>
+<td><code>seed</code></td>
+<td>int</td>
+<td><em>(unset)</em></td>
+<td>Seed for the sampler, making a run reproducible. Unset (the default), every planner samples from its own unseeded stream.</td>
 </tr>
 </tbody>
 </table>

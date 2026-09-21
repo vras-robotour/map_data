@@ -1259,7 +1259,18 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="[Unreleased]">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#300-2026-09-21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [3.0.0] — 2026-09-21
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[3.0.0] — 2026-09-21">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1278,6 +1289,17 @@
     <span class="md-ellipsis">
       
         Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
       
     </span>
   </a>
@@ -1324,7 +1346,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed" class="md-nav__link">
+  <a href="#changed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1374,7 +1396,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_1" class="md-nav__link">
+  <a href="#changed_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1485,7 +1507,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_2" class="md-nav__link">
+  <a href="#changed_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1563,7 +1585,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_3" class="md-nav__link">
+  <a href="#changed_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1613,7 +1635,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_4" class="md-nav__link">
+  <a href="#changed_5" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1717,7 +1739,18 @@
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="[Unreleased]">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#300-2026-09-21" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        [3.0.0] — 2026-09-21
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="[3.0.0] — 2026-09-21">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1736,6 +1769,17 @@
     <span class="md-ellipsis">
       
         Removed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#changed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changed
       
     </span>
   </a>
@@ -1782,7 +1826,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed" class="md-nav__link">
+  <a href="#changed_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1832,7 +1876,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_1" class="md-nav__link">
+  <a href="#changed_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -1943,7 +1987,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_2" class="md-nav__link">
+  <a href="#changed_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -2021,7 +2065,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_3" class="md-nav__link">
+  <a href="#changed_4" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -2071,7 +2115,7 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#changed_4" class="md-nav__link">
+  <a href="#changed_5" class="md-nav__link">
     <span class="md-ellipsis">
       
         Changed
@@ -2119,8 +2163,15 @@
 
 <h1 id="changelog">Changelog</h1>
 <h2 id="unreleased">[Unreleased]</h2>
+<h2 id="300-2026-09-21">[3.0.0] — 2026-09-21</h2>
+<p>A major version because public helpers and a config file are removed.</p>
 <h3 id="added">Added</h3>
 <ul>
+<li><code>.mapdata</code> files carry a <code>format_version</code> marker (<code>FORMAT_VERSION</code> in
+  <code>map_data/utils/serialization.py</code>, currently <code>1</code>). Files written before the marker load as
+  before, a file from a newer version is rejected with a message naming both versions instead
+  of half-loading, and every key of a stored way is optional on load (the <code>Way</code> defaults fill
+  in), so a key added later does not break older files</li>
 <li><code>plan_route()</code> and <code>route_planner</code> reject a start or goal more than
   <code>outside_map_tolerance</code> (100 m) outside the map's area with <code>start_outside_map</code> /
   <code>goal_outside_map</code> (any algorithm, checked before the snap distances; <code>route_planner</code> names
@@ -2132,6 +2183,11 @@
   that file, a ROS 2 parameter file with a <code>map_data_tracker</code> section. The default is the new
   <code>config/tracker.yaml</code>, which holds the built-in defaults, so nothing changes for existing setups</li>
 <li><code>config/helhest_jr.yaml</code>: tracker topics of helhest-jr (<code>map_data_viewer --config config/helhest_jr.yaml</code>)</li>
+<li>Tracker <code>tf_static_only</code> (config file only, default <code>true</code>): frames are read from
+  <code>/tf_static</code> alone. Set it to <code>false</code> when a frame above the robot is published on <code>/tf</code>,
+  which costs a lot of CPU</li>
+<li>The Tracker sidebar keeps the last five speech messages instead of only the newest, so a
+  message that scrolls by while you look elsewhere is still readable</li>
 <li>Tracker <strong>Clear Trail</strong>: drops the recorded trail on the node
   (<code>DELETE /api/tracker/trail</code>), so it stays gone instead of coming back with the next fix</li>
 <li>Planner <strong>Start at robot</strong>: with a robot position on the tracker's telemetry, the toggle
@@ -2153,9 +2209,55 @@
 <li><code>config/helhest.yaml</code>: helhest-jr is the only Fixposition robot, and its topics (tracker and
   <code>osm_cloud</code>) are in <code>config/helhest_jr.yaml</code>, now the default <code>config_file</code> of
   <code>osm_cloud.launch.py</code></li>
+<li>Migrations for annotation stores written before v2 (<code>migrate_change_log()</code> and the legacy
+  store normalization in <code>map_data/viewer/helpers.py</code>): a store from that era now loads as
+  whatever it literally contains. Re-export such a map from a v2 viewer before upgrading</li>
+<li><code>find_config()</code> (<code>map_data/utils/config.py</code>) and <code>save_mapdata()</code>
+  (<code>map_data/utils/serialization.py</code>), each with a single caller; use <code>MapData.save()</code></li>
+<li>The <code>requests</code> dependency (<code>python3-requests</code>). <code>map_data/utils/overpass.py</code> posts through
+  <code>urllib.request</code> and identifies itself as <code>map_data/&lt;version&gt;</code></li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li><code>smooth_path</code> runs as a vectorized Jacobi sweep over the whole path instead of a scalar
+  Gauss-Seidel triple loop: ~100x faster on a 1000-waypoint path (40 ms to 0.3 ms). Both
+  schemes share the same fixed point, so the smoothed path is the same up to the stopping
+  tolerance</li>
+<li><code>/api/mapdata</code> serves the merged GeoJSON from a cache keyed on the <code>.mapdata</code> file's
+  identity (mtime, size, inode) and a digest of the annotation store, so repeat calls no
+  longer copy the map, re-apply every edit and rebuild the FeatureCollection. The response
+  carries an <code>ETag</code> and honors <code>If-None-Match</code> with a 304. Any edit or a change to the file
+  on disk invalidates the entry</li>
+<li>Loading a map for planning no longer <code>deepcopy</code>s it. <code>apply_annotations</code> copies the map
+  shallowly and only the ways an edit touches, so an annotated map costs a copy of the edited
+  ways instead of the whole node table</li>
+<li>The grid A* inner loop runs on plain Python floats and an <code>array("f")</code> of g scores instead
+  of numpy scalars, and <code>math</code> replaces <code>np.sqrt</code> for the heuristic. Every g score is rounded
+  back to float32, so the expansion order and the resulting path are bit-identical to before</li>
+<li>Obstacles are marked in the point grid by index range: each obstacle's bounds become a
+  sub-block of the lattice and only that block is tested, instead of masking the whole grid
+  once per obstacle</li>
+<li>The graph planner measures distances with <code>math.hypot</code> rather than <code>np.linalg.norm</code> (the
+  A* heuristic, the snap costs and the spur collapse), and <code>latlon_to_utm_path</code> /
+  <code>utm_path_to_latlon_pairs</code> convert whole arrays in one <code>utm</code> call instead of point by point</li>
+<li><code>osm_cloud</code> queries its kd-tree in 2-D over all cores at once and splits ways with numpy
+  instead of a per-node loop</li>
+<li>The viewer's tracker spins on the C++ <code>EventsExecutor</code> when the distro has it (measured 6 %
+  vs 60 % CPU against a 250 Hz robot), falling back to <code>rclpy.spin</code>; TF comes from
+  <code>/tf_static</code> only (see <code>tf_static_only</code>), and telemetry updates less often</li>
+<li><code>route_planner</code> no longer blocks 0.5 s per goal waiting for the
+  <code>earth_frame -&gt; local_frame</code> transform: the lookup does not wait, the warning is throttled
+  to 30 s, and the one-shot preload timer is destroyed instead of only cancelled</li>
+<li>CI pins ruff to 0.16.6 (matching <code>pyproject.toml</code> and <code>.pre-commit-config.yaml</code>), builds the
+  docs with <code>--strict</code>, smoke-tests the demo on pull requests, and fails under 72 % coverage</li>
 </ul>
 <h3 id="fixed">Fixed</h3>
 <ul>
+<li>RRT* no longer samples from the module-global <code>random</code>. Every <code>RRTStar</code> gets its own
+  <code>random.Random</code> (injectable as <code>RRTStar(..., rng=...)</code> / <code>ReplanPath(..., rng=...)</code>, or via a
+  <code>seed</code> under <code>rrt:</code> in <code>config/planner_defaults.yaml</code>), so concurrent planners in different
+  request threads cannot interleave each other's draws, a failing run can be replayed, and tests
+  no longer have to seed the global stream</li>
 <li>Moving a node that several ways share now moves it for the planner the way the viewer draws
   it. Moves are stored per way, but the merged map resolved them per node id: the last
   override won, the other ways were dragged along in the graph and the junction survived.
@@ -2195,6 +2297,12 @@
   origin changes whenever the GNSS/INS driver restarts) rebuilds and re-publishes the grid and
   the intersections instead of needing the node restarted; and a grid that comes out empty over
   a map that has ways is logged as an error rather than latched onto every late subscriber</li>
+<li>The tracker kept showing a plan and goal that no longer existed. The plan and the goal are
+  dropped once nothing publishes their topics (a planner that stopped or restarted), or once
+  the planner has been sending empty plans for 3 s (<code>PLAN_STALE_TIMEOUT</code>) — crl_commander
+  republishes at 20 Hz and publishes an empty plan while it has no goal, so STOP, goal reached
+  and goal aborted all clear the display. Silence alone never clears anything, so a
+  publish-once planner (nav2) keeps its plan</li>
 <li>The tracker drew no high-level route on helhest-jr: <code>config/helhest_jr.yaml</code> pointed
   <code>sequence_path_topic</code> at <code>/crl_commander/goal_sequence</code>, which the commander only publishes
   in SEQUENCE mode, while <code>road_follower</code> drives it goal by goal. It now reads
@@ -2232,7 +2340,7 @@
   <code>utils.config.package_share</code>)</li>
 <li>The <code>tqdm</code> and <code>matplotlib</code> dependencies</li>
 </ul>
-<h3 id="changed">Changed</h3>
+<h3 id="changed_1">Changed</h3>
 <ul>
 <li>RRT<em>runs as Informed RRT</em>: once a path is found it keeps improving it for up
   to <code>rrt.improve_iter</code> (200) iterations, sampling the informed ellipse with an
@@ -2348,7 +2456,7 @@
   traversability rules and the cost tables the graph planner now shares, and the
   goal QR codes</li>
 </ul>
-<h3 id="changed_1">Changed</h3>
+<h3 id="changed_2">Changed</h3>
 <ul>
 <li><code>route_planner</code> preloads the map and caches its graph planners, converts ECEF
   in a vectorised form and subscribes to static TF only, so a plan request no
@@ -2515,7 +2623,7 @@
 <li>Wired up the dead <code>mapdata_path</code> launch argument in <code>osm_cloud.launch.py</code> (bare
   <code>mapdata_file</code>/<code>gpx_file</code> names now resolve against the data directory)</li>
 </ul>
-<h3 id="changed_2">Changed</h3>
+<h3 id="changed_3">Changed</h3>
 <ul>
 <li>Overpass <code>run_queries</code> now filters server-side by the tag families the parser
   inspects instead of downloading every way/node in the bounding box; matching
@@ -2568,7 +2676,7 @@
 <li><code>map_data_viewer --telemetry-rate</code> flag to configure the Tracker telemetry broadcast rate (default 2 Hz)</li>
 <li><code>map_data_info --validate</code> checks a <code>.mapdata</code> file for structural issues (missing metadata or geometry, duplicate way IDs, nodes missing from the cache, disconnected footway networks) and exits non-zero when any are found</li>
 </ul>
-<h3 id="changed_3">Changed</h3>
+<h3 id="changed_4">Changed</h3>
 <ul>
 <li>The package now targets ROS2 Jazzy or later and Python 3.12+</li>
 <li><code>create_mapdata</code> no longer requires ROS2 — it falls back to the repo data directory when <code>ament_index_python</code> is unavailable</li>
@@ -2615,7 +2723,7 @@
 <li>pytest suite covering core logic and path planning edge cases</li>
 <li>Expanded test suite: <code>test_overpass.py</code> (retry logic, rate limiting, status polling), <code>test_errors.py</code> (malformed GPX, corrupt files, Overpass timeouts, planning failures), <code>test_parsing.py</code> (OSM element classification and buffering), <code>test_fill_grid.py</code> (footway cost assignment, barrier cell marking), <code>test_viewer_helpers.py</code> (GeoJSON roundtrip, way splitting, change log migration), <code>test_viewer_routes.py</code> (annotation CRUD, path-traversal security, way operations), and extended <code>test_integration.py</code> (OSM cache roundtrip, bbox mismatch, <code>parse_intersections</code>)</li>
 </ul>
-<h3 id="changed_4">Changed</h3>
+<h3 id="changed_5">Changed</h3>
 <ul>
 <li>Interactive viewer: GPX download now exports a <code>&lt;trk&gt;&lt;trkseg&gt;&lt;trkpt&gt;</code> track by default; a Track / Waypoints toggle in the planner panel switches back to the legacy <code>&lt;wpt&gt;</code> format</li>
 <li>Interactive viewer: annotation vertex handles in Edit mode now only appear when the annotation is clicked, not for all annotations at once</li>
