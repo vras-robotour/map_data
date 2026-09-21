@@ -20,7 +20,8 @@ subsequent request. Two copy strategies are used, chosen per call site for
 a performance/safety tradeoff:
 
 - **Shallow copy** (``copy.copy``) is used for the hot, frequently-hit
-  paths: :func:`get_mapdata` copies the top-level ``MapData``, and
+  paths: :func:`_merged_mapdata_geojson` (behind :func:`get_mapdata`)
+  copies the top-level ``MapData``, and
   :func:`_resolve_way` (used by :func:`get_way`, :func:`get_way_nodes`, and
   :func:`_get_way_segments_geojson`) copies an individual ``Way`` out of
   the cached lists. A shallow copy only duplicates the wrapper object --
@@ -44,10 +45,11 @@ a performance/safety tradeoff:
   copy-before-mutate discipline above, at the cost of being noticeably
   slower for large mapdata files. Because that cost is paid only on
   export/planning (not on every pan/zoom/click), it is not worth applying
-  everywhere; :func:`get_mapdata`/:func:`_resolve_way` intentionally keep
-  the cheaper shallow copy plus the manual-copy discipline instead.
+  everywhere; :func:`_merged_mapdata_geojson`/:func:`_resolve_way`
+  intentionally keep the cheaper shallow copy plus the manual-copy
+  discipline instead.
 
-Functions relying on this invariant: :func:`get_mapdata`,
+Functions relying on this invariant: :func:`_merged_mapdata_geojson`,
 :func:`apply_way_edits`, :func:`_resolve_way`, :func:`get_way`,
 :func:`get_way_nodes`, :func:`_get_way_segments_geojson`,
 :func:`get_merged_mapdata`.
@@ -106,7 +108,7 @@ from map_data.utils.qr import geo_uri, qr_png, qr_svg
 from map_data.utils.serialization import map_data_to_dict
 from map_data.utils.way import FOOTWAY_VALUES, NON_ROUTABLE_HIGHWAY_VALUES
 
-from .cache import load_mapdata_cached
+from .cache import load_mapdata_cached, mapdata_geojson_cached
 from .helpers import (
     annotation_store,
     apply_added_nodes,
@@ -737,37 +739,23 @@ def list_files() -> Response:
     return jsonify(result)
 
 
-@bp.route("/api/mapdata")
-def get_mapdata() -> Response:
+def _merged_mapdata_geojson(path: Path, store: dict[str, Any]) -> dict[str, Any]:
     """
-    Return a mapdata file, with the user's recorded edits applied, as GeoJSON.
+    Build the ``/api/mapdata`` FeatureCollection for a mapdata *path* edited by *store*.
 
-    Loads the cached ``MapData`` for ``file``, takes a shallow ``copy.copy``
-    (see the module docstring's "MapData copy semantics" section -- this
-    is safe because :func:`apply_way_edits` never mutates a ``Way`` object
-    shared with the cache), applies deletions/splits/moves via
+    Loads the cached ``MapData``, takes a shallow ``copy.copy`` (see the
+    module docstring's "MapData copy semantics" section -- this is safe
+    because :func:`apply_way_edits` never mutates a ``Way`` object shared
+    with the cache), applies deletions/splits/moves via
     :func:`apply_way_edits`, converts to GeoJSON, and finally merges in
     any tag overrides (re-deriving each affected feature's ``road``/
     ``footway`` category from the merged ``highway`` tag).
 
-    Returns
-    -------
-    Response
-        A GeoJSON ``FeatureCollection`` (see
-        :func:`~map_data.viewer.helpers.mapdata_to_geojson`).
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing. 404 if the file doesn't exist.
-
+    Split out of :func:`get_mapdata` so that all of it -- the copy, the
+    re-applied edits and the rebuild -- sits behind the one call to
+    :func:`~map_data.viewer.cache.mapdata_geojson_cached`.
     """
-    filename = _require_args("file")
-    path = _safe_data_path(filename)
-    if not path.is_file():
-        abort(404, f"File not found: {filename}")
     map_data = copy.copy(load_mapdata_cached(str(path)))
-    store = load_annotations(str(_annotation_path(filename)))
 
     apply_way_edits(map_data, store)
 
@@ -782,7 +770,51 @@ def get_mapdata() -> Response:
                     ov,
                     f["properties"].get("category"),
                 )
-    return jsonify(geojson)
+    return geojson
+
+
+@bp.route("/api/mapdata")
+def get_mapdata() -> ResponseReturnValue:
+    """
+    Return a mapdata file, with the user's recorded edits applied, as GeoJSON.
+
+    The document is built by :func:`_merged_mapdata_geojson` and cached,
+    already serialized, by :func:`~map_data.viewer.cache.mapdata_geojson_cached`
+    under the map file's signature and the annotation store's digest -- so
+    panning around an unchanged map costs a stat and a store read, not
+    another ``parse_intersections`` plus FeatureCollection rebuild. The
+    same key doubles as the ``ETag``: a client that sends it back in
+    ``If-None-Match`` gets a 304 and no body at all.
+
+    Returns
+    -------
+    Response
+        A GeoJSON ``FeatureCollection`` (see
+        :func:`~map_data.viewer.helpers.mapdata_to_geojson`), or 304 if the
+        client's copy is still current.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if ``file`` is missing. 404 if the file doesn't exist.
+
+    """
+    filename = _require_args("file")
+    path = _safe_data_path(filename)
+    if not path.is_file():
+        abort(404, f"File not found: {filename}")
+    store = load_annotations(str(_annotation_path(filename)))
+    body, etag = mapdata_geojson_cached(
+        str(path),
+        store,
+        lambda: current_app.json.dumps(_merged_mapdata_geojson(path, store)),
+    )
+    resp = current_app.response_class(body, mimetype="application/json")
+    resp.set_etag(etag)
+    # An edit changes the body under the same URL, so the browser must ask
+    # every time; the ETag is what keeps that ask cheap.
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp.make_conditional(request)
 
 
 @bp.route("/api/annotations")

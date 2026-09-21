@@ -48,6 +48,12 @@
   Gauss-Seidel triple loop: ~100x faster on a 1000-waypoint path (40 ms to 0.3 ms). Both
   schemes share the same fixed point, so the smoothed path is the same up to the stopping
   tolerance
+- `/api/mapdata` serves the merged GeoJSON from a cache keyed on the `.mapdata` file's
+  identity (mtime, size, inode) and a digest of the annotation store, so repeat calls no
+  longer copy the map, re-apply every edit and rebuild the FeatureCollection. The response
+  carries an `ETag` and honors `If-None-Match` with a 304. Any edit or a change to the file
+  on disk invalidates the entry
+
 ### Fixed
 
 - RRT* no longer samples from the module-global `random`. Every `RRTStar` gets its own

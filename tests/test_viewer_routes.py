@@ -1,6 +1,7 @@
 import io
 import json
 import math
+import os
 import threading
 import time
 from unittest.mock import patch
@@ -15,6 +16,7 @@ from map_data.map_data import MapData
 from map_data.utils.way import Way
 from map_data.viewer import routes as viewer_routes
 from map_data.viewer.app import ACCESS_TOKEN_COOKIE, MAX_CONTENT_LENGTH, create_app
+from map_data.viewer.cache import _file_signature
 from map_data.viewer.routes import MAX_FETCH_AREA_KM2, MAX_GRID_CELLS, _bbox_area_km2
 
 
@@ -1269,3 +1271,99 @@ def test_annotated_path_far_from_footway_creates_no_crossroad(app_client_with_fi
 
     resp = client.get(f"/api/export?file={filename}")
     assert resp.get_json()["crossroads"] == []
+
+
+# ── /api/mapdata caching ──────────────────────────────────────────────────────
+
+
+def _count_parse_intersections(monkeypatch):
+    """Count ``parse_intersections`` calls -- the expensive half of a rebuild."""
+    calls = []
+    original = MapData.parse_intersections
+
+    def counting(self, ways_dict):
+        calls.append(ways_dict)
+        return original(self, ways_dict)
+
+    monkeypatch.setattr(MapData, "parse_intersections", counting)
+    return calls
+
+
+def test_mapdata_repeat_request_serves_the_cached_document(app_client_3node, monkeypatch):
+    client, _, filename = app_client_3node
+    # With an edit recorded, a rebuild recomputes the crossroads; that is what
+    # the second request must not pay for again.
+    client.post(f"/api/ways/split?file={filename}", json={"way_id": 2, "node_id": 202})
+    calls = _count_parse_intersections(monkeypatch)
+
+    first = client.get(f"/api/mapdata?file={filename}")
+    second = client.get(f"/api/mapdata?file={filename}")
+
+    assert first.status_code == second.status_code == 200
+    assert first.get_data() == second.get_data()
+    assert first.headers["ETag"] == second.headers["ETag"]
+    assert len(calls) == 1
+
+
+def test_mapdata_cache_invalidated_by_an_edit(app_client_3node, monkeypatch):
+    client, _, filename = app_client_3node
+    assert 2 in _mapdata_way_ids(client, filename)
+    calls = _count_parse_intersections(monkeypatch)
+
+    client.delete(f"/api/ways/2?file={filename}", json={})
+    assert 2 not in _mapdata_way_ids(client, filename)
+    assert len(calls) == 1  # rebuilt, not served from the pre-delete entry
+
+    client.put(f"/api/ways/2/restore?file={filename}", json={})
+    assert 2 in _mapdata_way_ids(client, filename)
+
+
+def test_mapdata_cache_invalidated_by_a_tag_override(app_client_3node):
+    client, _, filename = app_client_3node
+    assert _mapdata_way_ids(client, filename)  # prime the cache
+
+    client.put(f"/api/ways/2/tags?file={filename}", json={"tags": {"highway": "track"}})
+
+    feats = client.get(f"/api/mapdata?file={filename}").get_json()["features"]
+    way = next(f for f in feats if f["properties"].get("id") == 2)
+    assert way["properties"]["tags"]["highway"] == "track"
+
+
+def test_mapdata_cache_invalidated_by_map_file_rewrite(app_client_with_file):
+    client, tmp_path, filename = app_client_with_file
+    assert 1 in _mapdata_way_ids(client, filename)
+
+    _make_mapdata_3node(tmp_path / filename)  # same name, different map
+
+    ids = _mapdata_way_ids(client, filename)
+    assert 2 in ids
+    assert 1 not in ids
+
+
+def test_file_signature_catches_a_rewrite_that_kept_its_mtime(tmp_path):
+    # A coarse filesystem timestamp clock can hand a quick rewrite the mtime the
+    # file already had; the size and inode in the signature are what catch it.
+    path = tmp_path / "map.bin"
+    path.write_bytes(b"one")
+    before, stat_before = _file_signature(str(path)), path.stat()
+
+    path.write_bytes(b"another")
+    os.utime(path, ns=(stat_before.st_atime_ns, stat_before.st_mtime_ns))
+
+    assert _file_signature(str(path)) != before
+
+
+def test_mapdata_etag_serves_304_until_an_edit(app_client_3node):
+    client, _, filename = app_client_3node
+    etag = client.get(f"/api/mapdata?file={filename}").headers["ETag"]
+    assert etag
+
+    unchanged = client.get(f"/api/mapdata?file={filename}", headers={"If-None-Match": etag})
+    assert unchanged.status_code == 304
+    assert unchanged.get_data() == b""
+
+    client.delete(f"/api/ways/2?file={filename}", json={})
+    edited = client.get(f"/api/mapdata?file={filename}", headers={"If-None-Match": etag})
+    assert edited.status_code == 200
+    assert edited.headers["ETag"] != etag
+    assert 2 not in [f["properties"].get("id") for f in edited.get_json()["features"]]
