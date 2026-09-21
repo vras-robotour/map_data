@@ -14,6 +14,14 @@ def smooth_path(
     """
     Gradient descent path smoothing.
 
+    Each sweep is a vectorised Jacobi update: every interior point is relaxed from the
+    *previous* sweep's neighbours at once. The original scalar loop was Gauss-Seidel
+    (it read the already-updated ``i - 1`` point within the same sweep), which converges
+    in fewer sweeps but cannot be vectorised. Both schemes share the same fixed point, so
+    the returned path is unchanged up to the convergence tolerance; Jacobi just needs
+    roughly two to three times as many (far cheaper) sweeps to get there, which also means
+    ``collision_check_func`` is called correspondingly more often.
+
     Parameters
     ----------
     path : np.ndarray
@@ -26,7 +34,7 @@ def smooth_path(
     weight_smooth : float
         How much to weigh the smoothness.
     tolerance : float
-        Convergence tolerance.
+        Convergence tolerance, compared against the total absolute movement of a sweep.
 
     Returns
     -------
@@ -38,14 +46,17 @@ def smooth_path(
     best_path = path  # original is assumed collision-free
     change = tolerance
     while change >= tolerance:
-        change = 0.0
-        for i in range(1, len(path) - 1):
-            for j in range(len(path[i])):
-                aux = new_path[i][j]
-                new_path[i][j] += weight_data * (path[i][j] - new_path[i][j]) + weight_smooth * (
-                    new_path[i - 1][j] + new_path[i + 1][j] - 2.0 * new_path[i][j]
-                )
-                change += abs(aux - new_path[i][j])
+        # Slices of the interior points and of their two neighbours. For paths shorter
+        # than three points these are all empty, so the sweep is a no-op and the loop
+        # exits immediately -- matching the scalar `range(1, len(path) - 1)`.
+        interior = new_path[1:-1]
+        delta = weight_data * (path[1:-1] - interior) + weight_smooth * (
+            new_path[:-2] + new_path[2:] - 2.0 * interior
+        )
+        # Assign rather than `+=` so an integer input path keeps the scalar version's
+        # silent truncation instead of raising on the in-place float cast.
+        new_path[1:-1] = interior + delta
+        change = float(np.abs(delta).sum())
 
         if collision_check_func:
             if collision_check_func(LineString(new_path)):

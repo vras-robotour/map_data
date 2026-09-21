@@ -109,3 +109,73 @@ def test_smooth_collision_check_receives_linesting():
     smooth_path(path, collision_check_func=capture)
     assert len(received) > 0
     assert all(isinstance(ls, LineString) for ls in received)
+
+
+def _smooth_path_scalar(path, weight_data=0.5, weight_smooth=0.3, tolerance=0.001):
+    """Reference scalar Gauss-Seidel implementation (the pre-vectorisation behaviour)."""
+    new_path = np.copy(path)
+    change = tolerance
+    while change >= tolerance:
+        change = 0.0
+        for i in range(1, len(path) - 1):
+            for j in range(len(path[i])):
+                aux = new_path[i][j]
+                new_path[i][j] += weight_data * (path[i][j] - new_path[i][j]) + weight_smooth * (
+                    new_path[i - 1][j] + new_path[i + 1][j] - 2.0 * new_path[i][j]
+                )
+                change += abs(aux - new_path[i][j])
+    return new_path
+
+
+def test_smooth_matches_scalar_reference():
+    """Jacobi and Gauss-Seidel share a fixed point, so both converge to the same path.
+
+    They stop at different sweeps, so agreement is only to the order of the tolerance.
+    """
+    rng = np.random.default_rng(0)
+    for n in (5, 25, 120):
+        path = np.column_stack([np.linspace(0, n, n), rng.normal(0.0, 1.0, n)])
+        np.testing.assert_allclose(smooth_path(path), _smooth_path_scalar(path), atol=1e-3)
+
+
+def test_smooth_matches_scalar_reference_3d_and_custom_weights():
+    """Same agreement for 3D paths and non-default weights."""
+    rng = np.random.default_rng(1)
+    path = rng.normal(0.0, 2.0, (40, 3))
+    kwargs = {"weight_data": 0.2, "weight_smooth": 0.4, "tolerance": 1e-5}
+    np.testing.assert_allclose(
+        smooth_path(path, **kwargs), _smooth_path_scalar(path, **kwargs), atol=1e-4
+    )
+
+
+def test_smooth_does_not_mutate_input():
+    path = _straight()
+    path[1:-1, 1] = 1.0
+    original = path.copy()
+    smooth_path(path)
+    np.testing.assert_array_equal(path, original)
+
+
+def test_smooth_empty_path():
+    path = np.empty((0, 2))
+    result = smooth_path(path)
+    assert result.shape == (0, 2)
+
+
+def test_smooth_single_point_path_unchanged():
+    path = np.array([[1.0, 2.0]])
+    result = smooth_path(path)
+    np.testing.assert_array_equal(result, path)
+
+
+def test_smooth_degenerate_paths_unchanged_with_collision_check():
+    """Paths with no interior points converge immediately; the check still runs once."""
+    calls = []
+
+    def never_collides(ls):
+        calls.append(ls)
+        return False
+
+    path = np.array([[0.0, 0.0], [1.0, 1.0]])
+    np.testing.assert_array_equal(smooth_path(path, collision_check_func=never_collides), path)
+    assert len(calls) == 1

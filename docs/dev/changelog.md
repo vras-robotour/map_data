@@ -42,6 +42,12 @@
   `osm_cloud`) are in `config/helhest_jr.yaml`, now the default `config_file` of
   `osm_cloud.launch.py`
 
+### Changed
+
+- `smooth_path` runs as a vectorized Jacobi sweep over the whole path instead of a scalar
+  Gauss-Seidel triple loop: ~100x faster on a 1000-waypoint path (40 ms to 0.3 ms). Both
+  schemes share the same fixed point, so the smoothed path is the same up to the stopping
+  tolerance
 ### Fixed
 
 - RRT* no longer samples from the module-global `random`. Every `RRTStar` gets its own

@@ -37,13 +37,6 @@
   {
     "type": "improvement",
     "sev": "minor",
-    "title": "Vectorize smooth_path hot loop",
-    "desc": "<code>smooth_path</code> is a scalar triple-loop that vectorizes directly as a Jacobi iteration. Distinct from the backlogged native-extension item (which covers the RRT*/grid_astar raster loops).",
-    "file": "map_data/pathsolver/smoothing.py"
-  },
-  {
-    "type": "improvement",
-    "sev": "minor",
     "title": "Cache /api/mapdata responses",
     "desc": "Every call shallow-copies the cached map, re-applies all edits (recomputing <code>crossroads_list</code> via <code>parse_intersections</code> whenever any edit exists), and rebuilds the full GeoJSON FeatureCollection. Fix: cache the merged GeoJSON keyed on (mapdata mtime, annotation-store hash), or serve an ETag and honor <code>If-None-Match</code>.",
     "file": "map_data/viewer/routes.py, map_data/viewer/helpers.py"
