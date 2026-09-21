@@ -5,6 +5,13 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  workflow_dispatch: {}
+
+env:
+  # Single ruff version for the whole repo. Keep in sync with the `ruff` pin in
+  # pyproject.toml's [dev] extra and the ruff-pre-commit rev in
+  # .pre-commit-config.yaml — drift between them causes reformat churn.
+  RUFF_VERSION: "0.16.6"
 
 jobs:
   lint:
@@ -18,7 +25,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install ruff
-        run: pip install ruff
+        run: pip install "ruff==${RUFF_VERSION}"
 
       - name: Lint
         run: ruff check .
@@ -70,5 +77,21 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run tests
-        # Coverage flags come from [tool.pytest.ini_options] in pyproject.toml
+        # Coverage flags, including --cov-fail-under, come from
+        # [tool.pytest.ini_options] in pyproject.toml
         run: pytest
+
+      - name: Publish coverage summary
+        # Runs even when the coverage gate fails, so the summary shows why.
+        # coverage ships with pytest-cov; no third-party action or token needed.
+        if: always()
+        run: |
+          {
+            echo "### Coverage (Python ${{ matrix.python-version }})"
+            echo
+            if [ -f .coverage ]; then
+              python -m coverage report --format=markdown
+            else
+              echo "_No coverage data produced._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

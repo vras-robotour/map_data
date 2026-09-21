@@ -9,13 +9,26 @@ on:
       - "demo/**"
       - "scripts/build_static_demo.sh"
       - ".github/workflows/demo.yml"
+  # Smoke-build the demo on PRs too, so a broken viewer/scrape is caught before
+  # merge instead of after. The deploy step below stays push/dispatch-only.
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "map_data/viewer/**"
+      - "demo/**"
+      - "scripts/build_static_demo.sh"
+      - ".github/workflows/demo.yml"
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
 concurrency:
-  group: gh-pages
+  # PR runs never touch gh-pages, so they get their own group instead of
+  # serialising behind (and blocking) the docs/demo deploys.
+  group: ${{ github.event_name == 'pull_request' && format('demo-smoke-{0}', github.ref) || 'gh-pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   deploy-demo:
@@ -37,6 +50,7 @@ jobs:
         run: bash scripts/build_static_demo.sh
 
       - name: Deploy demo to gh-pages
+        if: github.event_name != 'pull_request'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

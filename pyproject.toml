@@ -30,7 +30,10 @@ dev = [
     "pytest",
     "pytest-cov",
     "pre-commit",
-    "ruff",
+    # Pinned so CI, pre-commit and local dev all format identically; bump this
+    # together with the ruff-pre-commit rev in .pre-commit-config.yaml and
+    # RUFF_VERSION in .github/workflows/ci.yml.
+    "ruff==0.16.6",
     "mypy",
     "mkdocs",
     "mkdocs-material",
@@ -41,7 +44,9 @@ dev = [
 testpaths = ["tests"]
 # Keep local runs identical to CI: coverage flags live here, not in the
 # workflow, so a plain `pytest` measures the same thing everywhere.
-addopts = "--cov=map_data --cov-report=term-missing"
+# --cov-fail-under sits a little below the measured total (~75%) so routine
+# churn does not trip the gate; raise it when coverage climbs.
+addopts = "--cov=map_data --cov-report=term-missing --cov-fail-under=72"
 
 [tool.ruff]
 line-length = 100
