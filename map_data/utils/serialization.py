@@ -13,6 +13,15 @@ from map_data.utils.way import Way
 if TYPE_CHECKING:
     from map_data.map_data import MapData
 
+#: Version of the ``.mapdata`` JSON schema written by :func:`map_data_to_dict`.
+#: Bump it whenever the schema changes; a reader that only knows an older
+#: version then says so instead of failing on a key it does not understand.
+FORMAT_VERSION = 1
+
+#: Version assumed for a file written before the marker existed. Such files are
+#: read as they are: every key added since is optional on load.
+LEGACY_FORMAT_VERSION = 0
+
 
 def way_to_dict(way: Way) -> dict[str, Any]:
     return {
@@ -26,19 +35,22 @@ def way_to_dict(way: Way) -> dict[str, Any]:
 
 
 def way_from_dict(data: dict[str, Any]) -> Way:
+    # Every key is optional: a file written by an older version lacks the ones
+    # added since, and the Way defaults are what that version meant by them.
     line = wkt.loads(data["line"]) if data.get("line") else None
     return Way(
-        id=data["id"],
-        is_area=data["is_area"],
-        nodes=data["nodes"],
-        tags=data["tags"],
+        id=data.get("id", -1),
+        is_area=data.get("is_area", False),
+        nodes=data.get("nodes") or [],
+        tags=data.get("tags") or {},
         line=line,
-        in_out=data["in_out"],
+        in_out=data.get("in_out", ""),
     )
 
 
 def map_data_to_dict(md: "MapData") -> dict[str, Any]:
     return {
+        "format_version": FORMAT_VERSION,
         "metadata": {
             "zone_number": md.zone_number,
             "zone_letter": md.zone_letter,
@@ -84,6 +96,16 @@ def load_mapdata(md_class: type["MapData"], path: str | Path) -> "MapData":
     # support has been removed for security reasons regardless.
     with p.open(encoding="utf-8") as f:
         data = json.load(f)
+
+    # No marker means a file written before the schema was versioned; anything
+    # newer than this build knows may hold keys whose meaning it would guess wrong.
+    version = data.get("format_version", LEGACY_FORMAT_VERSION)
+    if not isinstance(version, int) or version > FORMAT_VERSION:
+        raise ValueError(
+            f"{p}: .mapdata format version {version!r} is not supported by this build, which "
+            f"reads up to version {FORMAT_VERSION}. Update map_data, or re-save the file with "
+            "the version that wrote it.",
+        )
 
     md = md_class.__new__(md_class)
     md.__dict__.update(data["metadata"])  # zone_number/letter, min_/max_ x/y/lat/long, coords_file

@@ -34,6 +34,18 @@ def test_way_serialization():
     assert way2.line.equals(way.line)
 
 
+def test_way_from_dict_missing_keys_uses_defaults():
+    """A way stored by an older format version lacks the newer keys."""
+    way = way_from_dict({"id": 7})
+
+    assert way.id == 7
+    assert way.is_area is False
+    assert way.nodes == []
+    assert way.tags == {}
+    assert way.line is None
+    assert not way.in_out
+
+
 def test_combine_ways():
     w1 = Way(id=1, nodes=[10, 11], line=LineString([(0, 0), (1, 1)]))
     w2 = Way(id=2, nodes=[11, 12], line=LineString([(1, 1), (2, 2)]))

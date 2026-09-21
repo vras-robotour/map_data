@@ -4,6 +4,11 @@
 
 ### Added
 
+- `.mapdata` files carry a `format_version` marker (`FORMAT_VERSION` in
+  `map_data/utils/serialization.py`, currently `1`). Files written before the marker load as
+  before, a file from a newer version is rejected with a message naming both versions instead
+  of half-loading, and every key of a stored way is optional on load (the `Way` defaults fill
+  in), so a key added later does not break older files
 - `plan_route()` and `route_planner` reject a start or goal more than
   `outside_map_tolerance` (100 m) outside the map's area with `start_outside_map` /
   `goal_outside_map` (any algorithm, checked before the snap distances; `route_planner` names

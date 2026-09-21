@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 import utm
@@ -6,6 +9,7 @@ from conftest import FOOTWAY_WAYS_JSON as _WAYS_JSON
 from shapely.geometry import LineString
 
 from map_data.map_data import MapData
+from map_data.utils.serialization import FORMAT_VERSION
 from map_data.utils.way import Way
 
 _LAT, _LON = 50.0, 14.0
@@ -87,6 +91,60 @@ def test_mapdata_nodes_cache_survives_roundtrip(tmp_path):
     loaded = MapData.load(path)
     assert 99 in loaded.nodes_cache
     assert loaded.nodes_cache[99]["lat"] == pytest.approx(50.001)
+
+
+# ── .mapdata format version ───────────────────────────────────────────────────
+
+
+def _rewrite_version(path, version):
+    """Rewrite the saved file with ``version`` as its marker, or drop the key for ``None``."""
+    data = json.loads(Path(path).read_text())
+    if version is None:
+        del data["format_version"]
+    else:
+        data["format_version"] = version
+    Path(path).write_text(json.dumps(data))
+
+
+def test_saved_mapdata_carries_format_version(tmp_path):
+    md = _make_md()
+    path = tmp_path / "test.mapdata"
+    md.save(str(path))
+
+    assert json.loads(path.read_text())["format_version"] == FORMAT_VERSION
+    MapData.load(str(path))  # and the marker does not get in the loader's way
+
+
+def test_legacy_mapdata_without_version_loads(tmp_path):
+    """Files written before the marker existed stay readable."""
+    md = _make_md()
+    path = tmp_path / "test.mapdata"
+    md.save(str(path))
+    _rewrite_version(path, None)
+
+    loaded = MapData.load(str(path))
+    assert loaded.zone_number == md.zone_number
+    assert np.allclose(loaded.waypoints, md.waypoints)
+
+
+def test_future_version_mapdata_raises(tmp_path):
+    md = _make_md()
+    path = tmp_path / "test.mapdata"
+    md.save(str(path))
+    _rewrite_version(path, FORMAT_VERSION + 1)
+
+    with pytest.raises(ValueError, match="format version"):
+        MapData.load(str(path))
+
+
+def test_non_integer_version_mapdata_raises(tmp_path):
+    md = _make_md()
+    path = tmp_path / "test.mapdata"
+    md.save(str(path))
+    _rewrite_version(path, "1.0")
+
+    with pytest.raises(ValueError, match="format version"):
+        MapData.load(str(path))
 
 
 # ── atomic .mapdata writes ────────────────────────────────────────────────────

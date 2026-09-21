@@ -22,6 +22,7 @@ Never open `.mapdata` files with `pickle.load` directly — use `MapData.load()`
 
 ```json
 {
+  "format_version": 1,
   "metadata": { ... },
   "waypoints": [[x0, y0], [x1, y1], ...],
   "roads": [ <way object>, ... ],
@@ -31,6 +32,12 @@ Never open `.mapdata` files with `pickle.load` directly — use `MapData.load()`
   "nodes_cache": { "<node_id>": {"lat": 50.1, "lon": 14.5, "tags": {}}, ... }
 }
 ```
+
+`format_version` is the schema version (currently `1`, see `FORMAT_VERSION` in
+`map_data/utils/serialization.py`). Files written before the marker existed have no such key and
+are read as the pre-versioning schema; a file whose version is *newer* than the one this build
+knows is rejected with a `ValueError` rather than half-read. Every way key is optional on load, so
+a file written by an older version falls back to the `Way` defaults for the keys added since.
 
 ### `metadata` object
 
