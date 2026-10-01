@@ -568,9 +568,7 @@ async function deleteCurrentWay() {
     const res = await deleteWayApi(currentFile, wayId, cat, label);
     if (!res.ok) { setStatus('Delete failed', 'text-danger'); return; }
     redoStack = [];
-    if (currentClickedLayer && geoLayers[cat]) {
-        geoLayers[cat].removeLayer(currentClickedLayer);
-    }
+    if (currentClickedLayer && geoLayers[cat]) removeWayLayer(cat, currentClickedLayer);
     currentClickedLayer = null;
     currentClickedFeature = null;
     clearNodes();
@@ -605,6 +603,8 @@ async function hideCurrentWay() {
     const res = await hideWayApi(currentFile, wayId, cat, label);
     if (!res.ok) { setStatus('Hide failed', 'text-danger'); return; }
     if (currentClickedLayer && geoLayers[cat]) {
+        // Kept in subtypeLayers so Show can bring it back, so drop the highlight now
+        currentClickedLayer.setStyle(STYLES[cat]);
         geoLayers[cat].removeLayer(currentClickedLayer);
     }
     currentClickedLayer = null;
@@ -916,9 +916,11 @@ async function redoLastChange() {
         // The segments endpoint still returns deleted ways, so drop the layer
         // by hand like deleteCurrentWay does.
         deselectCurrent();
-        ['road', 'footway', 'barrier'].forEach(c => geoLayers[c]?.eachLayer(l => {
-            if (String(l._featureId) === String(r.wayId)) geoLayers[c].removeLayer(l);
-        }));
+        ['road', 'footway', 'barrier'].forEach(c => {
+            const gone = [];
+            geoLayers[c]?.eachLayer(l => { if (String(l._featureId) === String(r.wayId)) gone.push(l); });
+            gone.forEach(l => removeWayLayer(c, l));
+        });
     } else {
         await _reloadWay(r.wayId);
     }
