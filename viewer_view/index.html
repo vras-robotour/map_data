@@ -1575,7 +1575,11 @@ In <strong>VIEW</strong> mode you can also open a feature's properties for editi
 <li><strong>Annotations</strong> — list of all drawn obstacles and paths. The ↺ button reverts an
   annotation's geometry to the state it had when the file was loaded (geometry drags
   are saved immediately, so this is the way to recover from an accidental move).</li>
-<li><strong>Changes</strong> — features whose properties have been modified since the file was loaded.</li>
+<li><strong>Changes</strong> — features whose properties have been modified since the file was loaded.
+  Each entry has a ↩ revert button. <code>Ctrl+Z</code> (<code>Cmd+Z</code> on macOS) undoes the newest entry and
+  <code>Ctrl+Shift+Z</code> / <code>Ctrl+Y</code> redoes it, as do the ↶ ↷ buttons in the top bar (way/node
+  deletions, tag edits, node moves and additions, splits; not annotation shapes). Redo history
+  is dropped on any new edit or file load.</li>
 <li><strong>Hidden</strong> — features that have been hidden from the map via the context menu.</li>
 </ul>
 <p>Use the <strong>Export</strong> button in the toolbar to save all annotations and changes back to the <code>.mapdata</code> file.

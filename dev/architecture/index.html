@@ -2027,9 +2027,17 @@
 <hr />
 <h2 id="viewer">Viewer</h2>
 <p>The viewer (<code>map_data/viewer/</code>) is a single-page web application with three switchable modes.</p>
-<p><strong>Back-end</strong> (<code>app.py</code>, <code>routes.py</code>, <code>helpers.py</code>, <code>cache.py</code>):</p>
+<p><strong>Back-end</strong> (<code>app.py</code>, <code>routes/</code>, <code>helpers.py</code>, <code>cache.py</code>):</p>
 <ul>
-<li>Serves GeoJSON representations of the <code>MapData</code> contents and handles annotation CRUD</li>
+<li>
+<p><code>routes/</code> holds the one <code>viewer</code> blueprint, split by concern: <code>files</code> (page, file list,
+  mapdata, fetch, uploads, export), <code>annotations</code>, <code>ways</code> (way and node editing), <code>planning</code>
+  (planner defaults, traversability, cost grid, replan), <code>sharing</code> (goal QR codes, wormhole) and
+  <code>common</code> (the blueprint, path helpers, way resolution, validators, <code>get_merged_mapdata</code>)</p>
+</li>
+<li>
+<p>Serves GeoJSON representations of the <code>MapData</code> contents and handles annotation CRUD</p>
+</li>
 <li><code>/api/fetch_area</code> runs Overpass queries in a background thread and returns a task ID immediately; the client polls <code>/api/fetch_area/&lt;task_id&gt;</code> for completion, preventing UI hangs on long fetches</li>
 <li><code>/export</code> writes a human-readable JSON snapshot of the annotated map; <code>/export/geojson</code> writes the same merged data as a GeoJSON <code>FeatureCollection</code></li>
 <li><code>cache.py</code> manages the OSM response cache sidecar</li>
@@ -2126,7 +2134,7 @@
 </span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>│   │   └── way.py                 # Way dataclass
 </span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>│   └── viewer/
 </span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>│       ├── app.py                 # Flask app factory + SocketIO
-</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>│       ├── routes.py              # REST API endpoints
+</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>│       ├── routes/                # REST API endpoints, one module per concern
 </span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>│       ├── helpers.py             # GeoJSON conversion helpers
 </span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>│       ├── cache.py               # OSM response cache
 </span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>│       ├── ros_node.py            # TrackerNode (optional ROS2)

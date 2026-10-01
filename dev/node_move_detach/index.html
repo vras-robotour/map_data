@@ -1331,10 +1331,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#3-move_way_nodes-map_dataviewerroutespy2357-2411" class="md-nav__link">
+  <a href="#3-move_way_nodes-map_dataviewerrouteswayspy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. move_way_nodes — map_data/viewer/routes.py:2357-2411
+        3. move_way_nodes — map_data/viewer/routes/ways.py
       
     </span>
   </a>
@@ -1353,10 +1353,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#5-undo-map_dataviewerroutespy2414-2440" class="md-nav__link">
+  <a href="#5-undo-map_dataviewerrouteswayspy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        5. Undo — map_data/viewer/routes.py:2414-2440
+        5. Undo — map_data/viewer/routes/ways.py
       
     </span>
   </a>
@@ -1672,10 +1672,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#3-move_way_nodes-map_dataviewerroutespy2357-2411" class="md-nav__link">
+  <a href="#3-move_way_nodes-map_dataviewerrouteswayspy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. move_way_nodes — map_data/viewer/routes.py:2357-2411
+        3. move_way_nodes — map_data/viewer/routes/ways.py
       
     </span>
   </a>
@@ -1694,10 +1694,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#5-undo-map_dataviewerroutespy2414-2440" class="md-nav__link">
+  <a href="#5-undo-map_dataviewerrouteswayspy" class="md-nav__link">
     <span class="md-ellipsis">
       
-        5. Undo — map_data/viewer/routes.py:2414-2440
+        5. Undo — map_data/viewer/routes/ways.py
       
     </span>
   </a>
@@ -1939,7 +1939,7 @@ index internally and could be refactored, or add a standalone
 <code>node_way_ids(md)</code>. The endpoint needs it before deciding whether to detach.</p>
 <p><em>Small, but it is a per-request scan of every way list unless cached alongside
 <code>load_mapdata_cached</code>. Watch this on Stromovka-sized maps.</em></p>
-<h3 id="3-move_way_nodes-map_dataviewerroutespy2357-2411">3. <code>move_way_nodes</code> — <code>map_data/viewer/routes.py:2357-2411</code></h3>
+<h3 id="3-move_way_nodes-map_dataviewerrouteswayspy">3. <code>move_way_nodes</code> — <code>map_data/viewer/routes/ways.py</code></h3>
 <p>For each node in the body: if shared and not already move-detached for this
 way, mint an id, append a <code>detached_nodes</code> entry, and write the override under
 the <strong>new</strong> id. Return the id mapping in the response body (currently a bare
@@ -1957,14 +1957,14 @@ list will still show the junction that was just broken. Way objects must be
 copied, not mutated — the docstring at <code>annotations.py:65-74</code> guarantees that.</p>
 <p><em>Medium, and the highest-risk piece. ~40 lines, plus careful reading of the pass
 ordering.</em></p>
-<h3 id="5-undo-map_dataviewerroutespy2414-2440">5. Undo — <code>map_data/viewer/routes.py:2414-2440</code></h3>
+<h3 id="5-undo-map_dataviewerrouteswayspy">5. Undo — <code>map_data/viewer/routes/ways.py</code></h3>
 <p><code>undo_move_way_nodes</code> drops all overrides for a way; it must also drop that
 way's <code>"reason": "move"</code> detach entries. Per-node undo does not exist today and
 is now more clearly wanted, since each move is a topology change — worth adding
 at the same time.</p>
 <p><em>Small. ~25 lines.</em></p>
 <h3 id="6-frontend-draw_handlersjs346-352-ui_handlersjs299">6. Frontend — <code>draw_handlers.js:346-352</code>, <code>ui_handlers.js:299</code></h3>
-<p><code>get_way_nodes</code> (<code>routes.py:1556-1580</code>) reads ids straight off the resolved
+<p><code>get_way_nodes</code> (<code>routes/ways.py</code>) reads ids straight off the resolved
 <code>way.nodes</code>, so it returns the detached id for free once step 4 lands. The drag
 handler holds <code>currentNodes[nodeIndex].id</code> in memory across drags, though —
 after the first move it would address a node id that no longer belongs to the

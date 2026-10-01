@@ -1579,13 +1579,6 @@
   {
     "type": "improvement",
     "sev": "nice-to-have",
-    "title": "Split routes.py into focused modules",
-    "desc": "The triplicated way-resolution pipeline has been consolidated into a shared <code>_resolve_way</code> helper, but <code>routes.py</code> is still ~1,900 lines mixing annotations, way editing, planning, and wormhole sharing in one blueprint. Splitting it into per-concern modules (annotations, way edits, planning, sharing) would improve navigability.",
-    "file": "map_data/viewer/routes.py"
-  },
-  {
-    "type": "improvement",
-    "sev": "nice-to-have",
     "title": "Speed up planning hot paths with native extensions",
     "desc": "The main bottlenecks are the Python <code>_bresenham</code> generator and <code>_segment_cost</code> in RRT* (called O(max_iter × neighbors) times), and the <code>heapq</code> loop in <code>grid_astar</code>. Recommended approach: (1) try <code>@numba.njit</code> on these inner loops first — zero build overhead, easy to toggle; (2) replace <code>grid_astar</code> with <code>skimage.graph.route_through_array</code> which is C-backed; (3) Cython or pybind11 only if numba is unacceptable for deployment. Full C/C++ rewrite is not justified given that numpy, cKDTree, and Shapely/GEOS are already native.",
     "file": "map_data/pathsolver/rrt_star.py, map_data/pathsolver/grid_astar.py"
@@ -1600,37 +1593,9 @@
   {
     "type": "improvement",
     "sev": "nice-to-have",
-    "title": "Viewer undo/redo built on the existing change_log",
-    "desc": "The annotation store already records ordered, timestamped change entries; exposing undo/redo in the UI would mostly be frontend work plus inverse operations for each change type.",
-    "file": "map_data/viewer/routes.py, map_data/viewer/static/js/"
-  },
-  {
-    "type": "improvement",
-    "sev": "nice-to-have",
     "title": "Progress reporting for fetch_area via SocketIO",
     "desc": "The fetch task is polled over REST while a SocketIO channel already exists for telemetry — pushing progress (query, parse, save stages) would remove the polling and its 404-on-second-poll footgun.",
-    "file": "map_data/viewer/routes.py, map_data/viewer/app.py"
-  },
-  {
-    "type": "improvement",
-    "sev": "nice-to-have",
-    "title": "Rename GOAL_SAMPLE_BIAS in rrt_star.py",
-    "desc": "<code>GOAL_SAMPLE_BIAS</code> doubles as the unrelated traversable-cell sampling bias in <code>_sample_point</code>, which is confusing since the two uses have nothing to do with each other.",
-    "file": "map_data/pathsolver/rrt_star.py"
-  },
-  {
-    "type": "improvement",
-    "sev": "nice-to-have",
-    "title": "Route all viewer filename handling through one validated resolver",
-    "desc": "GET endpoints call <code>_safe_data_path</code> but many mutating endpoints pass the raw filename straight to <code>_annotation_path</code>, which contains traversal only incidentally (via <code>Path.stem</code>) and never verifies the referenced <code>.mapdata</code> exists. Harmless today but inconsistent defense-in-depth. Related lifecycle nit: <code>create_app</code> has no idempotency guard — a second call double-starts the telemetry thread and re-inits the ROS node.",
-    "file": "map_data/viewer/routes.py, map_data/viewer/app.py"
-  },
-  {
-    "type": "improvement",
-    "sev": "nice-to-have",
-    "title": "Cheap linter/typechecker wins",
-    "desc": "mypy: add <code>check_untyped_defs</code>, <code>warn_unused_ignores</code>, <code>warn_redundant_casts</code> (none require stubs). ruff: add the <code>RUF</code>, <code>C4</code>, and <code>PT</code> rule families (<code>PT</code> is valuable given the ~3,000-line test suite).",
-    "file": "pyproject.toml"
+    "file": "map_data/viewer/routes/files.py, map_data/viewer/app.py"
   },
   {
     "type": "improvement",
