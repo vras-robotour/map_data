@@ -22,6 +22,7 @@ let deletedNodes = [];            // [{way_id, node_id}, ...]        from annota
 let tagOverrides = [];            // [{id, category, label, tags}, ...] from annotations store
 let hiddenWays = [];            // [{id, category, label}, ...] from annotations store
 let changeLog = [];            // [{type:'way'|'node'|'tag', ...data}] in insertion order
+let redoStack = [];            // [{label, wayId, run}] forward replays for undone changeLog entries
 let hiddenWayIds = new Set();     // Set<number> for O(1) lookup
 let plannerBlockedIds = new Set(); // way IDs the Paths-only planner won't use, hidden in planner mode
 let editSelectedLayer = null;   // annotation layer selected in edit mode

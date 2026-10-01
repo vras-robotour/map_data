@@ -331,6 +331,7 @@ async function _onOsmDragUp(e) {
         if (!currentFile || !wayId) return;
         const res = await addWayNodeApi(currentFile, wayId, afterNodeId, e.latlng.lat, e.latlng.lng);
         if (!res.ok) { setStatus('Add node failed', 'text-danger'); return; }
+        redoStack = [];
         await _reloadWay(wayId);
         if (currentClickedFeature && currentClickedLayer) {
             await loadNodesForEditing(currentClickedFeature, currentClickedLayer);
@@ -365,6 +366,7 @@ async function _onOsmDragUp(e) {
     const _mlbl = _mtags0.highway || _mtags0.barrier || '';
     const res = await moveWayNodesApi(currentFile, wayId, nodesToSave, _mcat, _mlbl);
     if (!res.ok) { setStatus('Move failed', 'text-danger'); return; }
+    redoStack = [];
 
     const isLine = currentClickedFeature?.geometry?.type === 'LineString';
     if (!isLine) {

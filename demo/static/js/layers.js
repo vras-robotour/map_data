@@ -162,6 +162,14 @@ function setupWayLayer(feature, layer, cat) {
     });
 }
 
+// Drop a way layer for good: off the map *and* out of subtypeLayers, otherwise
+// filterLayers (search box, planner refilter) puts it back on the map.
+function removeWayLayer(cat, layer) {
+    geoLayers[cat]?.removeLayer(layer);
+    const st = layer._featureRef ? getSubtype(layer._featureRef, cat) : null;
+    if (subtypeLayers[cat][st]) subtypeLayers[cat][st] = subtypeLayers[cat][st].filter(l => l !== layer);
+}
+
 function updateWayWithSegments(originalWayId, segments) {
     const originalWayIdStr = String(originalWayId);
     // Find and remove old segments/original way from all category layers
@@ -169,25 +177,17 @@ function updateWayWithSegments(originalWayId, segments) {
         const layerGroup = geoLayers[cat];
         if (!layerGroup) return;
 
-        const toRemove = [];
-        layerGroup.eachLayer(l => {
-            // Check if ID matches original or starts with "original:"
+        // Check if ID matches original or starts with "original:". Hidden or
+        // filtered-out layers are only in subtypeLayers, so search both.
+        const toRemove = new Set();
+        const match = l => {
             const sid = String(l._featureId || '');
-            if (sid === originalWayIdStr || sid.startsWith(originalWayIdStr + ':')) {
-                toRemove.push(l);
-            }
-        });
+            if (sid === originalWayIdStr || sid.startsWith(originalWayIdStr + ':')) toRemove.add(l);
+        };
+        layerGroup.eachLayer(match);
+        Object.values(subtypeLayers[cat]).forEach(layers => layers.forEach(match));
 
-        toRemove.forEach(l => {
-            // Remove from subtypeLayers
-            if (l._featureRef) {
-                const st = getSubtype(l._featureRef, cat);
-                if (subtypeLayers[cat][st]) {
-                    subtypeLayers[cat][st] = subtypeLayers[cat][st].filter(item => item !== l);
-                }
-            }
-            layerGroup.removeLayer(l);
-        });
+        toRemove.forEach(l => removeWayLayer(cat, l));
     });
 
     // Add new segments
@@ -309,6 +309,7 @@ async function refreshMetadata(filename, { refreshAnnotations = false } = {}) {
 
 async function loadMapData(filename, { preserveView = false, silent = false } = {}) {
     if (!silent) setStatus('Loading…', 'text-warning');
+    redoStack = [];
 
     try {
         const geojson = await fetchMapData(filename);
@@ -449,6 +450,7 @@ function clearMapData() {
   hiddenWays = [];
   hiddenWayIds.clear();
   changeLog = [];
+  redoStack = [];
 
   // Reset UI elements
   document.getElementById('file-select').value = "";

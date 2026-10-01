@@ -262,6 +262,17 @@ async function initApp() {
         if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
         if (e.target.isContentEditable) return;
 
+        // Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y redo (changeLog edits)
+        const k = e.key.toLowerCase();
+        if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === 'z' || (k === 'y' && !e.shiftKey))) {
+            if (currentAppMode !== 'viewer' || document.querySelector('.modal.show')) return;
+            e.preventDefault();
+            runUndoRedo(k === 'z' && !e.shiftKey ? undoLastChange : redoLastChange);
+            return;
+        }
+        // Leave browser shortcuts (Ctrl+F find, Ctrl+V paste, ...) alone
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+
         switch (e.key) {
             case 'v': case 'V': {
                 if (currentAppMode !== 'viewer') return;

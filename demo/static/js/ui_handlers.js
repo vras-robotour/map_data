@@ -65,6 +65,7 @@ function setAppMode(mode) {
             const el = document.getElementById(id);
             if (el) el.hidden = true;
         });
+        syncUndoButtons();
     }
 
     if (mode === 'planner') {
@@ -425,6 +426,7 @@ async function splitCurrentWay(wayId, nodeId) {
 
     const res = await splitWayApi(currentFile, wayId, nodeId);
     if (res.ok) {
+        redoStack = [];
         const data = await res.json();
         setStatus('Way split successfully', 'text-success');
 
@@ -530,6 +532,7 @@ document.getElementById('way-edit-save')?.addEventListener('click', async () => 
         || currentClickedFeature?.properties?.tags?.barrier || '';
     const res = await updateWayTagsApi(currentFile, editingWayId, tags, cat, lbl);
     if (!res.ok) { setStatus('Save failed', 'text-danger'); return; }
+    redoStack = [];
     bootstrap.Modal.getInstance(document.getElementById('way-edit-modal'))?.hide();
     const existingIdx = changeLog.findIndex(c => c.type === 'tag' && String(c.id) === String(editingWayId));
     if (existingIdx >= 0) changeLog.splice(existingIdx, 1);
@@ -552,6 +555,7 @@ async function undoTagOverride(wayId) {
         await _reloadWay(wayId);
         renderChangesPanel();
     }
+    return res.ok;
 }
 
 async function deleteCurrentWay() {
@@ -563,9 +567,8 @@ async function deleteCurrentWay() {
     const label = tags.highway || tags.barrier || '';
     const res = await deleteWayApi(currentFile, wayId, cat, label);
     if (!res.ok) { setStatus('Delete failed', 'text-danger'); return; }
-    if (currentClickedLayer && geoLayers[cat]) {
-        geoLayers[cat].removeLayer(currentClickedLayer);
-    }
+    redoStack = [];
+    if (currentClickedLayer && geoLayers[cat]) removeWayLayer(cat, currentClickedLayer);
     currentClickedLayer = null;
     currentClickedFeature = null;
     clearNodes();
@@ -583,6 +586,7 @@ async function deleteCurrentNode(wayId, nodeId) {
     if (!currentFile) return;
     const res = await deleteNodeApi(currentFile, wayId, nodeId);
     if (!res.ok) { setStatus('Delete failed', 'text-danger'); return; }
+    redoStack = [];
     changeLog.push({ type: 'node', way_id: wayId, node_id: nodeId });
     await _reloadWay(wayId);
     if (currentClickedFeature) await toggleNodes();
@@ -599,6 +603,8 @@ async function hideCurrentWay() {
     const res = await hideWayApi(currentFile, wayId, cat, label);
     if (!res.ok) { setStatus('Hide failed', 'text-danger'); return; }
     if (currentClickedLayer && geoLayers[cat]) {
+        // Kept in subtypeLayers so Show can bring it back, so drop the highlight now
+        currentClickedLayer.setStyle(STYLES[cat]);
         geoLayers[cat].removeLayer(currentClickedLayer);
     }
     currentClickedLayer = null;
@@ -698,6 +704,7 @@ function renderChangesPanel() {
     const panel = document.getElementById('changes-panel');
     const list = document.getElementById('changes-list');
     const count = document.getElementById('changes-count');
+    syncUndoButtons();
     if (!panel || !list || !count) return;
     if (!changeLog.length || currentAppMode === 'planner') { panel.hidden = true; return; }
     panel.hidden = false;
@@ -773,10 +780,11 @@ async function undoWaySplit(wayId, nodeId) {
         }
 
         // Refresh only metadata (changes list, etc.) without map flashing
-        refreshMetadata(currentFile);
+        await refreshMetadata(currentFile);
     } else {
         setStatus('Undo failed', 'text-danger');
     }
+    return res.ok;
 }
 
 function renderHiddenPanel() {
@@ -810,6 +818,7 @@ async function undoWayDeletion(wayId) {
         changeLog = changeLog.filter(c => !(c.type === 'way' && c.id === wayId));
         await _reloadWay(wayId);
     }
+    return res.ok;
 }
 
 async function undoNodeDeletion(wayId, nodeId) {
@@ -819,6 +828,7 @@ async function undoNodeDeletion(wayId, nodeId) {
         changeLog = changeLog.filter(c => !(c.type === 'node' && String(c.way_id) === String(wayId) && c.node_id === nodeId));
         await _reloadWay(wayId);
     }
+    return res.ok;
 }
 
 async function undoNodeAddition(wayId, nodeId) {
@@ -829,6 +839,7 @@ async function undoNodeAddition(wayId, nodeId) {
         await _reloadWay(wayId);
         await refreshMetadata(currentFile);
     }
+    return res.ok;
 }
 
 async function undoWayNodeMoves(wayId) {
@@ -840,7 +851,101 @@ async function undoWayNodeMoves(wayId) {
         changeLog = changeLog.filter(c => !(c.type === 'move' && String(c.id) === String(wayId)));
         await _reloadWay(wayId);
     }
+    return res.ok;
 }
+
+// ── Keyboard undo/redo ───────────────────────────────────────────────────────
+// Undo reverts the newest changeLog entry through its panel revert function;
+// first it snapshots, from the annotation store, what redo needs to replay the
+// original forward API call. Any new edit clears redoStack.
+const _UNDO_LABELS = {
+    way: 'way deletion', node: 'node deletion', tag: 'tag edit',
+    move: 'node move', split: 'way split', add_node: 'node addition',
+};
+let _undoBusy = false; // serialises held-down/repeated shortcuts
+
+async function _redoFor(e) {
+    const f = currentFile;
+    const ann = await fetchAnnotations(f);
+    const baseId = String(e.id ?? e.way_id).split(':')[0];
+    const posOv = ann.node_position_overrides?.[baseId] || {};
+    let run;
+    if (e.type === 'way') run = () => deleteWayApi(f, e.id, e.category, e.label);
+    if (e.type === 'node') run = () => deleteNodeApi(f, e.way_id, e.node_id);
+    if (e.type === 'split') run = () => splitWayApi(f, e.way_id, e.node_id);
+    if (e.type === 'tag') {
+        const tags = ann.tag_overrides?.[String(e.id)] || {};
+        run = () => updateWayTagsApi(f, e.id, tags, e.category, e.label);
+    }
+    if (e.type === 'move') {
+        const nodes = Object.entries(posOv).map(([id, p]) => ({ id: +id, lat: p.lat, lon: p.lon }));
+        run = () => moveWayNodesApi(f, e.id, nodes, e.category, e.label);
+    }
+    if (e.type === 'add_node') {
+        const a = (ann.added_nodes || []).find(n => n.id === e.node_id);
+        if (!a) return null;
+        const pos = posOv[String(e.node_id)] || a; // a later drag of the new node wins
+        run = () => addWayNodeApi(f, e.way_id, a.after_node_id, pos.lat, pos.lon);
+    }
+    return run ? { type: e.type, label: _UNDO_LABELS[e.type], wayId: e.id ?? e.way_id, run } : null;
+}
+
+async function undoLastChange() {
+    const e = changeLog[changeLog.length - 1];
+    if (!currentFile || !e) { setStatus('Nothing to undo', 'text-secondary'); return; }
+    const redo = await _redoFor(e);
+    const ok = await ({
+        way: () => undoWayDeletion(e.id),
+        node: () => undoNodeDeletion(e.way_id, e.node_id),
+        tag: () => undoTagOverride(e.id),
+        move: () => undoWayNodeMoves(e.id),
+        split: () => undoWaySplit(e.way_id, e.node_id),
+        add_node: () => undoNodeAddition(e.way_id, e.node_id),
+    })[e.type]?.();
+    if (!ok) { setStatus('Undo failed', 'text-danger'); return; }
+    if (redo) redoStack.push(redo);
+    setStatus(`Undid ${_UNDO_LABELS[e.type]}`, 'text-success');
+}
+
+async function redoLastChange() {
+    const r = redoStack.pop();
+    if (!currentFile || !r) { setStatus('Nothing to redo', 'text-secondary'); return; }
+    const res = await r.run();
+    if (!res.ok) { setStatus('Redo failed', 'text-danger'); return; }
+    if (r.type === 'way') {
+        // The segments endpoint still returns deleted ways, so drop the layer
+        // by hand like deleteCurrentWay does.
+        deselectCurrent();
+        ['road', 'footway', 'barrier'].forEach(c => {
+            const gone = [];
+            geoLayers[c]?.eachLayer(l => { if (String(l._featureId) === String(r.wayId)) gone.push(l); });
+            gone.forEach(l => removeWayLayer(c, l));
+        });
+    } else {
+        await _reloadWay(r.wayId);
+    }
+    await refreshMetadata(currentFile); // server change_log is authoritative for order
+    setStatus(`Redid ${r.label}`, 'text-success');
+}
+
+async function runUndoRedo(fn) {
+    if (_undoBusy) return;
+    _undoBusy = true;
+    try { await fn(); }
+    catch (err) { console.error('Undo/redo failed:', err); }
+    finally { _undoBusy = false; syncUndoButtons(); }
+}
+
+function syncUndoButtons() {
+    const viewer = currentAppMode === 'viewer';
+    const undo = document.getElementById('undo-btn');
+    const redo = document.getElementById('redo-btn');
+    if (undo) undo.disabled = !viewer || !changeLog.length;
+    if (redo) redo.disabled = !viewer || !redoStack.length;
+}
+
+document.getElementById('undo-btn')?.addEventListener('click', () => runUndoRedo(undoLastChange));
+document.getElementById('redo-btn')?.addEventListener('click', () => runUndoRedo(redoLastChange));
 
 function showAnnProps(ann) {
     if (currentClickedFeature) {
