@@ -309,6 +309,7 @@ async function refreshMetadata(filename, { refreshAnnotations = false } = {}) {
 
 async function loadMapData(filename, { preserveView = false, silent = false } = {}) {
     if (!silent) setStatus('Loading…', 'text-warning');
+    redoStack = [];
 
     try {
         const geojson = await fetchMapData(filename);
@@ -449,6 +450,7 @@ function clearMapData() {
   hiddenWays = [];
   hiddenWayIds.clear();
   changeLog = [];
+  redoStack = [];
 
   // Reset UI elements
   document.getElementById('file-select').value = "";
