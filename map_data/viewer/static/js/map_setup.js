@@ -270,6 +270,8 @@ async function initApp() {
             runUndoRedo(k === 'z' && !e.shiftKey ? undoLastChange : redoLastChange);
             return;
         }
+        // Leave browser shortcuts (Ctrl+F find, Ctrl+V paste, ...) alone
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
 
         switch (e.key) {
             case 'v': case 'V': {
