@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+### Added
+
+- Viewer undo/redo for map edits: Ctrl/Cmd+Z undoes the newest entry in the Changes panel,
+  Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y re-applies it. Annotation shapes and hide/show are not covered
+
+### Changed
+
+- Viewer restyled: one slate palette for the top bar, sidebar, inputs and modals, the Geist
+  typeface, visible keyboard focus, and plain-text planner buttons instead of emoji
+- `map_data/viewer/routes.py` is now the `map_data/viewer/routes/` package (`common`, `files`,
+  `annotations`, `ways`, `planning`, `sharing`) on the same single `viewer` blueprint
+- RRT\* samples the whole box instead of a traversable cell with its own `UNIFORM_SAMPLE_RATE`
+  rather than reusing `GOAL_SAMPLE_BIAS` (same 0.1 value)
+- ruff enables the `RUF`, `C4` and `PT` rule families; mypy adds `check_untyped_defs`,
+  `warn_unused_ignores` and `warn_redundant_casts`
+
+### Fixed
+
+- Every viewer endpoint taking a `file` resolves it through one validator: a path outside the
+  data directory or a non-`.mapdata` name is a 400 and a missing file a 404, where mutating
+  endpoints used to accept it and create a stray `.annotations.json`
+- A second `create_app` call no longer re-initialises ROS or starts a second telemetry thread
+- Viewer mode shortcuts no longer fire with Ctrl/Cmd/Alt held (Ctrl+F switched to Fetch mode)
+
 ## [3.0.0] — 2026-09-21
 
 A major version because public helpers and a config file are removed.
