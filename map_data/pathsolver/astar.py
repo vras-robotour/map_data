@@ -30,7 +30,7 @@ def astar_search[N](
     """
     count = 0
     # Priority queue stores (f_score, count, current_node)
-    # f_score = cost + heuristic  # noqa: ERA001
+    # f_score = cost + heuristic
     q: list[tuple[float, int, N]] = [(0, count, start_node)]
 
     # visited maps node -> (cost, parent)

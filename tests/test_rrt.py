@@ -126,7 +126,7 @@ def test_rrt_star_start_in_collision():
 
 def _make_rrt(start=(0.0, 0.0), goal=(10.0, 10.0), **kwargs):
     grid = np.zeros((100, 100), dtype=float)
-    defaults = dict(max_iter=1000, step_size=1.0, neighbor_radius=2.0, grid_scale=0.1)
+    defaults = {"max_iter": 1000, "step_size": 1.0, "neighbor_radius": 2.0, "grid_scale": 0.1}
     defaults.update(kwargs)
     return RRTStar(np.array(start), np.array(goal), [], None, grid, (0.0, 0.0), **defaults)
 
@@ -398,7 +398,12 @@ def test_same_seed_reproduces_the_path_and_different_seeds_diverge():
     same seed grow the same tree and return the very same path, while another
     seed grows a different one.
     """
-    kwargs = dict(informed=True, adaptive_radius=True, improve_after_goal=True, max_iter=1500)
+    kwargs = {
+        "informed": True,
+        "adaptive_radius": True,
+        "improve_after_goal": True,
+        "max_iter": 1500,
+    }
 
     path_a = _make_rrt(rng=random.Random(2024), **kwargs).find_path()
     path_b = _make_rrt(rng=random.Random(2024), **kwargs).find_path()

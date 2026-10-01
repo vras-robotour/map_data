@@ -141,7 +141,8 @@ def test_astar_grid_with_obstacle_and_path():
     # Since it's a straight line and might be simplified, we check if it spans across the obstacle
     min_y = min(pt[1] for pt in path)
     max_y = max(pt[1] for pt in path)
-    assert min_y <= 4.0 and max_y >= 6.0, "Path should span across the obstacle area"
+    assert min_y <= 4.0, "Path should span across the obstacle area"
+    assert max_y >= 6.0, "Path should span across the obstacle area"
 
 
 def test_post_process_path_simplification():

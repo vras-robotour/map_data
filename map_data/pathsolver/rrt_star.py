@@ -406,7 +406,7 @@ class RRTStar:
                 count += 1
 
         avg_c = total_grid_cost / count if count > 0 else 0.0
-        # Cost = dist * (1 + avg_grid_cost * penalty)  # noqa: ERA001
+        # Cost = dist * (1 + avg_grid_cost * penalty)
         # We use grid_cost_weight to match A* logic
         return False, float(np.linalg.norm(end - start) * (1.0 + avg_c * self.grid_cost_weight))
 

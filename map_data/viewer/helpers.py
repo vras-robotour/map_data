@@ -176,7 +176,7 @@ def mapdata_to_geojson(map_data: "MapData") -> dict[str, Any]:
     def add_ways(ways: list["Way"], category: str) -> None:
         for way in ways:
             try:
-                geom = geom_to_geojson(way.line, zn, zl) if way.line else None  # type: ignore[arg-type]
+                geom = geom_to_geojson(way.line, zn, zl) if way.line else None
             except (ValueError, TypeError) as e:
                 logger.warning("Failed to convert geometry for way %s: %s", way.id, e)
                 continue
@@ -789,7 +789,7 @@ def apply_node_position_overrides(
         return way
     # way.line is typed Optional at the Way level, but every Way reaching this
     # function already has a concrete geometry from OSM parsing / prior edits.
-    geom: BaseGeometry = way.line  # type: ignore[assignment]
+    geom: BaseGeometry = way.line
     node_ids = [getattr(n, "id", n) for n in way.nodes]
     if not node_ids:
         # No OSM nodes (e.g. individual barrier node): translate geometry by centroid shift.
@@ -1007,7 +1007,7 @@ def apply_added_nodes(
 
     # way.line is typed Optional at the Way level, but every Way reaching this
     # function already has a concrete geometry from OSM parsing / prior edits.
-    geom: BaseGeometry = way.line  # type: ignore[assignment]
+    geom: BaseGeometry = way.line
     is_linestring = geom.geom_type == "LineString"
     is_polygon = geom.geom_type == "Polygon"
     if not is_linestring and not is_polygon:
@@ -1145,7 +1145,7 @@ def rebuild_way_without_nodes(
     w.nodes = [way.nodes[i] for i in keep]
     # way.line is typed Optional at the Way level, but every Way reaching this
     # function already has a concrete geometry from OSM parsing / prior edits.
-    geom: BaseGeometry = way.line  # type: ignore[assignment]
+    geom: BaseGeometry = way.line
 
     if geom.geom_type == "LineString":
         coords = list(geom.coords)
@@ -1300,7 +1300,7 @@ def update_segment_annotations_for_split_change(
         Ej = {e for e in E if old_edges[e] == old_idx}
 
         mapped = set()
-        for new_idx in set(new_edges.get(e, -1) for e in E):
+        for new_idx in {new_edges.get(e, -1) for e in E}:
             if new_idx == -1:
                 continue
             Ek = {e for e in E if new_edges[e] == new_idx}

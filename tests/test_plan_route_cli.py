@@ -1,5 +1,6 @@
 """Tests for the ``map_data_plan`` command line tool."""
 
+import argparse
 import json
 
 import pytest
@@ -18,7 +19,7 @@ def _latlon(lat0, lon0, dx, dy):
 def test_parse_latlon_accepts_geo_uri():
     assert parse_latlon("geo:48.8016394,16.8011145") == (48.8016394, 16.8011145)
     assert parse_latlon(" 50.1, 14.4 ") == (50.1, 14.4)
-    with pytest.raises(Exception):  # noqa: B017 - argparse type error
+    with pytest.raises(argparse.ArgumentTypeError, match="expected lat,lon"):
         parse_latlon("nonsense")
 
 
@@ -42,7 +43,8 @@ def test_cli_plans_and_saves_gpx(footway_network_mapdata, tmp_path, capsys):
     )
     assert rc == 0
     data = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
-    assert data["success"] and data["waypoints"] > 50
+    assert data["success"]
+    assert data["waypoints"] > 50
     assert data["length_m"] == pytest.approx(190.0, abs=10.0)
     assert "<trk>" in out.read_text()
 
@@ -89,7 +91,7 @@ def test_cli_annotations_switch(footway_network_mapdata, capsys):
     ]
     assert main(args) == 1
     assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["reason"] == "snap_too_far"
-    assert main(args + ["--annotations", "none"]) == 0
+    assert main([*args, "--annotations", "none"]) == 0
     assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["success"]
 
 

@@ -37,7 +37,8 @@ def test_densify_keeps_vertices_and_bounds_spacing():
 
 def test_densify_noop_cases():
     path = np.array([[0.0, 0.0], [10.0, 0.0]])
-    assert densify(path, 0.0) is not None and len(densify(path, 0.0)) == 2
+    assert densify(path, 0.0) is not None
+    assert len(densify(path, 0.0)) == 2
     assert len(densify(path, 50.0)) == 2
     assert len(densify(np.array([[1.0, 1.0]]), 1.0)) == 1
 
@@ -63,7 +64,8 @@ def test_plan_route_graph_follows_the_network(footway_network_mapdata):
     assert res.length_m == pytest.approx(95.0 + 95.0, abs=8.0)
     steps = np.hypot(*np.diff(res.utm, axis=0).T)
     assert steps.max() <= 3.0 + 1e-6
-    assert len(res.snap_distances) == 2 and max(res.snap_distances) < 5.0
+    assert len(res.snap_distances) == 2
+    assert max(res.snap_distances) < 5.0
     # Endpoints are the waypoints snapped onto the network, not the raw requests:
     # the start sits 3 m off way 1 and is routed from its projection at (5, 0).
     snapped_start = _latlon(lat0, lon0, 5.0, 0.0)
@@ -154,7 +156,10 @@ def test_plan_route_start_or_goal_outside_map(footway_network_mapdata, algorithm
         try:  # within the tolerance: plans, or fails for another reason (graph: snap_too_far)
             plan_route(md, points, algorithm=algorithm, outside_map_tolerance=250.0)
         except RoutePlanningError as err:
-            assert not err.reason.endswith("_outside_map")
+            failure = err.reason
+        else:
+            failure = ""
+        assert not failure.endswith("_outside_map")
 
 
 def test_plan_route_too_few_points(footway_network_mapdata):
@@ -200,7 +205,8 @@ def test_plan_route_grid_too_large(footway_network_mapdata):
 def test_gpx_track_roundtrip(tmp_path):
     pts = [(50.0, 14.0), (50.0001, 14.0001), (50.0002, 14.0003)]
     xml = create_gpx_track(pts, name="route")
-    assert "<trk>" in xml and "<trkpt" in xml
+    assert "<trk>" in xml
+    assert "<trkpt" in xml
     f = tmp_path / "route.gpx"
     f.write_text(xml)
     md = MapData(str(f), coords_type="file")

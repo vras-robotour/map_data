@@ -109,11 +109,11 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                     continue
                 del_nids = get_deleted_node_ids(store, w.id)
                 if del_nids:
-                    w = rebuild_way_without_nodes(w, del_nids, zn, zl, nodes_cache, category=cat)  # noqa: PLW2901
+                    w = rebuild_way_without_nodes(w, del_nids, zn, zl, nodes_cache, category=cat)
                     if w is None:
                         continue
 
-                w = apply_added_nodes(w, store, zn, zl)  # noqa: PLW2901
+                w = apply_added_nodes(w, store, zn, zl)
 
                 split_nids = get_split_node_ids(store, w.id)
                 if split_nids:
@@ -123,13 +123,13 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                     for i, seg in enumerate(segments):
                         virtual_id = f"{w.id}:{i}"
                         if seg is w:  # split_way declined; don't rename the caller's way
-                            seg = copy.copy(seg)  # noqa: PLW2901
+                            seg = copy.copy(seg)
                         seg.id = virtual_id
                         if virtual_id in deleted_way_ids:
                             continue
                         seg_del_nids = get_deleted_node_ids(store, virtual_id)
                         if seg_del_nids:
-                            seg = rebuild_way_without_nodes(  # noqa: PLW2901
+                            seg = rebuild_way_without_nodes(
                                 seg,
                                 seg_del_nids,
                                 zn,
@@ -206,10 +206,10 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                         nodes_cache,
                         category=_CAT_FOR_LIST[lst_name],
                     )
-                    w = result or w  # noqa: PLW2901
+                    w = result or w
                     remap = copies.get(str(w.id).split(":")[0])
                     if remap:
-                        w = copy.copy(w)  # noqa: PLW2901
+                        w = copy.copy(w)
                         w.nodes = [remap.get(getattr(n, "id", n), n) for n in w.nodes]
                 new_lst.append(w)
             setattr(md, lst_name, new_lst)
@@ -237,7 +237,7 @@ def apply_tag_overrides(md: MapData, store: dict[str, Any]) -> None:
             original_id = str(w.id).split(":")[0]
             ov = tag_overrides.get(original_id)
             if ov:
-                w = copy.copy(w)  # noqa: PLW2901
+                w = copy.copy(w)
                 w.tags = {**(w.tags or {}), **ov}
             new_lst.append(w)
         setattr(md, lst_name, new_lst)

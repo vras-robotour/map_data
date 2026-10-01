@@ -261,7 +261,7 @@ class RoutePlanner(Node):
             with self._lock:
                 md = self._load_map(path)
                 self._graph_planner(path, md, self.default_highway_types, self.default_max_snap)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             self.get_logger().error(f"preload of {path.name} failed: {e}")
             return
         self.get_logger().info(

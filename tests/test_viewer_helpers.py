@@ -135,8 +135,10 @@ def test_split_way_linestring_basic():
     assert segments[1].id == "42:1"
     seg0_nids = [getattr(n, "id", n) for n in segments[0].nodes]
     seg1_nids = [getattr(n, "id", n) for n in segments[1].nodes]
-    assert 1 in seg0_nids and 3 in seg0_nids
-    assert 3 in seg1_nids and 5 in seg1_nids
+    assert 1 in seg0_nids
+    assert 3 in seg0_nids
+    assert 3 in seg1_nids
+    assert 5 in seg1_nids
 
 
 def test_split_way_returns_original_if_no_split_nids():
@@ -238,7 +240,7 @@ def test_annotation_store_no_save_on_exception(tmp_path):
     path = str(tmp_path / "store.json")
     with annotation_store(path) as store:
         store["annotations"].append({"id": "keep"})
-    with pytest.raises(RuntimeError), annotation_store(path) as store:
+    with pytest.raises(RuntimeError), annotation_store(path) as store:  # noqa: PT012 - tests the exit path
         store["annotations"].append({"id": "discard"})
         raise RuntimeError("boom")
     loaded = load_annotations(path)

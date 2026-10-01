@@ -28,7 +28,7 @@ def _decode(png: bytes) -> str:
 def test_geo_uri_format():
     assert geo_uri(50.1103476, 14.4159857) == "geo:50.1103476,14.4159857"
     assert geo_uri(-33.9, 151.2) == "geo:-33.9000000,151.2000000"
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="out of range"):
         geo_uri(91.0, 0.0)
 
 
@@ -42,14 +42,16 @@ def test_qr_png_roundtrip():
 def test_qr_image_has_quiet_zone_and_caption():
     img = qr_image("geo:50.1,14.4", scale=8)
     assert img.ndim == 2
-    assert img[:8, :].min() == 255 and img[:, :8].min() == 255  # white border
+    assert img[:8, :].min() == 255
+    assert img[:, :8].min() == 255
     assert qr_image("geo:50.1,14.4", scale=8, caption="").shape[0] < img.shape[0]
 
 
 def test_qr_svg_is_vector_with_real_text():
     text = geo_uri(50.1103476, 14.4159857)
     svg = qr_svg(text, scale=10)
-    assert svg.startswith("<?xml") and svg.rstrip().endswith("</svg>")
+    assert svg.startswith("<?xml")
+    assert svg.rstrip().endswith("</svg>")
     # One module is one user unit, so the viewBox - not a pixel size - is what
     # makes it scale; the caption is a <text> element, not baked-in pixels.
     assert 'viewBox="0 0 37 ' in svg
@@ -59,7 +61,9 @@ def test_qr_svg_is_vector_with_real_text():
 
 def test_qr_svg_escapes_and_fits_the_caption():
     svg = qr_svg("geo:50.1,14.4", caption='a & b <"c">')
-    assert "&amp;" in svg and "&lt;" in svg and "<text" in svg
+    assert "&amp;" in svg
+    assert "&lt;" in svg
+    assert "<text" in svg
     # A long caption shrinks rather than running off the side of the code.
     wide = qr_svg("geo:50.1,14.4", caption="x" * 200)
     size = float(wide.split('font-size="')[1].split('"')[0])
@@ -99,7 +103,8 @@ def test_api_qr_svg(tmp_path):
     assert resp.status_code == 200
     assert resp.mimetype == "image/svg+xml"
     assert resp.headers["X-Geo-URI"] == "geo:50.1103476,14.4159857"
-    assert b"<text" in resp.data and b"viewBox" in resp.data
+    assert b"<text" in resp.data
+    assert b"viewBox" in resp.data
 
     assert b"<text" not in client.get("/api/qr.svg?lat=50.1&lon=14.4&caption=").data
 

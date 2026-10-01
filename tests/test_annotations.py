@@ -66,7 +66,9 @@ def test_annotated_path_bridges_a_gap(footway_network_mapdata):
     assert len(md.footways_list) == 4
     ann = [w for w in md.footways_list if isinstance(w.id, int) and w.id < 0]
     # Its own synthetic nodes, joined to the network by the nodes it ends on.
-    assert len(ann) == 1 and ann[0].nodes[0] == 103 and ann[0].nodes[-1] == 201
+    assert len(ann) == 1
+    assert ann[0].nodes[0] == 103
+    assert ann[0].nodes[-1] == 201
     assert all(n < 0 for n in ann[0].nodes[1:-1])
     assert any(w.tags.get("type") == "annotation_intersection" for w in md.crossroads_list), (
         "the annotated path should create crossroads where it touches the network"
@@ -356,7 +358,8 @@ def test_moving_a_shared_node_in_one_way_detaches_that_way(footway_network_mapda
     md, _ = load_mapdata_with_annotations(path)
     way1, way2 = md.footways_list[:2]
     assert way1.nodes == [101, 102, 103]
-    assert way2.nodes[0] < 0 and way2.nodes[1] == 104
+    assert way2.nodes[0] < 0
+    assert way2.nodes[1] == 104
     assert md.nodes_cache[way2.nodes[0]]["lat"] == pytest.approx(lat)
     assert md.crossroads_list == []
     with pytest.raises(RoutePlanningError):
@@ -392,7 +395,8 @@ def test_shared_node_moved_to_one_spot_in_every_way_stays_a_junction(footway_net
     res = _plan_with_store(path, lat0, lon0, store, (0.0, 0.0), (100.0, 100.0))
     assert res.length_m == pytest.approx((100.0**2 + 30.0**2) ** 0.5 + 70.0, abs=5.0)
     md, _ = load_mapdata_with_annotations(path)
-    assert md.footways_list[0].nodes == [101, 102, 103] and md.footways_list[1].nodes == [102, 104]
+    assert md.footways_list[0].nodes == [101, 102, 103]
+    assert md.footways_list[1].nodes == [102, 104]
 
 
 def test_a_move_in_one_way_does_not_redraw_the_others(footway_network_mapdata):
@@ -408,7 +412,7 @@ def test_a_move_in_one_way_does_not_redraw_the_others(footway_network_mapdata):
     }
     _plan_with_store(path, lat0, lon0, store, (0.0, 0.0), (100.0, 0.0))
     md, _ = load_mapdata_with_annotations(path)
-    e0, n0, _, _ = utm.from_latlon(lat0, lon0)
+    _e0, n0, _, _ = utm.from_latlon(lat0, lon0)
     assert md.footways_list[0].line.bounds[3] - n0 < 2.0, "way 1 bent towards way 2's move"
 
 
@@ -641,7 +645,8 @@ def test_apply_store_leaves_the_original_map_untouched():
         for w in merged.footways_list + merged.roads_list
         if str(w.id).split(":")[0] == str(victim.id)
     ]
-    assert overridden and all(w.tags["surface"] == "gravel" for w in overridden)
+    assert overridden
+    assert all(w.tags["surface"] == "gravel" for w in overridden)
     assert sorted(merged.nodes_cache) != before[5]  # annotation/added nodes
 
     # No state leaks into the original, so a second merge gives the same map.

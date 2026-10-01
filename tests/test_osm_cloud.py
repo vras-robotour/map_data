@@ -1,6 +1,7 @@
 """Tests for osm_cloud pure helper functions and node construction."""
 
 import sys
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 # Mock ROS2 modules before importing osm_cloud
@@ -104,7 +105,7 @@ class TestCreateGrid:
         grid = create_grid((0.0, 0.0), (2.0, 2.0), cell_size=1.0)
         assert grid.ndim == 2
         assert grid.shape[1] == 2
-        assert grid.shape[0] == 4  # 2×2 = 4 points
+        assert grid.shape[0] == 4  # 2x2 = 4 points
 
     def test_cell_size_controls_density(self):
         coarse = create_grid((0.0, 0.0), (2.0, 2.0), cell_size=1.0)
@@ -284,9 +285,9 @@ class _FakeMapData:
     """Minimal stand-in for map_data.map_data.MapData."""
 
     min_x, max_x, min_y, max_y = 0.0, 10.0, 0.0, 10.0
-    footways_list: list = []
-    roads_list: list = []
-    crossroads_list: list = []
+    footways_list: ClassVar[list] = []
+    roads_list: ClassVar[list] = []
+    crossroads_list: ClassVar[list] = []
 
     def get_points(self, z: float = 0.0):
         return {

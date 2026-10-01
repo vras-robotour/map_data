@@ -82,7 +82,7 @@ def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
         inner_ids: list[int] = []
 
         for member in rel.members:
-            if member._type_value == "way" and int(member.ref) in ways:  # noqa: SLF001
+            if member._type_value == "way" and int(member.ref) in ways:
                 (outer_ids if member.role == "outer" else inner_ids).append(int(member.ref))
 
         outer_ids = combine_ways(outer_ids, ways, consumed=consumed_ids)

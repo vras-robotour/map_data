@@ -112,7 +112,8 @@ def test_parse_osm_ways_populates_nodes_cache():
     data = _api().parse_json(_FOOTWAY_JSON)
     nodes_cache = {}
     parse_osm_ways(data, nodes_cache)
-    assert 1 in nodes_cache and 2 in nodes_cache
+    assert 1 in nodes_cache
+    assert 2 in nodes_cache
     assert abs(nodes_cache[1]["lat"] - _LAT) < 1e-6
     assert abs(nodes_cache[1]["lon"] - _LON) < 1e-6
 

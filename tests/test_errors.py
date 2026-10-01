@@ -44,7 +44,7 @@ def test_load_mapdata_legacy_pickle_raises(tmp_path):
     path = tmp_path / "legacy.mapdata"
     with path.open("wb") as f:
         f.write(b"\x80\x04\x95some pickle data")
-    with pytest.raises(ValueError):
+    with pytest.raises(UnicodeDecodeError):
         MapData.load(str(path))
 
 

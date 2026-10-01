@@ -44,8 +44,13 @@ def test_way_types_accepts_commas_and_spaces():
 
 
 def testflag():
-    assert flag("true") and flag("True") and flag("1") and flag("yes")
-    assert not flag("false") and not flag("") and not flag("0")
+    assert flag("true")
+    assert flag("True")
+    assert flag("1")
+    assert flag("yes")
+    assert not flag("false")
+    assert not flag("")
+    assert not flag("0")
 
 
 def test_params_file_lookup():

@@ -50,7 +50,6 @@ def _map(nodes: dict[int, tuple[float, float]]) -> MapData:
 
 def _way(way_id, node_ids, highway, md, width=3.0):
     """A way as the pipeline stores one: node ids plus *buffered* geometry."""
-    e0, n0 = md._origin
     coords = []
     for nid in node_ids:
         nd = md.nodes_cache[nid]
@@ -314,7 +313,7 @@ def test_an_annotated_path_crossing_a_footway_lands_on_it(tmp_path):
     found = _annotation_crossroads(md)
     assert len(found) == 1
 
-    e0, n0, zn, zl = utm.from_latlon(lat0, lon0)
+    e0, n0, _zn, _zl = utm.from_latlon(lat0, lon0)
     centre = found[0].line.centroid
     # The crossing is at (100, 0); the buggy match against the 3 m corridor put
     # it 1.5 m away, on the edge of the buffer.

@@ -180,10 +180,7 @@ class TraversabilityRules:
         raw_rules = data.get("rules") or []
         if not isinstance(raw_rules, Sequence) or isinstance(raw_rules, str | bytes):
             raise TraversabilityError(f"{source or 'traversability rules'}: 'rules' must be a list")
-        rules = tuple(
-            cls._parse_rule(raw, i, source)
-            for i, raw in enumerate(raw_rules)  # type: ignore[arg-type]
-        )
+        rules = tuple(cls._parse_rule(raw, i, source) for i, raw in enumerate(raw_rules))
         return cls(rules=rules, default=default, source=source)
 
     @classmethod

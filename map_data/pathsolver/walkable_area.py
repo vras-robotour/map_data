@@ -94,7 +94,7 @@ class WalkableArea:
                     (self._legs[i] + dist[j] + self._legs[j]) * self.factor,
                     [
                         self.entries[node],
-                        *_trace(prev, self._points + [self._points[i]], j),
+                        *_trace(prev, [*self._points, self._points[i]], j),
                         self.entries[other],
                     ],
                 )

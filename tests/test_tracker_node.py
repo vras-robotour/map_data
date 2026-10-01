@@ -123,7 +123,8 @@ def test_plan_clears_on_empty_path_and_when_the_planner_exits(make_node):
     # crl_commander sends empty plans at 20 Hz between goals: one does not clear the plan
     node._path_callback(Path())
     node._drop_orphaned_plan()
-    assert node.waypoints_gps and node.goal_gps
+    assert node.waypoints_gps
+    assert node.goal_gps
     # ... but empties persisting past PLAN_STALE_TIMEOUT do, and take a quiet goal with them
     with node._lock:
         node._last_plan_time -= stale
