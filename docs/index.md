@@ -100,7 +100,7 @@ map_data/
 │   └── serialization.py     # .mapdata file I/O
 └── viewer/                  # Modular interactive viewer (Flask + Leaflet)
     ├── app.py               # App factory and server entry point
-    ├── routes.py            # REST API endpoints and GeoJSON conversion
+    ├── routes/              # REST API endpoints, one module per concern
     ├── helpers.py           # Geometry and annotation utility functions
     ├── cache.py             # MapData object caching
     ├── templates/           # HTML templates

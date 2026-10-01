@@ -195,7 +195,7 @@ index internally and could be refactored, or add a standalone
 *Small, but it is a per-request scan of every way list unless cached alongside
 `load_mapdata_cached`. Watch this on Stromovka-sized maps.*
 
-### 3. `move_way_nodes` — `map_data/viewer/routes.py:2357-2411`
+### 3. `move_way_nodes` — `map_data/viewer/routes/ways.py`
 
 For each node in the body: if shared and not already move-detached for this
 way, mint an id, append a `detached_nodes` entry, and write the override under
@@ -220,7 +220,7 @@ copied, not mutated — the docstring at `annotations.py:65-74` guarantees that.
 *Medium, and the highest-risk piece. ~40 lines, plus careful reading of the pass
 ordering.*
 
-### 5. Undo — `map_data/viewer/routes.py:2414-2440`
+### 5. Undo — `map_data/viewer/routes/ways.py`
 
 `undo_move_way_nodes` drops all overrides for a way; it must also drop that
 way's `"reason": "move"` detach entries. Per-node undo does not exist today and
@@ -231,7 +231,7 @@ at the same time.
 
 ### 6. Frontend — `draw_handlers.js:346-352`, `ui_handlers.js:299`
 
-`get_way_nodes` (`routes.py:1556-1580`) reads ids straight off the resolved
+`get_way_nodes` (`routes/ways.py`) reads ids straight off the resolved
 `way.nodes`, so it returns the detached id for free once step 4 lands. The drag
 handler holds `currentNodes[nodeIndex].id` in memory across drags, though —
 after the first move it would address a node id that no longer belongs to the

@@ -7,6 +7,11 @@
 All endpoints are served by the Flask app started with `map_data_viewer`. Data endpoints live
 under `/api/`. Errors return standard HTTP status codes with a plain-text description.
 
+The handlers live in the `map_data.viewer.routes` package, one module per section below:
+`files` (file management and export), `annotations`, `ways` (ways and nodes), `planning`
+(path planning and traversability), and `sharing` (goal QR codes and wormhole). Shared helpers
+are in `common`; the tracker endpoints are in `map_data.viewer.tracker_routes`.
+
 ---
 
 ## File Management

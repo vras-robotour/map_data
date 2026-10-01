@@ -414,7 +414,12 @@ Key parameters now exposed in `planner_defaults.yaml`: `grid_cost_weight`, `obst
 
 The viewer (`map_data/viewer/`) is a single-page web application with three switchable modes.
 
-**Back-end** (`app.py`, `routes.py`, `helpers.py`, `cache.py`):
+**Back-end** (`app.py`, `routes/`, `helpers.py`, `cache.py`):
+
+- `routes/` holds the one `viewer` blueprint, split by concern: `files` (page, file list,
+  mapdata, fetch, uploads, export), `annotations`, `ways` (way and node editing), `planning`
+  (planner defaults, traversability, cost grid, replan), `sharing` (goal QR codes, wormhole) and
+  `common` (the blueprint, path helpers, way resolution, validators, `get_merged_mapdata`)
 
 - Serves GeoJSON representations of the `MapData` contents and handles annotation CRUD
 - `/api/fetch_area` runs Overpass queries in a background thread and returns a task ID immediately; the client polls `/api/fetch_area/<task_id>` for completion, preventing UI hangs on long fetches
@@ -482,7 +487,7 @@ map_data/                          # repository root
 │   │   └── way.py                 # Way dataclass
 │   └── viewer/
 │       ├── app.py                 # Flask app factory + SocketIO
-│       ├── routes.py              # REST API endpoints
+│       ├── routes/                # REST API endpoints, one module per concern
 │       ├── helpers.py             # GeoJSON conversion helpers
 │       ├── cache.py               # OSM response cache
 │       ├── ros_node.py            # TrackerNode (optional ROS2)

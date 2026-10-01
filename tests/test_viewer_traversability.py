@@ -7,8 +7,8 @@ from shapely.geometry import LineString
 
 from map_data.map_data import MapData
 from map_data.utils.way import Way
-from map_data.viewer import routes as viewer_routes
 from map_data.viewer.app import create_app
+from map_data.viewer.routes import planning as viewer_planning
 
 GRASS_RULES = "rules:\n  - match: {surface: grass}\n    traversable: false\n    reason: soft\n"
 
@@ -17,7 +17,7 @@ GRASS_RULES = "rules:\n  - match: {surface: grass}\n    traversable: false\n    
 def client(tmp_path, monkeypatch):
     rules_file = tmp_path / "traversability.yaml"
     rules_file.write_text("rules: []\n")
-    monkeypatch.setattr(viewer_routes, "_traversability_path", lambda: rules_file)
+    monkeypatch.setattr(viewer_planning, "_traversability_path", lambda: rules_file)
 
     e, n, zn, zl = utm.from_latlon(50.0, 14.0)
     md = MapData([np.array([[e, n], [e + 100, n + 100]]), int(zn), zl], coords_type="array")

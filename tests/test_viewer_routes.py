@@ -14,10 +14,12 @@ from shapely.geometry import LineString
 
 from map_data.map_data import MapData
 from map_data.utils.way import Way
-from map_data.viewer import routes as viewer_routes
 from map_data.viewer.app import ACCESS_TOKEN_COOKIE, MAX_CONTENT_LENGTH, create_app
 from map_data.viewer.cache import _file_signature
-from map_data.viewer.routes import MAX_FETCH_AREA_KM2, MAX_GRID_CELLS, _bbox_area_km2
+from map_data.viewer.routes import files as viewer_files
+from map_data.viewer.routes import planning as viewer_planning
+from map_data.viewer.routes import sharing as viewer_sharing
+from map_data.viewer.routes.common import MAX_FETCH_AREA_KM2, MAX_GRID_CELLS, _bbox_area_km2
 
 
 def _make_mapdata(path):
@@ -588,7 +590,7 @@ def test_fetch_area_accepts_small_bbox_and_completes(app_client, mock_overpass_c
 def test_fetch_area_sweeps_stale_terminal_tasks(app_client, mock_overpass_client):
     client, _ = app_client
     now = time.time()
-    stale = now - viewer_routes.FETCH_TASK_RETENTION_S - 1
+    stale = now - viewer_files.FETCH_TASK_RETENTION_S - 1
     injected = {
         "stale-done": {"status": "done", "result": {}, "completed_at": stale},
         "stale-failed": {"status": "failed", "error": "boom", "completed_at": stale},
@@ -596,7 +598,7 @@ def test_fetch_area_sweeps_stale_terminal_tasks(app_client, mock_overpass_client
         "unstamped-done": {"status": "done", "result": {}},
         "still-running": {"status": "querying", "detail": "…"},
     }
-    viewer_routes._fetch_tasks.update(injected)
+    viewer_files._fetch_tasks.update(injected)
     try:
         resp = client.post(
             "/api/fetch_area",
@@ -614,20 +616,20 @@ def test_fetch_area_sweeps_stale_terminal_tasks(app_client, mock_overpass_client
         assert resp.status_code == 200
         task_id = resp.get_json()["task_id"]
         # Abandoned terminal tasks past the retention window are swept.
-        assert "stale-done" not in viewer_routes._fetch_tasks
-        assert "stale-failed" not in viewer_routes._fetch_tasks
+        assert "stale-done" not in viewer_files._fetch_tasks
+        assert "stale-failed" not in viewer_files._fetch_tasks
         # Recent terminal, non-terminal, and the new task all survive.
-        assert "fresh-done" in viewer_routes._fetch_tasks
-        assert "still-running" in viewer_routes._fetch_tasks
-        assert task_id in viewer_routes._fetch_tasks
+        assert "fresh-done" in viewer_files._fetch_tasks
+        assert "still-running" in viewer_files._fetch_tasks
+        assert task_id in viewer_files._fetch_tasks
         # A terminal task never polled gets its retention clock started.
-        assert "unstamped-done" in viewer_routes._fetch_tasks
-        assert viewer_routes._fetch_tasks["unstamped-done"]["completed_at"] >= now
+        assert "unstamped-done" in viewer_files._fetch_tasks
+        assert viewer_files._fetch_tasks["unstamped-done"]["completed_at"] >= now
         # The sweep never stamps non-terminal tasks.
-        assert "completed_at" not in viewer_routes._fetch_tasks["still-running"]
+        assert "completed_at" not in viewer_files._fetch_tasks["still-running"]
     finally:
         for key in injected:
-            viewer_routes._fetch_tasks.pop(key, None)
+            viewer_files._fetch_tasks.pop(key, None)
 
 
 def test_upload_gpx_rejects_oversized_track(app_client):
@@ -1101,12 +1103,12 @@ def test_create_wormhole_returns_code_and_transfer_id(app_client):
     client, _ = app_client
     with (
         patch.object(
-            viewer_routes.wormhole_manager,
+            viewer_sharing.wormhole_manager,
             "create_transfer",
             return_value="tid-1",
         ) as mock_create,
         patch.object(
-            viewer_routes.wormhole_manager,
+            viewer_sharing.wormhole_manager,
             "get_transfer_code",
             return_value="7-crossover-clockwork",
         ),
@@ -1123,7 +1125,7 @@ def test_create_wormhole_returns_code_and_transfer_id(app_client):
 
 def test_create_wormhole_missing_gpx_rejected(app_client):
     client, _ = app_client
-    with patch.object(viewer_routes.wormhole_manager, "create_transfer") as mock_create:
+    with patch.object(viewer_sharing.wormhole_manager, "create_transfer") as mock_create:
         resp = client.post("/api/create_wormhole", json={})
     assert resp.status_code == 400
     assert resp.get_json()["success"] is False
@@ -1133,10 +1135,10 @@ def test_create_wormhole_missing_gpx_rejected(app_client):
 def test_create_wormhole_code_timeout_cancels_transfer(app_client):
     client, _ = app_client
     with (
-        patch.object(viewer_routes.wormhole_manager, "create_transfer", return_value="tid-2"),
-        patch.object(viewer_routes.wormhole_manager, "get_transfer_code", return_value=None),
+        patch.object(viewer_sharing.wormhole_manager, "create_transfer", return_value="tid-2"),
+        patch.object(viewer_sharing.wormhole_manager, "get_transfer_code", return_value=None),
         patch.object(
-            viewer_routes.wormhole_manager,
+            viewer_sharing.wormhole_manager,
             "cancel_transfer",
             return_value=(True, "Transfer cancelled"),
         ) as mock_cancel,
@@ -1155,7 +1157,7 @@ def test_cancel_wormhole_unknown_transfer(app_client):
 
 
 def test_get_transfer_code_wakes_up_on_event_instead_of_polling():
-    manager = viewer_routes.WormholeManager()
+    manager = viewer_sharing.WormholeManager()
     ready = threading.Event()
     manager.active_transfers["tid"] = {"code": None, "code_ready": ready}
 
@@ -1202,7 +1204,7 @@ def test_json_endpoints_reject_empty_json_body(app_client, endpoint):
 
 def test_cancel_replan_with_transfer_id_succeeds(app_client):
     client, _ = app_client
-    with patch.object(viewer_routes, "cancel_replan_backend") as mock_cancel:
+    with patch.object(viewer_planning, "cancel_replan_backend") as mock_cancel:
         resp = client.post("/api/cancel_replan", json={"transfer_id": "tid-9"})
     assert resp.status_code == 200
     assert resp.get_json() == {"success": True}
@@ -1211,7 +1213,7 @@ def test_cancel_replan_with_transfer_id_succeeds(app_client):
 
 def test_cancel_replan_missing_transfer_id_rejected(app_client):
     client, _ = app_client
-    with patch.object(viewer_routes, "cancel_replan_backend") as mock_cancel:
+    with patch.object(viewer_planning, "cancel_replan_backend") as mock_cancel:
         resp = client.post("/api/cancel_replan", json={})
     assert resp.status_code == 400
     assert resp.get_json()["success"] is False
