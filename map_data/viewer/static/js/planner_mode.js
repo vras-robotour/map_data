@@ -879,7 +879,7 @@ class PlannerMode {
         <span class="ms-auto" style="font-weight:bold; font-size:1.1rem;">&times;</span>
       `;
     } else {
-      btn.innerHTML = '<span class="btn-icon">✏️</span><span>Replan Path</span>';
+      btn.textContent = 'Replan Path';
     }
   }
 
