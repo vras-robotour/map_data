@@ -60,7 +60,7 @@ def test_run_parse_with_mocked_overpass(tmp_path, mock_overpass_client):
     md = _make_md()
     md.run_queries(use_cache=False)
 
-    assert md.osm_ways_data is not None
+    assert md.osm_data is not None
     result = md.run_parse()
     assert result == 0
     assert len(md.footways_list) >= 1
@@ -197,18 +197,6 @@ def test_csv_to_dict_multiple_rows(tmp_path):
         "natural": ["water", "wood"],
         "barrier": ["wall"],
     }
-
-
-def test_mapdata_load_restores_points(tmp_path):
-    md = _make_md()
-    path = str(tmp_path / "test.mapdata")
-    md.save(path)
-
-    loaded = MapData.load(path)
-
-    assert len(loaded.points) == len(md.points)
-    for p_loaded, p_orig in zip(loaded.points, md.points, strict=True):
-        assert p_loaded.equals(p_orig)
 
 
 # ── OSM cache ─────────────────────────────────────────────────────────────────

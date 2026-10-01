@@ -3,9 +3,7 @@ import logging
 import math
 from pathlib import Path
 
-import numpy as np
-import utm
-
+from map_data.annotations import annotation_path_for
 from map_data.map_data import MapData
 from map_data.utils.config import setup_logging
 from map_data.utils.way import Way
@@ -15,40 +13,23 @@ logger = logging.getLogger(__name__)
 _METADATA_FIELDS = ("zone_number", "zone_letter", "min_x", "max_x", "min_y", "max_y")
 
 
-def _way_node_ids(way: Way) -> list:
-    # way.nodes holds plain ids after JSON round-trip, overpy objects otherwise
-    return [getattr(n, "id", n) for n in way.nodes or []]
-
-
 def _footway_centerline_length(way: Way, md: MapData) -> float:
     """
     Length of a footway's centerline in metres.
 
     By save time footways have been buffered into Polygons, so ``line.length``
     is the buffer's *perimeter* (~2x the walked distance plus the end caps),
-    not the walked distance. Prefer reconstructing the centerline from the
-    way's node coordinates via ``nodes_cache``; fall back to inverting the
+    not the walked distance. Prefer the centerline rebuilt from the way's
+    node coordinates (:meth:`MapData.centre_line`); fall back to inverting the
     round-capped buffer formulas (perimeter ``P = 2L + pi*w``, area
     ``A = L*w + pi*w^2/4`` give ``L = sqrt(P^2 - 4*pi*A) / 2``).
     """
     line = way.line
     if line is None:
         return 0.0
-    if line.geom_type == "LineString":
-        return float(line.length)
-
-    node_ids = _way_node_ids(way)
-    nodes_cache = getattr(md, "nodes_cache", None) or {}
-    zone_number = getattr(md, "zone_number", None)
-    zone_letter = getattr(md, "zone_letter", None)
-    min_nodes = 2
-    if len(node_ids) >= min_nodes and zone_number and all(n in nodes_cache for n in node_ids):
-        lats = np.array([nodes_cache[n]["lat"] for n in node_ids])
-        lons = np.array([nodes_cache[n]["lon"] for n in node_ids])
-        easting, northing, _, _ = utm.from_latlon(
-            lats, lons, force_zone_number=zone_number, force_zone_letter=zone_letter
-        )
-        return float(np.sum(np.hypot(np.diff(easting), np.diff(northing))))
+    centre = md.centre_line(way)
+    if centre is not None:
+        return float(centre.length)
 
     discriminant = line.length**2 - 4.0 * math.pi * line.area
     if discriminant <= 0:
@@ -60,7 +41,7 @@ def _footway_components(footways: list[Way]) -> int:
     """
     Count connected components of the footway network (ways joined by shared nodes).
     """
-    node_ids = [set(_way_node_ids(w)) for w in footways]
+    node_ids = [set(w.nodes) for w in footways]
     parent = list(range(len(footways)))
 
     def find(i: int) -> int:
@@ -100,7 +81,7 @@ def validate_mapdata(md: MapData) -> list[str]:
         issues.append("content: no roads, footways, or barriers")
 
     seen_ids: dict = {}
-    nodes_cache = getattr(md, "nodes_cache", None) or {}
+    nodes_cache = md.nodes_cache
     for cat, ways in categories.items():
         for w in ways:
             if w.line is None:
@@ -109,7 +90,7 @@ def validate_mapdata(md: MapData) -> list[str]:
                 issues.append(f"{cat} {w.id}: duplicate id (also a {seen_ids[w.id]})")
             seen_ids.setdefault(w.id, cat)
             if nodes_cache:
-                missing = [n for n in _way_node_ids(w) if n not in nodes_cache]
+                missing = [n for n in w.nodes if n not in nodes_cache]
                 if missing:
                     issues.append(f"{cat} {w.id}: {len(missing)} node(s) missing from nodes_cache")
 
@@ -122,20 +103,25 @@ def validate_mapdata(md: MapData) -> list[str]:
     return issues
 
 
-def validate(path: str) -> int:
-    p = Path(path)
-    if not p.is_file():
+def _load(path: str) -> MapData | None:
+    """Load *path*, logging (and returning ``None``) when it is missing or unreadable."""
+    if not Path(path).is_file():
         logger.error("File not found: %s", path)
-        return 1
-
+        return None
     try:
-        md = MapData.load(path)
+        return MapData.load(path)
     except Exception:
         logger.exception("Failed to load map data")
+        return None
+
+
+def validate(path: str) -> int:
+    md = _load(path)
+    if md is None:
         return 1
 
     issues = validate_mapdata(md)
-    print(f"Validating {p.name}: ", end="")
+    print(f"Validating {Path(path).name}: ", end="")
     if not issues:
         print("no issues found")
         return 0
@@ -146,19 +132,12 @@ def validate(path: str) -> int:
 
 
 def get_stats(path: str) -> None:
-    p = Path(path)
-    if not p.is_file():
-        logger.error("File not found: %s", path)
-        return
-
-    try:
-        md = MapData.load(path)
-    except Exception:
-        logger.exception("Failed to load map data")
+    md = _load(path)
+    if md is None:
         return
 
     print("=" * 40)
-    print(f"MAP DATA STATISTICS: {p.name}")
+    print(f"MAP DATA STATISTICS: {Path(path).name}")
     print("=" * 40)
 
     source = f"File: {md.coords_file}" if md.coords_file else "Array"
@@ -179,7 +158,7 @@ def get_stats(path: str) -> None:
     print(f"Total Footway Distance: {total_footway_len:.1f} m")
 
     # Check for annotations sidecar
-    ann_path = p.with_suffix(".annotations.json")
+    ann_path = annotation_path_for(path)
     if ann_path.is_file():
         import json
 

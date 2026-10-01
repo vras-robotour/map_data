@@ -63,7 +63,12 @@ from flask import (
     request,
 )
 
-from map_data.annotations import apply_tag_overrides, apply_way_edits, merge_annotations
+from map_data.annotations import (
+    _CAT_FOR_LIST,
+    apply_tag_overrides,
+    apply_way_edits,
+    merge_annotations,
+)
 from map_data.map_data import MapData
 from map_data.utils.config import package_share
 from map_data.utils.way import FOOTWAY_VALUES
@@ -83,13 +88,6 @@ from ..helpers import (
 )
 
 bp = Blueprint("viewer", __name__)
-
-
-_WAY_LISTS = (
-    ("roads_list", "road"),
-    ("footways_list", "footway"),
-    ("barriers_list", "barrier"),
-)
 
 
 @dataclass
@@ -183,16 +181,15 @@ def _resolve_way(
     """
     nodes_cache = getattr(md, "nodes_cache", {})
 
-    way = None
-    category = None
-    for lst_name, cat in _WAY_LISTS:
-        for w in getattr(md, lst_name):
-            if w.id == search_id:
-                way = copy.copy(w)
-                category = cat
-                break
-        if way:
-            break
+    way, category = next(
+        (
+            (copy.copy(w), cat)
+            for lst_name, cat in _CAT_FOR_LIST.items()
+            for w in getattr(md, lst_name)
+            if w.id == search_id
+        ),
+        (None, None),
+    )
 
     if way is None:
         return _ResolvedWay(way=None, category=None, effective_nodes_cache=nodes_cache)
@@ -640,33 +637,6 @@ def _validated_cost_dict(value: Any, name: str) -> dict[str, float] | None:
             abort(400, f"{name}[{key!r}] must be a finite non-negative number")
         out[key] = cost_f
     return out
-
-
-def _check_grid_cells(area_m2: float, cell_size: float) -> None:
-    """
-    Reject a grid request whose cell count would exceed :data:`MAX_GRID_CELLS`.
-
-    Parameters
-    ----------
-    area_m2 : float
-        Grid area in square meters (a non-positive area trivially passes).
-    cell_size : float
-        Grid cell edge length in meters.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``area_m2 / cell_size**2`` exceeds :data:`MAX_GRID_CELLS`.
-
-    """
-    cells = area_m2 / (cell_size * cell_size)
-    if cells > MAX_GRID_CELLS:
-        abort(
-            400,
-            f"Requested area needs ~{cells / 1e6:.1f} million grid cells at "
-            f"cell_size={cell_size} m, exceeding the {MAX_GRID_CELLS / 1e6:.0f} million "
-            "cell limit. Request a smaller area or a larger cell size.",
-        )
 
 
 def get_merged_mapdata(filename: str) -> tuple[MapData | None, dict[str, Any] | None]:

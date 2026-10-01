@@ -7,6 +7,7 @@ import pytest
 import utm
 from shapely.geometry import LineString, MultiPolygon, Polygon
 
+from map_data.utils.serialization import atomic_write_json
 from map_data.utils.way import Way
 from map_data.viewer.helpers import (
     annotation_store,
@@ -17,7 +18,6 @@ from map_data.viewer.helpers import (
     load_annotations,
     mapdata_to_geojson,
     rebuild_way_without_nodes,
-    save_annotations,
     split_way,
 )
 
@@ -91,12 +91,13 @@ def test_save_and_load_annotations_roundtrip(tmp_path):
         "version": 1,
         "annotations": [{"id": "abc", "type": "obstacle", "geometry": {}, "properties": {}}],
     }
-    save_annotations(path, store)
+    with annotation_store(path) as s:
+        s.update(store)
     loaded = load_annotations(path)
     assert loaded == store
 
 
-def test_save_annotations_writes_through_symlink(tmp_path):
+def test_atomic_write_json_writes_through_symlink(tmp_path):
     # colcon symlink-install: install/.../data/x.annotations.json -> src/.../data/x.annotations.json
     target = tmp_path / "src" / "ann.json"
     target.parent.mkdir()
@@ -104,7 +105,7 @@ def test_save_annotations_writes_through_symlink(tmp_path):
     link = tmp_path / "ann.json"
     link.symlink_to(target)
     store = {"version": 1, "annotations": [], "deleted_ways": [{"id": 5}]}
-    save_annotations(str(link), store)
+    atomic_write_json(str(link), store, indent=2)
     assert link.is_symlink()
     assert json.loads(target.read_text()) == store
 
@@ -129,7 +130,7 @@ def test_split_way_linestring_basic():
         (_E0 + 100, _N0 + 100),
     ]
     way = Way(id=42, nodes=[1, 2, 3, 4, 5], line=LineString(coords), tags={}, in_out="")
-    segments = split_way(way, [3])
+    segments = split_way(way, [3], _ZN, _ZL, None)
     assert len(segments) == 2
     assert segments[0].id == "42:0"
     assert segments[1].id == "42:1"
@@ -143,7 +144,7 @@ def test_split_way_linestring_basic():
 
 def test_split_way_returns_original_if_no_split_nids():
     way = _make_way(10, [1, 2, 3], [(_E0, _N0), (_E0 + 25, _N0), (_E0 + 50, _N0)])
-    result = split_way(way, [])
+    result = split_way(way, [], _ZN, _ZL, None)
     assert result == [way]
 
 
@@ -153,7 +154,7 @@ def test_split_way_returns_original_if_no_split_nids():
 def test_rebuild_way_without_nodes_basic():
     coords = [(_E0, _N0), (_E0 + 25, _N0 + 25), (_E0 + 50, _N0 + 50), (_E0 + 75, _N0 + 75)]
     way = _make_way(99, [1, 2, 3, 4], coords)
-    result = rebuild_way_without_nodes(way, {2})
+    result = rebuild_way_without_nodes(way, {2}, _ZN, _ZL, None)
     assert result is not None
     result_nids = [getattr(n, "id", n) for n in result.nodes]
     assert 2 not in result_nids
@@ -162,7 +163,7 @@ def test_rebuild_way_without_nodes_basic():
 
 def test_rebuild_way_without_nodes_too_few_nodes():
     way = _make_way(7, [1, 2], [(_E0, _N0), (_E0 + 10, _N0 + 10)])
-    result = rebuild_way_without_nodes(way, {2})
+    result = rebuild_way_without_nodes(way, {2}, _ZN, _ZL, None)
     assert result is None
 
 

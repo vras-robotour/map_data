@@ -76,7 +76,7 @@ def test_launch_maps_traversability_onto_the_node_parameter():
     """``traversability:=<file>`` is the argument; the node parameter is the file name."""
     src = LAUNCH_FILE.read_text()
     assert '"traversability",\n            default_value="",' in src
-    assert 'given("traversability", "traversability_file")' in src
+    assert 'given(context, "traversability", "traversability_file")' in src
 
 
 def test_traversability_file_reaches_the_map_load_and_the_planner():
@@ -94,6 +94,6 @@ def test_traversability_file_is_part_of_both_cache_keys():
     src = (PKG / "map_data" / "route_planner.py").read_text()
     map_key = src.split("key = (str(path), str(ann)")[1][:40]
     assert "self.traversability_file" in map_key
-    planner_key = src.split("        key = (\n            cache[0],")[1][:300]
-    assert "self.traversability_file" in planner_key
+    # the graph's key starts with the map's, so it inherits traversability_file
+    assert "key = (cache[0], cache[1], tuple(highway_types)" in src
     assert "trav_path.stat().st_mtime" in src  # the file's own mtime, for the map cache

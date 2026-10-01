@@ -14,11 +14,11 @@ from pathlib import Path
 from map_data.utils.config import package_share
 
 
-def resolve_config_file(name: str, package: str = "map_data") -> str:
+def resolve_config_file(name: str) -> str:
     """An absolute path is taken as is; a bare name is looked up in ``config/``."""
     path = Path(name).expanduser()
     if not path.is_absolute():
-        in_package = package_share("config", package) / name
+        in_package = package_share("config") / name
         if in_package.exists():
             return str(in_package)
     return str(path)
@@ -32,3 +32,14 @@ def way_types(value: str) -> list[str]:
 def flag(value: str) -> bool:
     """Launch-argument spelling of a boolean."""
     return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def given(context, name: str, key: str | None = None, cast=str) -> dict:
+    """
+    ``{key or name: cast(value)}`` when launch argument *name* is set (non-blank), else ``{}``:
+    an unset argument then leaves the parameter file's value in place.
+    """
+    from launch.substitutions import LaunchConfiguration  # ROS-only; keep the module importable
+
+    value = LaunchConfiguration(name).perform(context).strip()
+    return {} if not value else {key or name: cast(value)}

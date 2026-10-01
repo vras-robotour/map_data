@@ -1,25 +1,14 @@
-import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 
 import gpxpy
 
-logger = logging.getLogger(__name__)
 
-
-def create_gpx_content(
-    waypoints_data: Sequence[Mapping[str, str | float]],
-    creator_name: str = "MapData Planner",
-) -> str:
-    """GPX 1.1 file of bare ``<wpt>`` elements from ``{"latitude", "longitude"}`` dicts."""
+def create_gpx_content(points: Sequence[Sequence[float]]) -> str:
+    """GPX 1.1 file of bare ``<wpt>`` elements from ``[(lat, lon), ...]``."""
     gpx = gpxpy.gpx.GPX()
-    gpx.creator = creator_name
-    for point in waypoints_data:
-        try:
-            lat, lon = float(point["latitude"]), float(point["longitude"])
-        except KeyError as e:
-            logger.warning("Skipping a waypoint due to missing key: %s", e)
-            continue
-        gpx.waypoints.append(gpxpy.gpx.GPXWaypoint(latitude=lat, longitude=lon))
+    gpx.creator = "MapData Planner"
+    for p in points:
+        gpx.waypoints.append(gpxpy.gpx.GPXWaypoint(latitude=float(p[0]), longitude=float(p[1])))
     return gpx.to_xml()
 
 

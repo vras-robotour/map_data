@@ -6,6 +6,7 @@ import utm
 from shapely.geometry import LineString
 
 from map_data import info
+from map_data.map_data import MapData
 from map_data.utils.way import Way
 
 
@@ -15,7 +16,7 @@ def _make_mapdata(
     barriers=None,
     coords_file="coords.gpx",
 ):
-    return SimpleNamespace(
+    md = SimpleNamespace(
         coords_file=coords_file,
         zone_number=33,
         zone_letter="U",
@@ -26,7 +27,10 @@ def _make_mapdata(
         roads_list=roads or [],
         footways_list=footways or [],
         barriers_list=barriers or [],
+        nodes_cache={},
     )
+    md.centre_line = lambda way: MapData.centre_line(md, way)
+    return md
 
 
 def _run_stats(tmp_path, monkeypatch, capsys, md, annotations=None):

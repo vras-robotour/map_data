@@ -8,20 +8,19 @@ from map_data.pathsolver.grid_astar import (
 )
 from map_data.pathsolver.replan import ReplanPath
 
-
-class Args:
-    def __init__(self):
-        self.low = (0, 0)
-        self.high = (10, 10)
-        self.cell_size = 0.5
-        self.simplify_path = True
-        self.inflate_obstacles = 0.0
+ARGS = {
+    "low": (0, 0),
+    "high": (10, 10),
+    "cell_size": 0.5,
+    "simplify_path": True,
+    "inflate_obstacles": 0.0,
+}
 
 
 def test_astar_grid_simple_success():
-    args = Args()
+    args = dict(ARGS)
     obstacles = []
-    replanner = ReplanPath(args, obstacles)
+    replanner = ReplanPath(obstacles, **args)
     # Mock a grid where everything is passable (cost 0)
     replanner.path_grid.grid_2d_cache = np.zeros((20, 20), dtype=float)
 
@@ -37,12 +36,12 @@ def test_astar_grid_simple_success():
 
 
 def test_astar_grid_with_obstacle():
-    args = Args()
+    args = dict(ARGS)
     # Create a building in the middle
     building = sh.Polygon([(4, 4), (6, 4), (6, 6), (4, 6)])
     obstacles = [building]
 
-    replanner = ReplanPath(args, obstacles)
+    replanner = ReplanPath(obstacles, **args)
     # Fill grid with base cost 0.5 (random terrain)
     grid = np.full((20, 20), 0.5, dtype=float)
     replanner.path_grid.grid_2d_cache = replanner.path_grid.burn_obstacles(
@@ -62,12 +61,12 @@ def test_astar_grid_with_obstacle():
 
 
 def test_astar_grid_no_path():
-    args = Args()
+    args = dict(ARGS)
     # Create a wall blocking the way
     wall = sh.Polygon([(0, 4), (10, 4), (10, 6), (0, 6)])
     obstacles = [wall]
 
-    replanner = ReplanPath(args, obstacles)
+    replanner = ReplanPath(obstacles, **args)
     grid = np.zeros((20, 20), dtype=float)
     replanner.path_grid.grid_2d_cache = replanner.path_grid.burn_obstacles(
         grid, replanner.obstacles
@@ -99,7 +98,7 @@ class MockMapData:
 
 
 def test_astar_grid_with_obstacle_and_path():
-    args = Args()
+    args = dict(ARGS)
     # Create a wall blocking the way
     wall = sh.Polygon([(0, 4), (10, 4), (10, 6), (0, 6)])
     obstacles = [wall]
@@ -114,11 +113,7 @@ def test_astar_grid_with_obstacle_and_path():
     # Give it some nodes so _split_ways doesn't fail
     footway = Way(id=1, nodes=[100, 101], tags={"highway": "footway"}, line=path_line)
 
-    replanner = ReplanPath(args, obstacles)
-    # ReplanPath.grid needs to be initialized for fill_grid
-    # ReplanPath.grid is expected to have shape (N, 3) before padding to (N, 4) in fill_grid
-    replanner.grid = replanner.path_grid.create_empty_grid()
-
+    replanner = ReplanPath(obstacles, **args)
     # Mock points for the nodes
     points = {
         100: np.array([5.0, 0.0]).reshape(1, 2),
@@ -146,10 +141,10 @@ def test_astar_grid_with_obstacle_and_path():
 
 
 def test_post_process_path_simplification():
-    args = Args()
-    args.simplify_path = True
-    args.cell_size = 0.5
-    replanner = ReplanPath(args, [])
+    args = dict(ARGS)
+    args["simplify_path"] = True
+    args["cell_size"] = 0.5
+    replanner = ReplanPath([], **args)
 
     # Create a path with many points very close to each other along a line
     # (5, 0), (5, 0.01), (5, 0.02), ..., (5, 1), then (5, 10)
@@ -168,8 +163,8 @@ def test_astar_grid_goal_outside_boundary():
     """
     Goal UTM outside the grid is caught — returns None.
     """
-    args = Args()
-    replanner = ReplanPath(args, [])
+    args = dict(ARGS)
+    replanner = ReplanPath([], **args)
     replanner.path_grid.grid_2d_cache = np.zeros((20, 20), dtype=float)
 
     start = (1.0, 1.0)
@@ -183,8 +178,8 @@ def test_astar_grid_start_equals_goal_same_cell():
     """
     Points that map to the same grid cell return a 2-point trivial path.
     """
-    args = Args()
-    replanner = ReplanPath(args, [])
+    args = dict(ARGS)
+    replanner = ReplanPath([], **args)
     replanner.path_grid.grid_2d_cache = np.zeros((20, 20), dtype=float)
 
     start = (5.0, 5.0)
@@ -384,9 +379,9 @@ def test_post_process_path_simplification_does_not_chord_into_obstacle():
     chord, so unchecked simplification would drop it — and the chord passes
     straight through the obstacle the original path skirts around.
     """
-    args = Args()
+    args = dict(ARGS)
     obstacle = sh.Polygon([(4.0, -0.1), (6.0, -0.1), (6.0, 0.1), (4.0, 0.1)])
-    replanner = ReplanPath(args, [obstacle])
+    replanner = ReplanPath([obstacle], **args)
 
     path = np.array([[0.0, 0.0], [5.0, 0.4], [10.0, 0.0]])
     # Sanity: the original path avoids the obstacle, the naive chord does not
@@ -402,9 +397,9 @@ def test_post_process_path_simplification_does_not_chord_into_obstacle():
 
 
 def test_post_process_path_very_close_points():
-    args = Args()
-    args.simplify_path = False  # Disable DP simplification to test only distance-based removal
-    replanner = ReplanPath(args, [])
+    args = dict(ARGS)
+    args["simplify_path"] = False  # Disable DP simplification to test only distance-based removal
+    replanner = ReplanPath([], **args)
 
     # Two points extremely close to each other
     path = np.array([[0.0, 0.0], [0.0, 0.01], [1.0, 1.0]])

@@ -1,6 +1,5 @@
 """Way-editing routes: tag overrides, delete/hide/restore, splits, node add/delete/move."""
 
-import time
 from typing import Any
 
 import utm
@@ -24,6 +23,7 @@ from ..helpers import (
     next_synthetic_node_id,
     split_way,
     update_segment_annotations_for_split_change,
+    way_feature,
 )
 from .common import (
     _annotation_path,
@@ -190,17 +190,7 @@ def get_way(way_id: str) -> Response:
     if geom is None:
         abort(500, "Could not convert geometry")
 
-    feature: dict[str, Any] = {
-        "type": "Feature",
-        "geometry": geom,
-        "properties": {
-            "id": way_id,
-            "category": category,
-            "is_node": category == "barrier" and not bool(way.nodes),
-            "tags": way.tags or {},
-            "in_out": way.in_out,
-        },
-    }
+    feature = way_feature(way, way_id, category, way.tags or {}, geom)
 
     ov = store.get("tag_overrides", {}).get(str(search_id))
     feature["properties"]["tags"], feature["properties"]["category"] = _apply_tag_override(
@@ -421,21 +411,10 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
 
         tags, feat_cat = _apply_tag_override(seg.tags or {}, ov, category)
 
-        features.append(
-            {
-                "type": "Feature",
-                "geometry": geom_to_geojson(seg.line, zn, zl),
-                "properties": {
-                    # An unsplit way keeps its plain id, the one /api/mapdata uses; a
-                    # "<id>:0" here gets deleted as a segment the full load never applies.
-                    "id": virtual_id if len(segments) > 1 else int(original_way_id),
-                    "category": feat_cat,
-                    "is_node": feat_cat == "barrier" and not bool(seg.nodes),
-                    "tags": tags,
-                    "in_out": seg.in_out,
-                },
-            },
-        )
+        # An unsplit way keeps its plain id, the one /api/mapdata uses; a
+        # "<id>:0" here gets deleted as a segment the full load never applies.
+        seg_id = virtual_id if len(segments) > 1 else int(original_way_id)
+        features.append(way_feature(seg, seg_id, feat_cat, tags, geom_to_geojson(seg.line, zn, zl)))
     return features
 
 
@@ -734,7 +713,7 @@ def add_way_node() -> Response:
     werkzeug.exceptions.HTTPException
         400 if ``file``/``way_id`` is missing, ``way_id``'s non-segment
         part isn't a valid integer, or the body is missing
-        ``after_node_id``/``lat``/``lon``.
+        ``after_node_id``/``lat``/``lon`` or ``after_node_id`` isn't an integer.
 
     """
     filename, way_id = _require_args("file", "way_id")
@@ -746,6 +725,10 @@ def add_way_node() -> Response:
     lon = body.get("lon")
     if after_node_id is None or lat is None or lon is None:
         abort(400, "Request body must include after_node_id, lat, lon")
+    try:
+        after_node_id = int(after_node_id)
+    except (ValueError, TypeError):
+        abort(400, "after_node_id must be an integer")
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
@@ -755,20 +738,12 @@ def add_way_node() -> Response:
             {
                 "id": synth_id,
                 "way_id": way_id_int,
-                "after_node_id": int(after_node_id),
+                "after_node_id": after_node_id,
                 "lat": float(lat),
                 "lon": float(lon),
             }
         )
-        cl = store.setdefault("change_log", [])
-        cl.append(
-            {
-                "type": "add_node",
-                "way_id": way_id_int,
-                "node_id": synth_id,
-                "ts": time.time(),
-            }
-        )
+        _log_add(store, "add_node", {"way_id": way_id_int, "node_id": synth_id})
     return jsonify({"id": synth_id, "lat": float(lat), "lon": float(lon)})
 
 

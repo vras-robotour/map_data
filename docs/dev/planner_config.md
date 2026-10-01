@@ -142,15 +142,13 @@ The viewer exposes a modal panel where `highway_costs` values can be edited per 
 ### Programmatic override
 
 ```python
-import copy
+from map_data.pathsolver.replan import ReplanPath
 
-from map_data.pathsolver.replan import DEFAULT_ARGS, ReplanPath
-
-args = copy.copy(DEFAULT_ARGS)
-args.cell_size = 0.5  # coarser grid for faster planning
-args.inflate_obstacles = 0.5  # wider obstacle clearance
-
-planner = ReplanPath(args, obstacles)
+planner = ReplanPath(
+    obstacles,
+    cell_size=0.5,  # coarser grid for faster planning
+    inflate_obstacles=0.5,  # wider obstacle clearance
+)
 ```
 
-Any `args` attribute `ReplanPath` reads (see the constructor table above) takes precedence over the YAML defaults for that instance.
+Any keyword `ReplanPath` takes (see the constructor table above) overrides the YAML defaults for that instance.

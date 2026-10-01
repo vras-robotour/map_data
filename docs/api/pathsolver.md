@@ -116,18 +116,18 @@ overridden per-instance:
 ### Constructor
 
 ```python
-ReplanPath(args, obstacles=None, transfer_id=None)
+ReplanPath(obstacles=None, transfer_id=None, ..., *, low, high, cell_size=0.25,
+           inflate_obstacles=0.25, simplify_path=True, smooth_path=False)
 ```
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `args` | `argparse.Namespace` | Planning parameters. Use `parse_args([])` to get defaults. |
 | `obstacles` | `list[shapely.Geometry]` | Obstacle geometries (from `ways_to_shapely(md.barriers_list)`). |
 | `transfer_id` | `str \| None` | Optional UUID for cancellation via `cancel_replan_backend()`. |
 
-**`args` attributes used by `ReplanPath`:**
+**Keyword-only planning parameters:**
 
-| Attribute | Default | Description |
+| Keyword | Default | Description |
 |-----------|---------|-------------|
 | `low` | — | `(min_x, min_y)` lower bound of the planning area in UTM metres |
 | `high` | — | `(max_x, max_y)` upper bound of the planning area in UTM metres |
@@ -178,16 +178,14 @@ cancel_replan_backend(transfer_id)
 ```python
 import numpy as np
 from map_data.map_data import MapData
-from map_data.pathsolver.replan import ReplanPath, parse_args
+from map_data.pathsolver.replan import ReplanPath
 from map_data.utils.parsing import ways_to_shapely
 
 md = MapData.load("coords.mapdata")
 
-args = parse_args([])
-args.low = (md.min_x, md.min_y)
-args.high = (md.max_x, md.max_y)
-
-replanner = ReplanPath(args, ways_to_shapely(md.barriers_list))
+replanner = ReplanPath(
+    ways_to_shapely(md.barriers_list), low=(md.min_x, md.min_y), high=(md.max_x, md.max_y)
+)
 replanner.fill_grid(md, highway_types=["footway"], max_path_dist=2.0)
 
 start = np.array([md.min_x + 10, md.min_y + 10])

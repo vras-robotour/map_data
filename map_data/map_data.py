@@ -35,6 +35,10 @@ logger = logging.getLogger(__name__)
 _DEFAULTS = load_config("planner_defaults.yaml")
 GRID_MARGIN: float = _DEFAULTS.get("grid_margin", 150)
 BBOX_LEN = 4
+# geometric_intersections: endpoint-to-way distance (m) that still counts as
+# touching, and buffer radius (m) of the resulting crossroad polygons.
+TOUCH_TOLERANCE = 1.0
+CROSSROAD_RADIUS = 1.5
 
 
 class MapData:
@@ -68,6 +72,15 @@ class MapData:
         Footway intersection points detected during parsing.
 
     """
+
+    zone_number: int
+    zone_letter: str
+    # Tag tables loaded from parameters/<name>.csv by _load_tag_configs.
+    BARRIER_TAGS: dict[str, list[str]]
+    NOT_BARRIER_TAGS: dict[str, list[str]]
+    ANTI_BARRIER_TAGS: dict[str, list[str]]
+    OBSTACLE_TAGS: dict[str, list[str]]
+    NOT_OBSTACLE_TAGS: dict[str, list[str]]
 
     def __init__(
         self,
@@ -116,7 +129,10 @@ class MapData:
                 raise ValueError(msg)
 
             latlon = np.array(points)
-            self.waypoints, self.zone_number, self.zone_letter = self._latlon_to_utm(latlon)
+            easting, northing, self.zone_number, self.zone_letter = utm.from_latlon(
+                latlon[:, 0], latlon[:, 1]
+            )
+            self.waypoints = np.column_stack([easting, northing])
         elif coords_type == "array":
             # coords_type == "array" guarantees coords is the (ndarray, int, str)
             # tuple here, but mypy can't correlate the two params (see above).
@@ -150,10 +166,6 @@ class MapData:
         )
 
         self._check_utm_zone_boundary()
-        self.points = [
-            geometry.Point(x, y)
-            for x, y in zip(self.waypoints[:, 0], self.waypoints[:, 1], strict=True)
-        ]
 
         self.nodes_cache: dict[int, dict[str, Any]] = {}
         self.roads_list: list[Way] = []
@@ -164,9 +176,7 @@ class MapData:
         self.traversability_removed: dict[str, int] = {}
 
         # Raw data stored temporarily during parsing
-        self.osm_ways_data: overpy.Result | None = None
-        self.osm_rels_data: overpy.Result | None = None
-        self.osm_nodes_data: overpy.Result | None = None
+        self.osm_data: overpy.Result | None = None
 
         self._load_tag_configs()
 
@@ -191,22 +201,14 @@ class MapData:
 
     def _load_tag_configs(self) -> None:
         params_path = package_share("parameters")
-
-        self.BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
-            params_path / "barrier_tags.csv",
-        )
-        self.NOT_BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
-            params_path / "not_barrier_tags.csv",
-        )
-        self.ANTI_BARRIER_TAGS: dict[str, list[str]] = self._csv_to_dict(
-            params_path / "anti_barrier_tags.csv",
-        )
-        self.OBSTACLE_TAGS: dict[str, list[str]] = self._csv_to_dict(
-            params_path / "obstacle_tags.csv",
-        )
-        self.NOT_OBSTACLE_TAGS: dict[str, list[str]] = self._csv_to_dict(
-            params_path / "not_obstacle_tags.csv",
-        )
+        for attr in (
+            "BARRIER_TAGS",
+            "NOT_BARRIER_TAGS",
+            "ANTI_BARRIER_TAGS",
+            "OBSTACLE_TAGS",
+            "NOT_OBSTACLE_TAGS",
+        ):
+            setattr(self, attr, self._csv_to_dict(params_path / f"{attr.lower()}.csv"))
 
     @staticmethod
     def _csv_to_dict(path: str | Path) -> dict[str, list[str]]:
@@ -217,11 +219,6 @@ class MapData:
         for row in arr:
             result.setdefault(row[0], []).append(row[1])
         return result
-
-    @staticmethod
-    def _latlon_to_utm(latlon: np.ndarray) -> tuple[np.ndarray, int, str]:
-        easting, northing, zone_number, zone_letter = utm.from_latlon(latlon[:, 0], latlon[:, 1])
-        return np.column_stack([easting, northing]), zone_number, zone_letter
 
     def _get_osm_cache_path(self) -> Path | None:
         if not self.coords_file:
@@ -304,9 +301,7 @@ class MapData:
                 except (overpy.exception.OverPyException, json.JSONDecodeError):
                     logger.warning("Cached OSM response is invalid. Re-querying.")
                 else:
-                    self.osm_ways_data = result
-                    self.osm_rels_data = result
-                    self.osm_nodes_data = result
+                    self.osm_data = result
                     return
 
         bbox = f"{self.min_lat},{self.min_long},{self.max_lat},{self.max_long}"
@@ -336,9 +331,7 @@ class MapData:
             logger.exception("Overpass returned an unparseable response.")
             return
 
-        self.osm_ways_data = result
-        self.osm_rels_data = result
-        self.osm_nodes_data = result
+        self.osm_data = result
 
         logger.info("OSM query finished.")
         self._save_osm_cache(raw)
@@ -358,19 +351,19 @@ class MapData:
             (call :meth:`run_queries` first).
 
         """
-        if any(d is None for d in (self.osm_ways_data, self.osm_rels_data, self.osm_nodes_data)):
+        if self.osm_data is None:
             logger.error("Missing OSM data. Run run_queries() first.")
             return 1
 
         logger.info("Parsing OSM data.")
         ways_dict = parse_osm_ways(
-            self.osm_ways_data, self.nodes_cache, self.zone_number, self.zone_letter
+            self.osm_data, self.nodes_cache, self.zone_number, self.zone_letter
         )
-        parse_osm_rels(self.osm_rels_data, ways_dict)
+        parse_osm_rels(self.osm_data, ways_dict)
 
         way_node_ids = {nid for w in ways_dict.values() for nid in w.nodes}
         node_barriers = parse_osm_nodes(
-            self.osm_nodes_data,
+            self.osm_data,
             self.nodes_cache,
             way_node_ids,
             self.OBSTACLE_TAGS,
@@ -390,9 +383,7 @@ class MapData:
         self.barriers_list = parsed_barriers + node_barriers
         self.crossroads_list = self.parse_intersections(ways_dict)
 
-        self.osm_ways_data = None
-        self.osm_rels_data = None
-        self.osm_nodes_data = None
+        self.osm_data = None
 
         logger.info("Parsing finished.")
         return 0
@@ -547,8 +538,6 @@ class MapData:
     def geometric_intersections(
         lines: list[tuple[Way, geometry.LineString]],
         others: list[tuple[Way, geometry.base.BaseGeometry]],
-        touch_tolerance: float = 1.0,
-        radius: float = 1.5,
     ) -> list[Way]:
         """
         Detect crossroads geometrically for ways that share no OSM node ids.
@@ -556,7 +545,7 @@ class MapData:
         Used for manually annotated paths: a crossroad is created where an
         annotated centre line crosses another way's centre line, where the two
         stop running together, or where one of its endpoints lies within
-        ``touch_tolerance`` metres of another way (a T-junction).
+        ``TOUCH_TOLERANCE`` metres of another way (a T-junction).
 
         Both sides must be **centre lines**. The geometry stored on a parsed
         ``Way`` is the way buffered to its width, and intersecting a line with
@@ -574,10 +563,6 @@ class MapData:
             Ways to test against, each with its centre line (the annotated way
             itself is skipped). A way whose centre line could not be rebuilt
             may be passed with its stored geometry, at the cost above.
-        touch_tolerance : float
-            Endpoint-to-way distance (m) that still counts as touching.
-        radius : float
-            Buffer radius (m) of the resulting crossroad polygons.
 
         Returns
         -------
@@ -590,7 +575,7 @@ class MapData:
 
         def add(pt: geometry.Point, count: int) -> None:
             nonlocal next_id
-            if any(pt.distance(q) < radius for q in seen):
+            if any(pt.distance(q) < CROSSROAD_RADIUS for q in seen):
                 return
             seen.append(pt)
             crossroads.append(
@@ -598,7 +583,7 @@ class MapData:
                     id=next_id,
                     is_area=True,
                     tags={"type": "annotation_intersection", "count": str(count)},
-                    line=pt.buffer(radius),
+                    line=pt.buffer(CROSSROAD_RADIUS),
                 ),
             )
             next_id -= 1
@@ -634,7 +619,7 @@ class MapData:
                         add(pt, 2)
                     continue
                 for end in ends:
-                    if end.distance(other_line) <= touch_tolerance:
+                    if end.distance(other_line) <= TOUCH_TOLERANCE:
                         add(end, 2)
         return crossroads
 

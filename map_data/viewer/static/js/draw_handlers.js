@@ -109,12 +109,17 @@ function _onAnnDragMove(e) {
     }
 }
 
-async function _onAnnDragUp(e) {
-    if (!annDrag.active) return;
-    map.off('mousemove', _onAnnDragMove);
-    map.off('mouseup', _onAnnDragUp);
+// Shared teardown of an annotation/OSM drag's map listeners.
+function _endMapDrag(move, up) {
+    map.off('mousemove', move);
+    map.off('mouseup', up);
     map.dragging.enable();
     map.getContainer().style.cursor = currentMode === 'edit' ? 'move' : '';
+}
+
+async function _onAnnDragUp(e) {
+    if (!annDrag.active) return;
+    _endMapDrag(_onAnnDragMove, _onAnnDragUp);
 
     const { type, layer, vertexIndex } = annDrag;
     annDrag.active = false;
@@ -234,17 +239,13 @@ function disableAnnotationEditMode() {
     if (editDrag.active) { editDrag.active = false; map.dragging.enable(); }
     if (annDrag.active) {
         annDrag.active = false;
-        map.off('mousemove', _onAnnDragMove);
-        map.off('mouseup', _onAnnDragUp);
-        map.dragging.enable();
+        _endMapDrag(_onAnnDragMove, _onAnnDragUp);
     }
     _clearAnnotationVertices();
     editSelectedLayer = null;
     if (osmDrag.active) {
         osmDrag.active = false;
-        map.off('mousemove', _onOsmDragMove);
-        map.off('mouseup', _onOsmDragUp);
-        map.dragging.enable();
+        _endMapDrag(_onOsmDragMove, _onOsmDragUp);
     }
     drawnItems.eachLayer(layer => {
         layer.off('mousedown', _onEditDragDown);
@@ -314,10 +315,7 @@ function _onOsmDragMove(e) {
 
 async function _onOsmDragUp(e) {
     if (!osmDrag.active) return;
-    map.off('mousemove', _onOsmDragMove);
-    map.off('mouseup', _onOsmDragUp);
-    map.dragging.enable();
-    map.getContainer().style.cursor = currentMode === 'edit' ? 'move' : '';
+    _endMapDrag(_onOsmDragMove, _onOsmDragUp);
 
     const { type, wayId, nodeIndex, startLatLng, origPositions, afterNodeId } = osmDrag;
     osmDrag.active = false;
@@ -329,7 +327,11 @@ async function _onOsmDragUp(e) {
 
     if (type === 'midpoint') {
         if (!currentFile || !wayId) return;
-        const res = await addWayNodeApi(currentFile, wayId, afterNodeId, e.latlng.lat, e.latlng.lng);
+        const res = await api('POST', '/api/way_node', {
+            query: { file: currentFile, way_id: wayId },
+            body: { after_node_id: afterNodeId, lat: e.latlng.lat, lon: e.latlng.lng },
+            readOnlyMsg: 'Editing',
+        });
         if (!res.ok) { setStatus('Add node failed', 'text-danger'); return; }
         redoStack = [];
         await _reloadWay(wayId);
@@ -443,10 +445,6 @@ function initDrawControl() {
     });
 }
 
-function initHandlers() {
-    deleteHandler = new L.EditToolbar.Delete(map, { featureGroup: drawnItems });
-}
-
 // ── Draw events ───────────────────────────────────────────────────────────────
 function setupDrawEvents() {
     map.on(L.Draw.Event.CREATED, async e => {
@@ -496,7 +494,9 @@ function setupDrawEvents() {
             if (annId) toDelete.push(annId);
         });
         Promise.all(
-            toDelete.map(id => deleteAnnotationApi(currentFile, id))
+            toDelete.map(id => api('DELETE', `/api/annotations/${id}`, {
+                query: { file: currentFile }, readOnlyMsg: 'Editing',
+            }))
         ).then(() => {
             annotations = annotations.filter(a => !toDelete.includes(a.id));
             renderAnnotationList();

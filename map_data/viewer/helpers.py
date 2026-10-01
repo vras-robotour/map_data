@@ -81,6 +81,41 @@ def ring_to_latlon(
     return result
 
 
+def _to_utm(lat: float, lon: float, zone_number: int, zone_letter: str) -> tuple[float, float]:
+    """Project lat/lon to ``(easting, northing)``, forced into the given UTM zone."""
+    e, n, _, _ = utm.from_latlon(
+        lat, lon, force_zone_number=zone_number, force_zone_letter=zone_letter
+    )
+    return e, n
+
+
+def way_feature(
+    way: "Way",
+    way_id: int | str,
+    category: str | None,
+    tags: dict[str, Any],
+    geom: dict[str, Any] | None,
+    feature_id: str | None = None,
+) -> dict[str, Any]:
+    """
+    Build a way's GeoJSON Feature; a top-level ``"id"`` only when *feature_id* is given.
+
+    ``is_node`` marks a barrier with no OSM nodes (synthesized from a single obstacle node).
+    """
+    feature: dict[str, Any] = {"type": "Feature"}
+    if feature_id is not None:
+        feature["id"] = feature_id
+    feature["geometry"] = geom
+    feature["properties"] = {
+        "id": way_id,
+        "category": category,
+        "is_node": category == "barrier" and not bool(way.nodes),
+        "tags": tags,
+        "in_out": way.in_out,
+    }
+    return feature
+
+
 def geom_to_geojson(
     geom: "_LineString | _SPoly | _SMPoly",
     zone_number: int,
@@ -182,20 +217,7 @@ def mapdata_to_geojson(map_data: "MapData") -> dict[str, Any]:
                 continue
             if geom is None:
                 continue
-            features.append(
-                {
-                    "type": "Feature",
-                    "id": str(way.id),
-                    "geometry": geom,
-                    "properties": {
-                        "id": way.id,
-                        "category": category,
-                        "is_node": category == "barrier" and not bool(way.nodes),
-                        "tags": way.tags or {},
-                        "in_out": way.in_out,
-                    },
-                },
-            )
+            features.append(way_feature(way, way.id, category, way.tags or {}, geom, str(way.id)))
 
     add_ways(map_data.roads_list, "road")
     add_ways(map_data.footways_list, "footway")
@@ -217,9 +239,8 @@ def mapdata_to_geojson(map_data: "MapData") -> dict[str, Any]:
     return {"type": "FeatureCollection", "features": features}
 
 
-# Per-file lock for thread-safe annotation access. Re-entrant so that
-# annotation_store() can hold it across a whole load -> mutate -> save cycle
-# while save_annotations() re-acquires it internally.
+# Per-file lock for thread-safe annotation access, held by annotation_store()
+# across a whole load -> mutate -> save cycle.
 _annotation_locks: defaultdict[str, threading.RLock] = defaultdict(threading.RLock)
 
 
@@ -253,27 +274,6 @@ def load_annotations(path: str) -> dict[str, Any]:
     return {"version": 1, "annotations": []}
 
 
-def save_annotations(path: str, data: dict[str, Any]) -> None:
-    """
-    Atomically write the annotation store to *path*.
-
-    Writes are serialized per-path via ``_annotation_locks`` to
-    guard against concurrent writers in the same process; the actual
-    tempfile-plus-``os.replace`` write is
-    :func:`~map_data.utils.serialization.atomic_write_json`.
-
-    Parameters
-    ----------
-    path : str
-        Destination path for the annotation JSON file.
-    data : dict
-        Annotation store to serialize.
-
-    """
-    with _annotation_locks[path]:
-        atomic_write_json(path, data, indent=2)
-
-
 @contextlib.contextmanager
 def annotation_store(path: str) -> Iterator[dict[str, Any]]:
     """
@@ -282,14 +282,14 @@ def annotation_store(path: str) -> Iterator[dict[str, Any]]:
     Holds the per-path lock from ``_annotation_locks`` across the
     entire cycle, so concurrent mutators serialize their read-modify-write
     sequences instead of silently overwriting each other's edits (the
-    lost-update race that plain ``load_annotations`` + ``save_annotations``
-    calls are subject to). The lock is re-entrant, so the nested
-    :func:`save_annotations` call taken on exit does not deadlock.
+    lost-update race that a plain load followed by a separate write is
+    subject to).
 
-    The store is written back (atomically, via :func:`save_annotations`)
-    only when the ``with`` body exits normally; if the body raises --
-    including a Flask ``abort()`` from a request handler -- nothing is
-    saved and the on-disk store is left untouched.
+    The store is written back (atomically, via
+    :func:`~map_data.utils.serialization.atomic_write_json`) only when the
+    ``with`` body exits normally; if the body raises -- including a Flask
+    ``abort()`` from a request handler -- nothing is saved and the on-disk
+    store is left untouched.
 
     Parameters
     ----------
@@ -307,7 +307,7 @@ def annotation_store(path: str) -> Iterator[dict[str, Any]]:
     with _annotation_locks[path]:
         store = load_annotations(path)
         yield store
-        save_annotations(path, store)
+        atomic_write_json(path, store, indent=2)
 
 
 def get_deleted_way_ids(store: dict[str, Any]) -> set[int | str]:
@@ -517,9 +517,9 @@ def _rebuild_polygon(
 def split_way(
     way: "Way",
     split_nids: list[int],
-    zone_number: int | None = None,
-    zone_letter: str | None = None,
-    nodes_cache: dict[int, dict[str, Any]] | None = None,
+    zone_number: int,
+    zone_letter: str,
+    nodes_cache: dict[int, dict[str, Any]] | None,
     detached: dict[int, int] | None = None,
 ) -> list["Way"]:
     """
@@ -542,9 +542,8 @@ def split_way(
     radius. For a plain ``LineString`` way, node coordinates are taken
     directly from the geometry; otherwise (buffered case, or missing
     node-level coordinates) the centerline is reconstructed from node
-    lat/lon — first from ``way.nodes`` objects' own ``lat``/``lon``
-    attributes if present, else from *nodes_cache* — which requires
-    *zone_number* and *zone_letter* to reproject back to UTM.
+    lat/lon in *nodes_cache*, reprojected with *zone_number* and
+    *zone_letter*.
 
     Parameters
     ----------
@@ -553,19 +552,18 @@ def split_way(
         ``nodes`` list to be split at all.
     split_nids : list of int
         Interior node IDs at which to cut the way.
-    zone_number : int, optional
-        UTM zone number, required to reconstruct centerline coordinates
-        from node lat/lon when the geometry itself doesn't carry per-node
+    zone_number : int
+        UTM zone number, used to reconstruct centerline coordinates from
+        node lat/lon when the geometry itself doesn't carry per-node
         coordinates (buffered-polygon ways).
-    zone_letter : str, optional
+    zone_letter : str
         UTM zone letter, paired with *zone_number*.
-    nodes_cache : dict, optional
-        Fallback ``{node_id: {"lat": ..., "lon": ...}}`` lookup used when a
-        node object in ``way.nodes`` doesn't carry its own coordinates.
+    nodes_cache : dict or None
+        ``{node_id: {"lat": ..., "lon": ...}}`` node position lookup.
     detached : dict of {int: int}, optional
         Split node ID -> synthetic node ID starting the following segment
         instead (see :func:`get_detached_node_ids`). Its position comes from
-        *nodes_cache* when *zone_number*/*zone_letter* are given.
+        *nodes_cache*.
 
     Returns
     -------
@@ -583,7 +581,7 @@ def split_way(
     if geom is None:
         return [way]
 
-    node_ids = [getattr(n, "id", n) for n in way.nodes]
+    node_ids = way.nodes
     if not node_ids:
         return [way]
 
@@ -598,38 +596,33 @@ def split_way(
     radius = _buffer_radius(geom) if is_buffered else 0
 
     # Reconstruct centerline coordinates
+    nc = nodes_cache or {}
     raw_coords = []
     if not is_buffered and geom.geom_type == "LineString":
         raw_coords = list(geom.coords)
-    elif zone_number is not None and zone_letter is not None:
+    else:
         # Reconstruct centerline from node positions
-        nc = nodes_cache or {}
         for nid in node_ids:
-            lat, lon = None, None
-            # Check if node object has lat/lon
-            for n_obj in way.nodes:
-                if getattr(n_obj, "id", None) == nid:
-                    lat, lon = getattr(n_obj, "lat", None), getattr(n_obj, "lon", None)
-                    break
-            # Fallback to cache
-            if lat is None and nid in nc:
-                lat, lon = nc[nid]["lat"], nc[nid]["lon"]
-
-            if lat is not None and lon is not None:
-                e, nn, _, _ = utm.from_latlon(
-                    float(lat),
-                    float(lon),
-                    force_zone_number=zone_number,
-                    force_zone_letter=zone_letter,
+            nd = nc.get(nid)
+            if nd and nd["lat"] is not None and nd["lon"] is not None:
+                raw_coords.append(
+                    _to_utm(float(nd["lat"]), float(nd["lon"]), zone_number, zone_letter)
                 )
-                raw_coords.append((e, nn))
 
     if not raw_coords:
         return [way]
 
     segments = []
-    current_nodes = []
-    current_coords = []
+    current_nodes: list[int] = []
+    current_coords: list[tuple[float, float]] = []
+
+    def emit() -> None:
+        if len(current_nodes) >= 2:
+            w = copy.copy(way)
+            w.nodes = current_nodes
+            ls = _LineString(current_coords)
+            w.line = ls.buffer(radius) if is_buffered else ls
+            segments.append(w)
 
     split_set = {int(nid) for nid in split_nids}
     for i, nid in enumerate(node_ids):
@@ -639,12 +632,7 @@ def split_way(
 
         if nid in split_set and i > 0 and i < len(node_ids) - 1:
             # Split point reached
-            if len(current_nodes) >= 2:
-                w = copy.copy(way)
-                w.nodes = current_nodes
-                ls = _LineString(current_coords)
-                w.line = ls.buffer(radius) if is_buffered else ls
-                segments.append(w)
+            emit()
 
             # Start new segment with the split node, or its detached copy
             current_nodes = [way.nodes[i]]
@@ -652,25 +640,16 @@ def split_way(
             did = (detached or {}).get(nid)
             if did is not None:
                 current_nodes = [did]
-                pos = (nodes_cache or {}).get(did)
-                if pos and zone_number is not None and zone_letter is not None:
-                    e, nn, _, _ = utm.from_latlon(
-                        float(pos["lat"]),
-                        float(pos["lon"]),
-                        force_zone_number=zone_number,
-                        force_zone_letter=zone_letter,
-                    )
-                    current_coords = [(e, nn)]
+                pos = nc.get(did)
+                if pos:
+                    current_coords = [
+                        _to_utm(float(pos["lat"]), float(pos["lon"]), zone_number, zone_letter)
+                    ]
 
     # Last segment
-    if len(current_nodes) >= 2:
-        w = copy.copy(way)
-        w.nodes = current_nodes
-        ls = _LineString(current_coords)
-        w.line = ls.buffer(radius) if is_buffered else ls
-        segments.append(w)
+    emit()
 
-    if not segments or len(segments) <= 1:
+    if len(segments) <= 1:
         return [way]
 
     # Update IDs to virtual IDs original_id:index
@@ -790,22 +769,17 @@ def apply_node_position_overrides(
     # way.line is typed Optional at the Way level, but every Way reaching this
     # function already has a concrete geometry from OSM parsing / prior edits.
     geom: BaseGeometry = way.line
-    node_ids = [getattr(n, "id", n) for n in way.nodes]
+    node_ids = way.nodes
     if not node_ids:
         # No OSM nodes (e.g. individual barrier node): translate geometry by centroid shift.
-        if overrides:
-            first_ov = next(iter(overrides.values()))
-            e_new, n_new, _, _ = utm.from_latlon(
-                float(first_ov["lat"]),
-                float(first_ov["lon"]),
-                force_zone_number=zone_number,
-                force_zone_letter=zone_letter,
-            )
-            centroid = geom.centroid
-            w = copy.copy(way)
-            w.line = _affine_translate(geom, xoff=e_new - centroid.x, yoff=n_new - centroid.y)
-            return w
-        return way
+        first_ov = next(iter(overrides.values()))
+        e_new, n_new = _to_utm(
+            float(first_ov["lat"]), float(first_ov["lon"]), zone_number, zone_letter
+        )
+        centroid = geom.centroid
+        w = copy.copy(way)
+        w.line = _affine_translate(geom, xoff=e_new - centroid.x, yoff=n_new - centroid.y)
+        return w
 
     nc = nodes_cache or {}
     # Geometry coords as fallback only — may be unreliable for buffered polygons
@@ -824,13 +798,7 @@ def apply_node_position_overrides(
             lat, lon = geom_latlon[i]
         else:
             continue
-        e, n, _, _ = utm.from_latlon(
-            lat,
-            lon,
-            force_zone_number=zone_number,
-            force_zone_letter=zone_letter,
-        )
-        utm_coords.append((e, n))
+        utm_coords.append(_to_utm(lat, lon, zone_number, zone_letter))
 
     if len(utm_coords) < 2:
         return way
@@ -850,8 +818,6 @@ def apply_node_position_overrides(
     if geom.geom_type == "LineString":
         w.line = _LineString(utm_coords)
     elif geom.geom_type == "Polygon":
-        if len(utm_coords) < 2:
-            return way
         try:
             w.line = _rebuild_polygon(
                 geom,
@@ -920,13 +886,7 @@ def geojson_geom_to_utm(
     """
 
     def pt(c: list[float] | tuple[float, float]) -> tuple[float, float]:
-        e, n, _, _ = utm.from_latlon(
-            c[1],
-            c[0],
-            force_zone_number=zone_number,
-            force_zone_letter=zone_letter,
-        )
-        return (e, n)
+        return _to_utm(c[1], c[0], zone_number, zone_letter)
 
     gtype = geometry.get("type")
     if gtype == "LineString":
@@ -1002,7 +962,7 @@ def apply_added_nodes(
     pos_ov_raw = store.get("node_position_overrides", {}).get(str(original_id), {})
 
     w = copy.copy(way)
-    w.nodes = [getattr(n, "id", n) for n in way.nodes]
+    w.nodes = list(way.nodes)
     node_ids: list = w.nodes  # mutable reference
 
     # way.line is typed Optional at the Way level, but every Way reaching this
@@ -1035,12 +995,7 @@ def apply_added_nodes(
             ov = pos_ov_raw.get(str(synth_id))
             lat = float(ov["lat"] if ov else a["lat"])
             lon = float(ov["lon"] if ov else a["lon"])
-            e, n_utm, _, _ = utm.from_latlon(
-                lat,
-                lon,
-                force_zone_number=zone_number,
-                force_zone_letter=zone_letter,
-            )
+            e, n_utm = _to_utm(lat, lon, zone_number, zone_letter)
             # For closed LineStrings the last coord repeats the first — insert before it.
             _is_closed = len(node_ids) >= 2 and node_ids[0] == node_ids[-1]
             coord_limit = len(coords) - 1 if _is_closed and len(coords) > 1 else len(coords)
@@ -1068,9 +1023,9 @@ def apply_added_nodes(
 def rebuild_way_without_nodes(
     way: "Way",
     del_nids: set[int] | list[int],
-    zone_number: int | None = None,
-    zone_letter: str | None = None,
-    nodes_cache: dict[int, dict[str, Any]] | None = None,
+    zone_number: int,
+    zone_letter: str,
+    nodes_cache: dict[int, dict[str, Any]] | None,
     category: str | None = None,
 ) -> "Way | None":
     """
@@ -1080,30 +1035,24 @@ def rebuild_way_without_nodes(
     match. Deletion never merely drops points from the existing geometry
     without also considering closure/buffering, since either could corrupt
     the shape; this largely mirrors the geometry-type handling in
-    :func:`apply_node_position_overrides`, keyed off whether *zone_number*
-    is given rather than off explicit overrides:
+    :func:`apply_node_position_overrides`:
 
     - ``LineString`` : coordinates are filtered by node index directly
-      (``zone_number`` is not needed). Closure (first node ID equals last,
+      (zone/cache are not needed). Closure (first node ID equals last,
       or ``geom.is_closed`` as a fallback) is preserved by re-appending the
       first coordinate if dropping nodes broke it.
-    - ``Polygon`` *with* *zone_number* given : treated as a buffered
+    - ``Polygon`` : treated as a buffered
       centerline (or, for a closed ``category="barrier"`` way or an
       ``area=yes`` tagged way, a flat area) and reconstructed the same way
       as in :func:`apply_node_position_overrides` — remaining node
-      positions are read from each node object's own ``lat``/``lon`` or
-      else *nodes_cache*, the loop is re-closed if needed, and (for the
+      positions are read from *nodes_cache*, the loop is re-closed if needed, and (for the
       re-buffer case) a new buffer radius is derived from the *original*
       geometry's perimeter/area via the isoperimetric relation. If
       re-buffering raises, falls back to the bare (unbuffered) centerline
       rather than failing outright.
-    - ``Polygon`` *without* *zone_number* : falls back to filtering the
-      polygon's own exterior-ring coordinates by index (no node-level
-      lat/lon available), re-closing the ring if needed. Requires at least
-      3 remaining coordinates.
 
     Any other geometry type, or a case where filtering leaves fewer than 2
-    (LineString) / 3 (Polygon fallback) / 4 (reconstructed ring) usable
+    (LineString) / 4 (reconstructed ring) usable
     coordinates, causes ``None`` to be returned instead of a Way — this
     signals to callers that the way became degenerate and should be
     dropped entirely, not just left unmodified.
@@ -1115,15 +1064,14 @@ def rebuild_way_without_nodes(
         *del_nids*, ``None`` is returned immediately.
     del_nids : set or list of int
         Node IDs to remove from *way*.
-    zone_number : int, optional
-        UTM zone number; if given, node positions for ``Polygon``
-        reconstruction are resolved from node/``nodes_cache`` lat/lon
-        instead of the (buffer-outline) geometry coordinates.
-    zone_letter : str, optional
+    zone_number : int
+        UTM zone number; node positions for ``Polygon`` reconstruction are
+        projected with it instead of using the (buffer-outline) geometry
+        coordinates.
+    zone_letter : str
         UTM zone letter, paired with *zone_number*.
-    nodes_cache : dict, optional
-        Fallback ``{node_id: {"lat": ..., "lon": ...}}`` lookup used when a
-        node object doesn't carry its own coordinates.
+    nodes_cache : dict or None
+        ``{node_id: {"lat": ..., "lon": ...}}`` node position lookup.
     category : str, optional
         Way category; only ``"barrier"`` changes behaviour, selecting
         flat-polygon reconstruction for closed areas instead of ring
@@ -1137,7 +1085,7 @@ def rebuild_way_without_nodes(
         geometry.
 
     """
-    node_ids = [getattr(n, "id", n) for n in way.nodes]
+    node_ids = way.nodes
     keep = [i for i, nid in enumerate(node_ids) if nid not in del_nids]
     if len(keep) < 2:
         return None
@@ -1160,51 +1108,31 @@ def rebuild_way_without_nodes(
         w.line = _LineString(new_coords)
 
     elif geom.geom_type == "Polygon":
-        if zone_number is not None:
-            nc = nodes_cache or {}
-            utm_coords = []
-            for n in w.nodes:
-                lat = getattr(n, "lat", None)
-                lon = getattr(n, "lon", None)
-                if lat is None:
-                    nd = nc.get(getattr(n, "id", n))
-                    if nd:
-                        lat, lon = nd["lat"], nd["lon"]
-                if lat is not None and lon is not None:
-                    e, nn, _, _ = utm.from_latlon(
-                        float(lat),
-                        float(lon),
-                        force_zone_number=zone_number,
-                        force_zone_letter=zone_letter,
-                    )
-                    utm_coords.append((e, nn))
-            if len(utm_coords) < 2:
-                return None
-            _is_closed_orig = len(node_ids) >= 2 and node_ids[0] == node_ids[-1]
-            try:
-                w.line = _rebuild_polygon(
-                    geom,
-                    utm_coords,
-                    _is_closed_orig,
-                    category,
-                    getattr(way, "tags", None),
+        nc = nodes_cache or {}
+        utm_coords = []
+        for n in w.nodes:
+            nd = nc.get(n)
+            if nd and nd["lat"] is not None and nd["lon"] is not None:
+                utm_coords.append(
+                    _to_utm(float(nd["lat"]), float(nd["lon"]), zone_number, zone_letter)
                 )
-            except _PolygonTooSmall:
-                return None
-            except (ValueError, TypeError) as e:
-                # Buffering the centerline failed; keep the (unbuffered) centerline itself.
-                logger.warning(
-                    "Way %s: polygon rebuild failed (%r), keeping the centerline", way.id, e
-                )
-                w.line = _LineString(utm_coords)
-        else:
-            coords = list(geom.exterior.coords)
-            new_coords = [coords[i] for i in keep if i < len(coords)]
-            if len(new_coords) < 3:
-                return None
-            if new_coords[0] != new_coords[-1]:
-                new_coords.append(new_coords[0])
-            w.line = _SPoly(new_coords)
+        if len(utm_coords) < 2:
+            return None
+        _is_closed_orig = len(node_ids) >= 2 and node_ids[0] == node_ids[-1]
+        try:
+            w.line = _rebuild_polygon(
+                geom,
+                utm_coords,
+                _is_closed_orig,
+                category,
+                getattr(way, "tags", None),
+            )
+        except _PolygonTooSmall:
+            return None
+        except (ValueError, TypeError) as e:
+            # Buffering the centerline failed; keep the (unbuffered) centerline itself.
+            logger.warning("Way %s: polygon rebuild failed (%r), keeping the centerline", way.id, e)
+            w.line = _LineString(utm_coords)
 
     else:
         return None
@@ -1226,7 +1154,7 @@ def update_segment_annotations_for_split_change(
     change meaning. This function maps deleted ways, deleted nodes, and change_log entries
     from the old segments to the new segments.
     """
-    node_ids = [getattr(n, "id", n) for n in way.nodes]
+    node_ids = way.nodes
     if not node_ids or node_ids[0] == node_ids[-1]:
         return
 

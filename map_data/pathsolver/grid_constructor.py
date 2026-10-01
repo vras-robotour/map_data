@@ -14,10 +14,7 @@ import shapely as sh
 from scipy.spatial import cKDTree
 
 from map_data.pathsolver.way_cost import way_cost
-
-# Segments shorter than this (in the same units as grid coordinates, i.e.
-# metres) are treated as coincident points rather than subdivided further.
-TOLERANCE = 1e-3
+from map_data.utils.densify import densify_ways
 
 if TYPE_CHECKING:
     from map_data.map_data import MapData
@@ -57,8 +54,8 @@ class PathGrid:
         Upper bound applied to a way's combined ``highway`` + ``surface``
         cost before distance falloff is applied.
     grid : np.ndarray
-        Flat point representation of the grid. ``(N, 3)`` columns
-        ``[x, y, 0]`` immediately after construction (see
+        Flat point representation of the grid. ``(N, 2)`` columns
+        ``[x, y]`` immediately after construction (see
         :meth:`create_empty_grid`); replaced by an ``(N, 4)`` array with
         columns ``[x, y, 0, cost]`` after :meth:`fill` is called.
     grid_2d_cache : np.ndarray or None
@@ -126,16 +123,14 @@ class PathGrid:
         Returns
         -------
         np.ndarray
-            ``(N, 3)`` array with columns ``[x, y, 0]``; the third column is
-            an unused placeholder (later replaced by a cost column in
-            :meth:`fill`).
+            ``(N, 2)`` array with columns ``[x, y]`` (:meth:`fill` replaces it
+            with the ``(N, 4)`` ``[x, y, 0, cost]`` array).
 
         """
         half = self.cell_size / 2.0
         xs = np.arange(self.low[0], self.high[0], self.cell_size) + half
         ys = np.arange(self.low[1], self.high[1], self.cell_size) + half
-        # grid is (N, 3) where columns are [x, y, 0]
-        return np.pad(np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2), ((0, 0), (0, 1)))
+        return np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2)
 
     def fill(
         self,
@@ -214,10 +209,10 @@ class PathGrid:
         points = map_data.get_points()
 
         # 1. Initialize path_grid with default off-path cost
-        path_grid = np.pad(self.grid[:, :2], ((0, 0), (0, 1)))
-        path_grid[:, 2] = 0.0
-        path_grid = np.pad(path_grid, ((0, 0), (0, 1)))
-        path_grid[:, 3] = self.default_off_path_cost
+        n = len(self.grid)
+        path_grid = np.column_stack(
+            (self.grid[:, :2], np.zeros(n), np.full(n, self.default_off_path_cost))
+        )
 
         bbox = sh.box(self.low[0], self.low[1], self.high[0], self.high[1])
         bbox_buffered = bbox.buffer(max_path_dist)
@@ -275,37 +270,19 @@ class PathGrid:
                 np.copyto(grid_cost[j0:j1, i0:i1], 1.0, where=mask_inside)
 
         # 3. Process ways to set their costs
-        path_points = []
-        path_point_costs = []
+        # Same helper as the graph planner's edge weights, so the two
+        # planners cannot start charging different prices for a way.
+        costs = [
+            way_cost(way.tags, self.highway_costs, self.surface_costs, self.path_cost_cap)
+            for way in all_ways
+        ]
+        path_points, way_index = densify_ways(points, [w.nodes for w in all_ways], self.cell_size)
 
-        for way in all_ways:
-            # Same helper as the graph planner's edge weights, so the two
-            # planners cannot start charging different prices for a way.
-            cost = way_cost(way.tags, self.highway_costs, self.surface_costs, self.path_cost_cap)
-
-            for i in range(len(way.nodes) - 1):
-                p0 = points[way.nodes[i]].ravel()[:2]
-                p1 = points[way.nodes[i + 1]].ravel()[:2]
-                dist = np.linalg.norm(p1 - p0)
-                if i == 0:
-                    path_points.append(p0)
-                    path_point_costs.append(cost)
-                if dist <= TOLERANCE:
-                    path_points.append(p1)
-                    path_point_costs.append(cost)
-                    continue
-                num = int(np.ceil(dist / self.cell_size))
-                step = dist / num
-                vec = (p1 - p0) / dist
-                for j in range(num):
-                    path_points.append(p0 + (j + 1) * step * vec)
-                    path_point_costs.append(cost)
-
-        if path_points:
-            tree = cKDTree(np.array(path_points))
+        if len(path_points):
+            tree = cKDTree(path_points)
             dists, indices = tree.query(path_grid[:, :2], distance_upper_bound=max_path_dist)
             mask = dists < max_path_dist
-            way_costs = np.array(path_point_costs)[indices[mask]]
+            way_costs = np.array(costs)[way_index][indices[mask]]
             final_costs = (
                 way_costs
                 + (self.default_off_path_cost - way_costs) * (dists[mask] / max_path_dist) ** 2
@@ -326,7 +303,7 @@ class PathGrid:
         construction in :meth:`create_empty_grid` — and clipped into range
         to absorb any floating-point spill at the upper edge. Note this
         reads column index 3 (cost) of :attr:`grid`, so it must be called
-        after :meth:`fill` has replaced the initial ``(N, 3)`` grid with the
+        after :meth:`fill` has replaced the initial ``(N, 2)`` grid with the
         ``(N, 4)`` cost-augmented one; calling it beforehand raises an
         ``IndexError``. Obstacle burning is *not* applied here — see
         :meth:`burn_obstacles`.
@@ -388,6 +365,8 @@ class PathGrid:
             return grid_2d
         ny, nx = grid_2d.shape
         for obstacle in obstacles:
+            if obstacle.geom_type not in ("Polygon", "MultiPolygon"):
+                continue
             minx, miny, maxx, maxy = obstacle.bounds
             ix_min = max(0, int(np.floor((minx - self.low[0]) / self.cell_size)))
             ix_max = min(nx - 1, int(np.ceil((maxx - self.low[0]) / self.cell_size)))
@@ -409,12 +388,6 @@ class PathGrid:
                 iy_max - iy_min + 1,
             )
             xv, yv = np.meshgrid(x, y)
-            points_bbox = np.stack((xv.ravel(), yv.ravel()), axis=-1)
-
-            if obstacle.geom_type in ("Polygon", "MultiPolygon"):
-                mask = sh.contains_xy(obstacle, points_bbox[:, 0], points_bbox[:, 1]).reshape(
-                    len(y),
-                    len(x),
-                )
-                grid_2d[iy_min : iy_max + 1, ix_min : ix_max + 1][mask] = np.inf
+            mask = sh.contains_xy(obstacle, xv, yv)
+            grid_2d[iy_min : iy_max + 1, ix_min : ix_max + 1][mask] = np.inf
         return grid_2d

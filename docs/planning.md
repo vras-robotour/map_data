@@ -229,24 +229,22 @@ result = planner.plan(np.array([start, goal]))  # np.ndarray or None
 Grid-based local replanning around OSM barriers. See the [ReplanPath API reference](api/pathsolver.md#replanpath) for full details.
 
 ```python
-import copy
-
 import numpy as np
 from map_data.map_data import MapData
-from map_data.pathsolver.replan import DEFAULT_ARGS, ReplanPath
+from map_data.pathsolver.replan import ReplanPath
 from map_data.utils.parsing import ways_to_shapely
 
 md = MapData.load("coords.mapdata")
 
-args = copy.copy(DEFAULT_ARGS)
-args.low = (md.min_x, md.min_y)
-args.high = (md.max_x, md.max_y)
-args.cell_size = 0.25
-args.inflate_obstacles = 0.25
-args.simplify_path = True
-args.smooth_path = False
-
-replanner = ReplanPath(args, ways_to_shapely(md.barriers_list))
+replanner = ReplanPath(
+    ways_to_shapely(md.barriers_list),
+    low=(md.min_x, md.min_y),
+    high=(md.max_x, md.max_y),
+    cell_size=0.25,
+    inflate_obstacles=0.25,
+    simplify_path=True,
+    smooth_path=False,
+)
 replanner.fill_grid(md, highway_types=["footway"], max_path_dist=2.0)
 
 start = np.array([md.min_x + 10, md.min_y + 10])

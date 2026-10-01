@@ -20,7 +20,7 @@ class PlannerMode {
     this.rulesYaml = null; // applied, unsaved traversability rules; null = the rule file
     this.startAtRobot = false; // waypoint 0 pinned to the robot (see onRobotPosition)
     this.robotPos = null;      // last position trackerMode published
-    this._mapDragListeners = [];
+    this.dragPoint = null;     // waypoint being dragged, see _onWpDragMove
 
     this.init();
   }
@@ -37,7 +37,7 @@ class PlannerMode {
       if (STATIC_BASE) {
         data = await _staticJson('api/planner_defaults.json');
       } else {
-        const res = await fetch('/api/planner_defaults');
+        const res = await api('GET', '/api/planner_defaults');
         if (!res.ok) throw new Error(await res.text());
         data = await res.json();
       }
@@ -53,22 +53,19 @@ class PlannerMode {
       if (data.smooth_path !== undefined) document.getElementById('planner-smooth').checked = data.smooth_path;
 
       // Populate advanced fields in all fetch/GPX modals with defaults
-      const gridMarginDefault = data.grid_margin ?? 150;
-      const obstacleRadiusDefault = data.obstacle_radius ?? 2.0;
-      const bwRoad = data.buffer_widths?.road ?? 7.0;
-      const bwFootway = data.buffer_widths?.footway ?? 3.0;
-      const bwBarrier = data.buffer_widths?.barrier ?? 2.0;
+      // (a missing default keeps the field's value from the `advanced` macro)
+      const advanced = {
+        'grid-margin': data.grid_margin,
+        'obstacle-radius': data.obstacle_radius,
+        'buf-road': data.buffer_widths?.road,
+        'buf-footway': data.buffer_widths?.footway,
+        'buf-barrier': data.buffer_widths?.barrier,
+      };
       for (const prefix of ['fetch', 'gpx']) {
-        const gm = document.getElementById(`${prefix}-grid-margin`);
-        const or = document.getElementById(`${prefix}-obstacle-radius`);
-        const br = document.getElementById(`${prefix}-buf-road`);
-        const bf = document.getElementById(`${prefix}-buf-footway`);
-        const bb = document.getElementById(`${prefix}-buf-barrier`);
-        if (gm) gm.value = gridMarginDefault;
-        if (or) or.value = obstacleRadiusDefault;
-        if (br) br.value = bwRoad;
-        if (bf) bf.value = bwFootway;
-        if (bb) bb.value = bwBarrier;
+        for (const [suffix, value] of Object.entries(advanced)) {
+          const el = document.getElementById(`${prefix}-${suffix}`);
+          if (el && value != null) el.value = value;
+        }
       }
       
     } catch (err) {
@@ -147,6 +144,9 @@ class PlannerMode {
 
     document.getElementById('planner-start-at-robot')
       .addEventListener('change', (e) => this.toggleStartAtRobot(e.target.checked));
+    // Waypoint drag (CircleMarkers aren't draggable): mousedown on a marker sets dragPoint
+    map.on('mousemove', this._onWpDragMove, this);
+    map.on('mouseup', this._onWpDragEnd, this);
     // trackerMode publishes the robot position with every telemetry frame, in every mode
     document.addEventListener('robot-position', (e) => this.onRobotPosition(e.detail));
   }
@@ -214,24 +214,12 @@ class PlannerMode {
     return allowed;
   }
 
-  // Flask's abort() answers with an HTML page; pull the message out of it.
-  async _errorText(res) {
-    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-    return (doc.querySelector('p') || doc.body).textContent.trim();
-  }
-
-  _rulesError(msg) {
-    const el = document.getElementById('planner-rules-error');
-    el.textContent = msg || '';
-    el.hidden = !msg;
-  }
-
   async showRulesModal() {
     if (STATIC_BASE) {
       setStatus('Traversability rules need the backend — run map_data_viewer locally', 'text-warning');
       return;
     }
-    this._rulesError('');
+    showError('planner-rules-error', '');
     await this.loadRulesFile();
     if (this.rulesYaml !== null) document.getElementById('planner-rules-text').value = this.rulesYaml;
     bootstrap.Modal.getOrCreateInstance(document.getElementById('planner-rules-modal')).show();
@@ -240,12 +228,12 @@ class PlannerMode {
   async loadRulesFile() {
     try {
       const res = await api('GET', '/api/traversability');
-      if (!res.ok) throw new Error(await this._errorText(res));
+      if (!res.ok) throw new Error(await errorText(res));
       const data = await res.json();
       document.getElementById('planner-rules-text').value = data.yaml;
       document.getElementById('planner-rules-path').textContent = data.path;
     } catch (err) {
-      this._rulesError(`Failed to load rules: ${err.message}`);
+      showError('planner-rules-error', `Failed to load rules: ${err.message}`);
     }
   }
 
@@ -253,7 +241,7 @@ class PlannerMode {
     const res = await api('POST', '/api/traversability/blocked', {
       body: { file: currentFile, traversability: rulesYaml ?? undefined, allowed_ways: this._allowedWays() },
     });
-    if (!res.ok) throw new Error(await this._errorText(res));
+    if (!res.ok) throw new Error(await errorText(res));
     return (await res.json()).blocked;
   }
 
@@ -262,7 +250,7 @@ class PlannerMode {
     try {
       if (save) {
         const res = await api('PUT', '/api/traversability', { body: { traversability: text } });
-        if (!res.ok) throw new Error(await this._errorText(res));
+        if (!res.ok) throw new Error(await errorText(res));
         this.rulesYaml = null;
         setStatus(`Rules saved to ${(await res.json()).path}`, 'text-success');
       } else {
@@ -272,10 +260,10 @@ class PlannerMode {
         setStatus('Rules applied (not saved)', 'text-success');
       }
     } catch (err) {
-      this._rulesError(err.message);
+      showError('planner-rules-error', err.message);
       return;
     }
-    this._rulesError('');
+    showError('planner-rules-error', '');
     bootstrap.Modal.getInstance(document.getElementById('planner-rules-modal')).hide();
     this.refreshBlocked();
   }
@@ -401,54 +389,38 @@ class PlannerMode {
     setStatus('Fetching cost grid...', 'text-warning');
     
     try {
-      const costsJson = JSON.stringify(this.highwayCosts);
-      const surfaceJson = JSON.stringify(this.surfaceCosts);
-      const res = await fetch(`/api/cost_grid?file=${currentFile}&min_lat=${bounds.getSouth()}&min_lon=${bounds.getWest()}&max_lat=${bounds.getNorth()}&max_lon=${bounds.getEast()}&highway_costs=${encodeURIComponent(costsJson)}&surface_costs=${encodeURIComponent(surfaceJson)}`);
+      const res = await api('GET', '/api/cost_grid', {
+        query: {
+          file: currentFile,
+          min_lat: bounds.getSouth(), min_lon: bounds.getWest(),
+          max_lat: bounds.getNorth(), max_lon: bounds.getEast(),
+          highway_costs: JSON.stringify(this.highwayCosts),
+          surface_costs: JSON.stringify(this.surfaceCosts),
+        },
+      });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       
       if (geoLayers.costGrid) map.removeLayer(geoLayers.costGrid);
       
-      const markers = data.map(pt => {
-        const lat = pt[0];
-        const lon = pt[1];
-        const cost = pt[2];
-        const latlng = [lat, lon];
-        
+      const offPathThreshold = this.defaults.default_off_path_cost || 0.9;
+      const pathCap = this.defaults.path_cost_cap || 0.85;
+      const markers = data.map(([lat, lon, cost]) => {
+        let style;
         if (cost >= 1.0) {
           // Hard Obstacle style: black marker
-          return L.circleMarker(latlng, {
-            radius: 4,
-            fillColor: '#000',
-            color: '#000',
-            weight: 1,
-            fillOpacity: 1
-          });
+          style = { radius: 4, fillColor: '#000', color: '#000', weight: 1, fillOpacity: 1 };
+        } else if (cost >= offPathThreshold) {
+          // Off-path / All-terrain style: dark gray/brown
+          style = { radius: 2, fillColor: '#444', color: '#444', weight: 0, fillOpacity: 0.4 };
+        } else {
+          // Interpolate color from green (0) to red (pathCap)
+          const normalizedCost = cost / pathCap;
+          const r = Math.floor(255 * Math.min(1, normalizedCost));
+          const g = Math.floor(255 * Math.max(0, 1 - normalizedCost));
+          style = { radius: 3, fillColor: `rgb(${r},${g},0)`, color: '#000', weight: 0.2, fillOpacity: 0.6 };
         }
-        const offPathThreshold = this.defaults.default_off_path_cost || 0.9;
-        const pathCap = this.defaults.path_cost_cap || 0.85;
-
-        if (cost >= offPathThreshold) {
-           // Off-path / All-terrain style: dark gray/brown
-           return L.circleMarker(latlng, {
-              radius: 2,
-              fillColor: '#444',
-              color: '#444',
-              weight: 0,
-              fillOpacity: 0.4
-           });
-        }
-        // Interpolate color from green (0) to red (pathCap)
-        const normalizedCost = cost / pathCap;
-        const r = Math.floor(255 * Math.min(1, normalizedCost));
-        const g = Math.floor(255 * Math.max(0, 1 - normalizedCost));
-        return L.circleMarker(latlng, {
-          radius: 3,
-          fillColor: `rgb(${r},${g},0)`,
-          color: '#000',
-          weight: 0.2,
-          fillOpacity: 0.6
-        });
+        return L.circleMarker([lat, lon], style);
       });
       
       geoLayers.costGrid = L.layerGroup(markers).addTo(map);
@@ -506,10 +478,9 @@ class PlannerMode {
       }).addTo(map);
 
       // Custom drag handling for CircleMarker
-      let dragging = false;
       const onWpDown = (e) => {
         L.DomEvent.stopPropagation(e);
-        dragging = true;
+        this.dragPoint = p;
         this.isDragging = true;
         map.dragging.disable();
       };
@@ -523,31 +494,7 @@ class PlannerMode {
       wpHit.on('mousedown', onWpDown);
       this.markerLayer.addLayer(wpHit);
 
-      const onMouseMove = (e) => {
-        if (dragging) {
-          marker.setLatLng(e.latlng);
-          p.lat = e.latlng.lat;
-          p.lon = e.latlng.lng;
-          this.hasPlannedPath = false;
-          this.drawPathLine();
-        }
-      };
-      map.on('mousemove', onMouseMove);
-      this._mapDragListeners.push({ event: 'mousemove', fn: onMouseMove });
-
-      const stopDrag = () => {
-        if (dragging) {
-          dragging = false;
-          this.isDragging = false;
-          this.lastDragEndTime = Date.now();
-          map.dragging.enable();
-          this.redraw();
-        }
-      };
-
-      map.on('mouseup', stopDrag);
-      this._mapDragListeners.push({ event: 'mouseup', fn: stopDrag });
-      marker.on('mouseup', stopDrag);
+      marker.on('mouseup', this._onWpDragEnd, this);
 
       // Right click to delete
       const onWpContext = (e) => {
@@ -610,11 +557,27 @@ class PlannerMode {
     });
   }
 
+  _onWpDragMove(e) {
+    const p = this.dragPoint;
+    if (!p) return;
+    p.marker.setLatLng(e.latlng);
+    p.lat = e.latlng.lat;
+    p.lon = e.latlng.lng;
+    this.hasPlannedPath = false;
+    this.drawPathLine();
+  }
+
+  _onWpDragEnd() {
+    if (!this.dragPoint) return;
+    this.dragPoint = null;
+    this.isDragging = false;
+    this.lastDragEndTime = Date.now();
+    map.dragging.enable();
+    this.redraw();
+  }
+
   clearMarkers() {
-    for (const { event, fn } of this._mapDragListeners) {
-      map.off(event, fn);
-    }
-    this._mapDragListeners = [];
+    this.dragPoint = null; // a drag ends with its marker
     this.markerLayer.clearLayers();
   }
 
@@ -679,14 +642,9 @@ class PlannerMode {
     event.target.value = '';
   }
 
-  loadGpxFile(file) {
+  async loadGpxFile(file) {
     setStatus(`Importing ${file.name}...`, 'text-info');
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const gpxText = e.target.result;
-      this.parseAndLoadGpx(gpxText);
-    };
-    reader.readAsText(file);
+    this.parseAndLoadGpx(await file.text());
   }
 
   parseAndLoadGpx(xmlText) {
@@ -695,15 +653,12 @@ class PlannerMode {
       const xml = parser.parseFromString(xmlText, 'text/xml');
       const wpts = xml.getElementsByTagName('wpt');
       const trkpts = xml.getElementsByTagName('trkpt');
-      const points = [];
 
       const nodes = wpts.length > 0 ? wpts : trkpts;
-      for (let i = 0; i < nodes.length; i++) {
-        points.push({
-          lat: parseFloat(nodes[i].getAttribute('lat')),
-          lon: parseFloat(nodes[i].getAttribute('lon'))
-        });
-      }
+      const points = Array.from(nodes, n => ({
+        lat: parseFloat(n.getAttribute('lat')),
+        lon: parseFloat(n.getAttribute('lon'))
+      }));
 
       if (points.length === 0) {
         setStatus('No points found in GPX', 'text-warning');
@@ -797,11 +752,9 @@ class PlannerMode {
     const smooth = document.getElementById('planner-smooth').checked;
 
     try {
-      const res = await fetch('/api/create_replan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await api('POST', '/api/create_replan', {
         signal: this.abortController.signal,
-        body: JSON.stringify({
+        body: {
           points: this.points.map(p => [p.lat, p.lon]),
           file: currentFile,
           allowed_ways: allowedWays,
@@ -816,7 +769,7 @@ class PlannerMode {
           surface_costs: this.surfaceCosts,
           traversability: this.rulesYaml ?? undefined,
           transfer_id: this.currentReplanId
-        })
+        }
       });
 
       if (!res.ok) throw new Error(await res.text());
@@ -857,11 +810,7 @@ class PlannerMode {
     if (!this.currentReplanId) return;
     setStatus('Cancelling...', 'text-warning');
     try {
-      await fetch('/api/cancel_replan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transfer_id: this.currentReplanId })
-      });
+      await api('POST', '/api/cancel_replan', { body: { transfer_id: this.currentReplanId } });
     } catch (err) {
       console.error('Cancel failed:', err);
     }
@@ -925,11 +874,7 @@ ${pts}
     const gpx = this.generateGPX();
     setStatus('Creating wormhole...', 'text-warning');
     try {
-      const res = await fetch('/api/create_wormhole', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gpx })
-      });
+      const res = await api('POST', '/api/create_wormhole', { body: { gpx } });
       const data = await res.json();
       if (data.success) {
         this.currentWormholeId = data.transfer_id;
@@ -947,11 +892,7 @@ ${pts}
     const modalEl = document.getElementById('wormhole-modal');
     modalEl.addEventListener('hidden.bs.modal', () => {
       if (this.currentWormholeId) {
-        fetch('/api/cancel_wormhole', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transfer_id: this.currentWormholeId })
-        }).catch(err => console.error('Wormhole cancel failed:', err));
+        api('POST', '/api/cancel_wormhole', { body: { transfer_id: this.currentWormholeId } }).catch(err => console.error('Wormhole cancel failed:', err));
       }
       this.currentWormholeId = null;
     }, { once: true });

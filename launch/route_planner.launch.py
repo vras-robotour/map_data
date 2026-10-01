@@ -20,7 +20,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 from launch import LaunchDescription
-from map_data.utils.launch import flag, resolve_config_file, way_types
+from map_data.utils.launch import flag, given, resolve_config_file, way_types
 
 DEFAULT_PARAMS_FILE = "route_planner.yaml"
 
@@ -83,24 +83,20 @@ def _arguments():
 
 
 def launch_setup(context, *args, **kwargs):
-    def given(name, key=None, cast=str):
-        value = LaunchConfiguration(name).perform(context).strip()
-        return {} if not value else {key or name: cast(value)}
-
     # Later parameter sources win in ROS 2, so the file first and the arguments on top.
     overrides = {
-        **given("mapdata_file"),
-        **given("mapdata_path", "data_dir"),
-        **given("annotations"),
-        **given("traversability", "traversability_file"),
-        **given("mission_dir"),
-        **given("gps_fix_topic"),
-        **given("earth_frame"),
-        **given("local_frame"),
-        **given("algorithm"),
-        **given("highway_types", cast=way_types),
-        **given("spacing", cast=float),
-        **given("preload", cast=flag),
+        **given(context, "mapdata_file"),
+        **given(context, "mapdata_path", "data_dir"),
+        **given(context, "annotations"),
+        **given(context, "traversability", "traversability_file"),
+        **given(context, "mission_dir"),
+        **given(context, "gps_fix_topic"),
+        **given(context, "earth_frame"),
+        **given(context, "local_frame"),
+        **given(context, "algorithm"),
+        **given(context, "highway_types", cast=way_types),
+        **given(context, "spacing", cast=float),
+        **given(context, "preload", cast=flag),
         "use_sim_time": flag(LaunchConfiguration("use_sim_time").perform(context)),
     }
     node = Node(

@@ -15,30 +15,13 @@ document.querySelectorAll('.app-mode-btn').forEach(btn => {
     });
 });
 
-// Per-mode config for setAppMode: everything that's a straight lookup rather
-// than mode-specific behavior (which stays inline below).
-const APP_MODE_CONFIG = {
-    viewer: {
-        status: ['Viewer Mode', 'text-info'],
-        disableModeBtns: false, interactive: true, drawControl: 'add',
-        plannerAction: 'disable', trackerAction: 'disable',
-    },
-    planner: {
-        status: ['Planner Mode', 'text-warning'],
-        disableModeBtns: true, interactive: false, drawControl: 'remove',
-        plannerAction: 'enable', trackerAction: 'disable',
-    },
-    tracker: {
-        status: ['Tracker Mode', 'text-success'],
-        disableModeBtns: true, interactive: false, drawControl: 'remove',
-        plannerAction: 'disable', trackerAction: 'enable',
-    },
-};
+// Status-line class per app mode; the rest of setAppMode follows from the mode name.
+const APP_MODE_STATUS_CLASS = { viewer: 'text-info', planner: 'text-warning', tracker: 'text-success' };
 
 function setAppMode(mode) {
     if (mode === currentAppMode) return;
     currentAppMode = mode;
-    const cfg = APP_MODE_CONFIG[mode];
+    const viewer = mode === 'viewer';
 
     document.querySelectorAll('.app-mode-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.appMode === mode);
@@ -48,13 +31,12 @@ function setAppMode(mode) {
     document.getElementById('planner-sidebar-panel').style.display = mode === 'planner' ? 'flex' : 'none';
     document.getElementById('tracker-sidebar-panel').style.display = mode === 'tracker' ? 'flex' : 'none';
 
-    document.querySelectorAll('.mode-btn').forEach(btn => btn.disabled = cfg.disableModeBtns);
-    const gpxBtn = document.getElementById('gpx-create-btn');
-    if (gpxBtn) gpxBtn.disabled = cfg.disableModeBtns;
+    // Includes #gpx-create-btn, which is a .mode-btn too
+    document.querySelectorAll('.mode-btn').forEach(btn => btn.disabled = !viewer);
 
-    toggleMapInteractivity(cfg.interactive);
+    toggleMapInteractivity(viewer);
 
-    if (mode === 'viewer') {
+    if (viewer) {
         // Restore accessory panels visibility based on their content/state
         renderAnnotationList();
         renderChangesPanel();
@@ -75,7 +57,7 @@ function setAppMode(mode) {
     }
 
     if (drawControl) {
-        if (cfg.drawControl === 'add') map.addControl(drawControl);
+        if (viewer) map.addControl(drawControl);
         else map.removeControl(drawControl);
     }
 
@@ -84,10 +66,10 @@ function setAppMode(mode) {
     if (mode !== 'tracker' && robotCb && !robotCb.checked) trackerMode.hideRobot();
     else trackerMode.showRobot();
 
-    plannerMode[cfg.plannerAction]();
-    trackerMode[cfg.trackerAction]();
+    plannerMode[mode === 'planner' ? 'enable' : 'disable']();
+    trackerMode[mode === 'tracker' ? 'enable' : 'disable']();
 
-    setStatus(...cfg.status);
+    setStatus(`${mode[0].toUpperCase()}${mode.slice(1)} Mode`, APP_MODE_STATUS_CLASS[mode]);
 
     // Force map resize
     setTimeout(() => map.invalidateSize(), 100);
@@ -123,10 +105,14 @@ function resetProps() {
         '<span class="text-secondary" style="font-style:italic;">Click a feature to inspect</span>';
 }
 
+function _unstyle(layer) {
+    const oldCat = layer._osmCat;
+    layer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === layer.options?._ann_id)));
+}
+
 function deselectCurrent() {
     if (currentClickedLayer) {
-        const oldCat = currentClickedLayer._osmCat;
-        currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options?._ann_id)));
+        _unstyle(currentClickedLayer);
         currentClickedLayer = null;
     }
     currentClickedFeature = null;
@@ -134,23 +120,27 @@ function deselectCurrent() {
     clearNodes();
 }
 
-function selectWay(feature, layer, cat) {
-    if (currentClickedLayer === layer) return;
-    deselectCurrent();
+// Un-styles the previous selection, then makes `layer` the highlighted
+// current selection. Callers follow up with their own showProps/etc.
+function _highlight(layer, cat, feature = layer._featureRef) {
+    if (currentClickedLayer && currentClickedLayer !== layer) _unstyle(currentClickedLayer);
     layer._osmCat = cat;
     currentClickedLayer = layer;
     currentClickedFeature = feature;
     layer.setStyle(HIGHLIGHT_STYLES[cat]);
+}
+
+function selectWay(feature, layer, cat) {
+    if (currentClickedLayer === layer) return;
+    deselectCurrent();
+    _highlight(layer, cat, feature);
     showProps(feature.properties, feature);
 }
 
 function selectAnnotation(ann, layer) {
     if (currentClickedLayer === layer) return;
     deselectCurrent();
-    const cat = ann.type === 'path' ? 'path' : 'annotation';
-    layer._osmCat = cat;
-    currentClickedLayer = layer;
-    layer.setStyle(HIGHLIGHT_STYLES[cat]);
+    _highlight(layer, ann.type === 'path' ? 'path' : 'annotation', null);
     showAnnProps(ann);
 }
 
@@ -311,10 +301,7 @@ async function loadNodesForEditing(feature, layer) {
     // Midpoint handles between consecutive nodes for inserting new nodes.
     // Added after node markers so they sit below nodes in the SVG DOM.
     midpointMarkers = [];
-    const isClosed = currentNodes.length >= 2 &&
-        currentNodes[0].id === currentNodes[currentNodes.length - 1].id;
-    const mpEnd = isClosed ? currentNodes.length - 1 : currentNodes.length - 1;
-    for (let i = 0; i < mpEnd; i++) {
+    for (let i = 0; i < currentNodes.length - 1; i++) {
         const a = currentNodes[i], b = currentNodes[i + 1];
         const mlat = (a.lat + b.lat) / 2, mlon = (a.lon + b.lon) / 2;
         const [mp, mpHit] = makeHandle(
@@ -369,13 +356,19 @@ function clickNode(index) {
     showOsmNodeProps(node, index, currentNodes.length);
 }
 
-function showOsmNodeProps(node, index, total) {
+// Paths and open barriers can be split at any node but their two ends.
+function _canSplit(index) {
     const wayFeature = currentClickedFeature;
-    const isPath = wayFeature && ['road', 'footway'].includes(wayFeature.properties.category);
-    const isOpenBarrier = wayFeature && wayFeature.properties.category === 'barrier'
+    if (!wayFeature) return false;
+    const isPath = ['road', 'footway'].includes(wayFeature.properties.category);
+    const isOpenBarrier = wayFeature.properties.category === 'barrier'
         && currentNodes.length >= 2
         && currentNodes[0]?.id !== currentNodes[currentNodes.length - 1]?.id;
-    const canSplit = (isPath || isOpenBarrier) && index > 0 && index < total - 1;
+    return (isPath || isOpenBarrier) && index > 0 && index < currentNodes.length - 1;
+}
+
+function showOsmNodeProps(node, index, total) {
+    const canSplit = _canSplit(index);
 
     const tagRows = Object.entries(node.tags || {})
         .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
@@ -424,7 +417,9 @@ function showOsmNodeProps(node, index, total) {
 async function splitCurrentWay(wayId, nodeId) {
     if (!currentFile) return;
 
-    const res = await splitWayApi(currentFile, wayId, nodeId);
+    const res = await api('POST', '/api/ways/split', {
+        query: { file: currentFile }, body: { way_id: wayId, node_id: nodeId }, readOnlyMsg: 'Editing',
+    });
     if (res.ok) {
         redoStack = [];
         const data = await res.json();
@@ -491,15 +486,9 @@ function showNodeContextMenu(node, index, latlng) {
     const wayFeature = currentClickedFeature;
     if (!wayFeature) return;
     const wayId = wayFeature.properties.id;
-    const total = currentNodes.length;
-    const isPath = ['road', 'footway'].includes(wayFeature.properties.category);
-    const isOpenBarrier = wayFeature.properties.category === 'barrier'
-        && currentNodes.length >= 2
-        && currentNodes[0]?.id !== currentNodes[currentNodes.length - 1]?.id;
-    const canSplit = (isPath || isOpenBarrier) && index > 0 && index < total - 1;
 
     const entries = [];
-    if (canSplit) entries.push(['✂️ Split Way', () => splitCurrentWay(wayId, node.id)]);
+    if (_canSplit(index)) entries.push(['✂️ Split Way', () => splitCurrentWay(wayId, node.id)]);
     entries.push(['&#128465; Delete Node', () => deleteCurrentNode(wayId, node.id)]);
     showMenu(latlng, entries);
 }
@@ -530,7 +519,9 @@ document.getElementById('way-edit-save')?.addEventListener('click', async () => 
     const cat = currentClickedFeature?.properties?.category ?? 'unknown';
     const lbl = currentClickedFeature?.properties?.tags?.highway
         || currentClickedFeature?.properties?.tags?.barrier || '';
-    const res = await updateWayTagsApi(currentFile, editingWayId, tags, cat, lbl);
+    const res = await api('PUT', `/api/ways/${editingWayId}/tags`, {
+        query: { file: currentFile }, body: { tags, category: cat, label: lbl }, readOnlyMsg: 'Editing',
+    });
     if (!res.ok) { setStatus('Save failed', 'text-danger'); return; }
     redoStack = [];
     bootstrap.Modal.getInstance(document.getElementById('way-edit-modal'))?.hide();
@@ -548,7 +539,7 @@ document.getElementById('way-edit-add-prop-btn')?.addEventListener('click', () =
 
 async function undoTagOverride(wayId) {
     if (!currentFile) return;
-    const res = await deleteWayTagsApi(currentFile, wayId);
+    const res = await api('DELETE', `/api/ways/${wayId}/tags`, { query: { file: currentFile }, readOnlyMsg: 'Editing' });
     if (res.ok) {
         changeLog = changeLog.filter(c => !(c.type === 'tag' && String(c.id) === String(wayId)));
         tagOverrides = tagOverrides.filter(t => String(t.id) !== String(wayId));
@@ -565,7 +556,9 @@ async function deleteCurrentWay() {
     const cat = feature.properties.category;
     const tags = feature.properties.tags || {};
     const label = tags.highway || tags.barrier || '';
-    const res = await deleteWayApi(currentFile, wayId, cat, label);
+    const res = await api('DELETE', `/api/ways/${wayId}`, {
+        query: { file: currentFile }, body: { category: cat, label }, readOnlyMsg: 'Editing',
+    });
     if (!res.ok) { setStatus('Delete failed', 'text-danger'); return; }
     redoStack = [];
     if (currentClickedLayer && geoLayers[cat]) removeWayLayer(cat, currentClickedLayer);
@@ -584,7 +577,9 @@ async function deleteCurrentWay() {
 
 async function deleteCurrentNode(wayId, nodeId) {
     if (!currentFile) return;
-    const res = await deleteNodeApi(currentFile, wayId, nodeId);
+    const res = await api('DELETE', '/api/way_node', {
+        query: { file: currentFile, way_id: wayId, node_id: nodeId }, readOnlyMsg: 'Editing',
+    });
     if (!res.ok) { setStatus('Delete failed', 'text-danger'); return; }
     redoStack = [];
     changeLog.push({ type: 'node', way_id: wayId, node_id: nodeId });
@@ -600,7 +595,9 @@ async function hideCurrentWay() {
     const cat = feature.properties.category;
     const tags = feature.properties.tags || {};
     const label = tags.highway || tags.barrier || '';
-    const res = await hideWayApi(currentFile, wayId, cat, label);
+    const res = await api('PUT', `/api/ways/${wayId}/hide`, {
+        query: { file: currentFile }, body: { category: cat, label }, readOnlyMsg: 'Editing',
+    });
     if (!res.ok) { setStatus('Hide failed', 'text-danger'); return; }
     if (currentClickedLayer && geoLayers[cat]) {
         // Kept in subtypeLayers so Show can bring it back, so drop the highlight now
@@ -622,7 +619,7 @@ async function hideCurrentWay() {
 
 async function showWay(wayId) {
     if (!currentFile) return;
-    const res = await showWayApi(currentFile, wayId);
+    const res = await api('PUT', `/api/ways/${wayId}/show`, { query: { file: currentFile }, readOnlyMsg: 'Editing' });
     if (res.ok) {
         hiddenWays = hiddenWays.filter(d => d.id !== wayId);
         hiddenWayIds.delete(wayId);
@@ -638,14 +635,7 @@ function focusFeatureById(wayId) {
         let found = null;
         catLayer.eachLayer(l => { if (String(l._featureId) === String(wayId)) found = l; });
         if (found) {
-            if (currentClickedLayer && currentClickedLayer !== found) {
-                const oldCat = currentClickedLayer._osmCat;
-                currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
-            }
-            found._osmCat = cat;
-            currentClickedLayer = found;
-            currentClickedFeature = found._featureRef;
-            found.setStyle(HIGHLIGHT_STYLES[cat]);
+            _highlight(found, cat);
             showProps(found._featureRef.properties, found._featureRef);
             try { map.fitBounds(found.getBounds(), { maxZoom: 18, padding: [40, 40] }); } catch (_) { }
             return;
@@ -755,7 +745,9 @@ function renderChangesPanel() {
 
 async function undoWaySplit(wayId, nodeId) {
     if (!currentFile) return;
-    const res = await undoWaySplitApi(currentFile, wayId, nodeId);
+    const res = await api('DELETE', '/api/ways/split', {
+        query: { file: currentFile, way_id: wayId, node_id: nodeId }, readOnlyMsg: 'Editing',
+    });
     if (res.ok) {
         const data = await res.json();
         setStatus('Split reverted', 'text-success');
@@ -813,7 +805,7 @@ function renderHiddenPanel() {
 
 async function undoWayDeletion(wayId) {
     if (!currentFile) return;
-    const res = await restoreWayApi(currentFile, wayId);
+    const res = await api('PUT', `/api/ways/${wayId}/restore`, { query: { file: currentFile }, readOnlyMsg: 'Editing' });
     if (res.ok) {
         changeLog = changeLog.filter(c => !(c.type === 'way' && c.id === wayId));
         await _reloadWay(wayId);
@@ -823,7 +815,9 @@ async function undoWayDeletion(wayId) {
 
 async function undoNodeDeletion(wayId, nodeId) {
     if (!currentFile) return;
-    const res = await restoreNodeApi(currentFile, wayId, nodeId);
+    const res = await api('PUT', '/api/way_node/restore', {
+        query: { file: currentFile, way_id: wayId, node_id: nodeId }, readOnlyMsg: 'Editing',
+    });
     if (res.ok) {
         changeLog = changeLog.filter(c => !(c.type === 'node' && String(c.way_id) === String(wayId) && c.node_id === nodeId));
         await _reloadWay(wayId);
@@ -833,7 +827,9 @@ async function undoNodeDeletion(wayId, nodeId) {
 
 async function undoNodeAddition(wayId, nodeId) {
     if (!currentFile) return;
-    const res = await deleteNodeApi(currentFile, wayId, nodeId);
+    const res = await api('DELETE', '/api/way_node', {
+        query: { file: currentFile, way_id: wayId, node_id: nodeId }, readOnlyMsg: 'Editing',
+    });
     if (res.ok) {
         changeLog = changeLog.filter(c => !(c.type === 'add_node' && c.way_id === wayId && c.node_id === nodeId));
         await _reloadWay(wayId);
@@ -846,7 +842,9 @@ async function undoWayNodeMoves(wayId) {
     if (!currentFile) return;
     // Pass original way ID to backend, but use virtual ID for local state
     const originalWayId = String(wayId).split(':')[0];
-    const res = await undoWayNodeMovesApi(currentFile, originalWayId);
+    const res = await api('DELETE', '/api/way_nodes/move', {
+        query: { file: currentFile, way_id: originalWayId }, readOnlyMsg: 'Editing',
+    });
     if (res.ok) {
         changeLog = changeLog.filter(c => !(c.type === 'move' && String(c.id) === String(wayId)));
         await _reloadWay(wayId);
@@ -858,9 +856,56 @@ async function undoWayNodeMoves(wayId) {
 // Undo reverts the newest changeLog entry through its panel revert function;
 // first it snapshots, from the annotation store, what redo needs to replay the
 // original forward API call. Any new edit clears redoStack.
-const _UNDO_LABELS = {
-    way: 'way deletion', node: 'node deletion', tag: 'tag edit',
-    move: 'node move', split: 'way split', add_node: 'node addition',
+// Per entry type: `undo` reverts it, `redo(f, e, ann, posOv)` returns the
+// forward replay (or null), with `f` the filename snapshotted at undo time.
+const CHANGE_TYPES = {
+    way: {
+        label: 'way deletion', undo: e => undoWayDeletion(e.id),
+        redo: (f, e) => () => api('DELETE', `/api/ways/${e.id}`, {
+            query: { file: f }, body: { category: e.category, label: e.label }, readOnlyMsg: 'Editing',
+        }),
+    },
+    node: {
+        label: 'node deletion', undo: e => undoNodeDeletion(e.way_id, e.node_id),
+        redo: (f, e) => () => api('DELETE', '/api/way_node', {
+            query: { file: f, way_id: e.way_id, node_id: e.node_id }, readOnlyMsg: 'Editing',
+        }),
+    },
+    tag: {
+        label: 'tag edit', undo: e => undoTagOverride(e.id),
+        redo: (f, e, ann) => {
+            const tags = ann.tag_overrides?.[String(e.id)] || {};
+            return () => api('PUT', `/api/ways/${e.id}/tags`, {
+                query: { file: f }, body: { tags, category: e.category, label: e.label }, readOnlyMsg: 'Editing',
+            });
+        },
+    },
+    move: {
+        label: 'node move', undo: e => undoWayNodeMoves(e.id),
+        redo: (f, e, ann, posOv) => {
+            const nodes = Object.entries(posOv).map(([id, p]) => ({ id: +id, lat: p.lat, lon: p.lon }));
+            return () => moveWayNodesApi(f, e.id, nodes, e.category, e.label);
+        },
+    },
+    split: {
+        label: 'way split', undo: e => undoWaySplit(e.way_id, e.node_id),
+        redo: (f, e) => () => api('POST', '/api/ways/split', {
+            query: { file: f }, body: { way_id: e.way_id, node_id: e.node_id }, readOnlyMsg: 'Editing',
+        }),
+    },
+    add_node: {
+        label: 'node addition', undo: e => undoNodeAddition(e.way_id, e.node_id),
+        redo: (f, e, ann, posOv) => {
+            const a = (ann.added_nodes || []).find(n => n.id === e.node_id);
+            if (!a) return null;
+            const pos = posOv[String(e.node_id)] || a; // a later drag of the new node wins
+            return () => api('POST', '/api/way_node', {
+                query: { file: f, way_id: e.way_id },
+                body: { after_node_id: a.after_node_id, lat: pos.lat, lon: pos.lon },
+                readOnlyMsg: 'Editing',
+            });
+        },
+    },
 };
 let _undoBusy = false; // serialises held-down/repeated shortcuts
 
@@ -869,42 +914,18 @@ async function _redoFor(e) {
     const ann = await fetchAnnotations(f);
     const baseId = String(e.id ?? e.way_id).split(':')[0];
     const posOv = ann.node_position_overrides?.[baseId] || {};
-    let run;
-    if (e.type === 'way') run = () => deleteWayApi(f, e.id, e.category, e.label);
-    if (e.type === 'node') run = () => deleteNodeApi(f, e.way_id, e.node_id);
-    if (e.type === 'split') run = () => splitWayApi(f, e.way_id, e.node_id);
-    if (e.type === 'tag') {
-        const tags = ann.tag_overrides?.[String(e.id)] || {};
-        run = () => updateWayTagsApi(f, e.id, tags, e.category, e.label);
-    }
-    if (e.type === 'move') {
-        const nodes = Object.entries(posOv).map(([id, p]) => ({ id: +id, lat: p.lat, lon: p.lon }));
-        run = () => moveWayNodesApi(f, e.id, nodes, e.category, e.label);
-    }
-    if (e.type === 'add_node') {
-        const a = (ann.added_nodes || []).find(n => n.id === e.node_id);
-        if (!a) return null;
-        const pos = posOv[String(e.node_id)] || a; // a later drag of the new node wins
-        run = () => addWayNodeApi(f, e.way_id, a.after_node_id, pos.lat, pos.lon);
-    }
-    return run ? { type: e.type, label: _UNDO_LABELS[e.type], wayId: e.id ?? e.way_id, run } : null;
+    const run = CHANGE_TYPES[e.type]?.redo(f, e, ann, posOv);
+    return run ? { type: e.type, label: CHANGE_TYPES[e.type].label, wayId: e.id ?? e.way_id, run } : null;
 }
 
 async function undoLastChange() {
     const e = changeLog[changeLog.length - 1];
     if (!currentFile || !e) { setStatus('Nothing to undo', 'text-secondary'); return; }
     const redo = await _redoFor(e);
-    const ok = await ({
-        way: () => undoWayDeletion(e.id),
-        node: () => undoNodeDeletion(e.way_id, e.node_id),
-        tag: () => undoTagOverride(e.id),
-        move: () => undoWayNodeMoves(e.id),
-        split: () => undoWaySplit(e.way_id, e.node_id),
-        add_node: () => undoNodeAddition(e.way_id, e.node_id),
-    })[e.type]?.();
+    const ok = await CHANGE_TYPES[e.type]?.undo(e);
     if (!ok) { setStatus('Undo failed', 'text-danger'); return; }
     if (redo) redoStack.push(redo);
-    setStatus(`Undid ${_UNDO_LABELS[e.type]}`, 'text-success');
+    setStatus(`Undid ${CHANGE_TYPES[e.type].label}`, 'text-success');
 }
 
 async function redoLastChange() {
@@ -1010,7 +1031,9 @@ async function deleteSelectedAnnotation() {
     if (!editSelectedLayer || !currentFile) return;
     const annId = editSelectedLayer.options._ann_id;
     if (!annId) return;
-    const res = await deleteAnnotationApi(currentFile, annId);
+    const res = await api('DELETE', `/api/annotations/${annId}`, {
+        query: { file: currentFile }, readOnlyMsg: 'Editing',
+    });
     if (res.ok) {
         if (editSelectedLayer.editing) editSelectedLayer.editing.disable();
         drawnItems.removeLayer(editSelectedLayer);
@@ -1042,7 +1065,7 @@ async function revertAnnotationGeometry(id) {
         setStatus('Failed to revert annotation geometry', 'text-danger');
         return;
     }
-    ann.geometry = JSON.parse(JSON.stringify(baseline));
+    ann.geometry = structuredClone(baseline);
     if (editSelectedLayer && editSelectedLayer.options._ann_id === id) {
         if (editSelectedLayer.editing) editSelectedLayer.editing.disable();
         editSelectedLayer = null;
@@ -1059,7 +1082,9 @@ async function revertAnnotationGeometry(id) {
 
 async function removeAnnotationById(id) {
     if (!currentFile) return;
-    const res = await deleteAnnotationApi(currentFile, id);
+    const res = await api('DELETE', `/api/annotations/${id}`, {
+        query: { file: currentFile }, readOnlyMsg: 'Editing',
+    });
     if (res.ok) {
         if (currentClickedLayer && currentClickedLayer.options && currentClickedLayer.options._ann_id === id) {
             currentClickedLayer = null;
@@ -1139,18 +1164,25 @@ function openAnnEditModal(annId) {
     new bootstrap.Modal(document.getElementById('ann-detail-modal')).show();
 }
 
+// Adds `filename` to the file picker if it is missing, selects it and loads it.
+async function selectAndLoad(filename) {
+    const sel = document.getElementById('file-select');
+    if (sel) {
+        if (![...sel.options].some(o => o.value === filename)) {
+            sel.appendChild(new Option(filename, filename));
+        }
+        sel.value = filename;
+    }
+    await loadMapData(filename);
+}
+
 async function handleMapdataUpload(file) {
     setStatus(`Uploading ${file.name}...`, 'text-info');
     const formData = new FormData();
     formData.append('file', file);
     try {
         const data = await uploadMapdataApi(formData);
-        const sel = document.getElementById('file-select');
-        if (sel && ![...sel.options].some(o => o.value === data.filename)) {
-            sel.appendChild(new Option(data.filename, data.filename));
-        }
-        if (sel) sel.value = data.filename;
-        await loadMapData(data.filename);
+        await selectAndLoad(data.filename);
     } catch (err) {
         setStatus(`Upload failed: ${err.message}`, 'text-danger');
     }
@@ -1187,12 +1219,7 @@ document.getElementById('gpx-upload-submit')?.addEventListener('click', async ()
             `GPX Processed: ${data.roads} roads, ${data.footways} footways, ${data.barriers} barriers`,
             'text-success'
         );
-        const sel = document.getElementById('file-select');
-        if (sel && ![...sel.options].some(o => o.value === data.filename)) {
-            sel.appendChild(new Option(data.filename, data.filename));
-        }
-        if (sel) sel.value = data.filename;
-        await loadMapData(data.filename);
+        await selectAndLoad(data.filename);
     } catch (err) {
         setStatus(`GPX processing failed: ${err.message}`, 'text-danger');
     } finally {

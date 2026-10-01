@@ -169,6 +169,9 @@ class GraphPlanner:
         # copies so the shared Way objects owned by map_data stay untouched
         # (a second GraphPlanner on the same MapData must not see synthetic IDs).
         way_nodes: list[list[int]] = [list(way.nodes) for way in self._allowed_ways]
+        # How many ways each node is on. Splits only insert fresh junction ids, so
+        # counts above one stay valid after them.
+        on_ways = Counter(n for nodes in way_nodes for n in set(nodes))
 
         # First pass: identify potential splits from annotations (negative-ID
         # ways). Building the snapping index is pointless when there are none.
@@ -195,10 +198,6 @@ class GraphPlanner:
             threshold = 5.0
             # An end that is a node of another way already has its junction (the
             # annotation merge joins drawn paths by real nodes, map_data.annotations.join_ways).
-            uses: dict[int, int] = {}
-            for nodes in way_nodes:
-                for n in set(nodes):
-                    uses[n] = uses.get(n, 0) + 1
             if tree:
                 for way in self._allowed_ways:
                     # way.id >= 0 check fails if way.id is a string (virtual ID for split ways).
@@ -210,7 +209,7 @@ class GraphPlanner:
 
                     # Check endpoints of annotation way
                     for node_id in [way.nodes[0], way.nodes[-1]]:
-                        if uses[node_id] > 1:
+                        if on_ways[node_id] > 1:
                             continue
                         p_node = self.nodes[node_id].ravel()[:2]
                         p_sh = Point(p_node)
@@ -289,9 +288,9 @@ class GraphPlanner:
         self._edge_node_pairs = final_edge_node_pairs
         self._edge_factors = final_edge_factors
         self._edge_tree = STRtree(final_edge_segments) if final_edge_segments else None
-        self._build_areas(way_nodes)
+        self._build_areas(way_nodes, on_ways)
 
-    def _build_areas(self, way_nodes: list[list[int]]) -> None:
+    def _build_areas(self, way_nodes: list[list[int]], on_ways: Counter) -> None:
         """
         Collect the walkable areas among the allowed ways, with their entries.
 
@@ -306,7 +305,6 @@ class GraphPlanner:
         """
         self._areas: list[WalkableArea] = []
         self._node_areas: dict[int, list[WalkableArea]] = {}
-        on_ways = Counter(n for nodes in way_nodes for n in set(nodes))
         candidates = [
             (way, nodes)
             for way, nodes in zip(self._allowed_ways, way_nodes, strict=True)

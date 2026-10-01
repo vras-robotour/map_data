@@ -49,39 +49,27 @@ def _qr_response(body: bytes | str, mimetype: str, text: str, suffix: str) -> Re
 
 
 @bp.route("/api/qr")
+@bp.route("/api/qr.svg")
 def get_qr() -> ResponseReturnValue:
     """
-    PNG QR code of a Robotour goal:
-    ``/api/qr?lat=50.11&lon=14.41[&scale=12][&download=1][&caption=]``.
+    QR code of a Robotour goal, as PNG or (``.svg``) vector art:
+    ``/api/qr[.svg]?lat=50.11&lon=14.41[&scale=12][&download=1][&caption=]``.
 
     The payload is the geo URI the robot's ``qr_goal`` node parses
     (``geo:lat,lon``); ``scale`` is pixels per module (1-40); ``download=1``
     sets a file name so the browser saves it. 400 on bad coordinates. The
-    caption is baked into the pixels here - prefer :func:`get_qr_svg` for
-    anything that gets scaled.
+    PNG bakes the caption into the pixels; the SVG is sharp at any size and
+    its caption is real text, so prefer ``/api/qr.svg`` for a screen or a
+    printer (``scale`` then only sets the default pixel size).
     """
     try:
         text, scale, caption = _qr_request()
     except (KeyError, ValueError) as e:
         return jsonify({"error": f"lat/lon required: {e}"}), 400
+    if request.path.endswith(".svg"):
+        svg = qr_svg(text, scale=scale, caption=caption)
+        return _qr_response(svg, "image/svg+xml", text, ".svg")
     return _qr_response(qr_png(text, scale=scale, caption=caption), "image/png", text, ".png")
-
-
-@bp.route("/api/qr.svg")
-def get_qr_svg() -> ResponseReturnValue:
-    """
-    The same code as vector art:
-    ``/api/qr.svg?lat=50.11&lon=14.41[&scale=12][&download=1][&caption=]``.
-
-    Sharp at any size and the caption is real text, so this is what to show on
-    a screen or send to a printer; ``scale`` only sets the default pixel size.
-    """
-    try:
-        text, scale, caption = _qr_request()
-    except (KeyError, ValueError) as e:
-        return jsonify({"error": f"lat/lon required: {e}"}), 400
-    svg = qr_svg(text, scale=scale, caption=caption)
-    return _qr_response(svg, "image/svg+xml", text, ".svg")
 
 
 class WormholeManager:

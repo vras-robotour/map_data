@@ -135,14 +135,7 @@ function setupWayLayer(feature, layer, cat) {
         if (currentMode === 'view') {
             selectWay(feature, layer, cat);
         } else if (currentMode === 'edit' && cat !== 'crossroad') {
-            if (currentClickedLayer && currentClickedLayer !== layer) {
-                const oldCat = currentClickedLayer._osmCat;
-                currentClickedLayer.setStyle(oldCat ? STYLES[oldCat] : _annStyle(annotations.find(a => a.id === currentClickedLayer.options._ann_id)));
-            }
-            layer._osmCat = cat;
-            currentClickedLayer = layer;
-            currentClickedFeature = feature;
-            layer.setStyle(HIGHLIGHT_STYLES[cat]);
+            _highlight(layer, cat, feature);
             loadNodesForEditing(feature, layer);
         } else if (currentMode === 'delete' && cat !== 'crossroad') {
             layer._osmCat = cat;
@@ -290,18 +283,22 @@ function applyAnnData(annData, { withChangeLog = true } = {}) {
     }
 }
 
-async function refreshMetadata(filename, { refreshAnnotations = false } = {}) {
+// applyAnnData plus `annotations` itself, its baselines and the side panels.
+function applyAnn(annData, { refreshAnnotations = false } = {}) {
+    annotations = annData.annotations || [];
+    snapshotAnnBaselines();
+    applyAnnData(annData);
+    if (refreshAnnotations) {
+        renderAnnotationLayer();
+    }
+    renderAnnotationList();
+    renderChangesPanel();
+    renderHiddenPanel();
+}
+
+async function refreshMetadata(filename) {
     try {
-        const annData = await fetchAnnotations(filename);
-        annotations = annData.annotations || [];
-        snapshotAnnBaselines();
-        applyAnnData(annData);
-        if (refreshAnnotations) {
-            renderAnnotationLayer();
-        }
-        renderAnnotationList();
-        renderChangesPanel();
-        renderHiddenPanel();
+        applyAnn(await fetchAnnotations(filename));
     } catch (err) {
         console.error('Failed to refresh metadata:', err);
     }
@@ -316,7 +313,6 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         const annData = await fetchAnnotations(filename);
 
         const oldGeoLayers = { ...geoLayers };
-        const oldDrawnItems = drawnItems; // We'll clear it below if needed
 
         currentClickedLayer = null;
         currentClickedFeature = null;
@@ -397,13 +393,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
             }
         }
 
-        annotations = annData.annotations || [];
-        snapshotAnnBaselines();
-        applyAnnData(annData);
-        renderAnnotationLayer();
-        renderAnnotationList();
-        renderChangesPanel();
-        renderHiddenPanel();
+        applyAnn(annData, { refreshAnnotations: true });
 
         currentFile = filename;
         document.getElementById('export-btn').disabled = false;
@@ -516,12 +506,7 @@ function _reselectFeature(wayId) {
         let found = null;
         catLayer.eachLayer(layer => { if (String(layer._featureId) === String(wayId)) found = layer; });
         if (found) {
-            if (currentClickedLayer && currentClickedLayer !== found)
-                currentClickedLayer.setStyle(STYLES[currentClickedLayer._osmCat]);
-            found._osmCat = cat;
-            currentClickedLayer = found;
-            found.setStyle(HIGHLIGHT_STYLES[cat]);
-            currentClickedFeature = found._featureRef;
+            _highlight(found, cat);
             showProps(found._featureRef.properties, found._featureRef);
             return true;
         }

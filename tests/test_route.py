@@ -11,7 +11,6 @@ from map_data.pathsolver.route import (
     densify,
     path_length,
     plan_route,
-    route_to_dicts,
 )
 from map_data.utils.gpx import create_gpx_track
 
@@ -72,8 +71,6 @@ def test_plan_route_graph_follows_the_network(footway_network_mapdata):
     assert res.latlon[0] == pytest.approx(snapped_start, abs=1e-6)
     assert res.latlon[-1] == pytest.approx(goal, abs=1e-6)
     assert res.changed
-    dicts = route_to_dicts(res)
-    assert dicts[0]["latitude"] == pytest.approx(snapped_start[0])
 
 
 def test_plan_route_graph_keep_start(footway_network_mapdata):

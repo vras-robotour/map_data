@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from shapely import geometry, wkt
+from shapely import wkt
 
 from map_data.utils.way import Way
 
@@ -110,18 +110,9 @@ def load_mapdata(md_class: type["MapData"], path: str | Path) -> "MapData":
     md = md_class.__new__(md_class)
     md.__dict__.update(data["metadata"])  # zone_number/letter, min_/max_ x/y/lat/long, coords_file
 
-    md.osm_ways_data = None
-    md.osm_rels_data = None
-    md.osm_nodes_data = None
+    md.osm_data = None
 
     md.waypoints = np.array(data["waypoints"])
-    # Constructed instances expose the waypoints as shapely Points too;
-    # restore the attribute for parity (MapData.__init__ builds the same list).
-    md.points = (
-        [geometry.Point(x, y) for x, y in zip(md.waypoints[:, 0], md.waypoints[:, 1], strict=True)]
-        if md.waypoints.ndim == 2
-        else []
-    )
     md.nodes_cache = {int(k): v for k, v in data["nodes_cache"].items()}
 
     md.roads_list = [way_from_dict(w) for w in data["roads"]]

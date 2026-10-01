@@ -80,7 +80,12 @@ from std_msgs.msg import String
 from tf2_msgs.msg import TFMessage
 from tf2_ros import Buffer, TransformException
 
-from map_data.annotations import NO_ANNOTATIONS, annotation_path_for, load_mapdata_with_annotations
+from map_data.annotations import (
+    NO_ANNOTATIONS,
+    annotation_path_for,
+    load_mapdata_with_annotations,
+    load_summary,
+)
 from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE, GraphPlanner
 from map_data.pathsolver.route import (
     GRAPH_ALGORITHM,
@@ -99,13 +104,8 @@ from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 from map_data_interfaces.action import PlanRoute
 
 WGS84_FRAME = "wgs84"
-
-
-def _removed_summary(removed: dict[str, int]) -> str:
-    """``"stairs 15, bridge 13"`` for the load log; ``"nothing removed"`` when empty."""
-    if not removed:
-        return "nothing removed"
-    return ", ".join(f"{reason} {count}" for reason, count in removed.items())
+#: GraphPlanners kept per (map, way set, snap distance); a small LRU.
+PLANNER_CACHE_SIZE = 4
 
 
 class RoutePlanner(Node):
@@ -162,7 +162,6 @@ class RoutePlanner(Node):
         self._map_cache: tuple[tuple[str, str, str], float, object] | None = None
         # (map key, mtime, highway types, snap distance) -> GraphPlanner; small LRU
         self._planner_cache: OrderedDict[tuple, GraphPlanner] = OrderedDict()
-        self._planner_cache_size = 4
 
         latched = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
         self.pub_route = self.create_publisher(GeoPath, self.route_topic, latched)
@@ -273,14 +272,9 @@ class RoutePlanner(Node):
         cache = self._map_cache
         if cache is None:  # every caller runs _load_map first, which fills the cache
             raise RuntimeError("_graph_planner called before the map was loaded")
-        key = (
-            cache[0],
-            cache[1],
-            tuple(highway_types),
-            float(max_snap),
-            tuple(sorted(self.exclude_highway)),
-            self.traversability_file,
-        )
+        # exclude_highway and traversability_file are fixed at init; the latter is
+        # also in the map key (cache[0]).
+        key = (cache[0], cache[1], tuple(highway_types), float(max_snap))
         planner = self._planner_cache.get(key)
         if planner is not None and planner.map_data is md:
             self._planner_cache.move_to_end(key)
@@ -294,7 +288,7 @@ class RoutePlanner(Node):
             traversability=self.traversability_file or None,
         )
         self._planner_cache[key] = planner
-        while len(self._planner_cache) > self._planner_cache_size:
+        while len(self._planner_cache) > PLANNER_CACHE_SIZE:
             self._planner_cache.popitem(last=False)
         self.get_logger().info(
             f"built graph planner for {path.name} ({'/'.join(highway_types)}) in "
@@ -338,21 +332,7 @@ class RoutePlanner(Node):
             exclude_highway=self.exclude_highway,
             traversability=self.traversability_file or None,
         )
-        if ann == NO_ANNOTATIONS:
-            store_name = "none"
-        elif ann_path is not None and ann_path.is_file():
-            store_name = ann_path.name
-        else:
-            store_name = "no store"
-        removed = getattr(md, "traversability_removed", {})
-        self.get_logger().info(
-            f"loaded {path.name}: {len(md.footways_list)} footways, {len(md.roads_list)} roads, "
-            f"annotations={store_name} ({len(store.get('deleted_ways', []))} deleted ways, "
-            f"{len(store.get('annotations', []))} drawn), "
-            f"excluded highway={','.join(self.exclude_highway) or 'none'}, "
-            f"traversability={trav_path.name if trav_path else 'none'} "
-            f"({_removed_summary(removed)})"
-        )
+        self.get_logger().info(load_summary(path, md, store, ann, self.exclude_highway, trav_path))
         self._map_cache = (key, mtime, md)
         return md
 

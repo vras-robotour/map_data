@@ -8,7 +8,6 @@ into ROS2 PointCloud2 and MarkerArray messages for visualization.
 
 import sys
 from collections.abc import Callable, Sequence
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -30,17 +29,13 @@ from tf2_ros import (
 from visualization_msgs.msg import Marker, MarkerArray
 
 import map_data.map_data as md
-from map_data.annotations import (
-    NO_ANNOTATIONS,
-    annotation_path_for,
-    load_mapdata_with_annotations,
-)
+from map_data.annotations import load_mapdata_with_annotations, load_summary
 from map_data.traversability import resolve_traversability_path
+from map_data.utils.densify import densify_ways
 from map_data.utils.geodesy import apply_transform, ecef_to_latlon, utm_to_local_via_ecef
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 
 CLOUD_COLS = 4
-TOLERANCE = 1e-3
 TRANSFORM_MODES = ("tf", "auto", "geodetic")
 # Smallest plausible norm of an ECEF position [m]. Every point on Earth is ~6.37e6 m from
 # the ECEF origin, so a much smaller one means the earth_frame -> local_frame TF carries no
@@ -133,12 +128,7 @@ class OSMCloud(Node):
         self.pub_grid = self.create_publisher(PointCloud2, self.grid_topic, qos)
 
         if self.publish_intersections:
-            self.pub_poses = self.create_publisher(PoseArray, self.intersections_topic, qos)
-            self.pub_markers = self.create_publisher(
-                MarkerArray,
-                self.intersection_markers_topic,
-                qos,
-            )
+            self._ensure_intersection_pubs()
 
         self.tf = Buffer()
         self.tf_sub = None
@@ -188,7 +178,13 @@ class OSMCloud(Node):
             )
 
         if self.transform_mode == "geodetic":
-            self.get_ecef_to_local()
+            self.ecef_to_local = self._poll_tf(
+                self.local_frame,
+                self.earth_frame,
+                self._placement_error,
+            )
+            if self.ecef_to_local is not None:
+                self._log_local_origin()
         elif self.transform_mode == "auto":
             self.get_logger().info("Auto-calculating UTM to local transform from map center")
             center_x = (self.map_data.min_x + self.map_data.max_x) / 2
@@ -204,14 +200,10 @@ class OSMCloud(Node):
             t.child_frame_id = self.local_frame
             t.transform.translation.x = center_x
             t.transform.translation.y = center_y
-            t.transform.translation.z = 0.0
-            t.transform.rotation.x = 0.0
-            t.transform.rotation.y = 0.0
-            t.transform.rotation.z = 0.0
-            t.transform.rotation.w = 1.0
             self.tf_static_pub.sendTransform(t)
         else:
-            self.get_utm_to_local()
+            self.utm_to_local = self._poll_tf(self.local_frame, self.utm_frame)
+            self.get_logger().info(f"Got UTM to local transform: {self.utm_to_local}")
 
         if self.transform_mode == "geodetic":
             self.get_logger().info(
@@ -276,25 +268,16 @@ class OSMCloud(Node):
             exclude_highway=self.exclude_highway,
             traversability=self.traversability_file or None,
         )
-        if ann == NO_ANNOTATIONS:
-            store_name = "none"
-        else:
-            ann_path = Path(ann).expanduser() if ann else annotation_path_for(path)
-            store_name = ann_path.name if ann_path.is_file() else "no store"
-        removed = getattr(map_data, "traversability_removed", {})
-        trav_path = resolve_traversability_path(self.traversability_file)
         self.get_logger().info(
-            f"loaded {Path(path).name}: {len(map_data.footways_list)} footways, "
-            f"{len(map_data.roads_list)} roads, {len(map_data.crossroads_list)} crossroads; "
-            f"annotations={store_name} ({len(store.get('deleted_ways', []))} deleted ways, "
-            f"{len(store.get('annotations', []))} drawn), "
-            f"excluded highway={','.join(self.exclude_highway) or 'none'}, "
-            f"traversability={trav_path.name if trav_path else 'none'} ("
-            + (
-                ", ".join(f"{reason} {count}" for reason, count in removed.items())
-                or "nothing removed"
+            load_summary(
+                path,
+                map_data,
+                store,
+                ann,
+                self.exclude_highway,
+                resolve_traversability_path(self.traversability_file),
+                crossroads=True,
             )
-            + ")"
         )
         return map_data
 
@@ -308,6 +291,18 @@ class OSMCloud(Node):
                 f"{sorted(HIGHWAY_TYPE_KEYS)}"
             )
         return [v for v in values if v in HIGHWAY_TYPE_KEYS]
+
+    def _ensure_intersection_pubs(self) -> None:
+        """Create the (latched) intersection publishers, unless they already exist."""
+        if hasattr(self, "pub_poses"):
+            return
+        qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+        self.pub_poses = self.create_publisher(PoseArray, self.intersections_topic, qos)
+        self.pub_markers = self.create_publisher(
+            MarkerArray,
+            self.intersection_markers_topic,
+            qos,
+        )
 
     def parameter_callback(self, params: list[rclpy.Parameter]) -> SetParametersResult:
         rebuild_cloud = False
@@ -337,14 +332,8 @@ class OSMCloud(Node):
                 rebuild_intersections = True
             elif param.name == "publish_intersections":
                 self.publish_intersections = param.value
-                if self.publish_intersections and not hasattr(self, "pub_poses"):
-                    qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
-                    self.pub_poses = self.create_publisher(PoseArray, self.intersections_topic, qos)
-                    self.pub_markers = self.create_publisher(
-                        MarkerArray,
-                        self.intersection_markers_topic,
-                        qos,
-                    )
+                if self.publish_intersections:
+                    self._ensure_intersection_pubs()
                 rebuild_intersections = True
 
         if rebuild_cloud:
@@ -517,25 +506,6 @@ class OSMCloud(Node):
             rclpy.spin_once(self, timeout_sec=1.0)
         return None
 
-    def get_utm_to_local(self) -> None:
-        """Poll for the UTM to local coordinate transform."""
-        self.utm_to_local = self._poll_tf(self.local_frame, self.utm_frame)
-        self.get_logger().info(f"Got UTM to local transform: {self.utm_to_local}")
-
-    def get_ecef_to_local(self) -> None:
-        """
-        Poll for the ``earth_frame -> local_frame`` transform (ECEF to local ENU).
-
-        The result is stored as a 4x4 matrix mapping ECEF points into ``local_frame``.
-        """
-        self.ecef_to_local = self._poll_tf(
-            self.local_frame,
-            self.earth_frame,
-            self._placement_error,
-        )
-        if self.ecef_to_local is not None:
-            self._log_local_origin()
-
     def _transform_ready(self) -> bool:
         if self.transform_mode == "geodetic":
             return self.ecef_to_local is not None
@@ -585,12 +555,10 @@ class OSMCloud(Node):
         # The nearest-neighbour search is 2-D (a third all-zero column only slows the
         # kd-tree down); the z=0 column create_cloud expects is put back afterwards.
         grid = np.insert(points_near_ref(grid, waypoints, self.max_path_dist), 2, 0.0, axis=1)
-        if self.neighbor_cost == "linear":
-            pass
-        elif self.neighbor_cost == "quadratic":
+        if self.neighbor_cost == "quadratic":
             grid[:, 3] = grid[:, 3] ** 2
-        else:
-            if self.neighbor_cost != "zero" and self.neighbor_cost != "linear":
+        elif self.neighbor_cost != "linear":
+            if self.neighbor_cost != "zero":
                 self.get_logger().warning(f"Unknown neighbor cost: {self.neighbor_cost}")
             grid[:, 3] = 0.0
         # An empty grid over a map that has ways means the bounds and the way points do
@@ -648,7 +616,6 @@ class OSMCloud(Node):
             pose = Pose()
             pose.position.x = float(p[0])
             pose.position.y = float(p[1])
-            pose.position.z = 0.0
             pose_array.poses.append(pose)
 
             marker = Marker()
@@ -660,13 +627,11 @@ class OSMCloud(Node):
             marker.action = Marker.ADD
             marker.pose.position.x = float(p[0])
             marker.pose.position.y = float(p[1])
-            marker.pose.position.z = 0.0
             marker.scale.x = 2.0
             marker.scale.y = 2.0
             marker.scale.z = 2.0
             marker.color.a = 1.0
             marker.color.r = 1.0
-            marker.color.g = 0.0
             marker.color.b = 1.0
             marker_array.markers.append(marker)
 
@@ -713,8 +678,7 @@ def create_cloud(points: np.ndarray) -> PointCloud2:
         Points in a grid to create the cloud from.
 
     """
-    if not isinstance(points, np.ndarray):
-        points = np.array(points)
+    points = np.asarray(points)
     if points.ndim != 2:
         msg = f"points must be a 2-D array, got {points.ndim}-D"
         raise ValueError(msg)
@@ -749,10 +713,8 @@ def points_near_ref(points: np.ndarray, reference: np.ndarray, max_dist: float =
         All points with a cost based on distance to reference points.
 
     """
-    if not isinstance(points, np.ndarray):
-        points = np.array(points)
-    if not isinstance(reference, np.ndarray):
-        reference = np.array(reference)
+    points = np.asarray(points)
+    reference = np.asarray(reference)
 
     tree = cKDTree(reference, compact_nodes=False, balanced_tree=False)
     dists, _ = tree.query(points, distance_upper_bound=max_dist, workers=-1)
@@ -825,32 +787,13 @@ def split_ways_to_points(
         Waypoints created from the ways.
 
     """
-    waypoints = []
     selected = [
         way
         for highway_type in dict.fromkeys(highway_types)
         if highway_type in HIGHWAY_TYPE_KEYS
         for way in ways.get(HIGHWAY_TYPE_KEYS[highway_type], [])
     ]
-    for way in selected:
-        ids = [getattr(n, "id", n) for n in way.nodes]
-        if len(ids) < 2:
-            continue
-        nodes = np.array([points[i].ravel()[:2] for i in ids])
-        starts, ends = nodes[:-1], nodes[1:]
-        dists = np.linalg.norm(ends - starts, axis=1)
-
-        waypoints.append(nodes[:1])
-        for point0, point1, dist in zip(starts, ends, dists):
-            if dist <= TOLERANCE:
-                waypoints.append(point1[None])
-                continue
-
-            num = int(np.ceil(dist / max_dist))
-            steps = np.arange(1, num + 1) / num
-            waypoints.append(point0 + steps[:, None] * (point1 - point0))
-
-    return np.concatenate(waypoints) if waypoints else np.empty((0, 2))
+    return densify_ways(points, [way.nodes for way in selected], max_dist)[0]
 
 
 def main() -> None:

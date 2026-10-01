@@ -76,6 +76,43 @@ def annotation_path_for(mapdata_path: str | Path) -> Path:
     return p.with_name(f"{p.stem}.annotations.json")
 
 
+def load_summary(
+    path: str | Path,
+    md: MapData,
+    store: dict[str, Any],
+    annotations: str | None,
+    exclude_highway: Iterable[str],
+    trav_path: Path | None,
+    *,
+    crossroads: bool = False,
+) -> str:
+    """
+    The one-line "loaded <map>: ..." log of a node that loaded *path* with
+    :func:`load_mapdata_with_annotations`.
+
+    *annotations* is the store argument it was loaded with (``None`` for the
+    default sidecar), *trav_path* the resolved traversability rule file;
+    *crossroads* adds the crossroad count.
+    """
+    if annotations == NO_ANNOTATIONS:
+        store_name = "none"
+    else:
+        ann_path = Path(annotations).expanduser() if annotations else annotation_path_for(path)
+        store_name = ann_path.name if ann_path.is_file() else "no store"
+    removed = getattr(md, "traversability_removed", {})
+    junctions = f"{len(md.crossroads_list)} crossroads; " if crossroads else ""
+    return (
+        f"loaded {Path(path).name}: {len(md.footways_list)} footways, "
+        f"{len(md.roads_list)} roads, {junctions}"
+        f"annotations={store_name} ({len(store.get('deleted_ways', []))} deleted ways, "
+        f"{len(store.get('annotations', []))} drawn), "
+        f"excluded highway={','.join(exclude_highway) or 'none'}, "
+        f"traversability={trav_path.name if trav_path else 'none'} ("
+        + (", ".join(f"{reason} {count}" for reason, count in removed.items()) or "nothing removed")
+        + ")"
+    )
+
+
 def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
     """
     Apply way/node deletions, splits and node position overrides to *md*.
@@ -92,7 +129,7 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
     # Without the moves: they are per way, so the second pass places them, and the
     # first one must not rebuild a way from a position another way moved its node to.
     nodes_cache = md.nodes_cache = edited_nodes_cache(
-        {**store, "node_position_overrides": {}}, getattr(md, "nodes_cache", None)
+        {**store, "node_position_overrides": {}}, md.nodes_cache
     )
 
     deleted_way_ids = get_deleted_way_ids(store)
@@ -159,7 +196,7 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
         for lst_name in lists:
             for w in getattr(md, lst_name):
                 for n in w.nodes:
-                    users.setdefault(getattr(n, "id", n), set()).add(str(w.id).split(":")[0])
+                    users.setdefault(n, set()).add(str(w.id).split(":")[0])
         nodes_cache = md.nodes_cache = dict(nodes_cache)
         next_id = min([0, *nodes_cache]) - 1
         copies: dict[str, dict[int, int]] = {}  # original way id -> {node id: copy id}
@@ -210,7 +247,7 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                     remap = copies.get(str(w.id).split(":")[0])
                     if remap:
                         w = copy.copy(w)
-                        w.nodes = [remap.get(getattr(n, "id", n), n) for n in w.nodes]
+                        w.nodes = [remap.get(n, n) for n in w.nodes]
                 new_lst.append(w)
             setattr(md, lst_name, new_lst)
         if moves:
@@ -269,8 +306,6 @@ def merge_annotations(md: MapData, store: dict[str, Any]) -> None:
     all_ways = md.footways_list + md.roads_list + md.barriers_list
     ann_id = min([0, *(int(str(w.id).split(":")[0]) for w in all_ways)]) - 1
     ann_lines: list[tuple[Way, Any]] = []  # annotated path ways with their centre lines
-    if not hasattr(md, "nodes_cache") or md.nodes_cache is None:
-        md.nodes_cache = {}
     # Below the synthetic ids apply_way_edits may already have put in the cache.
     node_id = min([0, *md.nodes_cache]) - 1
     for ann in store.get("annotations", []):
@@ -284,17 +319,13 @@ def merge_annotations(md: MapData, store: dict[str, Any]) -> None:
         w.id = ann_id
         ann_id -= 1
         w.line = geom
-        w.nodes = []
-        w.in_out = ""
 
         if ann_type == "path":
-            hw = props.get("highway", "path")
-            w.tags = {"highway": hw}
-            if "width" in props:
-                w.tags["width"] = str(props["width"])
-            for k, v in props.items():
-                if k not in ("highway", "width"):
-                    w.tags[k] = str(v)
+            w.tags = {
+                "highway": props.get("highway", "path"),
+                **({"width": str(props["width"])} if "width" in props else {}),
+                **{k: str(v) for k, v in props.items() if k not in ("highway", "width")},
+            }
             if geom.geom_type == "LineString":
                 width_m = float(props.get("width", DEFAULT_ANNOTATION_WIDTH_M))
                 for e_coord, n_coord in geom.coords:
@@ -307,10 +338,10 @@ def merge_annotations(md: MapData, store: dict[str, Any]) -> None:
                 ann_lines.append((w, geom))
             (md.roads_list if w.is_road() else md.footways_list).append(w)
         else:
-            w.tags = {"barrier": props.get("barrier", "wall")}
-            for k, v in props.items():
-                if k != "barrier":
-                    w.tags[k] = str(v)
+            w.tags = {
+                "barrier": props.get("barrier", "wall"),
+                **{k: str(v) for k, v in props.items() if k != "barrier"},
+            }
             md.barriers_list.append(w)
 
     # Annotated paths share no OSM node ids with the map, so node-based crossroad
@@ -468,7 +499,7 @@ def apply_store(md: MapData, store: dict[str, Any]) -> MapData:
     against the ~280 ms of deep-copying every geometry (Stromovka).
     """
     md = copy.copy(md)
-    md.nodes_cache = dict(getattr(md, "nodes_cache", None) or {})
+    md.nodes_cache = dict(md.nodes_cache)
     md.roads_list = list(md.roads_list)
     md.footways_list = list(md.footways_list)
     md.barriers_list = list(md.barriers_list)

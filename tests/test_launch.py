@@ -7,7 +7,7 @@ Importing the launch file for real requires the `launch`, `launch_ros`, and
 tests/test_osm_cloud.py for why that's impractical to fake convincingly for
 a whole launch-description graph. Instead we parse the file's AST and check
 that every ``DeclareLaunchArgument`` it declares is actually consumed via
-``LaunchConfiguration`` somewhere in the file.
+``LaunchConfiguration`` (or ``map_data.utils.launch.given``) somewhere in the file.
 
 This is exactly the class of bug fixed by a previous commit ("osm_cloud
 bugs (run_all, costs, topics, linspace, launch args)"): it's easy to add a
@@ -50,7 +50,8 @@ def _string_literal(node: ast.AST) -> str | None:
 def _declared_and_used_args(tree: ast.Module) -> tuple[set[str], set[str]]:
     """
     Collect launch-argument names declared via DeclareLaunchArgument("name", ...)
-    and names referenced via LaunchConfiguration("name") anywhere in the module.
+    and names referenced via LaunchConfiguration("name") or given(context, "name", ...)
+    anywhere in the module.
     """
     declared: set[str] = set()
     used: set[str] = set()
@@ -66,6 +67,10 @@ def _declared_and_used_args(tree: ast.Module) -> tuple[set[str], set[str]]:
             arg_name = _string_literal(node.args[0])
             if arg_name is not None:
                 used.add(arg_name)
+        elif name == "given" and len(node.args) > 1:
+            arg_name = _string_literal(node.args[1])
+            if arg_name is not None:
+                used.add(arg_name)
     return declared, used
 
 
@@ -76,7 +81,7 @@ def test_launch_file_exists():
 def test_every_declared_launch_argument_is_referenced():
     """
     Every DeclareLaunchArgument must be consumed via LaunchConfiguration
-    somewhere in the file. A declared-but-unused argument silently does
+    (or given) somewhere in the file. A declared-but-unused argument silently does
     nothing when a user sets it — that's a dead argument.
     """
     tree = _parse_launch_file()
@@ -93,8 +98,8 @@ def test_every_declared_launch_argument_is_referenced():
 
 def test_no_launch_configuration_references_undeclared_argument():
     """
-    Every LaunchConfiguration("name") must correspond to a declared argument
-    — catches typos/renames that would raise at launch time.
+    Every LaunchConfiguration("name") / given(context, "name") must correspond
+    to a declared argument — catches typos/renames that would raise at launch time.
     """
     tree = _parse_launch_file()
     declared, used = _declared_and_used_args(tree)

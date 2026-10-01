@@ -142,19 +142,7 @@ def parse_osm_nodes(
         if node.id in way_node_ids:
             continue
 
-        is_obstacle = any(
-            key in obstacle_tags
-            and (
-                node.tags[key] in obstacle_tags[key]
-                or (
-                    "*" in obstacle_tags[key]
-                    and node.tags[key] not in not_obstacle_tags.get(key, [])
-                )
-            )
-            for key in node.tags
-        )
-
-        if is_obstacle:
+        if Way(tags=node.tags).is_barrier(obstacle_tags, not_obstacle_tags, {}):
             easting, northing, _, _ = utm.from_latlon(
                 float(node.lat),
                 float(node.lon),
@@ -202,6 +190,26 @@ def combine_ways(
     merged_ids = []
     used_ways = set()
 
+    def extend(at_end: bool) -> bool:
+        """Attach the next unused way at the chain's end (or start); False if none."""
+        joint = current_nodes[-1] if at_end else current_nodes[0]
+        candidates = [w for w in endpoint_map.get(joint, []) if w.id not in used_ways]
+        if not candidates:
+            return False
+        way = candidates[0]
+        used_ways.add(way.id)
+        used_ways_this_loop.append(way.id)
+        if at_end:
+            nodes = way.nodes if way.nodes[0] == joint else way.nodes[::-1]
+            current_nodes.extend(nodes[1:])
+            current_lines.append(way.line)
+        else:
+            nodes = way.nodes if way.nodes[-1] == joint else way.nodes[::-1]
+            current_nodes[:0] = nodes[:-1]
+            current_lines.insert(0, way.line)
+        current_tags.update(way.tags)
+        return True
+
     for start_way in ways_to_merge:
         if start_way.id in used_ways:
             continue
@@ -212,45 +220,13 @@ def combine_ways(
         used_ways.add(start_way.id)
         used_ways_this_loop = [start_way.id]
 
-        while True:
-            last_node_id = current_nodes[-1]
-            possible_next = [w for w in endpoint_map.get(last_node_id, []) if w.id not in used_ways]
-            if not possible_next:
-                break
-            next_way = possible_next[0]
-            used_ways.add(next_way.id)
-            used_ways_this_loop.append(next_way.id)
-
-            if next_way.nodes[0] == last_node_id:
-                current_nodes.extend(next_way.nodes[1:])
-            else:
-                current_nodes.extend(reversed(next_way.nodes[:-1]))
-
-            current_tags.update(next_way.tags)
-            current_lines.append(next_way.line)
-
+        while extend(at_end=True):
             if current_nodes[0] == current_nodes[-1]:
-                break
+                break  # closed ring
 
         if current_nodes[0] != current_nodes[-1]:
-            while True:
-                first_node_id = current_nodes[0]
-                possible_prev = [
-                    w for w in endpoint_map.get(first_node_id, []) if w.id not in used_ways
-                ]
-                if not possible_prev:
-                    break
-                prev_way = possible_prev[0]
-                used_ways.add(prev_way.id)
-                used_ways_this_loop.append(prev_way.id)
-
-                if prev_way.nodes[-1] == first_node_id:
-                    current_nodes = list(prev_way.nodes[:-1]) + current_nodes
-                else:
-                    current_nodes = list(reversed(prev_way.nodes[1:])) + current_nodes
-
-                current_tags.update(prev_way.tags)
-                current_lines.insert(0, prev_way.line)
+            while extend(at_end=False):
+                pass
 
         if len(current_lines) > 1:
             is_area = current_nodes[0] == current_nodes[-1]

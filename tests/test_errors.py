@@ -62,7 +62,7 @@ def test_overpass_timeout_returns_none():
 def test_run_parse_without_queries_returns_error():
     e, n, zn, zl = utm.from_latlon(50.0, 14.0)
     md = MapData([np.array([[e, n]]), int(zn), zl], coords_type="array")
-    # osm_*_data are all None at construction — run_parse should signal failure
+    # osm_data is None at construction — run_parse should signal failure
     result = md.run_parse()
     assert result == 1
 
@@ -77,7 +77,6 @@ def test_rrt_star_goal_in_isolated_obstacle():
     rrt_star = RRTStar(
         np.array([0.0, 0.0]),
         np.array([5.0, 5.0]),  # goal inside the fully blocked region
-        [],
         None,
         grid,
         (0.0, 0.0),

@@ -762,25 +762,19 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
                 self.sequence_gps = pts
                 self._dirty = True
 
-    def _sequence_poses_callback(self, msg: PoseArray) -> None:
+    def _pose_array_to(self, attr: str, msg: PoseArray) -> None:
         xyz = np.array([[p.position.x, p.position.y, p.position.z] for p in msg.poses]).reshape(
             -1, 3
         )
         pts = self._points_to_latlon(msg.header.frame_id, xyz)
         if pts is not None:
-            with self._lock:
-                self.sequence_window_gps = pts
-                self._dirty = True
+            self._set(**{attr: pts})
+
+    def _sequence_poses_callback(self, msg: PoseArray) -> None:
+        self._pose_array_to("sequence_window_gps", msg)
 
     def _intersections_callback(self, msg: PoseArray) -> None:
-        xyz = np.array([[p.position.x, p.position.y, p.position.z] for p in msg.poses]).reshape(
-            -1, 3
-        )
-        pts = self._points_to_latlon(msg.header.frame_id, xyz)
-        if pts is not None:
-            with self._lock:
-                self.intersections_gps = pts
-                self._dirty = True
+        self._pose_array_to("intersections_gps", msg)
 
     def _active_intersection_callback(self, msg: PoseStamped) -> None:
         pts = (
@@ -814,15 +808,18 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             self._dirty = True
 
     # ------------------------------------------------------------------ callbacks: hardware
-    def _voltage_callback(self, msg: Float32) -> None:
+    def _set(self, **fields: Any) -> None:
+        """Set telemetry attributes under the lock and mark the status dirty."""
         with self._lock:
-            self.bus_voltage = round(float(msg.data), 2)
+            for name, value in fields.items():
+                setattr(self, name, value)
             self._dirty = True
 
+    def _voltage_callback(self, msg: Float32) -> None:
+        self._set(bus_voltage=round(float(msg.data), 2))
+
     def _current_callback(self, msg: Float32) -> None:
-        with self._lock:
-            self.bus_current = round(float(msg.data), 2)
-            self._dirty = True
+        self._set(bus_current=round(float(msg.data), 2))
 
     def _battery_state_callback(self, msg: BatteryState) -> None:
         with self._lock:
@@ -837,9 +834,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             self._dirty = True
 
     def _motors_callback(self, msg: Bool) -> None:
-        with self._lock:
-            self.motors_enabled = bool(msg.data)
-            self._dirty = True
+        self._set(motors_enabled=bool(msg.data))
 
     def _estop_callback(self, msg: Bool) -> None:
         with self._lock:
@@ -848,9 +843,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             self._dirty = self._dirty or changed
 
     def _temp_callback(self, msg: Float32) -> None:
-        with self._lock:
-            self.teensy_temp = round(float(msg.data), 1)
-            self._dirty = True
+        self._set(teensy_temp=round(float(msg.data), 1))
 
     def _temperature_callback(self, msg: Temperature) -> None:
         with self._lock:
@@ -860,9 +853,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             self._dirty = True
 
     def _odrv_error_callback(self, msg: UInt64) -> None:
-        with self._lock:
-            self.motor_error = int(msg.data)
-            self._dirty = True
+        self._set(motor_error=int(msg.data))
 
     def _diagnostics_callback(self, msg: DiagnosticArray) -> None:
         errors = [s for s in msg.status if s.level >= DiagnosticStatus.ERROR]
@@ -893,9 +884,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             self._dirty = True
 
     def _recovery_callback(self, _msg: Header) -> None:
-        with self._lock:
-            self._last_recovery_time = time.time()
-            self._dirty = True
+        self._set(_last_recovery_time=time.time())
 
     def _teleop_callback(self, msg: TwistStamped) -> None:
         lv, av = msg.twist.linear, msg.twist.angular

@@ -21,13 +21,13 @@ def setup_logging(level: int = logging.INFO) -> None:
     )
 
 
-def package_share(subdir: str, package: str = "map_data") -> Path:
-    """The installed ``share/<package>/<subdir>``, or the source tree's ``<subdir>``."""
+def package_share(subdir: str) -> Path:
+    """The installed ``share/map_data/<subdir>``, or the source tree's ``<subdir>``."""
     try:
         from ament_index_python.resources import get_resource
 
-        _, prefix = get_resource("packages", package)
-        return Path(prefix) / "share" / package / subdir
+        _, prefix = get_resource("packages", "map_data")
+        return Path(prefix) / "share" / "map_data" / subdir
     except (ImportError, LookupError):
         return (Path(__file__).parent / ".." / ".." / subdir).resolve()
 

@@ -19,20 +19,19 @@ readable ``reason`` instead of a bare ``None``:
     the waypoints lie on disconnected parts of the network (graph planner);
 ``no_path``
     the grid planner found no path;
-``cancelled``
-    the grid planner was cancelled through its ``transfer_id``;
+``start_outside_map`` / ``goal_outside_map``
+    the start or goal lies too far outside the map's area (wrong map file?);
 ``grid_too_large``
     the requested grid would exceed ``max_grid_cells`` cells.
 """
 
 from __future__ import annotations
 
-import copy
 import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 import shapely as sh
@@ -40,7 +39,7 @@ import utm
 from shapely import geometry
 
 from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE, GraphPlanner
-from map_data.pathsolver.replan import DEFAULT_ARGS, ReplanPath
+from map_data.pathsolver.replan import ReplanPath
 from map_data.traversability import TraversabilityRules
 from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
@@ -294,23 +293,21 @@ def plan_route(
                 f"cell_size={cell_size} m, exceeding the {max_grid_cells / 1e6:.0f} million "
                 "cell limit. Request a smaller area or a larger cell size.",
             )
-        args = copy.copy(DEFAULT_ARGS)
-        args.simplify_path = simplify_path
-        args.smooth_path = smooth_path
-        args.cell_size = cell_size
-        args.inflate_obstacles = inflate_obstacles
-        args.low = p_low
-        args.high = p_high
 
         bbox = geometry.box(p_low[0], p_low[1], p_high[0], p_high[1])
         filtered_barriers = [w for w in md.barriers_list if w.line and w.line.intersects(bbox)]
         replanner = ReplanPath(
-            args,
             ways_to_shapely(filtered_barriers),
             transfer_id=transfer_id,
             grid_cost_weight=grid_cost_weight,
             highway_costs=highway_costs,
             surface_costs=surface_costs,
+            low=p_low,
+            high=p_high,
+            cell_size=cell_size,
+            inflate_obstacles=inflate_obstacles,
+            simplify_path=simplify_path,
+            smooth_path=smooth_path,
         )
         replanner.fill_grid(md, highway_types=highway_types)
         res = replanner.replan(utm_path, algorithm=sub_algorithm)
@@ -340,8 +337,3 @@ def plan_route(
         changed=changed,
         algorithm=algorithm,
     )
-
-
-def route_to_dicts(result: RouteResult) -> list[dict[str, Any]]:
-    """``[{"latitude", "longitude", "elevation"}, ...]`` for the GPX writers."""
-    return [{"latitude": lat, "longitude": lon, "elevation": 0.0} for lat, lon in result.latlon]

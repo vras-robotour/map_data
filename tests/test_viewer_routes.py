@@ -602,6 +602,15 @@ def test_fetch_area_rejects_oversized_bbox(app_client):
     assert "km" in resp.get_data(as_text=True)
 
 
+def test_fetch_area_rejects_non_numeric_bbox(app_client):
+    client, _ = app_client
+    resp = client.post(
+        "/api/fetch_area",
+        json={"min_lat": "50", "max_lat": 50.01, "min_lon": 14.0, "max_lon": 14.01, "name": "x"},
+    )
+    assert resp.status_code == 400
+
+
 def test_fetch_area_accepts_small_bbox_and_completes(app_client, mock_overpass_client):
     client, _ = app_client
     resp = client.post(
@@ -861,6 +870,15 @@ def test_add_way_node_concurrent_ids_unique(app_client_with_file):
     with (tmp_path / "test.annotations.json").open() as f:
         store = json.load(f)
     assert len(store["added_nodes"]) == n
+
+
+def test_add_way_node_rejects_non_integer_after_node_id(app_client_with_file):
+    client, _, filename = app_client_with_file
+    resp = client.post(
+        f"/api/way_node?file={filename}&way_id=1",
+        json={"after_node_id": "abc", "lat": 50.0, "lon": 14.0},
+    )
+    assert resp.status_code == 400
 
 
 # ── added node resolution round-trip ─────────────────────────────────────────

@@ -3,7 +3,6 @@
 import logging
 import random
 import threading
-from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -49,30 +48,27 @@ def _discard_cancelled(transfer_id: str | None) -> None:
             _cancelled_transfers.discard(transfer_id)
 
 
-# Default parameter set for :class:`ReplanPath`; callers ``copy.copy`` it and override
-# the fields they care about (``low``, ``high``, ``cell_size``, ...).
-DEFAULT_ARGS = SimpleNamespace(
-    low=(0.0, 0.0),
-    high=(0.0, 0.0),
-    cell_size=0.25,
-    inflate_obstacles=0.25,
-    simplify_path=True,
-    smooth_path=False,
-)
-
-
 class ReplanPath:
     def __init__(
         self,
-        args: SimpleNamespace,
         obstacles: list[sh.geometry.base.BaseGeometry] | None = None,
         transfer_id: str | None = None,
         grid_cost_weight: float | None = None,
         highway_costs: dict[str, float] | None = None,
         surface_costs: dict[str, float] | None = None,
         rng: random.Random | None = None,
+        *,
+        low: tuple[float, float] = (0.0, 0.0),
+        high: tuple[float, float] = (0.0, 0.0),
+        cell_size: float = 0.25,
+        inflate_obstacles: float = 0.25,
+        simplify_path: bool = True,
+        smooth_path: bool = False,
     ) -> None:
-        self.args = args
+        self.low = low
+        self.cell_size = cell_size
+        self.simplify_path = simplify_path
+        self.smooth_path = smooth_path
         self.transfer_id = transfer_id
         defaults = load_config("planner_defaults.yaml")
         self.grid_cost_weight = (
@@ -108,52 +104,24 @@ class ReplanPath:
 
         # Use the decoupled PathGrid component
         self.path_grid = PathGrid(
-            low=args.low,
-            high=args.high,
-            cell_size=args.cell_size,
+            low=low,
+            high=high,
+            cell_size=cell_size,
             highway_costs=self.HIGHWAY_COSTS,
             surface_costs=self.SURFACE_COSTS,
             default_off_path_cost=self.DEFAULT_OFF_PATH_COST,
             path_cost_cap=self.PATH_COST_CAP,
         )
 
-        if args.inflate_obstacles:
+        if inflate_obstacles:
             self.obstacles = (
-                [obstacle.buffer(args.inflate_obstacles) for obstacle in obstacles]
-                if obstacles
-                else []
+                [obstacle.buffer(inflate_obstacles) for obstacle in obstacles] if obstacles else []
             )
         else:
             self.obstacles = obstacles or []
 
         # Spatial index for faster collision checking
         self.obstacles_tree = sh.STRtree(self.obstacles) if self.obstacles else None
-
-    @property
-    def grid(self) -> np.ndarray:
-        """
-        Compatibility property for old access to the raw point grid.
-        """
-        return self.path_grid.grid
-
-    @grid.setter
-    def grid(self, value: np.ndarray) -> None:
-        self.path_grid.grid = value
-
-    def _ensure_grid_2d_cache(self) -> np.ndarray:
-        """
-        Build (once) and return the obstacle-burned 2D cost grid.
-
-        ``replan()``, ``_astar()`` and ``_rrt_star()`` all need this and none
-        of them should redundantly rebuild it, so they all call this instead.
-        """
-        if self.path_grid.grid_2d_cache is None:
-            grid_2d = self.path_grid.get_grid_2d()
-            self.path_grid.grid_2d_cache = self.path_grid.burn_obstacles(
-                grid_2d,
-                self.obstacles,
-            )
-        return self.path_grid.grid_2d_cache
 
     def replan(self, path: np.ndarray, algorithm: str = "astar") -> np.ndarray | None:
         # A cancel targeting a *previous* replan with the same transfer_id may
@@ -164,10 +132,6 @@ class ReplanPath:
         _discard_cancelled(self.transfer_id)
         try:
             # This is pure-Python, GIL-bound work, so it runs sequentially.
-            # Warm the grid cache once up front to avoid every segment lazily
-            # (and redundantly) rebuilding it in _astar/_rrt_star.
-            self._ensure_grid_2d_cache()
-
             new_path: list[np.ndarray] = []
             for i in range(len(path) - 1):
                 if _is_cancelled(self.transfer_id):
@@ -214,7 +178,7 @@ class ReplanPath:
             return path
 
         # 2. Smooth path if requested
-        if getattr(self.args, "smooth_path", False):
+        if self.smooth_path:
             path = smooth_path(path, collision_check_func=self._colides)
 
         # 3. Final Douglas-Peucker simplification on the whole path. This is
@@ -224,24 +188,25 @@ class ReplanPath:
         #    Every shortcut the simplification introduces is collision-checked
         #    against the obstacle polygons; colliding shortcuts keep their
         #    original vertices so the path cannot chord into an obstacle.
-        if self.args.simplify_path:
+        if self.simplify_path:
             path = simplify_path_checked(
                 path,
-                self.args.cell_size,
+                self.cell_size,
                 lambda p1, p2: self._colides(LineString([p1, p2])),
             )
 
         return path
 
     def _rrt_star(self, start: np.ndarray, goal: np.ndarray) -> np.ndarray | None:
+        grid = self.path_grid.grid_2d_cache
+        assert grid is not None, "fill_grid() must run before replan()"
         planner = RRTStar(
             start=start,
             goal=goal,
-            obstacles=self.obstacles,
             obstacles_tree=self.obstacles_tree,
-            grid=self._ensure_grid_2d_cache(),
-            low=self.args.low,
-            grid_scale=self.args.cell_size,
+            grid=grid,
+            low=self.low,
+            grid_scale=self.cell_size,
             grid_cost_weight=self.grid_cost_weight,
             transfer_id=self.transfer_id,
             informed=self.rrt_informed,
@@ -253,12 +218,14 @@ class ReplanPath:
         return planner.find_path()
 
     def _astar(self, start: np.ndarray, goal: np.ndarray) -> np.ndarray | None:
+        grid = self.path_grid.grid_2d_cache
+        assert grid is not None, "fill_grid() must run before replan()"
         return grid_astar(
-            self._ensure_grid_2d_cache(),
+            grid,
             start,
             goal,
-            self.args.low,
-            self.args.cell_size,
+            self.low,
+            self.cell_size,
             # The final pass in _post_process_path is the only simplification;
             # doing it again per segment here would just redo that work.
             simplify_path=False,

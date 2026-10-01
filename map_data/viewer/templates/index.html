@@ -103,38 +103,21 @@
           <small class="text-secondary" style="font-size:0.7rem;">ID · name · tag values · annotation type &amp; properties</small>
         </div>
 
-        <!-- Road -->
+        {% for layer, swatch, label in [
+             ('road', 'background:#333; border:1px solid #555;', 'Roads'),
+             ('footway', 'background:#FFD700; border:1px solid #b89900;', 'Footways'),
+             ('barrier', 'background:#BF0009; border:1px solid #8b0000;', 'Barriers'),
+           ] %}
         <details>
           <summary class="layer-row">
-            <input type="checkbox" class="st-check" data-layer="road" checked onclick="event.stopPropagation()">
-            <div class="layer-swatch" style="background:#333; border:1px solid #555;"></div>
-            <span>Roads</span>
+            <input type="checkbox" class="st-check" data-layer="{{ layer }}" checked onclick="event.stopPropagation()">
+            <div class="layer-swatch" style="{{ swatch }}"></div>
+            <span>{{ label }}</span>
             <span class="subtype-btn"></span>
           </summary>
-          <div id="subfilter-road" class="subtype-panel"></div>
+          <div id="subfilter-{{ layer }}" class="subtype-panel"></div>
         </details>
-
-        <!-- Footway -->
-        <details>
-          <summary class="layer-row">
-            <input type="checkbox" class="st-check" data-layer="footway" checked onclick="event.stopPropagation()">
-            <div class="layer-swatch" style="background:#FFD700; border:1px solid #b89900;"></div>
-            <span>Footways</span>
-            <span class="subtype-btn"></span>
-          </summary>
-          <div id="subfilter-footway" class="subtype-panel"></div>
-        </details>
-
-        <!-- Barrier -->
-        <details>
-          <summary class="layer-row">
-            <input type="checkbox" class="st-check" data-layer="barrier" checked onclick="event.stopPropagation()">
-            <div class="layer-swatch" style="background:#BF0009; border:1px solid #8b0000;"></div>
-            <span>Barriers</span>
-            <span class="subtype-btn"></span>
-          </summary>
-          <div id="subfilter-barrier" class="subtype-panel"></div>
-        </details>
+        {% endfor %}
 
         <!-- Crossroads -->
         <div class="layer-row">
@@ -322,42 +305,34 @@
           </div>
         </div>
         <div id="tracker-status-content" class="mt-2" style="flex: 1; min-height: 0; overflow-y: auto; font-size: 0.8rem;">
+{%- macro tsi_row(row, label, value, value_class='') %}
+            <div id="tsi-row-{{ row }}" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
+              <span class="text-secondary fw-bold">{{ label }}</span>
+              <span id="tsi-{{ value }}"{% if value_class %} class="{{ value_class }}"{% endif %}>—</span>
+            </div>
+{%- endmacro %}
           <div id="tsi-section-hardware" class="mb-3">
-            <div id="tsi-row-battery" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
-              <span class="text-secondary fw-bold">BATTERY</span>
-              <span id="tsi-battery" class="text-light">—</span>
-            </div>
-            <div id="tsi-row-estop" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
-              <span class="text-secondary fw-bold">E-STOP</span>
-              <span id="tsi-estop">—</span>
-            </div>
-            <div id="tsi-row-motors" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
-              <span class="text-secondary fw-bold">MOTORS</span>
-              <span id="tsi-motors">—</span>
-            </div>
+            {%- for row, label, cls in [
+                 ('battery', 'BATTERY', 'text-light'),
+                 ('estop', 'E-STOP', ''),
+                 ('motors', 'MOTORS', ''),
+                 ('temp', 'TEMP', 'text-light'),
+               ] %}
+            {%- if row == 'temp' %}
             <div id="tsi-motor-error" class="text-danger small" hidden></div>
-            <div id="tsi-row-temp" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
-              <span class="text-secondary fw-bold">TEMP</span>
-              <span id="tsi-temp" class="text-light">—</span>
-            </div>
+            {%- endif %}
+            {{- tsi_row(row, label, row, cls) }}
+            {%- endfor %}
           </div>
           <div id="tsi-section-localization" class="mb-3">
-            <div id="tsi-row-gps" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
-              <span class="text-secondary fw-bold">LOCALIZATION</span>
-              <span id="tsi-gps-fix">—</span>
-            </div>
-            <div id="tsi-row-fix-age" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
-              <span class="text-secondary fw-bold">FIX AGE</span>
-              <span id="tsi-fix-age">—</span>
-            </div>
-            <div id="tsi-row-speed" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
-              <span class="text-secondary fw-bold">SPEED</span>
-              <span id="tsi-speed">—</span>
-            </div>
-            <div id="tsi-row-speed-limit" class="d-flex justify-content-between border-bottom border-secondary pb-1 mb-1">
-              <span class="text-secondary fw-bold">LIMIT</span>
-              <span id="tsi-speed-limit">—</span>
-            </div>
+            {%- for row, label, value in [
+                 ('gps', 'LOCALIZATION', 'gps-fix'),
+                 ('fix-age', 'FIX AGE', 'fix-age'),
+                 ('speed', 'SPEED', 'speed'),
+                 ('speed-limit', 'LIMIT', 'speed-limit'),
+               ] %}
+            {{- tsi_row(row, label, value) }}
+            {%- endfor %}
           </div>
           <div id="tsi-section-navigation" class="mb-3">
             <div class="panel-title mb-1" style="font-size:0.6rem;">NAVIGATION</div>
@@ -480,7 +455,20 @@
 </div>
 {%- endmacro %}
 
-<!-- Fetch Area Modal -->
+{% macro modal(id, title, size, dialog_class='', content_class='', title_id=None) -%}
+<div class="modal fade" id="{{ id }}" tabindex="-1">
+  <div class="modal-dialog modal-{{ size }} modal-dialog-centered{{ ' ' ~ dialog_class if dialog_class }}">
+    <div class="modal-content bg-dark text-light border-secondary{{ ' ' ~ content_class if content_class }}">
+      <div class="modal-header border-secondary py-2">
+        <h6 class="modal-title"{% if title_id %} id="{{ title_id }}"{% endif %}>{{ title }}</h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+{{ caller() }}
+    </div>
+  </div>
+</div>
+{%- endmacro %}
+
 <!-- Robotour goal QR code: shown full screen (white) so a laptop/tablet can be held to the robot camera -->
 <div class="modal fade" id="qr-modal" tabindex="-1">
   <div class="modal-dialog modal-fullscreen">
@@ -506,13 +494,8 @@
   </div>
 </div>
 
-<div class="modal fade" id="fetch-area-modal" tabindex="-1">
-  <div class="modal-dialog modal-sm modal-dialog-centered">
-    <div class="modal-content bg-dark text-light border-secondary">
-      <div class="modal-header border-secondary py-2">
-        <h6 class="modal-title">Fetch OSM Area</h6>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
+<!-- Fetch Area Modal -->
+{% call modal('fetch-area-modal', 'Fetch OSM Area', 'sm') %}
       <div class="modal-body py-2">
         <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">NAME</label>
         <input id="area-name-input" type="text" placeholder="e.g. prague_center"
@@ -526,18 +509,10 @@
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
         <button type="button" id="fetch-area-submit" class="btn btn-primary btn-sm">Fetch & Parse</button>
       </div>
-    </div>
-  </div>
-</div>
+{% endcall %}
 
 <!-- GPX Upload Modal -->
-<div class="modal fade" id="gpx-upload-modal" tabindex="-1">
-  <div class="modal-dialog modal-sm modal-dialog-centered">
-    <div class="modal-content bg-dark text-light border-secondary">
-      <div class="modal-header border-secondary py-2">
-        <h6 class="modal-title">Create Map from GPX</h6>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
+{% call modal('gpx-upload-modal', 'Create Map from GPX', 'sm') %}
       <div class="modal-body py-2">
         <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">MAP NAME</label>
         <input id="gpx-name-input" type="text" placeholder="e.g. my_route"
@@ -551,18 +526,10 @@
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
         <button type="button" id="gpx-upload-submit" class="btn btn-primary btn-sm">Upload & Parse</button>
       </div>
-    </div>
-  </div>
-</div>
+{% endcall %}
 
 <!-- Highway Costs Modal -->
-<div class="modal fade" id="planner-costs-modal" tabindex="-1">
-  <div class="modal-dialog modal-sm modal-dialog-centered">
-    <div class="modal-content bg-dark text-light border-secondary">
-      <div class="modal-header border-secondary py-2">
-        <h6 class="modal-title">Highway Costs</h6>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
+{% call modal('planner-costs-modal', 'Highway Costs', 'sm') %}
       <div class="modal-body py-2" style="max-height:400px; overflow-y:auto;">
         <div class="panel-title mb-2" style="font-size:0.6rem;">HIGHWAY TYPES</div>
         <p class="mb-2 text-secondary" style="font-size:0.7rem;">Set base traversal cost (0.0 = best, 1.0 = obstacle).</p>
@@ -581,18 +548,10 @@
         <button type="button" id="planner-costs-reset" class="btn btn-outline-warning btn-sm">Reset</button>
         <button type="button" id="planner-costs-save" class="btn btn-primary btn-sm">Save</button>
       </div>
-    </div>
-  </div>
-</div>
+{% endcall %}
 
 <!-- Traversability Rules Modal -->
-<div class="modal fade" id="planner-rules-modal" tabindex="-1">
-  <div class="modal-dialog modal-lg modal-dialog-centered">
-    <div class="modal-content bg-dark text-light border-secondary">
-      <div class="modal-header border-secondary py-2">
-        <h6 class="modal-title">Traversability Rules</h6>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
+{% call modal('planner-rules-modal', 'Traversability Rules', 'lg') %}
       <div class="modal-body py-2">
         <p class="mb-2 text-secondary" style="font-size:0.7rem;">
           First matching rule wins. <b>Apply</b> uses the rules for planning in this browser tab
@@ -609,18 +568,10 @@
         <button type="button" id="planner-rules-apply" class="btn btn-outline-primary btn-sm">Apply</button>
         <button type="button" id="planner-rules-save" class="btn btn-primary btn-sm">Save to file</button>
       </div>
-    </div>
-  </div>
-</div>
+{% endcall %}
 
 <!-- Tracker Topics Modal -->
-<div class="modal fade" id="tracker-topics-modal" tabindex="-1">
-  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-    <div class="modal-content bg-dark text-light border-secondary">
-      <div class="modal-header border-secondary py-2">
-        <h6 class="modal-title">Tracker Topics</h6>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
+{% call modal('tracker-topics-modal', 'Tracker Topics', 'lg', dialog_class='modal-dialog-scrollable') %}
       <div class="modal-body py-2">
         <p class="mb-2 text-secondary" style="font-size:0.7rem;">
           <b>Apply</b> resubscribes the tracker now (its telemetry starts over); <b>Save</b> also
@@ -641,18 +592,10 @@
         <button type="button" id="tracker-topics-apply" class="btn btn-outline-primary btn-sm">Apply</button>
         <button type="button" id="tracker-topics-save" class="btn btn-primary btn-sm">Save to file</button>
       </div>
-    </div>
-  </div>
-</div>
+{% endcall %}
 
 <!-- Wormhole Share Modal -->
-<div class="modal fade" id="wormhole-modal" tabindex="-1">
-  <div class="modal-dialog modal-sm modal-dialog-centered">
-    <div class="modal-content bg-dark text-light border-secondary text-center">
-      <div class="modal-header border-secondary py-2">
-        <h6 class="modal-title">Share via Wormhole</h6>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
+{% call modal('wormhole-modal', 'Share via Wormhole', 'sm', content_class='text-center') %}
       <div class="modal-body py-3">
         <p class="mb-2" style="font-size:0.8rem;">Use this code on the receiving device:</p>
         <div id="wormhole-code" class="font-monospace fw-bold wormhole-code"></div>
@@ -661,18 +604,10 @@
       <div class="modal-footer border-secondary py-2 justify-content-center">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
       </div>
-    </div>
-  </div>
-</div>
+{% endcall %}
 
 <!-- Annotation Detail Modal -->
-<div class="modal fade" id="ann-detail-modal" tabindex="-1">
-  <div class="modal-dialog modal-sm modal-dialog-centered">
-    <div class="modal-content bg-dark text-light border-secondary">
-      <div class="modal-header border-secondary py-2">
-        <h6 class="modal-title" id="ann-detail-title">New Annotation</h6>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
+{% call modal('ann-detail-modal', 'New Annotation', 'sm', title_id='ann-detail-title') %}
       <div class="modal-body py-2" style="max-height:400px;overflow-y:auto;">
         <div class="mb-3">
           <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">TYPE</label>
@@ -723,18 +658,10 @@
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
         <button type="button" id="ann-detail-save" class="btn btn-warning btn-sm">Save</button>
       </div>
-    </div>
-  </div>
-</div>
+{% endcall %}
 
 <!-- Way properties edit modal -->
-<div class="modal fade" id="way-edit-modal" tabindex="-1">
-  <div class="modal-dialog modal-sm modal-dialog-centered">
-    <div class="modal-content bg-dark text-light border-secondary">
-      <div class="modal-header border-secondary py-2">
-        <h6 class="modal-title" id="way-edit-title">Edit Way Properties</h6>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
+{% call modal('way-edit-modal', 'Edit Way Properties', 'sm', title_id='way-edit-title') %}
       <div class="modal-body py-2" style="font-size:0.82rem;max-height:360px;overflow-y:auto;">
         <div id="way-edit-props"></div>
         <button type="button" id="way-edit-add-prop-btn"
@@ -746,9 +673,7 @@
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
         <button type="button" id="way-edit-save" class="btn btn-warning btn-sm">Save</button>
       </div>
-    </div>
-  </div>
-</div>
+{% endcall %}
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>

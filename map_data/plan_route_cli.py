@@ -36,7 +36,6 @@ from map_data.pathsolver.route import (
     GRID_ALGORITHMS,
     RoutePlanningError,
     plan_route,
-    route_to_dicts,
 )
 from map_data.traversability import TraversabilityRules
 from map_data.utils.config import package_share
@@ -196,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.save:
         text = (
-            create_gpx_content(route_to_dicts(result))
+            create_gpx_content(result.latlon)
             if args.wpt
             else create_gpx_track(result.latlon, name=Path(args.save).stem)
         )

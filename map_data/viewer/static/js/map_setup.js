@@ -77,7 +77,6 @@ function setMode(newMode, commit = true) {
     } else if (newMode === 'edit') {
         enableAnnotationEditMode();
     } else if (newMode === 'delete') {
-        if (!deleteHandler) initHandlers();
         deleteHandler.enable();
     } else if (newMode === 'fetch') {
         if (!fetchRectDraw) {
@@ -110,7 +109,7 @@ function setMode(newMode, commit = true) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function initApp() {
-    initHandlers();
+    deleteHandler = new L.EditToolbar.Delete(map, { featureGroup: drawnItems });
     setupDrawEvents();
     const data = await fetchFileList();
     const sel = document.getElementById('file-select');
@@ -136,7 +135,8 @@ async function initApp() {
     filterLayers(e.target.value);
   });
 
-    document.querySelectorAll('.mode-btn').forEach(btn => {
+    // [data-mode]: #gpx-create-btn is styled as a .mode-btn but opens a file picker
+    document.querySelectorAll('.mode-btn[data-mode]').forEach(btn => {
         btn.addEventListener('click', () => setMode(btn.dataset.mode));
     });
 
@@ -183,12 +183,7 @@ async function initApp() {
                 `Fetched: ${data.roads} roads, ${data.footways} footways, ${data.barriers} barriers`,
                 'text-success'
             );
-            const sel = document.getElementById('file-select');
-            if (sel && ![...sel.options].some(o => o.value === data.filename)) {
-                sel.appendChild(new Option(data.filename, data.filename));
-            }
-            if (sel) sel.value = data.filename;
-            await loadMapData(data.filename);
+            await selectAndLoad(data.filename);
         } catch (err) {
             setStatus(`Fetch failed: ${err.message}`, 'text-danger');
         }
@@ -247,7 +242,7 @@ async function initApp() {
             try {
                 const ann = await createAnnotationApi(currentFile, type, pendingAnnGeom, props);
                 annotations.push(ann);
-                annBaselineGeoms[ann.id] = JSON.parse(JSON.stringify(ann.geometry));
+                annBaselineGeoms[ann.id] = structuredClone(ann.geometry);
                 addAnnotationToLayer(ann);
                 renderAnnotationList();
                 setStatus('Annotation added', 'text-success');
@@ -273,6 +268,12 @@ async function initApp() {
         // Leave browser shortcuts (Ctrl+F find, Ctrl+V paste, ...) alone
         if (e.ctrlKey || e.metaKey || e.altKey) return;
 
+        const keyMode = { a: 'add', d: 'delete', f: 'fetch', p: 'path' }[k];
+        if (keyMode) {
+            if (currentAppMode === 'viewer') setMode(keyMode);
+            return;
+        }
+
         switch (e.key) {
             case 'v': case 'V': {
                 if (currentAppMode !== 'viewer') return;
@@ -280,10 +281,7 @@ async function initApp() {
                 const prevFeature = currentClickedFeature;
                 setMode('view');
                 if (prevLayer && prevFeature) {
-                    currentClickedLayer = prevLayer;
-                    currentClickedFeature = prevFeature;
-                    prevLayer._osmCat = prevFeature.properties.category;
-                    prevLayer.setStyle(HIGHLIGHT_STYLES[prevFeature.properties.category]);
+                    _highlight(prevLayer, prevFeature.properties.category, prevFeature);
                     showProps(prevFeature.properties, prevFeature);
                 }
                 break;
@@ -295,26 +293,11 @@ async function initApp() {
                 setMode('edit');
                 const cat = prevFeature?.properties?.category;
                 if (prevLayer && prevFeature && cat && cat !== 'crossroad') {
-                    currentClickedLayer = prevLayer;
-                    currentClickedFeature = prevFeature;
-                    prevLayer._osmCat = cat;
-                    prevLayer.setStyle(HIGHLIGHT_STYLES[cat]);
+                    _highlight(prevLayer, cat, prevFeature);
                     loadNodesForEditing(prevFeature, prevLayer);
                 }
                 break;
             }
-            case 'a': case 'A': 
-                if (currentAppMode === 'viewer') setMode('add'); 
-                break;
-            case 'd': case 'D': 
-                if (currentAppMode === 'viewer') setMode('delete'); 
-                break;
-            case 'f': case 'F': 
-                if (currentAppMode === 'viewer') setMode('fetch'); 
-                break;
-            case 'p': case 'P': 
-                if (currentAppMode === 'viewer') setMode('path'); 
-                break;
             case 'g': case 'G':
                 if (currentAppMode === 'viewer') {
                     document.getElementById('gpx-create-input')?.click();
@@ -403,14 +386,7 @@ async function initStaticDemo() {
 
     const demoFile = window.__mapdataDemoFile;
     if (demoFile) {
-        const sel = document.getElementById('file-select');
-        if (sel) {
-            if (![...sel.options].some(o => o.value === demoFile)) {
-                sel.appendChild(new Option(demoFile, demoFile));
-            }
-            sel.value = demoFile;
-        }
-        await loadMapData(demoFile);
+        await selectAndLoad(demoFile);
     }
     setStatus('Read-only demo — run map_data_viewer locally for editing & planning', 'text-info');
 }

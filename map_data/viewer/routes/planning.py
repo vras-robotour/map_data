@@ -1,6 +1,5 @@
 """Path-planning routes: planner defaults, traversability rules, cost grid, (re)planning."""
 
-import copy
 import json
 import logging
 from pathlib import Path
@@ -16,7 +15,7 @@ from flask import (
 )
 from flask.typing import ResponseReturnValue
 
-from map_data.pathsolver.replan import DEFAULT_ARGS, ReplanPath, cancel_replan_backend
+from map_data.pathsolver.replan import ReplanPath, cancel_replan_backend
 from map_data.pathsolver.route import (
     GRAPH_ALGORITHM,
     RoutePlanningError,
@@ -42,7 +41,6 @@ from .common import (
     MAX_INFLATE_OBSTACLES_M,
     MIN_CELL_SIZE_M,
     _bbox_area_km2,
-    _check_grid_cells,
     _validated_bbox,
     _validated_cost_dict,
     _validated_number,
@@ -208,7 +206,14 @@ def get_cost_grid() -> Response:
     )
 
     cell_size = 1.0  # Use a coarser grid for visualization performance
-    _check_grid_cells(_bbox_area_km2(min_lat, min_lon, max_lat, max_lon) * 1e6, cell_size)
+    cells = _bbox_area_km2(min_lat, min_lon, max_lat, max_lon) * 1e6 / (cell_size * cell_size)
+    if cells > MAX_GRID_CELLS:
+        abort(
+            400,
+            f"Requested area needs ~{cells / 1e6:.1f} million grid cells at "
+            f"cell_size={cell_size} m, exceeding the {MAX_GRID_CELLS / 1e6:.0f} million "
+            "cell limit. Request a smaller area or a larger cell size.",
+        )
 
     # Get custom highway/surface costs from the request, if provided
     cost_dicts: dict[str, dict[str, float] | None] = {}
@@ -235,15 +240,15 @@ def get_cost_grid() -> Response:
     low = (min(p1[0], p2[0]), min(p1[1], p2[1]))
     high = (max(p1[0], p2[0]), max(p1[1], p2[1]))
 
-    args = copy.copy(DEFAULT_ARGS)
-    args.low = low
-    args.high = high
-    args.cell_size = cell_size
-    args.inflate_obstacles = 0.0
-
     obstacles = ways_to_shapely(md.barriers_list)
     replanner = ReplanPath(
-        args, obstacles, highway_costs=highway_costs_dict, surface_costs=surface_costs_dict
+        obstacles,
+        highway_costs=highway_costs_dict,
+        surface_costs=surface_costs_dict,
+        low=low,
+        high=high,
+        cell_size=cell_size,
+        inflate_obstacles=0.0,
     )
 
     replanner.fill_grid(md, highway_types=["footway", "road"])
@@ -251,7 +256,7 @@ def get_cost_grid() -> Response:
     # grid is [N, 4] -> [x, y, 0, cost]; obstacles (cost >= 1.0) are not filtered
     # out, unlike planning, so they can be visualized too.
     points = []
-    for row in replanner.grid:
+    for row in replanner.path_grid.grid:
         lat, lon = utm.to_latlon(row[0], row[1], zn, zl)
         points.append([lat, lon, float(row[3])])
 
@@ -435,9 +440,7 @@ def create_replan() -> Response:
             max_grid_cells=MAX_GRID_CELLS,
         )
     except RoutePlanningError as e:
-        if e.reason == "grid_too_large":
-            abort(400, e.message)
-        if e.reason == "too_few_points":
+        if e.reason in ("grid_too_large", "too_few_points"):
             abort(400, e.message)
         # The grid planner cannot tell "no path" from "cancelled"; keep the
         # historical status strings the frontend expects.
@@ -446,8 +449,4 @@ def create_replan() -> Response:
         return jsonify({"retrieveNum": 1, "newPath": None, "status": status, "reason": e.reason})
 
     new_path = [[lat, lon] for lat, lon in result.latlon]
-    changed = result.changed
-
-    if changed:
-        return jsonify({"retrieveNum": 0, "newPath": new_path})
-    return jsonify({"retrieveNum": -1, "newPath": new_path})
+    return jsonify({"retrieveNum": 0 if result.changed else -1, "newPath": new_path})

@@ -10,7 +10,6 @@ import math
 import random
 
 import numpy as np
-import shapely as sh
 from scipy.spatial import cKDTree
 from shapely.geometry import LineString, Point
 from shapely.strtree import STRtree
@@ -53,7 +52,6 @@ class RRTStar:
         self,
         start: np.ndarray,
         goal: np.ndarray,
-        obstacles: list[sh.geometry.base.BaseGeometry],
         obstacles_tree: STRtree | None,
         grid: np.ndarray,
         low: tuple[float, float],
@@ -82,12 +80,8 @@ class RRTStar:
         goal : np.ndarray
             Goal position as a 2-element array ``[x, y]`` in world
             coordinates.
-        obstacles : list
-            Shapely geometries representing hard barriers. Not read directly
-            (collision checks go through *obstacles_tree*); accepted so
-            callers can pass the same pair they already have.
         obstacles_tree : STRtree or None
-            Pre-built Shapely STRtree index over *obstacles*. Pass ``None``
+            Pre-built Shapely STRtree index over the barrier polygons. Pass ``None``
             to skip polygon-based collision checking (grid only).
         grid : np.ndarray
             2-D cost array with shape ``(Y, X)``. A value of ``0.0`` means
@@ -137,9 +131,6 @@ class RRTStar:
         """
         self.start = start
         self.goal = goal
-        # obstacles itself is not read (collision checks go through
-        # obstacles_tree); kept as a parameter so callers can pass the same
-        # (geometries, tree) pair they already have.
         self.obstacles_tree = obstacles_tree
         self.grid = grid  # (Y, X)
         self.grid_shape = grid.shape

@@ -1,5 +1,3 @@
-import copy
-
 import numpy as np
 import pytest
 import shapely.geometry as geom
@@ -7,7 +5,7 @@ import utm
 from shapely.geometry import LineString
 
 from map_data.map_data import MapData
-from map_data.pathsolver.replan import DEFAULT_ARGS, ReplanPath
+from map_data.pathsolver.replan import ReplanPath
 from map_data.utils.way import Way
 
 _ZN, _ZL = 33, "U"
@@ -40,12 +38,7 @@ def _make_md_with_footway():
 
 
 def _make_args(low, high, cell_size=0.5):
-    args = copy.copy(DEFAULT_ARGS)
-    args.low = low
-    args.high = high
-    args.cell_size = cell_size
-    args.inflate_obstacles = 0.0
-    return args
+    return {"low": low, "high": high, "cell_size": cell_size, "inflate_obstacles": 0.0}
 
 
 # ── footway cost ──────────────────────────────────────────────────────────────
@@ -54,7 +47,7 @@ def _make_args(low, high, cell_size=0.5):
 def test_fill_grid_cells_on_footway_have_low_cost():
     md = _make_md_with_footway()
     args = _make_args((_E0, _N0), (_E0 + 20, _N0 + 20))
-    rp = ReplanPath(args, [])
+    rp = ReplanPath([], **args)
     rp.fill_grid(md)
 
     grid_2d = rp.path_grid.grid_2d_cache
@@ -62,8 +55,8 @@ def test_fill_grid_cells_on_footway_have_low_cost():
 
     # Footway is at n0+10 → y_idx ≈ floor(10 / 0.5) = 20 out of 40
     # Footway x midpoint n0+10 → x_idx ≈ 20
-    y_idx = int(10 / args.cell_size)
-    x_idx = int(10 / args.cell_size)
+    y_idx = int(10 / args["cell_size"])
+    x_idx = int(10 / args["cell_size"])
     # cap at grid bounds
     y_idx = min(y_idx, grid_2d.shape[0] - 1)
     x_idx = min(x_idx, grid_2d.shape[1] - 1)
@@ -74,7 +67,7 @@ def test_fill_grid_cells_on_footway_have_low_cost():
 def test_fill_grid_cells_far_from_footway_have_high_cost():
     md = _make_md_with_footway()
     args = _make_args((_E0, _N0), (_E0 + 20, _N0 + 20))
-    rp = ReplanPath(args, [])
+    rp = ReplanPath([], **args)
     rp.fill_grid(md)
 
     grid_2d = rp.path_grid.grid_2d_cache
@@ -93,13 +86,13 @@ def test_fill_grid_cells_inside_barrier_are_inf():
     barrier = geom.box(_E0 + 5, _N0 + 2, _E0 + 7, _N0 + 4)
 
     args = _make_args((_E0, _N0), (_E0 + 20, _N0 + 20))
-    rp = ReplanPath(args, [barrier])
+    rp = ReplanPath([barrier], **args)
     rp.fill_grid(md)
 
     grid_2d = rp.path_grid.grid_2d_cache
     # Centroid of barrier: (e0+6, n0+3) → x_idx=12, y_idx=6
-    x_idx = int(6 / args.cell_size)
-    y_idx = int(3 / args.cell_size)
+    x_idx = int(6 / args["cell_size"])
+    y_idx = int(3 / args["cell_size"])
     x_idx = min(x_idx, grid_2d.shape[1] - 1)
     y_idx = min(y_idx, grid_2d.shape[0] - 1)
 
@@ -111,7 +104,7 @@ def test_fill_grid_cells_outside_barrier_not_inf():
     barrier = geom.box(_E0 + 5, _N0 + 2, _E0 + 7, _N0 + 4)
 
     args = _make_args((_E0, _N0), (_E0 + 20, _N0 + 20))
-    rp = ReplanPath(args, [barrier])
+    rp = ReplanPath([barrier], **args)
     rp.fill_grid(md)
 
     grid_2d = rp.path_grid.grid_2d_cache
@@ -125,7 +118,7 @@ def test_fill_grid_cells_outside_barrier_not_inf():
 def test_fill_grid_produces_2d_cache():
     md = _make_md_with_footway()
     args = _make_args((_E0, _N0), (_E0 + 20, _N0 + 20))
-    rp = ReplanPath(args, [])
+    rp = ReplanPath([], **args)
     assert rp.path_grid.grid_2d_cache is None  # not filled yet
     rp.fill_grid(md)
     assert rp.path_grid.grid_2d_cache is not None
@@ -148,7 +141,7 @@ def test_fill_grid_produces_2d_cache():
 def test_fill_grid_no_zero_cost_cells_off_path():
     md = _make_md_with_footway()
     args = _make_args((_E0, _N0), (_E0 + 20, _N0 + 20))
-    rp = ReplanPath(args, [])
+    rp = ReplanPath([], **args)
     max_path_dist = 2.0
     rp.fill_grid(md, max_path_dist=max_path_dist)
 

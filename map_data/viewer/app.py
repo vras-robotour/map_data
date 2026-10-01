@@ -221,14 +221,12 @@ def create_app(
                         executor.add_node(tracker_node)
                         executor.spin()
 
-                    spin_thread = threading.Thread(target=ros_spin, daemon=True)
-                    spin_thread.start()
+                    threading.Thread(target=ros_spin, daemon=True).start()
 
                     # Start telemetry broadcaster
-                    broadcaster_thread = threading.Thread(
+                    threading.Thread(
                         target=telemetry_broadcaster, args=(1.0 / telemetry_hz,), daemon=True
-                    )
-                    broadcaster_thread.start()
+                    ).start()
 
                     logger.info(
                         "ROS2 TrackerNode initialized and spinning (config %s).",
@@ -262,7 +260,6 @@ def main() -> None:
     )
 
     # Filter out ROS-specific arguments before parsing
-    ros_args = []
     try:
         from rclpy.utilities import remove_ros_args
 
@@ -274,17 +271,12 @@ def main() -> None:
     if args.telemetry_rate <= 0:
         parser.error("--telemetry-rate must be positive")
 
-    data_dir = None
-
-    if args.data_dir:
-        data_dir = str(Path(args.data_dir).resolve())
+    data_dir = str(Path(args.data_dir).resolve()) if args.data_dir else None
 
     setup_logging()
-    tracker_config = None
-    if args.config:
-        tracker_config = Path(args.config).resolve()
-        if not tracker_config.is_file():
-            logger.warning("%s does not exist yet: default topics, Save creates it", tracker_config)
+    tracker_config = Path(args.config).resolve() if args.config else None
+    if tracker_config and not tracker_config.is_file():
+        logger.warning("%s does not exist yet: default topics, Save creates it", tracker_config)
 
     try:
         app = create_app(

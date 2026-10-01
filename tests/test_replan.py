@@ -4,14 +4,13 @@ import pytest
 from map_data.pathsolver import replan as replan_mod
 from map_data.pathsolver.replan import ReplanPath, cancel_replan_backend
 
-
-class Args:
-    def __init__(self):
-        self.low = (0, 0)
-        self.high = (10, 10)
-        self.cell_size = 0.5
-        self.simplify_path = True
-        self.inflate_obstacles = 0.0
+ARGS = {
+    "low": (0, 0),
+    "high": (10, 10),
+    "cell_size": 0.5,
+    "simplify_path": True,
+    "inflate_obstacles": 0.0,
+}
 
 
 @pytest.fixture
@@ -26,7 +25,7 @@ def transfer_id():
 
 
 def _make_replanner(transfer_id=None):
-    replanner = ReplanPath(Args(), [], transfer_id=transfer_id)
+    replanner = ReplanPath([], transfer_id=transfer_id, **ARGS)
     # Pre-warm the grid cache with an all-free grid (same pattern as test_astar)
     replanner.path_grid.grid_2d_cache = np.zeros((20, 20), dtype=float)
     return replanner

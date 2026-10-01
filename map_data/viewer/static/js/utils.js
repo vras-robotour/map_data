@@ -72,6 +72,19 @@ window.fetch = function (input, init) {
     return _rawFetch(input, init);
 };
 
+// Flask's abort() answers with an HTML page; pull the message out of it.
+async function errorText(res) {
+    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+    return (doc.querySelector('p') || doc.body).textContent.trim();
+}
+
+// Shows `msg` in the error element `id`, or hides it when `msg` is empty.
+function showError(id, msg) {
+    const el = document.getElementById(id);
+    el.textContent = msg || '';
+    el.hidden = !msg;
+}
+
 async function copyToClipboard(text) {
     try {
         await navigator.clipboard.writeText(String(text));
@@ -84,7 +97,7 @@ async function copyToClipboard(text) {
 function snapshotAnnBaselines() {
     annBaselineGeoms = {};
     annotations.forEach(a => {
-        annBaselineGeoms[a.id] = JSON.parse(JSON.stringify(a.geometry));
+        annBaselineGeoms[a.id] = structuredClone(a.geometry);
     });
 }
 

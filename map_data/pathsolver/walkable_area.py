@@ -65,19 +65,13 @@ class WalkableArea:
         self._weights: np.ndarray | None = None
         self._crossings: dict[int, dict[int, Crossing]] = {}
 
-    def covers(self, point: np.ndarray) -> bool:
-        """
-        Return ``True`` if *point* lies in the area (boundary included, holes excluded).
-        """
-        return bool(self.polygon.covers(Point(point)))
-
     def _anchor(self, point: np.ndarray) -> tuple[np.ndarray, float]:
         """
         Where *point* joins the area and the length of the leg to it: the point
         itself when inside, else its nearest boundary point.
         """
         point = np.asarray(point, dtype=float)
-        if self.covers(point):
+        if self.polygon.covers(Point(point)):
             return point, 0.0
         anchor = np.array(nearest_points(self.polygon, Point(point))[0].coords[0])
         return anchor, float(np.linalg.norm(point - anchor))

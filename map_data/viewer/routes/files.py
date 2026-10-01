@@ -44,6 +44,7 @@ from .common import (
     _get_data_dir,
     _mapdata_path,
     _require_args,
+    _validated_bbox,
     bp,
     get_merged_mapdata,
 )
@@ -190,20 +191,6 @@ def _stamp_or_evict_if_stale(task_id: str, task: dict[str, Any], now: float) -> 
         _fetch_tasks.pop(task_id, None)
 
 
-def _sweep_stale_fetch_tasks() -> None:
-    """
-    Evict every terminal fetch task older than :data:`FETCH_TASK_RETENTION_S`.
-
-    Called on every :func:`fetch_area` POST so that abandoned tasks (ones
-    whose client never polls them to their terminal state, which is what
-    normally triggers eviction in :func:`fetch_area_status`) cannot
-    accumulate in ``_fetch_tasks`` forever.
-    """
-    now = time.time()
-    for task_id, task in list(_fetch_tasks.items()):
-        _stamp_or_evict_if_stale(task_id, task, now)
-
-
 class _FetchFailed(Exception):
     """Raised by :func:`_query_parse_save` when the Overpass query or parse step fails."""
 
@@ -211,7 +198,6 @@ class _FetchFailed(Exception):
         """*stage* is ``"query"`` or ``"parse"``, letting callers pick an appropriate response."""
         super().__init__(error)
         self.stage = stage
-        self.error = error
 
 
 def _query_parse_save(
@@ -246,7 +232,7 @@ def _query_parse_save(
 
     """
     md.run_queries(progress_cb=progress_cb)
-    if any(d is None for d in (md.osm_ways_data, md.osm_rels_data, md.osm_nodes_data)):
+    if md.osm_data is None:
         raise _FetchFailed("query", "Overpass API unavailable — try again later")
     if on_parse_start:
         on_parse_start()
@@ -333,8 +319,8 @@ def _run_fetch_task(
         )
         _fetch_tasks[task_id] = {"status": "done", "result": result}
     except _FetchFailed as e:
-        logger.warning("fetch task %s failed at %s: %s", task_id, e.stage, e.error)
-        _fetch_tasks[task_id] = {"status": "failed", "error": e.error}
+        logger.warning("fetch task %s failed at %s: %s", task_id, e.stage, e)
+        _fetch_tasks[task_id] = {"status": "failed", "error": str(e)}
     except Exception:
         logger.exception("fetch task %s failed", task_id)
         _fetch_tasks[task_id] = {"status": "failed", "error": "Internal server error"}
@@ -370,8 +356,8 @@ def fetch_area() -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if a required field is missing, the bounding box is
-        degenerate/inverted, or ``name`` sanitizes to empty.
+        400 if a required field is missing, a corner isn't a finite in-range number,
+        the box is degenerate/inverted, or ``name`` sanitizes to empty.
 
     """
     body = request.get_json(force=True) or {}
@@ -379,10 +365,11 @@ def fetch_area() -> Response:
         if field not in body:
             abort(400, f"Missing field: {field}")
 
-    if body["min_lat"] >= body["max_lat"] or body["min_lon"] >= body["max_lon"]:
-        abort(400, "min_lat/min_lon must be strictly less than max_lat/max_lon")
+    min_lat, min_lon, max_lat, max_lon = _validated_bbox(
+        body["min_lat"], body["min_lon"], body["max_lat"], body["max_lon"]
+    )
 
-    area_km2 = _bbox_area_km2(body["min_lat"], body["min_lon"], body["max_lat"], body["max_lon"])
+    area_km2 = _bbox_area_km2(min_lat, min_lon, max_lat, max_lon)
     if area_km2 > MAX_FETCH_AREA_KM2:
         abort(
             400,
@@ -404,16 +391,20 @@ def fetch_area() -> Response:
 
     corners = np.array(
         [
-            [body["min_lat"], body["min_lon"]],
-            [body["min_lat"], body["max_lon"]],
-            [body["max_lat"], body["min_lon"]],
-            [body["max_lat"], body["max_lon"]],
+            [min_lat, min_lon],
+            [min_lat, max_lon],
+            [max_lat, min_lon],
+            [max_lat, max_lon],
         ],
     )
     easting, northing, zone_number, zone_letter = utm.from_latlon(corners[:, 0], corners[:, 1])
     waypoints = np.column_stack([easting, northing])
 
-    _sweep_stale_fetch_tasks()
+    # Evict stale terminal tasks here too, so ones whose client never polled them
+    # to completion (what normally evicts them, in fetch_area_status) can't pile up.
+    now = time.time()
+    for stale_id, task in list(_fetch_tasks.items()):
+        _stamp_or_evict_if_stale(stale_id, task, now)
     task_id = str(uuid.uuid4())
     _fetch_tasks[task_id] = {"status": "pending"}
     threading.Thread(
@@ -551,8 +542,8 @@ def upload_gpx() -> Response:
             try:
                 result = _query_parse_save(md, out_path)
             except _FetchFailed as e:
-                logger.warning("GPX upload fetch failed at %s: %s", e.stage, e.error)
-                abort(503 if e.stage == "query" else 500, e.error)
+                logger.warning("GPX upload fetch failed at %s: %s", e.stage, e)
+                abort(503 if e.stage == "query" else 500, str(e))
 
             return jsonify(result)
         except Exception as e:

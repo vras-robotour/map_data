@@ -9,13 +9,11 @@ from map_data.pathsolver.rrt_star import RRTStar
 def test_rrt_star_simple_success():
     start = (0.0, 0.0)
     goal = (10.0, 10.0)
-    obstacles = []
     grid = np.zeros((100, 100), dtype=float)
 
     rrt_star = RRTStar(
         np.array(start),
         np.array(goal),
-        obstacles,
         None,
         grid,
         (0.0, 0.0),
@@ -41,7 +39,6 @@ def test_rrt_star_with_obstacle():
     rrt_star = RRTStar(
         np.array(start),
         np.array(goal),
-        [],
         None,
         grid,
         (0.0, 0.0),
@@ -86,7 +83,6 @@ def test_rrt_star_near_equal_start_goal():
     rrt = RRTStar(
         start,
         goal,
-        [],
         None,
         grid,
         (0.0, 0.0),
@@ -113,7 +109,6 @@ def test_rrt_star_start_in_collision():
     rrt_star = RRTStar(
         np.array(start),
         np.array(goal),
-        [],
         None,
         grid,
         (0.0, 0.0),
@@ -128,7 +123,7 @@ def _make_rrt(start=(0.0, 0.0), goal=(10.0, 10.0), **kwargs):
     grid = np.zeros((100, 100), dtype=float)
     defaults = {"max_iter": 1000, "step_size": 1.0, "neighbor_radius": 2.0, "grid_scale": 0.1}
     defaults.update(kwargs)
-    return RRTStar(np.array(start), np.array(goal), [], None, grid, (0.0, 0.0), **defaults)
+    return RRTStar(np.array(start), np.array(goal), None, grid, (0.0, 0.0), **defaults)
 
 
 def test_informed_rrt_finds_path():
