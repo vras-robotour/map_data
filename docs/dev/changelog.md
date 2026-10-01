@@ -2,10 +2,16 @@
 
 ## [Unreleased]
 
+## [3.1.0] — 2026-10-01
+
+A minor version: viewer undo/redo and fixes, no public API removed. Code importing private
+helpers from `map_data.viewer.routes` must import them from the new submodules.
+
 ### Added
 
-- Viewer undo/redo for map edits: Ctrl/Cmd+Z undoes the newest entry in the Changes panel,
-  Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y re-applies it. Annotation shapes and hide/show are not covered
+- Viewer undo/redo for map edits: Ctrl/Cmd+Z or the top-bar ↶ button undoes the newest entry
+  in the Changes panel, Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y or ↷ re-applies it. Annotation shapes and
+  hide/show are not covered
 
 ### Changed
 
@@ -25,6 +31,8 @@
   endpoints used to accept it and create a stray `.annotations.json`
 - A second `create_app` call no longer re-initialises ROS or starts a second telemetry thread
 - Viewer mode shortcuts no longer fire with Ctrl/Cmd/Alt held (Ctrl+F switched to Fetch mode)
+- A deleted way no longer comes back when switching to the planner or searching, and a restored
+  or re-shown way is drawn once: the old layer used to reappear on top, still highlighted
 
 ## [3.0.0] — 2026-09-21
 
