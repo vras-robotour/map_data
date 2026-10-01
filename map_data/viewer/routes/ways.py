@@ -31,11 +31,11 @@ from .common import (
     _apply_tag_override,
     _log_add,
     _log_remove,
+    _mapdata_path,
     _original_way_id,
     _parse_way_id,
     _require_args,
     _resolve_way,
-    _safe_data_path,
     _select_segment,
     bp,
 )
@@ -72,9 +72,7 @@ def get_way_nodes() -> Response:
 
     """
     filename, way_id = _require_args("file", "way_id")
-    path = _safe_data_path(filename)
-    if not path.is_file():
-        abort(404, f"File not found: {filename}")
+    path = _mapdata_path(filename)
 
     md = load_mapdata_cached(str(path))
     store = load_annotations(str(_annotation_path(filename)))
@@ -166,9 +164,7 @@ def get_way(way_id: str) -> Response:
 
     """
     filename = _require_args("file")
-    path = _safe_data_path(filename)
-    if not path.is_file():
-        abort(404, f"File not found: {filename}")
+    path = _mapdata_path(filename)
 
     md = load_mapdata_cached(str(path))
     store = load_annotations(str(_annotation_path(filename)))
@@ -353,7 +349,7 @@ def get_way_segments(way_id: str) -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing.
+        400 if ``file`` is missing or invalid. 404 if the file doesn't exist.
 
     """
     filename = _require_args("file")
@@ -379,10 +375,8 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
     Parameters
     ----------
     filename : str
-        Mapdata filename (resolved relative to the data directory; not
-        validated for path traversal here since callers already do that
-        via :func:`~map_data.viewer.routes.common._safe_data_path` before invoking a route, or pass
-        an already-int-parsed ID).
+        Mapdata filename, resolved and validated via
+        :func:`~map_data.viewer.routes.common._mapdata_path`.
     original_way_id : str
         Original (non-virtual) OSM way ID, as a string.
 
@@ -395,7 +389,7 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
         uncaught, since callers are expected to have already validated it).
 
     """
-    path = _safe_data_path(filename)
+    path = _mapdata_path(filename)
     md = load_mapdata_cached(str(path))
     store = load_annotations(str(_annotation_path(filename)))
 
@@ -421,9 +415,7 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
     for i, seg in enumerate(segments):
         virtual_id = f"{original_way_id}:{i}"
 
-        seg = _apply_segment_deletions(
-            seg, virtual_id, store, zn, zl, effective_nc, category
-        )
+        seg = _apply_segment_deletions(seg, virtual_id, store, zn, zl, effective_nc, category)
         if seg is None:
             continue
 
@@ -518,7 +510,7 @@ def split_way_endpoint() -> Response:
                 way_ov[str(detached_id)] = dict(way_ov[str(node_id_int)])
 
             # Re-map segment references
-            path = _safe_data_path(filename)
+            path = _mapdata_path(filename)
             md = load_mapdata_cached(str(path))
             resolved = _resolve_way(md, store, int(original_way_id))
             if resolved.way is not None:
@@ -594,7 +586,7 @@ def undo_way_split() -> Response:
                     del overrides[str(way_id_int)]
                     _log_remove(store, "move", id=way_id_int)
 
-                path = _safe_data_path(filename)
+                path = _mapdata_path(filename)
                 md = load_mapdata_cached(str(path))
                 resolved = _resolve_way(md, store, way_id_int)
                 if resolved.way is not None:

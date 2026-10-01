@@ -264,6 +264,49 @@ def test_symlinked_mapdata_loads(tmp_path):
         assert client.get("/api/mapdata?file=../build/linked.mapdata").status_code == 400
 
 
+@pytest.mark.parametrize("filename", ["../x.mapdata", "missing.mapdata", "test.gpx"])
+@pytest.mark.parametrize(
+    ("method", "url", "body"),
+    [
+        ("post", "/api/annotations", {"type": "obstacle", "geometry": None}),
+        ("put", "/api/ways/1/tags", {"tags": {"highway": "path"}}),
+        ("delete", "/api/ways/1", {}),
+    ],
+)
+def test_mutating_endpoint_rejects_bad_file(app_client_with_file, filename, method, url, body):
+    client, tmp_path, _ = app_client_with_file
+    (tmp_path / "test.gpx").write_text("<gpx/>")
+    resp = getattr(client, method)(f"{url}?file={quote(filename)}", json=body)
+    assert resp.status_code == (404 if filename == "missing.mapdata" else 400)
+    for d in (tmp_path, tmp_path.parent):
+        assert not list(d.glob("*.annotations.json"))
+
+
+def test_create_app_starts_ros_once(tmp_path, monkeypatch):
+    import sys
+    from unittest.mock import MagicMock
+
+    from map_data.viewer import app as app_mod
+    from map_data.viewer.tracker_routes import TRACKER_EXTENSION
+
+    rclpy = MagicMock()
+    rclpy.ok.return_value = False
+    monkeypatch.setitem(sys.modules, "rclpy", rclpy)
+    monkeypatch.setitem(sys.modules, "rclpy.signals", MagicMock())
+    monkeypatch.setattr(app_mod, "ROS_AVAILABLE", True)
+    monkeypatch.setattr(app_mod, "tracker_node", None)
+    monkeypatch.setattr(app_mod, "TrackerNode", MagicMock())
+    thread = MagicMock()
+    monkeypatch.setattr(app_mod.threading, "Thread", thread)
+
+    a1 = create_app(data_dir=str(tmp_path))
+    a2 = create_app(data_dir=str(tmp_path))
+    assert rclpy.init.call_count == 1
+    assert app_mod.TrackerNode.call_count == 1
+    assert thread.call_count == 2  # spin + telemetry, not doubled
+    assert a1.extensions[TRACKER_EXTENSION] is a2.extensions[TRACKER_EXTENSION]
+
+
 # ── way tags ─────────────────────────────────────────────────────────────────
 
 

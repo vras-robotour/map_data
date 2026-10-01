@@ -359,21 +359,36 @@ def _safe_data_path(filename: str) -> Path:
     return resolved
 
 
+def _mapdata_path(filename: str) -> Path:
+    """
+    Resolve a user-supplied filename to an existing ``.mapdata`` file.
+
+    The one validated resolver every endpoint taking a mapdata ``file``
+    goes through: :func:`_safe_data_path` containment, then a ``.mapdata``
+    extension check, then an existence check.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if the path escapes the data directory or isn't a ``.mapdata``
+        file. 404 if the file doesn't exist.
+
+    """
+    path = _safe_data_path(filename)
+    if path.suffix != ".mapdata":
+        abort(400, "Invalid file path")
+    if not path.is_file():
+        abort(404, f"File not found: {filename}")
+    return path
+
+
 def _annotation_path(filename: str) -> Path:
     """
     Return the annotation-store path paired with a mapdata *filename*.
 
-    Not itself traversal-safe -- callers pass the result to functions
-    like :func:`~map_data.viewer.helpers.load_annotations` that only read
-    or atomically rewrite this exact path, and *filename* has typically
-    already been validated via :func:`_safe_data_path` for the
-    corresponding ``.mapdata`` file.
-
-    Parameters
-    ----------
-    filename : str
-        Mapdata filename (with or without directory components; only the
-        stem is used).
+    *filename* is validated via :func:`_mapdata_path` (so a missing or
+    out-of-tree ``.mapdata`` aborts 404/400 before any annotation file can
+    be read or written).
 
     Returns
     -------
@@ -381,8 +396,7 @@ def _annotation_path(filename: str) -> Path:
         ``<data_dir>/<stem>.annotations.json``.
 
     """
-    base = Path(filename).stem
-    return _get_data_dir().resolve() / f"{base}.annotations.json"
+    return _get_data_dir().resolve() / f"{_mapdata_path(filename).stem}.annotations.json"
 
 
 def _parse_way_id(way_id: str) -> int | str:

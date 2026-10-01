@@ -42,8 +42,8 @@ from .common import (
     _apply_tag_override,
     _bbox_area_km2,
     _get_data_dir,
+    _mapdata_path,
     _require_args,
-    _safe_data_path,
     bp,
     get_merged_mapdata,
 )
@@ -149,9 +149,7 @@ def get_mapdata() -> ResponseReturnValue:
 
     """
     filename = _require_args("file")
-    path = _safe_data_path(filename)
-    if not path.is_file():
-        abort(404, f"File not found: {filename}")
+    path = _mapdata_path(filename)
     store = load_annotations(str(_annotation_path(filename)))
     body, etag = mapdata_geojson_cached(
         str(path),

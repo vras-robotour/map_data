@@ -49,6 +49,9 @@ def _resolve_cors_origins() -> str | list[str] | None:
 # RequestContext.session, which became a read-only property).
 socketio = SocketIO(manage_session=False)
 tracker_node = None
+# Serializes the one-time ROS init in create_app: the node and its spin/telemetry
+# threads are process-wide, so later create_app calls reuse them.
+_ros_init_lock = threading.Lock()
 
 # Upper bound on any request body (uploads included). Keeps a single oversized
 # POST from exhausting disk/memory; comfortably above any realistic .mapdata
@@ -192,47 +195,50 @@ def create_app(
         # Outside the try below: a broken config file must stop the viewer, not silently
         # start a tracker on default topics.
         tracker_params = node_parameters(load_tracker_config(app.config["TRACKER_CONFIG"]))
-        try:
-            import rclpy
-            from rclpy.signals import SignalHandlerOptions
-
-            if not rclpy.ok():
-                # Keep Python's default SIGINT/SIGTERM handling: rclpy's handlers only shut
-                # the ROS context down and would leave the web server running (port 5000
-                # stays busy after Ctrl-C / kill).
-                rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
-            tracker_node = TrackerNode(tracker_params)
-            app.extensions[TRACKER_EXTENSION] = tracker_node
-
-            # Start ROS2 spin in a separate thread
-            def ros_spin() -> None:
-                # The C++ events executor costs a fraction of rclpy.spin's Python wait set
-                # (measured 6 % vs 60 % CPU on a 250 Hz robot); not in every distro yet.
+        with _ros_init_lock:
+            if tracker_node is None:
                 try:
-                    from rclpy.experimental.events_executor import EventsExecutor
-                except ImportError:
-                    rclpy.spin(tracker_node)
-                    return
-                executor = EventsExecutor()
-                executor.add_node(tracker_node)
-                executor.spin()
+                    import rclpy
+                    from rclpy.signals import SignalHandlerOptions
 
-            spin_thread = threading.Thread(target=ros_spin, daemon=True)
-            spin_thread.start()
+                    if not rclpy.ok():
+                        # Keep Python's default SIGINT/SIGTERM handling: rclpy's handlers only shut
+                        # the ROS context down and would leave the web server running (port 5000
+                        # stays busy after Ctrl-C / kill).
+                        rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
+                    tracker_node = TrackerNode(tracker_params)
 
-            # Start telemetry broadcaster
-            broadcaster_thread = threading.Thread(
-                target=telemetry_broadcaster, args=(1.0 / telemetry_hz,), daemon=True
-            )
-            broadcaster_thread.start()
+                    # Start ROS2 spin in a separate thread
+                    def ros_spin() -> None:
+                        # The C++ events executor costs a fraction of rclpy.spin's Python wait set
+                        # (measured 6 % vs 60 % CPU on a 250 Hz robot); not in every distro yet.
+                        try:
+                            from rclpy.experimental.events_executor import EventsExecutor
+                        except ImportError:
+                            rclpy.spin(tracker_node)
+                            return
+                        executor = EventsExecutor()
+                        executor.add_node(tracker_node)
+                        executor.spin()
 
-            logger.info(
-                "ROS2 TrackerNode initialized and spinning (config %s).",
-                app.config["TRACKER_CONFIG"],
-            )
-        except Exception:
-            logger.exception("Failed to initialize ROS2")
-            tracker_node = None
+                    spin_thread = threading.Thread(target=ros_spin, daemon=True)
+                    spin_thread.start()
+
+                    # Start telemetry broadcaster
+                    broadcaster_thread = threading.Thread(
+                        target=telemetry_broadcaster, args=(1.0 / telemetry_hz,), daemon=True
+                    )
+                    broadcaster_thread.start()
+
+                    logger.info(
+                        "ROS2 TrackerNode initialized and spinning (config %s).",
+                        app.config["TRACKER_CONFIG"],
+                    )
+                except Exception:
+                    logger.exception("Failed to initialize ROS2")
+                    tracker_node = None
+        if tracker_node is not None:
+            app.extensions[TRACKER_EXTENSION] = tracker_node
 
     return app
 
