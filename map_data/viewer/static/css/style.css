@@ -239,3 +239,5 @@ details:not([open]) > .bottom-panel-header .panel-toggle-icon::before { content:
   border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin-bottom: 12px;
 }
 .leaflet-container:focus-visible { outline-offset: -2px; }
+.undo-btn { display: inline-flex; align-items: center; padding-inline: 7px; }
+.undo-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }

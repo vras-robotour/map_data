@@ -65,6 +65,7 @@ function setAppMode(mode) {
             const el = document.getElementById(id);
             if (el) el.hidden = true;
         });
+        syncUndoButtons();
     }
 
     if (mode === 'planner') {
@@ -703,6 +704,7 @@ function renderChangesPanel() {
     const panel = document.getElementById('changes-panel');
     const list = document.getElementById('changes-list');
     const count = document.getElementById('changes-count');
+    syncUndoButtons();
     if (!panel || !list || !count) return;
     if (!changeLog.length || currentAppMode === 'planner') { panel.hidden = true; return; }
     panel.hidden = false;
@@ -929,8 +931,19 @@ async function runUndoRedo(fn) {
     _undoBusy = true;
     try { await fn(); }
     catch (err) { console.error('Undo/redo failed:', err); }
-    finally { _undoBusy = false; }
+    finally { _undoBusy = false; syncUndoButtons(); }
 }
+
+function syncUndoButtons() {
+    const viewer = currentAppMode === 'viewer';
+    const undo = document.getElementById('undo-btn');
+    const redo = document.getElementById('redo-btn');
+    if (undo) undo.disabled = !viewer || !changeLog.length;
+    if (redo) redo.disabled = !viewer || !redoStack.length;
+}
+
+document.getElementById('undo-btn')?.addEventListener('click', () => runUndoRedo(undoLastChange));
+document.getElementById('redo-btn')?.addEventListener('click', () => runUndoRedo(redoLastChange));
 
 function showAnnProps(ann) {
     if (currentClickedFeature) {

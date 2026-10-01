@@ -56,8 +56,9 @@ Three collapsible panels at the bottom of the sidebar track the state of manual 
   are saved immediately, so this is the way to recover from an accidental move).
 - **Changes** — features whose properties have been modified since the file was loaded.
   Each entry has a ↩ revert button. `Ctrl+Z` (`Cmd+Z` on macOS) undoes the newest entry and
-  `Ctrl+Shift+Z` / `Ctrl+Y` redoes it (way/node deletions, tag edits, node moves and additions,
-  splits; not annotation shapes). Redo history is dropped on any new edit or file load.
+  `Ctrl+Shift+Z` / `Ctrl+Y` redoes it, as do the ↶ ↷ buttons in the top bar (way/node
+  deletions, tag edits, node moves and additions, splits; not annotation shapes). Redo history
+  is dropped on any new edit or file load.
 - **Hidden** — features that have been hidden from the map via the context menu.
 
 Use the **Export** button in the toolbar to save all annotations and changes back to the `.mapdata` file.

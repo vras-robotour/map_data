@@ -47,6 +47,15 @@
       </button>
     </div>
 
+    <div class="btn-group btn-group-sm">
+      <button id="undo-btn" class="btn btn-outline-light undo-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2.5 1.5 6 5 9.5M1.5 6h8a4 4 0 0 1 0 8H7"/></svg>
+      </button>
+      <button id="redo-btn" class="btn btn-outline-light undo-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 2.5 14.5 6 11 9.5M14.5 6h-8a4 4 0 0 0 0 8H9"/></svg>
+      </button>
+    </div>
+
     <div class="vr mx-1"></div>
 
     <button class="btn btn-outline-info btn-sm mode-btn" data-mode="fetch" title="Fetch area from OSM Overpass">
