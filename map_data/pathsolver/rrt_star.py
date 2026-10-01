@@ -23,7 +23,10 @@ logger = logging.getLogger(__name__)
 # Balances rebuild cost (O(n log n)) against linear-scan cost for the unindexed tail.
 _KDTREE_REBUILD_INTERVAL = 50
 
+# Probability of sampling the goal itself instead of a random point.
 GOAL_SAMPLE_BIAS = 0.1
+# Probability of sampling the whole bounding box instead of a known traversable cell.
+UNIFORM_SAMPLE_RATE = 0.1
 
 
 class RRTStar:
@@ -286,7 +289,7 @@ class RRTStar:
         """
         if self.informed and self._best_cost < float("inf"):
             return self._sample_informed()
-        if self._trav_xs is not None and self._rng.random() > GOAL_SAMPLE_BIAS:
+        if self._trav_xs is not None and self._rng.random() > UNIFORM_SAMPLE_RATE:
             idx = self._rng.randrange(len(self._trav_xs))
             return np.array(
                 [
