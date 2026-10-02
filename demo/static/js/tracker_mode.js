@@ -12,11 +12,8 @@ const trackerMode = (() => {
     let activeExitCircle = null;
     let goalMarker = null;
     let enabled = false;
-    let _lastPos = null; // last known robot position, for the planner's "Start at robot"
 
-    // Cached DOM/element references — resolved lazily on first use
-    let _robotCb = null;
-    let _followCb = null;
+    // The robot marker's SVG, resolved once per marker element
     let _robotSvg = null;
 
     const ROBOT_ICON_HTML = `
@@ -33,10 +30,6 @@ const trackerMode = (() => {
 
         socket = io();
 
-        socket.on('connect', () => {
-            console.log('Tracker: Connected to server');
-        });
-
         socket.on('telemetry', (data) => {
             // Update map (robot icon) regardless of whether 'Tracker' mode is active
             // This allows seeing the robot in Viewer and Planner modes
@@ -46,10 +39,6 @@ const trackerMode = (() => {
             if (enabled) {
                 updateUI(data);
             }
-        });
-
-        socket.on('disconnect', () => {
-            console.log('Tracker: Disconnected from server');
         });
     }
 
@@ -61,13 +50,12 @@ const trackerMode = (() => {
         const pos = data.position.ekf.lat ? data.position.ekf : data.position.gps;
         const havePos = !!(pos && pos.lat && pos.lon);
         if (havePos) {
-            _lastPos = { lat: pos.lat, lon: pos.lon };
-            document.dispatchEvent(new CustomEvent('robot-position', { detail: _lastPos }));
+            document.dispatchEvent(new CustomEvent('robot-position', { detail: { lat: pos.lat, lon: pos.lon } }));
         }
 
-        // Check robot layer visibility — cache the checkbox element
-        if (!_robotCb) _robotCb = document.querySelector('[data-layer="robot"]');
-        if (_robotCb && !_robotCb.checked) {
+        // Check robot layer visibility
+        const robotCb = document.querySelector('[data-layer="robot"]');
+        if (robotCb && !robotCb.checked) {
             hideRobot();
             return;
         }
@@ -91,9 +79,8 @@ const trackerMode = (() => {
             } else {
                 robotMarker.setLatLng(latlng);
 
-                // Cache the follow checkbox
-                if (!_followCb) _followCb = document.getElementById('tracker-follow-robot');
-                if (enabled && _followCb && _followCb.checked) {
+                const followCb = document.getElementById('tracker-follow-robot');
+                if (enabled && followCb && followCb.checked) {
                     map.panTo(latlng);
                 }
             }
@@ -186,10 +173,11 @@ const trackerMode = (() => {
         return null;
     }
 
+    const robotLayers = () => [robotMarker, robotPathLayer, sequenceLayer, windowLayer, roadPathLayer,
+        trailLayer, intersectionsLayer, activeEnterCircle, activeExitCircle, goalMarker];
+
     function hideRobot() {
-        if (robotMarker && map.hasLayer(robotMarker)) map.removeLayer(robotMarker);
-        [robotPathLayer, sequenceLayer, windowLayer, roadPathLayer, trailLayer, intersectionsLayer,
-         activeEnterCircle, activeExitCircle, goalMarker].forEach(l => {
+        robotLayers().forEach(l => {
             if (l && map.hasLayer(l)) map.removeLayer(l);
         });
         _robotSvg = null; // Leaflet recreates the element on the next addTo()
@@ -197,8 +185,7 @@ const trackerMode = (() => {
 
     function showRobot() {
         initSocket();
-        [robotMarker, robotPathLayer, sequenceLayer, windowLayer, roadPathLayer, trailLayer,
-         intersectionsLayer, activeEnterCircle, activeExitCircle, goalMarker].forEach(l => {
+        robotLayers().forEach(l => {
             if (l && !map.hasLayer(l)) l.addTo(map);
         });
     }
@@ -440,18 +427,6 @@ const trackerMode = (() => {
     // ── Topics dialog: switch the tracker's topics live and save them to its config file ──
     let _settings = null; // last GET /api/tracker/settings response
 
-    // Flask's abort() answers with an HTML page; pull the message out of it.
-    async function errorText(res) {
-        const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-        return (doc.querySelector('p') || doc.body).textContent.trim();
-    }
-
-    function topicsError(msg) {
-        const el = $('tracker-topics-error');
-        el.textContent = msg || '';
-        el.hidden = !msg;
-    }
-
     const isTopic = s => s.name.endsWith('_topic');
     const listId = type => 'tts-list-' + type.replace(/[^A-Za-z0-9]/g, '_');
 
@@ -567,7 +542,7 @@ const trackerMode = (() => {
             setStatus(`Failed to load tracker topics: ${err.message}`, 'text-danger');
             return;
         }
-        topicsError('');
+        showError('tracker-topics-error', '');
         renderTopicsForm();
         $('tracker-topics-path').textContent = _settings.path;
         const fileNote = $('tracker-topics-file-error');
@@ -586,10 +561,10 @@ const trackerMode = (() => {
             const what = data.changed ? 'Tracker resubscribed' : 'Tracker topics unchanged';
             setStatus(save ? `${what}; saved to ${data.path}` : `${what} (not saved)`, 'text-success');
         } catch (err) {
-            topicsError(err.message);
+            showError('tracker-topics-error', err.message);
             return;
         }
-        topicsError('');
+        showError('tracker-topics-error', '');
         bootstrap.Modal.getInstance($('tracker-topics-modal')).hide();
     }
 
@@ -648,6 +623,5 @@ const trackerMode = (() => {
         },
         showRobot: showRobot,
         hideRobot: hideRobot,
-        position: () => (_lastPos ? { ..._lastPos } : null)
     };
 })();

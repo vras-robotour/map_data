@@ -102,7 +102,7 @@
           <small class="text-secondary" style="font-size:0.7rem;">ID · name · tag values · annotation type &amp; properties</small>
         </div>
 
-        <!-- Road -->
+        
         <details>
           <summary class="layer-row">
             <input type="checkbox" class="st-check" data-layer="road" checked onclick="event.stopPropagation()">
@@ -112,8 +112,7 @@
           </summary>
           <div id="subfilter-road" class="subtype-panel"></div>
         </details>
-
-        <!-- Footway -->
+        
         <details>
           <summary class="layer-row">
             <input type="checkbox" class="st-check" data-layer="footway" checked onclick="event.stopPropagation()">
@@ -123,8 +122,7 @@
           </summary>
           <div id="subfilter-footway" class="subtype-panel"></div>
         </details>
-
-        <!-- Barrier -->
+        
         <details>
           <summary class="layer-row">
             <input type="checkbox" class="st-check" data-layer="barrier" checked onclick="event.stopPropagation()">
@@ -134,6 +132,7 @@
           </summary>
           <div id="subfilter-barrier" class="subtype-panel"></div>
         </details>
+        
 
         <!-- Crossroads -->
         <div class="layer-row">
@@ -432,7 +431,8 @@
 
 
 
-<!-- Fetch Area Modal -->
+
+
 <!-- Robotour goal QR code: shown full screen (white) so a laptop/tablet can be held to the robot camera -->
 <div class="modal fade" id="qr-modal" tabindex="-1">
   <div class="modal-dialog modal-fullscreen">
@@ -458,6 +458,7 @@
   </div>
 </div>
 
+<!-- Fetch Area Modal -->
 <div class="modal fade" id="fetch-area-modal" tabindex="-1">
   <div class="modal-dialog modal-sm modal-dialog-centered">
     <div class="modal-content bg-dark text-light border-secondary">
@@ -465,6 +466,7 @@
         <h6 class="modal-title">Fetch OSM Area</h6>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
+
       <div class="modal-body py-2">
         <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">NAME</label>
         <input id="area-name-input" type="text" placeholder="e.g. prague_center"
@@ -516,6 +518,7 @@
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
         <button type="button" id="fetch-area-submit" class="btn btn-primary btn-sm">Fetch & Parse</button>
       </div>
+
     </div>
   </div>
 </div>
@@ -528,6 +531,7 @@
         <h6 class="modal-title">Create Map from GPX</h6>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
+
       <div class="modal-body py-2">
         <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">MAP NAME</label>
         <input id="gpx-name-input" type="text" placeholder="e.g. my_route"
@@ -579,6 +583,7 @@
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
         <button type="button" id="gpx-upload-submit" class="btn btn-primary btn-sm">Upload & Parse</button>
       </div>
+
     </div>
   </div>
 </div>
@@ -591,6 +596,7 @@
         <h6 class="modal-title">Highway Costs</h6>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
+
       <div class="modal-body py-2" style="max-height:400px; overflow-y:auto;">
         <div class="panel-title mb-2" style="font-size:0.6rem;">HIGHWAY TYPES</div>
         <p class="mb-2 text-secondary" style="font-size:0.7rem;">Set base traversal cost (0.0 = best, 1.0 = obstacle).</p>
@@ -609,6 +615,7 @@
         <button type="button" id="planner-costs-reset" class="btn btn-outline-warning btn-sm">Reset</button>
         <button type="button" id="planner-costs-save" class="btn btn-primary btn-sm">Save</button>
       </div>
+
     </div>
   </div>
 </div>
@@ -621,6 +628,7 @@
         <h6 class="modal-title">Traversability Rules</h6>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
+
       <div class="modal-body py-2">
         <p class="mb-2 text-secondary" style="font-size:0.7rem;">
           First matching rule wins. <b>Apply</b> uses the rules for planning in this browser tab
@@ -637,6 +645,7 @@
         <button type="button" id="planner-rules-apply" class="btn btn-outline-primary btn-sm">Apply</button>
         <button type="button" id="planner-rules-save" class="btn btn-primary btn-sm">Save to file</button>
       </div>
+
     </div>
   </div>
 </div>
@@ -649,6 +658,7 @@
         <h6 class="modal-title">Tracker Topics</h6>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
+
       <div class="modal-body py-2">
         <p class="mb-2 text-secondary" style="font-size:0.7rem;">
           <b>Apply</b> resubscribes the tracker now (its telemetry starts over); <b>Save</b> also
@@ -669,6 +679,7 @@
         <button type="button" id="tracker-topics-apply" class="btn btn-outline-primary btn-sm">Apply</button>
         <button type="button" id="tracker-topics-save" class="btn btn-primary btn-sm">Save to file</button>
       </div>
+
     </div>
   </div>
 </div>
@@ -681,6 +692,7 @@
         <h6 class="modal-title">Share via Wormhole</h6>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
+
       <div class="modal-body py-3">
         <p class="mb-2" style="font-size:0.8rem;">Use this code on the receiving device:</p>
         <div id="wormhole-code" class="font-monospace fw-bold wormhole-code"></div>
@@ -689,6 +701,7 @@
       <div class="modal-footer border-secondary py-2 justify-content-center">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
       </div>
+
     </div>
   </div>
 </div>
@@ -701,6 +714,7 @@
         <h6 class="modal-title" id="ann-detail-title">New Annotation</h6>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
+
       <div class="modal-body py-2" style="max-height:400px;overflow-y:auto;">
         <div class="mb-3">
           <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">TYPE</label>
@@ -751,6 +765,7 @@
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
         <button type="button" id="ann-detail-save" class="btn btn-warning btn-sm">Save</button>
       </div>
+
     </div>
   </div>
 </div>
@@ -763,6 +778,7 @@
         <h6 class="modal-title" id="way-edit-title">Edit Way Properties</h6>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
+
       <div class="modal-body py-2" style="font-size:0.82rem;max-height:360px;overflow-y:auto;">
         <div id="way-edit-props"></div>
         <button type="button" id="way-edit-add-prop-btn"
@@ -774,6 +790,7 @@
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
         <button type="button" id="way-edit-save" class="btn btn-warning btn-sm">Save</button>
       </div>
+
     </div>
   </div>
 </div>

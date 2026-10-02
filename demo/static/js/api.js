@@ -20,12 +20,10 @@ function _staticReadOnly(action) {
 // string, sets JSON headers/body (or leaves FormData bodies alone), and
 // refuses up-front (via _staticReadOnly) when `readOnlyMsg` is given and the
 // page is running as the read-only static demo.
-async function api(method, path, { query, body, readOnlyMsg } = {}) {
+async function api(method, path, { query, body, readOnlyMsg, signal } = {}) {
     if (STATIC_BASE && readOnlyMsg) _staticReadOnly(readOnlyMsg);
-    const qs = query
-        ? '?' + Object.entries(query).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')
-        : '';
-    const opts = { method };
+    const qs = query ? '?' + new URLSearchParams(query) : '';
+    const opts = { method, signal };
     if (body !== undefined) {
         if (body instanceof FormData) {
             opts.body = body;
@@ -60,12 +58,6 @@ async function fetchAnnotations(filename) {
     return await res.json();
 }
 
-async function deleteAnnotationApi(filename, annId) {
-    return await api('DELETE', `/api/annotations/${annId}`, {
-        query: { file: filename }, readOnlyMsg: 'Editing',
-    });
-}
-
 async function createAnnotationApi(filename, type, geometry, properties) {
     const res = await api('POST', '/api/annotations', {
         query: { file: filename }, body: { type, geometry, properties }, readOnlyMsg: 'Editing',
@@ -87,68 +79,6 @@ async function fetchWayNodes(filename, wayId) {
     return await res.json();
 }
 
-async function updateWayTagsApi(filename, wayId, tags, cat, lbl) {
-    return await api('PUT', `/api/ways/${wayId}/tags`, {
-        query: { file: filename }, body: { tags, category: cat, label: lbl }, readOnlyMsg: 'Editing',
-    });
-}
-
-async function deleteWayTagsApi(filename, wayId) {
-    return await api('DELETE', `/api/ways/${wayId}/tags`, { query: { file: filename }, readOnlyMsg: 'Editing' });
-}
-
-async function deleteWayApi(filename, wayId, cat, label) {
-    return await api('DELETE', `/api/ways/${wayId}`, {
-        query: { file: filename }, body: { category: cat, label }, readOnlyMsg: 'Editing',
-    });
-}
-
-async function deleteNodeApi(filename, wayId, nodeId) {
-    return await api('DELETE', '/api/way_node', {
-        query: { file: filename, way_id: wayId, node_id: nodeId }, readOnlyMsg: 'Editing',
-    });
-}
-
-async function addWayNodeApi(filename, wayId, afterNodeId, lat, lon) {
-    return await api('POST', '/api/way_node', {
-        query: { file: filename, way_id: wayId },
-        body: { after_node_id: afterNodeId, lat, lon },
-        readOnlyMsg: 'Editing',
-    });
-}
-
-async function splitWayApi(filename, wayId, nodeId) {
-    return await api('POST', '/api/ways/split', {
-        query: { file: filename }, body: { way_id: wayId, node_id: nodeId }, readOnlyMsg: 'Editing',
-    });
-}
-
-async function undoWaySplitApi(filename, wayId, nodeId) {
-    return await api('DELETE', '/api/ways/split', {
-        query: { file: filename, way_id: wayId, node_id: nodeId }, readOnlyMsg: 'Editing',
-    });
-}
-
-async function hideWayApi(filename, wayId, cat, label) {
-    return await api('PUT', `/api/ways/${wayId}/hide`, {
-        query: { file: filename }, body: { category: cat, label }, readOnlyMsg: 'Editing',
-    });
-}
-
-async function showWayApi(filename, wayId) {
-    return await api('PUT', `/api/ways/${wayId}/show`, { query: { file: filename }, readOnlyMsg: 'Editing' });
-}
-
-async function restoreWayApi(filename, wayId) {
-    return await api('PUT', `/api/ways/${wayId}/restore`, { query: { file: filename }, readOnlyMsg: 'Editing' });
-}
-
-async function restoreNodeApi(filename, wayId, nodeId) {
-    return await api('PUT', '/api/way_node/restore', {
-        query: { file: filename, way_id: wayId, node_id: nodeId }, readOnlyMsg: 'Editing',
-    });
-}
-
 async function fetchWayApi(filename, wayId) {
     return await api('GET', `/api/ways/${wayId}`, { query: { file: filename }, readOnlyMsg: 'Way lookup' });
 }
@@ -164,12 +94,6 @@ async function moveWayNodesApi(filename, wayId, nodes, category, label) {
         query: { file: filename, way_id: wayId },
         body: { nodes, category: category ?? 'unknown', label: label ?? '' },
         readOnlyMsg: 'Editing',
-    });
-}
-
-async function undoWayNodeMovesApi(filename, wayId) {
-    return await api('DELETE', '/api/way_nodes/move', {
-        query: { file: filename, way_id: wayId }, readOnlyMsg: 'Editing',
     });
 }
 
