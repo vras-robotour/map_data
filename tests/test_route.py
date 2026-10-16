@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 import utm
+from shapely.geometry import LineString
 
 from map_data.annotations import load_mapdata_with_annotations
 from map_data.map_data import MapData
@@ -13,6 +14,7 @@ from map_data.pathsolver.route import (
     plan_route,
 )
 from map_data.utils.gpx import create_gpx_track
+from map_data.utils.way import Way
 
 
 def _latlon(lat0, lon0, dx, dy):
@@ -205,6 +207,20 @@ def test_plan_route_grid_sub_algorithm(
     start, goal = _latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 60.0, 0.0)
     plan_route(md, [start, goal], algorithm=algorithm, sub_algorithm=sub_algorithm, cell_size=2.0)
     assert seen == [expected]
+
+
+def test_plan_route_grid_goal_just_outside_map(footway_network_mapdata):
+    """A goal past the map edge but within the tolerance must still lie inside the grid."""
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    e0, n0, _, _ = utm.from_latlon(lat0, lon0)
+    # A wall across the straight line, so the grid planner actually has to search.
+    wall = LineString([(e0 + 80.0, n0 + 290.0), (e0 + 120.0, n0 + 290.0)])
+    md.barriers_list.append(Way(id=9, is_area=False, nodes=[], tags={}, line=wall, in_out=""))
+    start, goal = _latlon(lat0, lon0, 100.0, 250.0), _latlon(lat0, lon0, 100.0, 340.0)
+    res = plan_route(md, [start, goal], algorithm="astar", cell_size=2.0)
+    assert len(res.latlon) > 2  # went around the wall
+    assert res.latlon[-1] == pytest.approx(goal, abs=1e-5)
 
 
 def test_plan_route_grid_too_large(footway_network_mapdata):

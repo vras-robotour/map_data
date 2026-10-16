@@ -135,16 +135,20 @@ def utm_path_to_latlon_pairs(
 def _grid_bbox(
     md: MapData, utm_path: np.ndarray
 ) -> tuple[tuple[float, float], tuple[float, float]]:
-    """Planning box: the waypoints' bbox plus :data:`GRID_MARGIN_M`, clipped to the map."""
-    p_low = (
-        max(md.min_x, float(np.min(utm_path[:, 0])) - GRID_MARGIN_M),
-        max(md.min_y, float(np.min(utm_path[:, 1])) - GRID_MARGIN_M),
-    )
-    p_high = (
-        min(md.max_x, float(np.max(utm_path[:, 0])) + GRID_MARGIN_M),
-        min(md.max_y, float(np.max(utm_path[:, 1])) + GRID_MARGIN_M),
-    )
-    return p_low, p_high
+    """
+    Planning box: the waypoints' bbox plus :data:`GRID_MARGIN_M`, clipped to the map.
+
+    A side where a waypoint lies on or past the map edge (:func:`check_in_map` lets start
+    and goal be up to ``OUTSIDE_MAP_TOLERANCE_M`` off) keeps its full margin instead, so
+    the grid always contains every waypoint (its high edge is exclusive).
+    """
+    lo = utm_path[:, :2].min(axis=0)
+    hi = utm_path[:, :2].max(axis=0)
+    map_lo = np.array([md.min_x, md.min_y])
+    map_hi = np.array([md.max_x, md.max_y])
+    p_low = np.where(lo <= map_lo, lo - GRID_MARGIN_M, np.maximum(map_lo, lo - GRID_MARGIN_M))
+    p_high = np.where(hi >= map_hi, hi + GRID_MARGIN_M, np.minimum(map_hi, hi + GRID_MARGIN_M))
+    return (float(p_low[0]), float(p_low[1])), (float(p_high[0]), float(p_high[1]))
 
 
 #: How far (m) past the map's area a start or goal may lie: the robot can start just outside
