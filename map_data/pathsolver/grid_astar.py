@@ -271,8 +271,10 @@ def grid_astar(
 
             # Diagonal moves must not slip between two corner-touching
             # blocked cells: both edge-adjacent cells have to be free.
-            if ortho_offsets and any(flat_costs[u_flat + o] == math.inf for o in ortho_offsets):
-                continue
+            if ortho_offsets:
+                o1, o2 = ortho_offsets
+                if flat_costs[u_flat + o1] == math.inf or flat_costs[u_flat + o2] == math.inf:
+                    continue
 
             _f32[0] = dist * cost_val
             _f32[0] = current_g + _f32[0]
