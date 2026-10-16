@@ -280,7 +280,9 @@ class PathGrid:
 
         if len(path_points):
             tree = cKDTree(path_points)
-            dists, indices = tree.query(path_grid[:, :2], distance_upper_bound=max_path_dist)
+            dists, indices = tree.query(
+                path_grid[:, :2], distance_upper_bound=max_path_dist, workers=-1
+            )
             mask = dists < max_path_dist
             way_costs = np.array(costs)[way_index][indices[mask]]
             final_costs = (
