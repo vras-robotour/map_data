@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Grid planning is faster: the cost grid queries the way KD-tree on all cores, the A\* inner
+  loop is tighter, and the grid is only built once a leg actually hits an obstacle (an
+  unobstructed route no longer pays ~1 s for it)
+- The viewer converts coordinates to lon/lat in one vectorised call (opening or reloading a
+  large map ~4x faster) and caches the edited map and the graph planner between replans
+  (a graph replan drops from ~130 ms to ~3 ms)
+- The **Show Cost Grid** overlay is one PNG image instead of a marker per cell;
+  `/api/cost_grid` returns `{"image", "bounds"}`
+- `.mapdata` files store way geometry at 6 decimals (micrometres) and save ~4x faster;
+  files shrink ~30%. Older files load unchanged, the format version stays 1
+- RRT\* falls back to Grid A\* on the same grid when it finds no path for a leg (not after a
+  cancel)
+- `plan_route(sub_algorithm=None)` derives the grid search from `algorithm`; an explicit
+  `sub_algorithm` is honoured
+
+### Fixed
+
+- The viewer's **All terrain — A\*** ran RRT\*: an explicit `sub_algorithm="astar"` was
+  overridden by `algorithm="rrt"`
+- The grid planners returned `no_path` for a start or goal just outside the map edge (within
+  `outside_map_tolerance`): the planning grid now always contains every waypoint
+- The README and docs show a demo route that plans on the bundled demo map with the default
+  planner
+
 ## [3.1.0] — 2026-10-01
 
 A minor version: viewer undo/redo and fixes, no public API removed. Code importing private

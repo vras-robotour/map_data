@@ -59,7 +59,7 @@ a file written by an older version falls back to the `Way` defaults for the keys
 | `is_area` | bool | `true` if the geometry is a closed polygon |
 | `nodes` | list[int] | Ordered list of OSM node IDs |
 | `tags` | object | OSM tag key-value pairs |
-| `line` | str | Shapely WKT representation of the geometry (UTM coordinates) |
+| `line` | str | Shapely WKT representation of the geometry (UTM coordinates, 6 decimals) |
 | `in_out` | str or null | `"outer"` or `"inner"` for multipolygon relation members; `null` otherwise |
 
 ### Human-readable export

@@ -289,7 +289,9 @@ Rapidly-exploring Random Tree Star is a sampling-based planner that builds a tre
 collision-free waypoints by randomly sampling the free space. It is asymptotically optimal —
 given enough iterations it converges to the shortest path — and handles irregular obstacle
 shapes well. RRT\* is best suited for large open areas or when the grid resolution required
-for Grid A\* would be prohibitively expensive.
+for Grid A\* would be prohibitively expensive. It gives up after a fixed iteration budget,
+so when it finds no path for a leg, Grid A\* is run on the same grid instead (unless the
+run was cancelled).
 
 ---
 

@@ -414,7 +414,7 @@ Run path planning on a set of waypoints. The main planning endpoint.
 | Field | Default | Description |
 |-------|---------|-------------|
 | `algorithm` | `"rrt"` | `"astar"` = Grid A*, `"rrt"` = RRT*, `"graph"` = on-way graph planning |
-| `sub_algorithm` | `"astar"` | Used when `algorithm` is `"astar"` or `"rrt"` — selects the segment-level solver |
+| `sub_algorithm` | `"astar"` | Used when `algorithm` is `"astar"` or `"rrt"` — selects the segment-level solver (`"rrt"` falls back to `"astar"` when it finds no path) |
 | `allowed_ways` | `["footway"]` | Way categories to treat as low-cost: `"footway"`, `"road"`, or both |
 | `transfer_id` | `null` | Client-generated UUID; pass to `/api/cancel_replan` to abort |
 

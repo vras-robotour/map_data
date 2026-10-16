@@ -140,7 +140,8 @@ ReplanPath(obstacles=None, transfer_id=None, ..., *, low, high, cell_size=0.25,
 
 #### `fill_grid(map_data, highway_types=None, max_path_dist=2.0)`
 
-Populate the cost grid from map data. Must be called before `replan()`.
+Populate the cost grid from map data. Must be called before `replan()` (or use
+`fill_grid_lazily`).
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -150,6 +151,12 @@ Populate the cost grid from map data. Must be called before `replan()`.
 
 Cost model per cell: `way_cost + (DEFAULT_OFF_PATH_COST - way_cost) × (dist / max_path_dist)²`, where `way_cost = min(PATH_COST_CAP, HIGHWAY_COSTS[highway] + SURFACE_COSTS[surface])`. Obstacle cells are set to `inf`.
 
+#### `fill_grid_lazily(map_data, highway_types=None, max_path_dist=2.0)`
+
+Same arguments as `fill_grid`, but the grid is only built when the first leg that collides
+with an obstacle needs it; legs that don't are checked against the obstacle geometries alone.
+`plan_route` uses this.
+
 #### `replan(path, algorithm="astar")`
 
 Plan a path through the cost grid.
@@ -157,7 +164,7 @@ Plan a path through the cost grid.
 | Parameter | Description |
 |-----------|-------------|
 | `path` | `np.ndarray` of shape `(N, 2+)` — input waypoints in UTM metres |
-| `algorithm` | `"astar"` (Grid A*) or `"rrt"` (RRT*) |
+| `algorithm` | `"astar"` (Grid A*) or `"rrt"` (RRT*; falls back to Grid A* when it finds no path for a leg) |
 
 Returns `np.ndarray` (replanned path) or `None` (no path found, or the run was cancelled).
 Segments between consecutive waypoints are processed sequentially.
