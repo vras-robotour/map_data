@@ -315,7 +315,7 @@ def plan_route(
             simplify_path=simplify_path,
             smooth_path=smooth_path,
         )
-        replanner.fill_grid(md, highway_types=highway_types)
+        replanner.fill_grid_lazily(md, highway_types=highway_types)
         res = replanner.replan(utm_path, algorithm=sub_algorithm)
         snap = []
         if res is None:

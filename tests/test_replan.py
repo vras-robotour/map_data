@@ -176,3 +176,26 @@ def test_replan_rrt_cancelled_does_not_fall_back(transfer_id):
 
     assert replanner.replan(np.array([[1.0, 1.0], [9.0, 9.0]]), algorithm="rrt") is None
     assert astar_calls == []
+
+
+# ── lazy grid ────────────────────────────────────────────────────────────────
+
+
+def test_fill_grid_lazily_builds_the_grid_only_for_a_colliding_leg():
+    replanner = ReplanPath([], **ARGS)
+    fills = []
+
+    def fill(map_data, highway_types=None, max_path_dist=2.0):
+        fills.append(map_data)
+        replanner.path_grid.grid_2d_cache = np.zeros((20, 20), dtype=float)
+
+    replanner.fill_grid = fill
+    replanner.fill_grid_lazily("md")
+    path = np.array([[1.0, 1.0], [5.0, 5.0], [9.0, 9.0]])
+
+    assert replanner.replan(path) is not None
+    assert fills == []  # no leg collided: grid never built
+
+    replanner._colides = lambda seg: True
+    assert replanner.replan(path) is not None
+    assert fills == ["md"]  # built once, reused by the second leg

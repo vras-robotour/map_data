@@ -120,6 +120,8 @@ class ReplanPath:
         else:
             self.obstacles = obstacles or []
 
+        self._deferred_fill: tuple[MapData, list[str] | None, float] | None = None
+
         # Spatial index for faster collision checking
         self.obstacles_tree = sh.STRtree(self.obstacles) if self.obstacles else None
 
@@ -202,9 +204,17 @@ class ReplanPath:
 
         return path
 
-    def _rrt_star(self, start: np.ndarray, goal: np.ndarray) -> np.ndarray | None:
+    def _grid(self) -> np.ndarray:
+        if self.path_grid.grid_2d_cache is None and self._deferred_fill is not None:
+            map_data, highway_types, max_path_dist = self._deferred_fill
+            self._deferred_fill = None
+            self.fill_grid(map_data, highway_types, max_path_dist)
         grid = self.path_grid.grid_2d_cache
         assert grid is not None, "fill_grid() must run before replan()"
+        return grid
+
+    def _rrt_star(self, start: np.ndarray, goal: np.ndarray) -> np.ndarray | None:
+        grid = self._grid()
         planner = RRTStar(
             start=start,
             goal=goal,
@@ -223,8 +233,7 @@ class ReplanPath:
         return planner.find_path()
 
     def _astar(self, start: np.ndarray, goal: np.ndarray) -> np.ndarray | None:
-        grid = self.path_grid.grid_2d_cache
-        assert grid is not None, "fill_grid() must run before replan()"
+        grid = self._grid()
         return grid_astar(
             grid,
             start,
@@ -258,3 +267,16 @@ class ReplanPath:
             highway_types=highway_types,
             max_path_dist=max_path_dist,
         )
+
+    def fill_grid_lazily(
+        self,
+        map_data: "MapData",
+        highway_types: list[str] | None = None,
+        max_path_dist: float = 2.0,
+    ) -> None:
+        """
+        :meth:`fill_grid`, deferred until the first leg that hits an obstacle needs the
+        grid: legs that don't are checked against the obstacle geometries alone, so an
+        unobstructed route never pays for building it (~1 s on a large map).
+        """
+        self._deferred_fill = (map_data, highway_types, max_path_dist)
