@@ -37,7 +37,8 @@ a performance/safety tradeoff:
   sidesteps having to audit every one of those sites for the
   copy-before-mutate discipline above, at the cost of being noticeably
   slower for large mapdata files. Because that cost is paid only on
-  export/planning (not on every pan/zoom/click), it is not worth applying
+  export/planning, and only once per map and set of edits (the result is
+  cached and shared, so it is read-only to its callers), it is not worth applying
   everywhere; :func:`~map_data.viewer.routes.files._merged_mapdata_geojson`/:func:`_resolve_way`
   intentionally keep the cheaper shallow copy plus the manual-copy
   discipline instead.
@@ -73,7 +74,7 @@ from map_data.map_data import MapData
 from map_data.utils.config import package_share
 from map_data.utils.way import FOOTWAY_VALUES
 
-from ..cache import load_mapdata_cached
+from ..cache import load_mapdata_cached, merged_mapdata_cached
 from ..helpers import (
     apply_added_nodes,
     apply_node_position_overrides,
@@ -665,6 +666,10 @@ def get_merged_mapdata(filename: str) -> tuple[MapData | None, dict[str, Any] | 
        negative node IDs registered in ``md.nodes_cache``), anything else
        becomes a barrier.
 
+    The result is cached by :func:`~map_data.viewer.cache.merged_mapdata_cached`
+    (map file signature plus annotation store digest) and shared between
+    requests: callers must treat it as read-only.
+
     Parameters
     ----------
     filename : str
@@ -682,10 +687,12 @@ def get_merged_mapdata(filename: str) -> tuple[MapData | None, dict[str, Any] | 
         return None, None
 
     store = load_annotations(str(_annotation_path(filename)))
-    md = copy.deepcopy(load_mapdata_cached(str(path)))
 
-    apply_way_edits(md, store)
-    apply_tag_overrides(md, store)
-    merge_annotations(md, store)
+    def build() -> MapData:
+        md = copy.deepcopy(load_mapdata_cached(str(path)))
+        apply_way_edits(md, store)
+        apply_tag_overrides(md, store)
+        merge_annotations(md, store)
+        return md
 
-    return md, store
+    return merged_mapdata_cached(str(path), store, build), store

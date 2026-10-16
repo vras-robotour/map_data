@@ -2,6 +2,7 @@
 
 import json
 import logging
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,8 @@ from flask import (
 )
 from flask.typing import ResponseReturnValue
 
+from map_data.map_data import MapData
+from map_data.pathsolver.graph_planner import GraphPlanner
 from map_data.pathsolver.replan import ReplanPath, cancel_replan_backend
 from map_data.pathsolver.route import (
     GRAPH_ALGORITHM,
@@ -50,6 +53,31 @@ from .common import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=4)
+def _graph_planner(
+    md: MapData,
+    highway_types: tuple[str, ...],
+    traversability: TraversabilityRules,
+    highway_costs: tuple[tuple[str, float], ...] | None,
+    surface_costs: tuple[tuple[str, float], ...] | None,
+) -> GraphPlanner:
+    """
+    The :class:`GraphPlanner` ``plan_route`` would build for these arguments, built once.
+
+    Keyed on *md*'s identity, which is safe because *md* is the shared,
+    read-only map from :func:`get_merged_mapdata` (a new one after every edit)
+    and the cached planner keeps it alive. Cost tables come as sorted item
+    tuples so they can be part of the key.
+    """
+    return GraphPlanner(
+        md,
+        highway_types=list(highway_types),
+        traversability=traversability,
+        highway_costs=None if highway_costs is None else dict(highway_costs),
+        surface_costs=None if surface_costs is None else dict(surface_costs),
+    )
 
 
 @bp.route("/api/planner_defaults")
@@ -421,6 +449,16 @@ def create_replan() -> Response:
         lon = _validated_number(p[1], f"points[{i}] longitude", _MIN_LON, _MAX_LON)
         points.append((lat, lon))
 
+    planner = None
+    if algorithm == GRAPH_ALGORITHM:
+        planner = _graph_planner(
+            md,
+            tuple(highway_types or ["footway"]),
+            traversability,
+            None if highway_costs is None else tuple(sorted(highway_costs.items())),
+            None if surface_costs is None else tuple(sorted(surface_costs.items())),
+        )
+
     try:
         result = plan_route(
             md,
@@ -438,6 +476,7 @@ def create_replan() -> Response:
             traversability=traversability,
             transfer_id=transfer_id,
             max_grid_cells=MAX_GRID_CELLS,
+            planner=planner,
         )
     except RoutePlanningError as e:
         if e.reason in ("grid_too_large", "too_few_points"):

@@ -1,12 +1,13 @@
 """
 The viewer's process-wide read caches.
 
-Two layers, both keyed on what the cached answer was computed from rather than
-on a clock: :func:`load_mapdata_cached` keeps parsed
-:class:`~map_data.map_data.MapData` objects, and :func:`mapdata_geojson_cached`
-keeps the serialized GeoJSON ``/api/mapdata`` hands out, so a repeat request
-skips the shallow copy, the re-applied edits (``parse_intersections`` above
-all) and the FeatureCollection rebuild altogether.
+All keyed on what the cached answer was computed from rather than on a clock:
+:func:`load_mapdata_cached` keeps parsed :class:`~map_data.map_data.MapData`
+objects, :func:`mapdata_geojson_cached` keeps the serialized GeoJSON
+``/api/mapdata`` hands out, so a repeat request skips the shallow copy, the
+re-applied edits (``parse_intersections`` above all) and the FeatureCollection
+rebuild altogether, and :func:`merged_mapdata_cached` keeps the fully edited
+``MapData`` that export and planning work on.
 """
 
 import hashlib
@@ -53,12 +54,14 @@ def load_mapdata_cached(path: str) -> MapData:
     return _load(path, _file_signature(path))
 
 
-#: Merged GeoJSON documents kept, one per mapdata file like :func:`_load`.
-_GEOJSON_CACHE_SIZE = 3
+#: Entries kept per cache below, one per mapdata file like :func:`_load`.
+_CACHE_SIZE = 3
 
 #: cache key -> ``(serialized FeatureCollection, ETag)``, least recently used first.
 _geojson_cache: OrderedDict[tuple[Any, ...], tuple[str, str]] = OrderedDict()
-_geojson_lock = threading.Lock()
+#: cache key -> fully edited ``MapData``, least recently used first.
+_merged_cache: OrderedDict[tuple[Any, ...], MapData] = OrderedDict()
+_lock = threading.Lock()
 
 
 def _store_digest(store: dict[str, Any]) -> str:
@@ -90,20 +93,48 @@ def mapdata_geojson_cached(
     The returned text is shared between requests -- like
     :func:`load_mapdata_cached`'s ``MapData``, treat it as immutable.
     """
-    key = (path, _file_signature(path), _store_digest(store))
-    with _geojson_lock:
-        hit = _geojson_cache.get(key)
+    key = _edited_key(path, store)
+    # The ETag comes from the key, not the (potentially megabytes of) body --
+    # equal keys are what "the same document" means here.
+    return _lru(
+        _geojson_cache,
+        key,
+        lambda: (build(), hashlib.blake2b(repr(key).encode(), digest_size=16).hexdigest()),
+    )
+
+
+def merged_mapdata_cached(
+    path: str, store: dict[str, Any], build: Callable[[], MapData]
+) -> MapData:
+    """
+    Return the fully edited ``MapData`` for *path* under *store*, built by *build* on a miss.
+
+    Keyed exactly like :func:`mapdata_geojson_cached`. The object is shared
+    between requests -- like :func:`load_mapdata_cached`'s, never mutate it.
+    """
+    return _lru(_merged_cache, _edited_key(path, store), build)
+
+
+def _edited_key(path: str, store: dict[str, Any]) -> tuple[Any, ...]:
+    """What a document built from the mapdata at *path* edited by *store* depends on."""
+    return (path, _file_signature(path), _store_digest(store))
+
+
+def _lru[V](
+    cache: OrderedDict[tuple[Any, ...], V], key: tuple[Any, ...], build: Callable[[], V]
+) -> V:
+    """Look *key* up in *cache*, building the value on a miss (LRU of :data:`_CACHE_SIZE`)."""
+    with _lock:
+        hit = cache.get(key)
         if hit is not None:
-            _geojson_cache.move_to_end(key)
+            cache.move_to_end(key)
             return hit
     # Built outside the lock: two requests racing on a cold cache do the work
     # twice instead of queueing up behind each other, for the same result.
-    # The ETag comes from the key, not the (potentially megabytes of) body --
-    # equal keys are what "the same document" means here.
-    entry = (build(), hashlib.blake2b(repr(key).encode(), digest_size=16).hexdigest())
-    with _geojson_lock:
-        _geojson_cache[key] = entry
-        _geojson_cache.move_to_end(key)
-        while len(_geojson_cache) > _GEOJSON_CACHE_SIZE:
-            _geojson_cache.popitem(last=False)
-    return entry
+    value = build()
+    with _lock:
+        cache[key] = value
+        cache.move_to_end(key)
+        while len(cache) > _CACHE_SIZE:
+            cache.popitem(last=False)
+    return value

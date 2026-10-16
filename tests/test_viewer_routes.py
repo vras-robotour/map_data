@@ -1061,6 +1061,22 @@ def test_create_replan_grid_cell_budget_rejected(app_client_with_file):
     assert "cell" in resp.get_data(as_text=True)
 
 
+def test_create_replan_graph_follows_edits_despite_caching(app_client_with_file):
+    """The cached merged map and graph planner are rebuilt after each annotation edit."""
+    client, _, filename = app_client_with_file
+    e, n, zn, zl = utm.from_latlon(50.0, 14.0)
+    points = [list(utm.to_latlon(e + d, n + d, zn, zl)) for d in (5, 45)]
+    body = {"file": filename, "points": points, "algorithm": "graph"}
+    way = {"data": json.dumps({"category": "footway"}), "content_type": "application/json"}
+
+    assert client.post("/api/create_replan", json=body).get_json()["newPath"]
+    assert client.post("/api/create_replan", json=body).get_json()["newPath"]  # warm cache
+    assert client.delete(f"/api/ways/1?file={filename}", **way).status_code == 204
+    assert client.post("/api/create_replan", json=body).get_json()["newPath"] is None
+    assert client.put(f"/api/ways/1/restore?file={filename}", **way).status_code == 204
+    assert client.post("/api/create_replan", json=body).get_json()["newPath"]
+
+
 # ── upload_mapdata ───────────────────────────────────────────────────────────
 
 
