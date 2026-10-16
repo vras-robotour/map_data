@@ -1859,13 +1859,16 @@ is real text rather than pixels; <code>GET /api/qr?…</code> serves the same co
 needs a bitmap (OpenCV <code>QRCodeEncoder</code>, <code>map_data.utils.qr</code>). An empty <code>caption=</code> leaves the
 caption off - the viewer draws its own as HTML text under the code.</p>
 <h3 id="command-line">Command line</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Paths only (graph planner on footways), 3 m waypoint spacing, saved as a GPX track</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>map_data_plan<span class="w"> </span>-f<span class="w"> </span>stromovka.mapdata<span class="w"> </span>--start<span class="w"> </span><span class="m">50</span>.1038,14.4294<span class="w"> </span>--goal<span class="w"> </span>geo:50.1067,14.4193<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span>--spacing<span class="w"> </span><span class="m">3</span><span class="w"> </span>--save<span class="w"> </span>route.gpx
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1"># All terrain (grid A*) through several points, printed as JSON</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>map_data_plan<span class="w"> </span>-f<span class="w"> </span>stromovka.mapdata<span class="w"> </span>-p<span class="w"> </span><span class="m">50</span>.1038,14.4294<span class="w"> </span>-p<span class="w"> </span><span class="m">50</span>.1050,14.4250<span class="w"> </span>-p<span class="w"> </span><span class="m">50</span>.1067,14.4193<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span>--algorithm<span class="w"> </span>astar<span class="w"> </span>--cell-size<span class="w"> </span><span class="m">0</span>.5<span class="w"> </span>--json
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Try it on the bundled demo map (the two waypoints of demo/buchlovice.gpx, ~420 m)</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>map_data_plan<span class="w"> </span>-f<span class="w"> </span>demo/buchlovice.mapdata<span class="w"> </span>--start<span class="w"> </span><span class="m">49</span>.084416,17.336309<span class="w"> </span>--goal<span class="w"> </span><span class="m">49</span>.083106,17.338527
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Paths only (graph planner on footways), 3 m waypoint spacing, saved as a GPX track</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>map_data_plan<span class="w"> </span>-f<span class="w"> </span>stromovka.mapdata<span class="w"> </span>--start<span class="w"> </span><span class="m">50</span>.1038,14.4294<span class="w"> </span>--goal<span class="w"> </span>geo:50.1067,14.4193<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span>--spacing<span class="w"> </span><span class="m">3</span><span class="w"> </span>--save<span class="w"> </span>route.gpx
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="c1"># All terrain (grid A*) through several points, printed as JSON</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>map_data_plan<span class="w"> </span>-f<span class="w"> </span>stromovka.mapdata<span class="w"> </span>-p<span class="w"> </span><span class="m">50</span>.1038,14.4294<span class="w"> </span>-p<span class="w"> </span><span class="m">50</span>.1050,14.4250<span class="w"> </span>-p<span class="w"> </span><span class="m">50</span>.1067,14.4193<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">    </span>--algorithm<span class="w"> </span>astar<span class="w"> </span>--cell-size<span class="w"> </span><span class="m">0</span>.5<span class="w"> </span>--json
 </span></code></pre></div>
 <p><code>--traversability FILE</code> plans with another rule file than the package's
 <code>config/traversability.yaml</code> and <code>--no-traversability</code> with none at all (stairs are still
@@ -2167,7 +2170,9 @@ inflation are tunable via <code>--cell_size</code> and <code>--inflate_obstacles
 collision-free waypoints by randomly sampling the free space. It is asymptotically optimal —
 given enough iterations it converges to the shortest path — and handles irregular obstacle
 shapes well. RRT* is best suited for large open areas or when the grid resolution required
-for Grid A* would be prohibitively expensive.</p>
+for Grid A* would be prohibitively expensive. It gives up after a fixed iteration budget,
+so when it finds no path for a leg, Grid A* is run on the same grid instead (unless the
+run was cancelled).</p>
 <hr />
 <h2 id="cost-grid">Cost grid</h2>
 <p><code>ReplanPath.fill_grid()</code> converts OSM map data into a 2-D NumPy array of floating-point costs,

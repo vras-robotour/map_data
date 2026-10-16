@@ -1605,7 +1605,7 @@ an ordinary one.</p>
 </tr>
 <tr>
 <td><strong>All terrain — RRT*</strong></td>
-<td>Sampling-based planner. Faster in large open areas; converges to optimal asymptotically.</td>
+<td>Sampling-based planner. Faster in large open areas; converges to optimal asymptotically. Falls back to A* when it finds no path.</td>
 </tr>
 <tr>
 <td><strong>Paths only</strong></td>
@@ -1658,7 +1658,7 @@ gate through a fence) without modifying the underlying map data.</p>
 <tr>
 <td>Show Cost Grid</td>
 <td>off</td>
-<td>Overlay the traversal cost grid on the map for debugging. Memory intensive on larger areas.</td>
+<td>Overlay the traversal cost grid of the current view on the map for debugging (one image; larger views take longer to compute).</td>
 </tr>
 </tbody>
 </table>

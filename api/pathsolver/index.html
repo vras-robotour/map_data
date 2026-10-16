@@ -1253,6 +1253,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#fill_grid_lazilymap_data-highway_typesnone-max_path_dist20" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fill_grid_lazily(map_data, highway_types=None, max_path_dist=2.0)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#replanpath-algorithmastar" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2094,6 +2105,17 @@
     <span class="md-ellipsis">
       
         fill_grid(map_data, highway_types=None, max_path_dist=2.0)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fill_grid_lazilymap_data-highway_typesnone-max_path_dist20" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fill_grid_lazily(map_data, highway_types=None, max_path_dist=2.0)
       
     </span>
   </a>
@@ -3209,7 +3231,7 @@ segment could not be routed.</p>
 
     <div class="doc doc-contents first">
 
-        <p>Run A<em> from </em>id_s<em> to </em>id_g* over the graph plus a local subgraph.</p>
+        <p>Run A* from <em>id_s</em> to <em>id_g</em> over the graph plus a local subgraph.</p>
 <p><em>positions</em> gives the world coordinate of the two temporary snapped
 nodes (everything else resolves through :attr:<code>nodes</code>); <em>extra_adj</em>
 gives their (and their edge endpoints') extra adjacency, and
@@ -3841,7 +3863,9 @@ not given or cannot be reached from <em>point</em> inside the area.</p>
 <span class="normal"><a href="#__codelineno-0-284">284</a></span>
 <span class="normal"><a href="#__codelineno-0-285">285</a></span>
 <span class="normal"><a href="#__codelineno-0-286">286</a></span>
-<span class="normal"><a href="#__codelineno-0-287">287</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-134"><a id="__codelineno-0-134" name="__codelineno-0-134"></a><span class="k">def</span><span class="w"> </span><span class="nf">grid_astar</span><span class="p">(</span>
+<span class="normal"><a href="#__codelineno-0-287">287</a></span>
+<span class="normal"><a href="#__codelineno-0-288">288</a></span>
+<span class="normal"><a href="#__codelineno-0-289">289</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-134"><a id="__codelineno-0-134" name="__codelineno-0-134"></a><span class="k">def</span><span class="w"> </span><span class="nf">grid_astar</span><span class="p">(</span>
 </span><span id="__span-0-135"><a id="__codelineno-0-135" name="__codelineno-0-135"></a>    <span class="n">grid</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="__span-0-136"><a id="__codelineno-0-136" name="__codelineno-0-136"></a>    <span class="n">start_utm</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
 </span><span id="__span-0-137"><a id="__codelineno-0-137" name="__codelineno-0-137"></a>    <span class="n">goal_utm</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -3981,20 +4005,22 @@ not given or cannot be reached from <em>point</em> inside the area.</p>
 </span><span id="__span-0-271"><a id="__codelineno-0-271" name="__codelineno-0-271"></a>
 </span><span id="__span-0-272"><a id="__codelineno-0-272" name="__codelineno-0-272"></a>            <span class="c1"># Diagonal moves must not slip between two corner-touching</span>
 </span><span id="__span-0-273"><a id="__codelineno-0-273" name="__codelineno-0-273"></a>            <span class="c1"># blocked cells: both edge-adjacent cells have to be free.</span>
-</span><span id="__span-0-274"><a id="__codelineno-0-274" name="__codelineno-0-274"></a>            <span class="k">if</span> <span class="n">ortho_offsets</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="n">flat_costs</span><span class="p">[</span><span class="n">u_flat</span> <span class="o">+</span> <span class="n">o</span><span class="p">]</span> <span class="o">==</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">ortho_offsets</span><span class="p">):</span>
-</span><span id="__span-0-275"><a id="__codelineno-0-275" name="__codelineno-0-275"></a>                <span class="k">continue</span>
-</span><span id="__span-0-276"><a id="__codelineno-0-276" name="__codelineno-0-276"></a>
-</span><span id="__span-0-277"><a id="__codelineno-0-277" name="__codelineno-0-277"></a>            <span class="n">_f32</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">dist</span> <span class="o">*</span> <span class="n">cost_val</span>
-</span><span id="__span-0-278"><a id="__codelineno-0-278" name="__codelineno-0-278"></a>            <span class="n">_f32</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">current_g</span> <span class="o">+</span> <span class="n">_f32</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-</span><span id="__span-0-279"><a id="__codelineno-0-279" name="__codelineno-0-279"></a>            <span class="n">new_g</span> <span class="o">=</span> <span class="n">_f32</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-</span><span id="__span-0-280"><a id="__codelineno-0-280" name="__codelineno-0-280"></a>            <span class="k">if</span> <span class="n">new_g</span> <span class="o">&lt;</span> <span class="n">g_scores</span><span class="p">[</span><span class="n">v_flat</span><span class="p">]:</span>
-</span><span id="__span-0-281"><a id="__codelineno-0-281" name="__codelineno-0-281"></a>                <span class="n">g_scores</span><span class="p">[</span><span class="n">v_flat</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_g</span>
-</span><span id="__span-0-282"><a id="__codelineno-0-282" name="__codelineno-0-282"></a>                <span class="n">parents</span><span class="p">[</span><span class="n">v_flat</span><span class="p">]</span> <span class="o">=</span> <span class="n">u_flat</span>
-</span><span id="__span-0-283"><a id="__codelineno-0-283" name="__codelineno-0-283"></a>                <span class="n">v_iy</span><span class="p">,</span> <span class="n">v_ix</span> <span class="o">=</span> <span class="nb">divmod</span><span class="p">(</span><span class="n">v_flat</span><span class="p">,</span> <span class="n">p_nx</span><span class="p">)</span>
-</span><span id="__span-0-284"><a id="__codelineno-0-284" name="__codelineno-0-284"></a>                <span class="n">h</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">((</span><span class="n">v_ix</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">goal_ix</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="p">(</span><span class="n">v_iy</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">goal_iy</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
-</span><span id="__span-0-285"><a id="__codelineno-0-285" name="__codelineno-0-285"></a>                <span class="n">heapq</span><span class="o">.</span><span class="n">heappush</span><span class="p">(</span><span class="n">pq</span><span class="p">,</span> <span class="p">(</span><span class="n">new_g</span> <span class="o">+</span> <span class="n">h</span><span class="p">,</span> <span class="n">new_g</span><span class="p">,</span> <span class="n">v_ix</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">v_iy</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
-</span><span id="__span-0-286"><a id="__codelineno-0-286" name="__codelineno-0-286"></a>
-</span><span id="__span-0-287"><a id="__codelineno-0-287" name="__codelineno-0-287"></a>    <span class="k">return</span> <span class="kc">None</span>
+</span><span id="__span-0-274"><a id="__codelineno-0-274" name="__codelineno-0-274"></a>            <span class="k">if</span> <span class="n">ortho_offsets</span><span class="p">:</span>
+</span><span id="__span-0-275"><a id="__codelineno-0-275" name="__codelineno-0-275"></a>                <span class="n">o1</span><span class="p">,</span> <span class="n">o2</span> <span class="o">=</span> <span class="n">ortho_offsets</span>
+</span><span id="__span-0-276"><a id="__codelineno-0-276" name="__codelineno-0-276"></a>                <span class="k">if</span> <span class="n">flat_costs</span><span class="p">[</span><span class="n">u_flat</span> <span class="o">+</span> <span class="n">o1</span><span class="p">]</span> <span class="o">==</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span> <span class="ow">or</span> <span class="n">flat_costs</span><span class="p">[</span><span class="n">u_flat</span> <span class="o">+</span> <span class="n">o2</span><span class="p">]</span> <span class="o">==</span> <span class="n">math</span><span class="o">.</span><span class="n">inf</span><span class="p">:</span>
+</span><span id="__span-0-277"><a id="__codelineno-0-277" name="__codelineno-0-277"></a>                    <span class="k">continue</span>
+</span><span id="__span-0-278"><a id="__codelineno-0-278" name="__codelineno-0-278"></a>
+</span><span id="__span-0-279"><a id="__codelineno-0-279" name="__codelineno-0-279"></a>            <span class="n">_f32</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">dist</span> <span class="o">*</span> <span class="n">cost_val</span>
+</span><span id="__span-0-280"><a id="__codelineno-0-280" name="__codelineno-0-280"></a>            <span class="n">_f32</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">current_g</span> <span class="o">+</span> <span class="n">_f32</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-0-281"><a id="__codelineno-0-281" name="__codelineno-0-281"></a>            <span class="n">new_g</span> <span class="o">=</span> <span class="n">_f32</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-0-282"><a id="__codelineno-0-282" name="__codelineno-0-282"></a>            <span class="k">if</span> <span class="n">new_g</span> <span class="o">&lt;</span> <span class="n">g_scores</span><span class="p">[</span><span class="n">v_flat</span><span class="p">]:</span>
+</span><span id="__span-0-283"><a id="__codelineno-0-283" name="__codelineno-0-283"></a>                <span class="n">g_scores</span><span class="p">[</span><span class="n">v_flat</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_g</span>
+</span><span id="__span-0-284"><a id="__codelineno-0-284" name="__codelineno-0-284"></a>                <span class="n">parents</span><span class="p">[</span><span class="n">v_flat</span><span class="p">]</span> <span class="o">=</span> <span class="n">u_flat</span>
+</span><span id="__span-0-285"><a id="__codelineno-0-285" name="__codelineno-0-285"></a>                <span class="n">v_iy</span><span class="p">,</span> <span class="n">v_ix</span> <span class="o">=</span> <span class="nb">divmod</span><span class="p">(</span><span class="n">v_flat</span><span class="p">,</span> <span class="n">p_nx</span><span class="p">)</span>
+</span><span id="__span-0-286"><a id="__codelineno-0-286" name="__codelineno-0-286"></a>                <span class="n">h</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">((</span><span class="n">v_ix</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">goal_ix</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="p">(</span><span class="n">v_iy</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">goal_iy</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
+</span><span id="__span-0-287"><a id="__codelineno-0-287" name="__codelineno-0-287"></a>                <span class="n">heapq</span><span class="o">.</span><span class="n">heappush</span><span class="p">(</span><span class="n">pq</span><span class="p">,</span> <span class="p">(</span><span class="n">new_g</span> <span class="o">+</span> <span class="n">h</span><span class="p">,</span> <span class="n">new_g</span><span class="p">,</span> <span class="n">v_ix</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">v_iy</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+</span><span id="__span-0-288"><a id="__codelineno-0-288" name="__codelineno-0-288"></a>
+</span><span id="__span-0-289"><a id="__codelineno-0-289" name="__codelineno-0-289"></a>    <span class="k">return</span> <span class="kc">None</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -4329,8 +4355,8 @@ solution exists (see :meth:<code>_sample_informed</code>), shrinking as
             <td>
               <div class="doc-md-description">
                 <p>If <code>True</code> (default), shrink the rewiring radius as the tree
-grows per the RRT<em> asymptotic-optimality formula, instead of
-using a fixed </em>neighbor_radius*.</p>
+grows per the RRT* asymptotic-optimality formula, instead of
+using a fixed <em>neighbor_radius</em>.</p>
               </div>
             </td>
             <td>
@@ -5401,7 +5427,7 @@ redo the same work at a smaller (and less effective) scale.</p>
 <p><code>ReplanPath</code> is the local replanning engine used by the viewer's <strong>Planner</strong> mode and the
 <code>replan</code> CLI tool. It discretizes the area around the input waypoints into a cost grid,
 assigns traversal costs based on OSM highway and surface types, then finds a collision-free
-path using either Grid A<em> or RRT</em>.</p>
+path using either Grid A* or RRT*.</p>
 <h3 id="class-attributes">Class attributes</h3>
 <p>These cost tables are loaded from <code>config/planner_defaults.yaml</code> at import time and can be
 overridden per-instance:</p>
@@ -5505,7 +5531,8 @@ overridden per-instance:</p>
 </table>
 <h3 id="methods">Methods</h3>
 <h4 id="fill_gridmap_data-highway_typesnone-max_path_dist20"><code>fill_grid(map_data, highway_types=None, max_path_dist=2.0)</code></h4>
-<p>Populate the cost grid from map data. Must be called before <code>replan()</code>.</p>
+<p>Populate the cost grid from map data. Must be called before <code>replan()</code> (or use
+<code>fill_grid_lazily</code>).</p>
 <table>
 <thead>
 <tr>
@@ -5533,6 +5560,10 @@ overridden per-instance:</p>
 </tbody>
 </table>
 <p>Cost model per cell: <code>way_cost + (DEFAULT_OFF_PATH_COST - way_cost) × (dist / max_path_dist)²</code>, where <code>way_cost = min(PATH_COST_CAP, HIGHWAY_COSTS[highway] + SURFACE_COSTS[surface])</code>. Obstacle cells are set to <code>inf</code>.</p>
+<h4 id="fill_grid_lazilymap_data-highway_typesnone-max_path_dist20"><code>fill_grid_lazily(map_data, highway_types=None, max_path_dist=2.0)</code></h4>
+<p>Same arguments as <code>fill_grid</code>, but the grid is only built when the first leg that collides
+with an obstacle needs it; legs that don't are checked against the obstacle geometries alone.
+<code>plan_route</code> uses this.</p>
 <h4 id="replanpath-algorithmastar"><code>replan(path, algorithm="astar")</code></h4>
 <p>Plan a path through the cost grid.</p>
 <table>
@@ -5549,7 +5580,7 @@ overridden per-instance:</p>
 </tr>
 <tr>
 <td><code>algorithm</code></td>
-<td><code>"astar"</code> (Grid A<em>) or <code>"rrt"</code> (RRT</em>)</td>
+<td><code>"astar"</code> (Grid A*) or <code>"rrt"</code> (RRT*; falls back to Grid A* when it finds no path for a leg)</td>
 </tr>
 </tbody>
 </table>

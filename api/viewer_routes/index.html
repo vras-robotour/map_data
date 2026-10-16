@@ -2602,8 +2602,7 @@ every subsequent load.</p>
 <hr />
 <h3 id="get-apicost_gridfilenamemin_latmin_lonmax_latmax_lon"><code>GET /api/cost_grid?file=&lt;name&gt;&amp;min_lat=&amp;min_lon=&amp;max_lat=&amp;max_lon=</code></h3>
 <p>Compute the traversal cost grid for a bounding box. Used by the <strong>Show Cost Grid</strong> overlay
-in the Planner. Cells have cost 0.0 (free path) to 1.0 (obstacle boundary); values above
-1.0 indicate hard obstacles.</p>
+in the Planner. Cells have cost 0.0 (free path) up to 1.0 (hard obstacle).</p>
 <p><strong>Query parameters</strong></p>
 <table>
 <thead>
@@ -2636,7 +2635,11 @@ in the Planner. Cells have cost 0.0 (free path) to 1.0 (obstacle boundary); valu
 </tr>
 </tbody>
 </table>
-<p><strong>Response</strong> — GeoJSON FeatureCollection of Point features, each with property <code>cost</code>.</p>
+<p><strong>Response</strong> — <code>{"image": "data:image/png;base64,...", "bounds": [[south, west], [north, east]]}</code>,
+ready for <code>L.imageOverlay(image, bounds)</code>. The UTM grid is resampled onto a lat/lon-aligned
+raster (~1 px per cell); pixels outside the grid are transparent. Colours: black = obstacle
+(cost ≥ 1), translucent grey = off-path (cost ≥ <code>default_off_path_cost</code>), green → red = path
+cost / <code>path_cost_cap</code>. Both fields are <code>null</code> for an empty grid.</p>
 <hr />
 <h3 id="post-apicreate_replan"><code>POST /api/create_replan</code></h3>
 <p>Run path planning on a set of waypoints. The main planning endpoint.</p>
@@ -2668,12 +2671,12 @@ in the Planner. Cells have cost 0.0 (free path) to 1.0 (obstacle boundary); valu
 <tr>
 <td><code>algorithm</code></td>
 <td><code>"rrt"</code></td>
-<td><code>"astar"</code> = Grid A<em>, <code>"rrt"</code> = RRT</em>, <code>"graph"</code> = on-way graph planning</td>
+<td><code>"astar"</code> = Grid A*, <code>"rrt"</code> = RRT*, <code>"graph"</code> = on-way graph planning</td>
 </tr>
 <tr>
 <td><code>sub_algorithm</code></td>
 <td><code>"astar"</code></td>
-<td>Used when <code>algorithm</code> is <code>"astar"</code> or <code>"rrt"</code> — selects the segment-level solver</td>
+<td>Used when <code>algorithm</code> is <code>"astar"</code> or <code>"rrt"</code> — selects the segment-level solver (<code>"rrt"</code> falls back to <code>"astar"</code> when it finds no path)</td>
 </tr>
 <tr>
 <td><code>allowed_ways</code></td>
