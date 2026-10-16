@@ -33,6 +33,9 @@ caption off - the viewer draws its own as HTML text under the code.
 ### Command line
 
 ```bash
+# Try it on the bundled demo map (the two waypoints of demo/buchlovice.gpx, ~420 m)
+map_data_plan -f demo/buchlovice.mapdata --start 49.084416,17.336309 --goal 49.083106,17.338527
+
 # Paths only (graph planner on footways), 3 m waypoint spacing, saved as a GPX track
 map_data_plan -f stromovka.mapdata --start 50.1038,14.4294 --goal geo:50.1067,14.4193 \
     --spacing 3 --save route.gpx

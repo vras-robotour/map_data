@@ -2,6 +2,7 @@
 
 import argparse
 import json
+from pathlib import Path
 
 import pytest
 import utm
@@ -139,3 +140,24 @@ def test_cli_rejects_a_missing_rule_file(footway_network_mapdata):
                 "/nonexistent/rules.yaml",
             ]
         )
+
+
+def test_cli_plans_the_documented_demo_route(capsys):
+    """The demo command in README.md and docs/planning.md, on the default footway graph."""
+    demo = Path(__file__).resolve().parents[1] / "demo" / "buchlovice.mapdata"
+    rc = main(
+        [
+            "-f",
+            str(demo),
+            "--start",
+            "49.084416,17.336309",
+            "--goal",
+            "49.083106,17.338527",
+            "--json",
+        ]
+    )
+
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert data["algorithm"] == "graph"
+    assert data["length_m"] > 300
