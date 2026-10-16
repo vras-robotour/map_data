@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [3.2.0] — 2026-10-16
+
+A minor version: faster grid planning, viewer and saving, plus planner fixes. `/api/cost_grid`
+now returns an image instead of a point list.
+
 ### Changed
 
 - Grid planning is faster: the cost grid queries the way KD-tree on all cores, the A\* inner
