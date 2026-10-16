@@ -182,7 +182,7 @@ def plan_route(
     points_latlon: Sequence[Sequence[float]],
     *,
     algorithm: str = GRAPH_ALGORITHM,
-    sub_algorithm: str = "astar",
+    sub_algorithm: str | None = None,
     highway_types: Sequence[str] | None = None,
     max_snap_distance: float = DEFAULT_MAX_SNAP_DISTANCE,
     spacing: float = 0.0,
@@ -207,9 +207,11 @@ def plan_route(
 
     ``algorithm="graph"`` routes along the allowed ways only (the viewer's
     *Paths only*); ``"astar"``/``"rrt"`` run the grid planner over the cost
-    grid built from the map (*All terrain*; ``sub_algorithm`` is derived from
-    ``algorithm`` unless given explicitly as the viewer does). Any other value
-    also selects the grid planner with ``sub_algorithm``.
+    grid built from the map (*All terrain*). ``sub_algorithm`` picks the grid
+    search (``"astar"``/``"rrt"``); ``None`` derives it from ``algorithm``, so
+    ``algorithm="rrt"`` alone runs RRT*, while the viewer sends ``"rrt"`` plus an
+    explicit ``sub_algorithm``. Any other ``algorithm`` value also selects the
+    grid planner, with ``sub_algorithm`` (default ``"astar"``).
 
     ``spacing`` > 0 resamples the result so waypoints are at most that far
     apart (a waypoint follower wants a few metres). ``changed`` and
@@ -281,8 +283,8 @@ def plan_route(
                 f"no {'/'.join(highway_types)} route connects the waypoints",
             )
     else:
-        if algorithm in GRID_ALGORITHMS and sub_algorithm == "astar":
-            sub_algorithm = algorithm
+        if sub_algorithm is None:
+            sub_algorithm = algorithm if algorithm in GRID_ALGORITHMS else "astar"
         p_low, p_high = _grid_bbox(md, utm_path)
         area_m2 = max(0.0, p_high[0] - p_low[0]) * max(0.0, p_high[1] - p_low[1])
         cells = area_m2 / (cell_size * cell_size)

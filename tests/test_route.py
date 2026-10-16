@@ -182,6 +182,31 @@ def test_plan_route_grid_astar(footway_network_mapdata):
     assert res.latlon[-1] == pytest.approx(goal, abs=1e-5)
 
 
+@pytest.mark.parametrize(
+    ("algorithm", "sub_algorithm", "expected"),
+    [("rrt", "astar", "astar"), ("rrt", None, "rrt"), ("astar", None, "astar")],
+)
+def test_plan_route_grid_sub_algorithm(
+    footway_network_mapdata, monkeypatch, algorithm, sub_algorithm, expected
+):
+    # The viewer's "All terrain" mode sends algorithm="rrt" with the search it
+    # wants in sub_algorithm; an explicit "astar" must not be overridden to RRT*.
+    from map_data.pathsolver.replan import ReplanPath
+
+    seen = []
+
+    def spy(self, path, algorithm="astar"):
+        seen.append(algorithm)
+        return path  # skip the (randomised) search itself
+
+    monkeypatch.setattr(ReplanPath, "replan", spy)
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    start, goal = _latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 60.0, 0.0)
+    plan_route(md, [start, goal], algorithm=algorithm, sub_algorithm=sub_algorithm, cell_size=2.0)
+    assert seen == [expected]
+
+
 def test_plan_route_grid_too_large(footway_network_mapdata):
     path, lat0, lon0 = footway_network_mapdata
     md, _ = load_mapdata_with_annotations(path)
