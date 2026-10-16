@@ -400,31 +400,18 @@ class PlannerMode {
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      
+
       if (geoLayers.costGrid) map.removeLayer(geoLayers.costGrid);
-      
-      const offPathThreshold = this.defaults.default_off_path_cost || 0.9;
-      const pathCap = this.defaults.path_cost_cap || 0.85;
-      const markers = data.map(([lat, lon, cost]) => {
-        let style;
-        if (cost >= 1.0) {
-          // Hard Obstacle style: black marker
-          style = { radius: 4, fillColor: '#000', color: '#000', weight: 1, fillOpacity: 1 };
-        } else if (cost >= offPathThreshold) {
-          // Off-path / All-terrain style: dark gray/brown
-          style = { radius: 2, fillColor: '#444', color: '#444', weight: 0, fillOpacity: 0.4 };
-        } else {
-          // Interpolate color from green (0) to red (pathCap)
-          const normalizedCost = cost / pathCap;
-          const r = Math.floor(255 * Math.min(1, normalizedCost));
-          const g = Math.floor(255 * Math.max(0, 1 - normalizedCost));
-          style = { radius: 3, fillColor: `rgb(${r},${g},0)`, color: '#000', weight: 0.2, fillOpacity: 0.6 };
-        }
-        return L.circleMarker([lat, lon], style);
-      });
-      
-      geoLayers.costGrid = L.layerGroup(markers).addTo(map);
-      
+      geoLayers.costGrid = null;
+      if (!data.image) {
+        setStatus('Cost grid is empty for this view', 'text-warning');
+        return;
+      }
+      // One server-rendered PNG, already resampled onto a lat/lon-aligned raster;
+      // colours and per-cell opacity are baked into its pixels.
+      geoLayers.costGrid = L.imageOverlay(data.image, data.bounds).addTo(map);
+      geoLayers.costGrid.getElement().style.imageRendering = 'pixelated';
+
       setStatus('Cost grid loaded', 'text-success');
     } catch (err) {
       setStatus(`Failed to fetch cost grid: ${err.message}`, 'text-danger');
