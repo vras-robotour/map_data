@@ -150,9 +150,8 @@ def test_non_integer_version_mapdata_raises(tmp_path):
 # ── atomic .mapdata writes ────────────────────────────────────────────────────
 
 
-def _broken_json_dump(obj, fp, **kwargs):
-    """Simulate a crash/full disk mid-dump: write a partial file, then fail."""
-    fp.write('{"partial": ')
+def _broken_json_dumps(obj, **kwargs):
+    """Simulate a crash/full disk mid-dump, after the temp file is already open."""
     raise OSError("disk full")
 
 
@@ -162,7 +161,7 @@ def test_save_mapdata_failure_preserves_existing_file(tmp_path, monkeypatch):
     md.save(str(path))
     good_content = path.read_text()
 
-    monkeypatch.setattr("map_data.utils.serialization.json.dump", _broken_json_dump)
+    monkeypatch.setattr("map_data.utils.serialization.json.dumps", _broken_json_dumps)
     with pytest.raises(OSError, match="disk full"):
         md.save(str(path))
 
@@ -230,7 +229,7 @@ def test_save_osm_cache_failure_preserves_existing_cache(tmp_path, monkeypatch):
     md.coords_file = str(tmp_path / "test.gpx")
     md._save_osm_cache(_WAYS_JSON)
 
-    monkeypatch.setattr("map_data.map_data.json.dump", _broken_json_dump)
+    monkeypatch.setattr("map_data.utils.serialization.json.dumps", _broken_json_dumps)
     # _save_osm_cache logs a warning on OSError instead of raising.
     md._save_osm_cache(_EMPTY_JSON)
     monkeypatch.undo()

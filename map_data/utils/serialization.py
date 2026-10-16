@@ -29,7 +29,9 @@ def way_to_dict(way: Way) -> dict[str, Any]:
         "is_area": way.is_area,
         "nodes": way.nodes,
         "tags": way.tags,
-        "line": wkt.dumps(way.line) if way.line else None,
+        # UTM metres: 6 decimals is a micrometre. shapely's default (16 zero-padded
+        # decimals) made this the bulk of save time and bloated the file.
+        "line": wkt.dumps(way.line, rounding_precision=6, trim=True) if way.line else None,
         "in_out": way.in_out,
     }
 
@@ -81,7 +83,8 @@ def atomic_write_json(path: str | Path, data: Any, **dump_kwargs: Any) -> None:
     fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=p.name + ".", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, **dump_kwargs)
+            # dumps, not dump: json.dump streams via the pure-Python encoder, ~3x slower.
+            f.write(json.dumps(data, **dump_kwargs))
         os.replace(tmp, p)
     except BaseException:
         with contextlib.suppress(OSError):
