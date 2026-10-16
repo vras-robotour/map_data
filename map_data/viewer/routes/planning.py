@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import utm
 import yaml
 from flask import (
@@ -255,12 +256,11 @@ def get_cost_grid() -> Response:
 
     # grid is [N, 4] -> [x, y, 0, cost]; obstacles (cost >= 1.0) are not filtered
     # out, unlike planning, so they can be visualized too.
-    points = []
-    for row in replanner.path_grid.grid:
-        lat, lon = utm.to_latlon(row[0], row[1], zn, zl)
-        points.append([lat, lon, float(row[3])])
-
-    return jsonify(points)
+    grid = np.asarray(replanner.path_grid.grid, dtype=float)
+    if len(grid) == 0:
+        return jsonify([])
+    lat, lon = utm.to_latlon(grid[:, 0], grid[:, 1], zn, zl)
+    return jsonify(np.column_stack([lat, lon, grid[:, 3]]).tolist())
 
 
 @bp.route("/api/cancel_replan", methods=["POST"])

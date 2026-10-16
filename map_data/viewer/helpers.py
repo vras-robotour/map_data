@@ -74,11 +74,12 @@ def ring_to_latlon(
         (longitude first).
 
     """
-    result = []
-    for x, y in coords:
-        lat, lon = utm.to_latlon(x, y, zone_number, zone_letter)
-        result.append([lon, lat])
-    return result
+    xy = np.asarray(coords, dtype=float)
+    if len(xy) == 0:
+        return []
+    # One vectorised call: utm.to_latlon is ~50x slower per point than per array.
+    lat, lon = utm.to_latlon(xy[:, 0], xy[:, 1], zone_number, zone_letter)
+    return np.column_stack([lon, lat]).tolist()
 
 
 def _to_utm(lat: float, lon: float, zone_number: int, zone_letter: str) -> tuple[float, float]:
