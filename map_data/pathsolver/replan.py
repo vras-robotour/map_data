@@ -144,6 +144,11 @@ class ReplanPath:
                 if self._colides(path_seg):
                     if algorithm == "rrt":
                         way = self._rrt_star(start[:2], goal[:2])
+                        # RRT* gives up after a fixed iteration budget; A* on the
+                        # same grid is complete. Not after a cancel, though.
+                        if way is None and not _is_cancelled(self.transfer_id):
+                            logger.info("rrt found no path for leg %d; falling back to astar.", i)
+                            way = self._astar(start[:2], goal[:2])
                     else:
                         way = self._astar(start[:2], goal[:2])
 

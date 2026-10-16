@@ -145,3 +145,34 @@ def test_replan_cancelled_mid_run_stops_and_consumes_cancel(transfer_id):
     assert len(calls) == 1
     # The cancel id was consumed (discarded) when the cancellation was honoured
     assert not replan_mod._is_cancelled(transfer_id)
+
+
+# ── rrt -> astar fallback ────────────────────────────────────────────────────
+
+
+def test_replan_rrt_failure_falls_back_to_astar(transfer_id):
+    replanner = _make_replanner(transfer_id)
+    replanner._rrt_star = lambda start, goal: None
+    astar_way = np.array([[1.0, 1.0], [1.0, 9.0], [9.0, 9.0]])
+    replanner._astar = lambda start, goal: astar_way
+    replanner._colides = lambda seg: True  # force a search; also keeps the corner
+
+    result = replanner.replan(np.array([[1.0, 1.0], [9.0, 9.0]]), algorithm="rrt")
+
+    np.testing.assert_array_equal(result, astar_way)
+
+
+def test_replan_rrt_cancelled_does_not_fall_back(transfer_id):
+    replanner = _make_replanner(transfer_id)
+
+    def cancel_then_fail(start, goal):
+        cancel_replan_backend(transfer_id)  # RRTStar returns None when cancelled
+        return None
+
+    astar_calls = []
+    replanner._rrt_star = cancel_then_fail
+    replanner._astar = lambda start, goal: astar_calls.append(1)
+    replanner._colides = lambda seg: True
+
+    assert replanner.replan(np.array([[1.0, 1.0], [9.0, 9.0]]), algorithm="rrt") is None
+    assert astar_calls == []
