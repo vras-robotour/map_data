@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import math
@@ -7,6 +8,7 @@ import time
 from unittest.mock import patch
 from urllib.parse import quote
 
+import cv2
 import numpy as np
 import pytest
 import utm
@@ -905,20 +907,60 @@ def test_add_way_node_and_resolution_round_trip(app_client_with_file):
 # ── cost grid ────────────────────────────────────────────────────────────────
 
 
-def test_cost_grid_small_bbox_returns_points(app_client_with_file):
+def _decode_png_rgba(data_url):
+    assert data_url.startswith("data:image/png;base64,")
+    png = np.frombuffer(base64.b64decode(data_url.split(",", 1)[1]), np.uint8)
+    return cv2.cvtColor(cv2.imdecode(png, cv2.IMREAD_UNCHANGED), cv2.COLOR_BGRA2RGBA)
+
+
+def test_cost_grid_small_bbox_returns_image(app_client_with_file):
     client, _, filename = app_client_with_file
     resp = client.get(
         f"/api/cost_grid?file={filename}&min_lat=50.0&min_lon=14.0&max_lat=50.0005&max_lon=14.0005",
     )
     assert resp.status_code == 200
-    points = resp.get_json()
-    assert isinstance(points, list)
-    assert points
-    for point in points:
-        lat, lon, cost = point
-        assert 49.99 < lat < 50.01
-        assert 13.99 < lon < 14.01
-        assert math.isfinite(cost)
+    data = resp.get_json()
+    (south, west), (north, east) = data["bounds"]
+    # The image covers the 1 m-cell grid laid over the requested box.
+    assert south == pytest.approx(50.0, abs=2e-5)
+    assert west == pytest.approx(14.0, abs=3e-5)
+    assert north == pytest.approx(50.0005, abs=2e-5)
+    assert east == pytest.approx(14.0005, abs=3e-5)
+    rgba = _decode_png_rgba(data["image"])
+    assert rgba.shape[2] == 4
+    alphas = set(np.unique(rgba[..., 3]).tolist())
+    assert {153, 102} <= alphas  # the footway's path cells and open terrain
+
+
+def test_cost_grid_image_resamples_utm_cells_onto_latlon_pixels():
+    # 200 x 100 one-metre cells near Prague (meridian convergence ~0.4 deg), with
+    # one column band per colour class.
+    zn, zl = 33, "U"
+    x0, y0, _, _ = utm.from_latlon(50.1, 14.42, zn, zl)
+    low = (x0, y0)
+    xs, ys = np.meshgrid(np.arange(200) + 0.5, np.arange(100) + 0.5)
+    band_cost = np.array([0.0, 0.425, 0.95, 1.0])
+    costs = band_cost[(xs // 50).astype(int)]
+    grid = np.column_stack([xs.ravel() + x0, ys.ravel() + y0, np.zeros(xs.size), costs.ravel()])
+
+    rgba, ((s, w), (n, e)) = viewer_planning._cost_grid_image(grid, low, 1.0, 0.9, 0.85, zn, zl)
+    expected_by_band = [(0, 255, 0, 153), (127, 127, 0, 153), (68, 68, 68, 102), (0, 0, 0, 255)]
+    height, width, _ = rgba.shape
+    seen_outside = False
+    for row in range(height):
+        for col in range(width):
+            lat = n - (row + 0.5) * (n - s) / height
+            lon = w + (col + 0.5) * (e - w) / width
+            px, py, _, _ = utm.from_latlon(lat, lon, zn, zl)
+            cx, cy = math.floor(px - x0), math.floor(py - y0)
+            if 0 <= cx < 200 and 0 <= cy < 100:
+                expected = expected_by_band[cx // 50]
+            else:
+                expected = (0, 0, 0, 0)
+                seen_outside = True
+            assert tuple(rgba[row, col]) == expected, (row, col)
+    # The rotated grid leaves transparent corners in its lat/lon bounding box.
+    assert seen_outside
 
 
 def test_cost_grid_oversized_bbox_rejected(app_client_with_file):

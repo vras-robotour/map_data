@@ -369,8 +369,7 @@ Return the planner default configuration from `config/planner_defaults.yaml`.
 ### `GET /api/cost_grid?file=<name>&min_lat=&min_lon=&max_lat=&max_lon=`
 
 Compute the traversal cost grid for a bounding box. Used by the **Show Cost Grid** overlay
-in the Planner. Cells have cost 0.0 (free path) to 1.0 (obstacle boundary); values above
-1.0 indicate hard obstacles.
+in the Planner. Cells have cost 0.0 (free path) up to 1.0 (hard obstacle).
 
 **Query parameters**
 
@@ -381,7 +380,11 @@ in the Planner. Cells have cost 0.0 (free path) to 1.0 (obstacle boundary); valu
 | `highway_costs` | no | JSON-encoded cost override dict (e.g. `{"footway":0.0,"residential":0.5}`) |
 | `surface_costs` | no | JSON-encoded surface cost override dict |
 
-**Response** — GeoJSON FeatureCollection of Point features, each with property `cost`.
+**Response** — `{"image": "data:image/png;base64,...", "bounds": [[south, west], [north, east]]}`,
+ready for `L.imageOverlay(image, bounds)`. The UTM grid is resampled onto a lat/lon-aligned
+raster (~1 px per cell); pixels outside the grid are transparent. Colours: black = obstacle
+(cost ≥ 1), translucent grey = off-path (cost ≥ `default_off_path_cost`), green → red = path
+cost / `path_cost_cap`. Both fields are `null` for an empty grid.
 
 ---
 

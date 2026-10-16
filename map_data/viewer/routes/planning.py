@@ -1,11 +1,13 @@
 """Path-planning routes: planner defaults, traversability rules, cost grid, (re)planning."""
 
+import base64
 import json
 import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import cv2
 import numpy as np
 import utm
 import yaml
@@ -178,6 +180,88 @@ def get_traversability_blocked() -> Response:
     return jsonify({"blocked": blocked})
 
 
+def _cost_grid_image(
+    grid: np.ndarray,
+    low: tuple[float, float],
+    cell_size: float,
+    off_path_cost: float,
+    path_cost_cap: float,
+    zone_number: int,
+    zone_letter: str,
+) -> tuple[np.ndarray, list[list[float]]]:
+    """
+    Resample a UTM cost grid onto a lat/lon-aligned RGBA raster for ``L.imageOverlay``.
+
+    The grid is axis-aligned in UTM, which is rotated against lat/lon by the
+    meridian convergence, so each pixel centre is projected to UTM and takes
+    the colour of the grid cell it falls in; pixels outside the grid stay
+    transparent. Colours match the old per-cell markers: black for obstacles
+    (cost >= 1), translucent grey for off-path cells (cost >=
+    ``off_path_cost``), green-to-red for paths (``cost / path_cost_cap``).
+
+    Parameters
+    ----------
+    grid : np.ndarray
+        ``(N, 4)`` ``[x, y, 0, cost]`` cell centres (``PathGrid.grid``).
+    low : tuple of float
+        UTM ``(x, y)`` corner the grid was built from.
+    cell_size : float
+        Cell edge in metres.
+    off_path_cost, path_cost_cap : float
+        Colour thresholds (the planner's ``default_off_path_cost`` and
+        ``path_cost_cap``).
+    zone_number, zone_letter : int, str
+        The map's UTM zone.
+
+    Returns
+    -------
+    rgba : np.ndarray
+        ``(H, W, 4)`` uint8 image, row 0 at the north edge.
+    bounds : list of list of float
+        ``[[south, west], [north, east]]`` of the image.
+
+    """
+    ix = np.floor((grid[:, 0] - low[0]) / cell_size).astype(int)
+    iy = np.floor((grid[:, 1] - low[1]) / cell_size).astype(int)
+    nx, ny = int(ix.max()) + 1, int(iy.max()) + 1
+    costs = np.full((ny, nx), np.nan)
+    costs[iy, ix] = grid[:, 3]
+
+    xs = low[0] + np.array([0, nx, 0, nx]) * cell_size
+    ys = low[1] + np.array([0, 0, ny, ny]) * cell_size
+    lats, lons = utm.to_latlon(xs, ys, zone_number, zone_letter)
+    south, north, west, east = lats.min(), lats.max(), lons.min(), lons.max()
+
+    # ~cell_size pixels. ponytail: rows are spaced linearly in latitude while
+    # Leaflet stretches the image linearly in Web Mercator; the mismatch is
+    # < 0.2 m at the MAX_GRID_CELLS cap, under one 1 m cell.
+    m_per_deg = 111_320.0
+    height = max(1, int(np.ceil((north - south) * m_per_deg / cell_size)))
+    width = max(1, int(np.ceil((east - west) * m_per_deg * np.cos(np.radians(north)) / cell_size)))
+    lat_c = north - (np.arange(height) + 0.5) * (north - south) / height
+    lon_c = west + (np.arange(width) + 0.5) * (east - west) / width
+    lon2d, lat2d = np.meshgrid(lon_c, lat_c)
+    px, py, *_ = utm.from_latlon(lat2d.ravel(), lon2d.ravel(), zone_number, zone_letter)
+    pix = np.floor((px - low[0]) / cell_size).astype(int)
+    piy = np.floor((py - low[1]) / cell_size).astype(int)
+    inside = (pix >= 0) & (pix < nx) & (piy >= 0) & (piy < ny)
+    cost = np.full(pix.shape, np.nan)
+    cost[inside] = costs[piy[inside], pix[inside]]
+
+    rgba = np.zeros((cost.size, 4), dtype=np.uint8)
+    with np.errstate(invalid="ignore"):  # NaN (outside / no cell) stays transparent
+        obstacle = cost >= 1.0
+        off_path = (cost >= off_path_cost) & ~obstacle
+        on_path = (cost < off_path_cost) & ~obstacle
+    rgba[obstacle] = (0, 0, 0, 255)
+    rgba[off_path] = (0x44, 0x44, 0x44, 102)  # fillOpacity 0.4
+    norm = cost[on_path] / path_cost_cap
+    rgba[on_path, 0] = np.floor(255 * np.minimum(1, norm))
+    rgba[on_path, 1] = np.floor(255 * np.maximum(0, 1 - norm))
+    rgba[on_path, 3] = 153  # fillOpacity 0.6
+    return rgba.reshape(height, width, 4), [[south, west], [north, east]]
+
+
 @bp.route("/api/cost_grid")
 def get_cost_grid() -> Response:
     """
@@ -187,7 +271,7 @@ def get_cost_grid() -> Response:
     fills a 1m-resolution :class:`~map_data.pathsolver.replan.ReplanPath`
     grid over the requested lat/lon box (obstacles are *not* filtered out
     of the result, unlike planning, so the client can render them), and
-    returns every cell as a flat ``[lat, lon, cost]`` point.
+    renders it as one PNG (see :func:`_cost_grid_image`).
 
     Parameters (query string)
     -----------------------------
@@ -205,7 +289,8 @@ def get_cost_grid() -> Response:
     Returns
     -------
     Response
-        JSON list of ``[lat, lon, cost]`` triples, one per grid cell.
+        JSON ``{"image": "data:image/png;base64,...", "bounds": [[s, w], [n, e]]}``
+        for ``L.imageOverlay`` (both ``null`` for an empty grid).
 
     Raises
     ------
@@ -284,11 +369,24 @@ def get_cost_grid() -> Response:
 
     # grid is [N, 4] -> [x, y, 0, cost]; obstacles (cost >= 1.0) are not filtered
     # out, unlike planning, so they can be visualized too.
-    grid = np.asarray(replanner.path_grid.grid, dtype=float)
+    path_grid = replanner.path_grid
+    grid = np.asarray(path_grid.grid, dtype=float)
     if len(grid) == 0:
-        return jsonify([])
-    lat, lon = utm.to_latlon(grid[:, 0], grid[:, 1], zn, zl)
-    return jsonify(np.column_stack([lat, lon, grid[:, 3]]).tolist())
+        return jsonify({"image": None, "bounds": None})
+    rgba, bounds = _cost_grid_image(
+        grid,
+        low,
+        cell_size,
+        path_grid.default_off_path_cost,
+        path_grid.path_cost_cap,
+        zn,
+        zl,
+    )
+    ok, png = cv2.imencode(".png", cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGRA))
+    if not ok:
+        abort(500, "Failed to encode the cost grid image")
+    image = "data:image/png;base64," + base64.b64encode(png.tobytes()).decode("ascii")
+    return jsonify({"image": image, "bounds": bounds})
 
 
 @bp.route("/api/cancel_replan", methods=["POST"])

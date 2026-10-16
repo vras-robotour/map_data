@@ -61,7 +61,7 @@ browser, using the same algorithms as the `replan` [CLI tool](planning.md).
 | Obstacle Inflation (m) | `0.25` | Safety buffer added around barrier polygons. |
 | Simplify Path | on | Remove redundant intermediate waypoints from the result. |
 | Smooth Path | off | Apply spline smoothing to the planned path. |
-| Show Cost Grid | off | Overlay the traversal cost grid on the map for debugging. Memory intensive on larger areas. |
+| Show Cost Grid | off | Overlay the traversal cost grid of the current view on the map for debugging (one image; larger views take longer to compute). |
 
 ### Highway Costs
 
