@@ -83,7 +83,7 @@ A store that exists but is not a readable JSON object raises `AnnotationStoreErr
 | `split_ways` | object | Node IDs a way is split at |
 | `detached_nodes` | list | Synthetic node that starts the segment after a split |
 | `added_nodes` | list | Synthetic nodes inserted into ways |
-| `deleted_nodes` | object | Node IDs deleted from ways |
+| `deleted_nodes` | list | Nodes deleted from ways or segments |
 | `node_position_overrides` | object | Moved node positions |
 | `change_log` | list | The viewer's undoable change list |
 
@@ -167,14 +167,15 @@ Nodes inserted with the viewer's *add node* tool. `id` is negative and shared wi
 ]
 ```
 
-### `deleted_nodes` object
+### `deleted_nodes` list
 
-Keys are way IDs as strings; values are lists of OSM node IDs deleted from that way:
+Nodes deleted from a way, or from one segment when `way_id` is a `"<id>:<index>"` string:
 
 ```json
-{
-  "123456789": [9876540, 9876541]
-}
+[
+  {"way_id": 123456789, "node_id": 9876540},
+  {"way_id": "123456789:1", "node_id": 9876541}
+]
 ```
 
 ### `node_position_overrides` object

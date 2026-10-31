@@ -79,65 +79,28 @@ Incremental edits are automatically saved to `<stem>.annotations.json` in the da
 
 ## Programmatic annotations
 
-Sidecar `.annotations.json` files can be inspected or generated programmatically:
+`map_data.edits.annotation_store` opens a store for editing and writes it back atomically (see [Data formats](dev/data_formats.md#annotationsjson-sidecar-format) for the schema). Its lock is per process, so do not edit a map the viewer is editing at the same time.
 
 ```python
-import json
-import pathlib
-import time
 import uuid
 
-mapdata_path = pathlib.Path("coords.mapdata")
-sidecar_path = mapdata_path.with_suffix(".annotations.json")
+from map_data.annotations import annotation_path_for
+from map_data.edits import annotation_store
 
-if sidecar_path.exists():
-    with open(sidecar_path) as f:
-        sidecar = json.load(f)
-else:
-    sidecar = {
-        "version": 1,
-        "annotations": [],
-        "deleted_ways": [],
-        "hidden_ways": [],
-        "tag_overrides": {},
-        "split_ways": {},
-        "deleted_nodes": [],
-        "added_nodes": [],
-        "node_position_overrides": {},
-        "change_log": [],
-    }
-
-# Annotation IDs are UUID4 strings; coordinates are WGS-84 [lon, lat] pairs
-sidecar["annotations"].append(
-    {
-        "id": str(uuid.uuid4()),
-        "type": "obstacle",
-        "geometry": {
-            "type": "Polygon",
-            "coordinates": [
-                [
-                    [14.5678, 50.1234],
-                    [14.5680, 50.1234],
-                    [14.5680, 50.1236],
-                    [14.5678, 50.1234],
-                ]
-            ],
-        },
-        "properties": {},
-    }
-)
-
-# Change-log entries record a floating-point timestamp
-sidecar["change_log"].append(
-    {
-        "action": "add_annotation",
-        "ann_id": sidecar["annotations"][-1]["id"],
-        "ts": time.time(),
-    }
-)
-
-with open(sidecar_path, "w") as f:
-    json.dump(sidecar, f, indent=2)
+with annotation_store(str(annotation_path_for("coords.mapdata"))) as store:
+    store.setdefault("annotations", []).append(
+        {
+            "id": str(uuid.uuid4()),
+            "type": "obstacle",
+            # WGS-84 [lon, lat]
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[[14.5678, 50.1234], [14.5680, 50.1234],
+                                 [14.5680, 50.1236], [14.5678, 50.1234]]],
+            },
+            "properties": {},
+        }
+    )
 ```
 
-The viewer merges sidecar edits on load, applying them to the displayed map.
+The viewer, `map_data_plan`, `route_planner` and `osm_cloud` merge the store when they load the map.
