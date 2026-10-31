@@ -1488,3 +1488,33 @@ def test_mapdata_etag_serves_304_until_an_edit(app_client_3node):
     assert edited.status_code == 200
     assert edited.headers["ETag"] != etag
     assert 2 not in [f["properties"].get("id") for f in edited.get_json()["features"]]
+
+
+# ── unreadable annotation store ──────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("content", [b"{not json", b"[1, 2]", b"\xff\xfe", b"null"])
+def test_unreadable_store_is_moved_aside_not_overwritten(app_client_with_file, content):
+    client, tmp_path, filename = app_client_with_file
+    ann_path = tmp_path / "test.annotations.json"
+    ann_path.write_bytes(content)
+
+    resp = client.delete(f"/api/ways/1?file={filename}", json={})
+    assert resp.status_code == 409
+    assert "error" in resp.get_json()
+    backups = list(tmp_path.glob("test.annotations.json.corrupt-*"))
+    assert [b.read_bytes() for b in backups] == [content]
+    assert not ann_path.exists()
+
+    # The next edit starts a fresh store and leaves the backup alone.
+    assert client.delete(f"/api/ways/1?file={filename}", json={}).status_code == 204
+    assert json.loads(ann_path.read_text())["deleted_ways"][0]["id"] == 1
+    assert backups[0].read_bytes() == content
+
+
+def test_unreadable_store_on_read_is_409(app_client_with_file):
+    client, tmp_path, filename = app_client_with_file
+    for url in (f"/api/annotations?file={filename}", f"/api/mapdata?file={filename}"):
+        (tmp_path / "test.annotations.json").write_text("{not json")
+        assert client.get(url).status_code == 409
+    assert len(list(tmp_path.glob("test.annotations.json.corrupt-*"))) == 2

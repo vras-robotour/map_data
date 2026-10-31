@@ -12,6 +12,7 @@ from map_data.utils import serialization
 from map_data.utils.serialization import atomic_write_json
 from map_data.utils.way import Way
 from map_data.viewer.helpers import (
+    AnnotationStoreError,
     annotation_store,
     apply_node_position_overrides,
     geojson_geom_to_utm,
@@ -19,6 +20,7 @@ from map_data.viewer.helpers import (
     get_deleted_way_ids,
     load_annotations,
     mapdata_to_geojson,
+    quarantine_annotation_store,
     rebuild_way_without_nodes,
     split_way,
 )
@@ -97,6 +99,21 @@ def test_save_and_load_annotations_roundtrip(tmp_path):
         s.update(store)
     loaded = load_annotations(path)
     assert loaded == store
+
+
+def test_quarantine_leaves_a_readable_store_alone(tmp_path):
+    path = tmp_path / "ann.json"
+    path.write_text('{"version": 1, "annotations": []}')
+    assert quarantine_annotation_store(str(path)) is None
+    assert path.is_file()
+
+
+@pytest.mark.parametrize("content", ["{", "[]", "3"])
+def test_load_annotations_rejects_an_unreadable_store(tmp_path, content):
+    path = tmp_path / "ann.json"
+    path.write_text(content)
+    with pytest.raises(AnnotationStoreError):
+        load_annotations(str(path))
 
 
 def test_atomic_write_json_writes_through_symlink(tmp_path):

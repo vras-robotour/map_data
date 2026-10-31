@@ -59,8 +59,10 @@ from typing import Any
 
 from flask import (
     Blueprint,
+    Response,
     abort,
     current_app,
+    jsonify,
     request,
 )
 
@@ -76,6 +78,7 @@ from map_data.utils.way import FOOTWAY_VALUES
 
 from ..cache import load_mapdata_cached, merged_mapdata_cached
 from ..helpers import (
+    AnnotationStoreError,
     apply_added_nodes,
     apply_node_position_overrides,
     edited_nodes_cache,
@@ -84,11 +87,21 @@ from ..helpers import (
     get_node_position_overrides,
     get_split_node_ids,
     load_annotations,
+    quarantine_annotation_store,
     rebuild_way_without_nodes,
     split_way,
 )
 
 bp = Blueprint("viewer", __name__)
+
+
+@bp.app_errorhandler(AnnotationStoreError)
+def _unreadable_store(e: AnnotationStoreError) -> tuple[Response, int]:
+    """Move an unreadable annotation store aside and answer 409, keeping the bad file for repair."""
+    backup = quarantine_annotation_store(e.path)
+    kept = f"moved it to {backup.name}" if backup else "it was already moved aside"
+    msg = f"Annotation store unreadable ({e}); {kept}. Reload to continue."
+    return jsonify({"error": msg}), 409
 
 
 @dataclass

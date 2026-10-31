@@ -29,6 +29,7 @@ from map_data.map_data import MapData
 from map_data.traversability import TraversabilityRules, load_traversability
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES, Way
 from map_data.viewer.helpers import (
+    AnnotationStoreError,
     apply_added_nodes,
     apply_node_position_overrides,
     edited_nodes_cache,
@@ -547,7 +548,12 @@ def load_mapdata_with_annotations(
     if annotations_path == NO_ANNOTATIONS:
         store = {"version": 1, "annotations": []}
     else:
-        store = load_annotations(str(annotations_path or annotation_path_for(mapdata_path)))
+        ann_path = str(annotations_path or annotation_path_for(mapdata_path))
+        try:
+            store = load_annotations(ann_path)
+        except AnnotationStoreError as e:
+            logger.error("Ignoring unreadable annotation store %s", e)
+            store = {"version": 1, "annotations": []}
     md = MapData.load(str(mapdata_path))
     md.apply_traversability(load_traversability(traversability).extend(exclude_highway))
     n_ann = len(store.get("annotations", []))
