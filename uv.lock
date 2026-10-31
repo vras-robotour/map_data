@@ -578,7 +578,7 @@ dependencies = [
     { name = "utm" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "mkdocs" },
     { name = "mkdocs-material" },
@@ -595,23 +595,26 @@ requires-dist = [
     { name = "flask" },
     { name = "flask-socketio" },
     { name = "gpxpy" },
-    { name = "mkdocs", marker = "extra == 'dev'" },
-    { name = "mkdocs-material", marker = "extra == 'dev'" },
-    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'dev'" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = "==2.3.0" },
     { name = "numpy" },
     { name = "opencv-python-headless" },
     { name = "overpy" },
-    { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "pyyaml" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.6" },
     { name = "scipy" },
     { name = "shapely" },
     { name = "utm" },
 ]
-provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mkdocs" },
+    { name = "mkdocs-material" },
+    { name = "mkdocstrings", extras = ["python"] },
+    { name = "mypy", specifier = "==2.3.0" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff", specifier = "==0.16.6" },
+]
 
 [[package]]
 name = "markdown"

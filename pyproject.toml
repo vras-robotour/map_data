@@ -22,7 +22,7 @@ dependencies = [
     "opencv-python-headless",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest",
     "pytest-cov",

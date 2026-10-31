@@ -9,7 +9,7 @@ on:
 
 env:
   # Single ruff version for the whole repo. Keep in sync with the `ruff` pin in
-  # pyproject.toml's [dev] extra and the ruff-pre-commit rev in
+  # pyproject.toml's dev dependency group and the ruff-pre-commit rev in
   # .pre-commit-config.yaml — drift between them causes reformat churn.
   RUFF_VERSION: "0.16.6"
 
