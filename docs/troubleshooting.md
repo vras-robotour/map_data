@@ -2,7 +2,7 @@
 
 ## Overpass API errors
 
-### Rate limiting (HTTP 429)
+### Rate limiting (HTTP 429 / 404)
 
 The Overpass API enforces per-IP rate limits. If a request is rejected, `map_data` automatically backs off and retries on an alternate endpoint. If you see repeated failures in the log:
 
@@ -88,7 +88,7 @@ After sourcing, run `ros2 run map_data create_mapdata ...`.
 ### `osm_cloud` does not publish
 
 1. Check that a `.mapdata` file path is provided via the `mapdata_file` parameter or launch argument. If no input file is given, `osm_cloud` logs an error and idles.
-2. Verify the placement frames are available in `/tf_static`. The node transforms the point cloud into `local_frame`. Until that transform is available (`utm -> local_frame` for `transform_mode: tf`, or `earth_frame -> local_frame` for `geodetic`), the node logs `Placement check: ... lookup failed` and publishes nothing. It picks up the transform as soon as it arrives on `/tf_static`.
+2. Verify the placement frames are available in `/tf_static`. The node transforms the point cloud into `local_frame`. Until that transform is available (`utm -> local_frame` for `transform_mode: tf`, or `earth_frame -> local_frame` for `geodetic`), the node logs `Failed to get ... transform` and publishes nothing. It picks up the transform as soon as it arrives on `/tf_static`.
 3. Confirm the grid topic (`osm_grid` or `grid`) is present using `ros2 topic list`.
 
 ### `osm_cloud` publishes an empty cloud
