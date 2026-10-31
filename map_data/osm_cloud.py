@@ -6,7 +6,6 @@ This module provides the OSMCloud class which converts parsed MapData
 into ROS2 PointCloud2 and MarkerArray messages for visualization.
 """
 
-import sys
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -15,6 +14,7 @@ import rclpy
 from geometry_msgs.msg import Pose, PoseArray, TransformStamped
 from numpy.lib.recfunctions import unstructured_to_structured
 from rcl_interfaces.msg import SetParametersResult
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSProfile
 from ros2_numpy import msgify, numpify
@@ -29,7 +29,7 @@ from tf2_ros import (
 from visualization_msgs.msg import Marker, MarkerArray
 
 import map_data.map_data as md
-from map_data.annotations import load_mapdata_with_annotations, load_summary
+from map_data.annotations import edit_mapdata, load_mapdata_with_annotations, load_summary
 from map_data.traversability import resolve_traversability_path
 from map_data.utils.densify import densify_ways
 from map_data.utils.geodesy import apply_transform, ecef_to_latlon, utm_to_local_via_ecef
@@ -48,6 +48,22 @@ MIN_ECEF_NORM = 1.0e6
 PLACEMENT_EPS = 1e-6
 # highway_types value -> MapData.get_ways() key, as in route_planner's graph planner.
 HIGHWAY_TYPE_KEYS = {"footway": "footways", "road": "roads"}
+# Attributes a parameter change can touch: restored when the rebuild with them fails.
+_REBUILD_ATTRS = (
+    "max_path_dist",
+    "neighbor_cost",
+    "highway_types",
+    "grid_res",
+    "grid_max",
+    "grid_min",
+    "grid_bounds_auto",
+    "publish_intersections",
+    "cloud_degenerate",
+)
+
+
+class NoMapInputError(ValueError):
+    """Neither ``mapdata_file`` nor ``gpx_file`` is set."""
 
 
 class OSMCloud(Node):
@@ -149,11 +165,11 @@ class OSMCloud(Node):
         if self.mapdata_file:
             self.map_data = self.load_map_data(self.mapdata_file)
         elif self.gpx_file:
-            self.map_data = md.MapData(self.gpx_file)
-            self.map_data.run_all(save=self.save_mapdata)
+            self.map_data = self.load_map_data(self.gpx_file, download=True)
         else:
-            self.get_logger().error("No map data or gpx file provided")
-            sys.exit(1)
+            msg = "No mapdata_file or gpx_file parameter given"
+            self.destroy_node()  # main() idles in a fresh node of this name
+            raise NoMapInputError(msg)
         self.get_logger().info(str(self.map_data))
 
         if self.transform_mode not in TRANSFORM_MODES:
@@ -252,22 +268,41 @@ class OSMCloud(Node):
         self.grid_max = [np.max(bounds_arr[:, 0]), np.max(bounds_arr[:, 1])]
         self.get_logger().info(f"Calculated grid bounds: min={self.grid_min}, max={self.grid_max}")
 
-    def load_map_data(self, path: str) -> "md.MapData":
+    def load_map_data(self, path: str, *, download: bool = False) -> "md.MapData":
         """
         Load ``path`` with the same merge the planner uses.
 
         The annotation store selected by the ``annotations`` parameter is merged
         in, and the ways the ``traversability_file`` rules (and ``exclude_highway``)
         refuse are dropped, so the rings and the cost grid published here describe
-        the network ``route_planner`` routes on.
+        the network ``route_planner`` routes on. With *download* ``path`` is a GPX
+        file whose area is fetched from Overpass first, and the same steps follow.
+
+        Raises
+        ------
+        RuntimeError
+            If *download* is set and Overpass returned nothing.
+
         """
         ann = None if self.annotations in ("", "auto") else self.annotations
-        map_data, store = load_mapdata_with_annotations(
-            path,
-            ann,
-            exclude_highway=self.exclude_highway,
-            traversability=self.traversability_file or None,
-        )
+        trav = self.traversability_file or None
+        if download:
+            raw = md.MapData(path)
+            raw.run_queries()
+            if raw.osm_data is None:
+                msg = f"No OSM data for {path}: the Overpass query failed"
+                raise RuntimeError(msg)
+            raw.run_parse()
+            if self.save_mapdata:
+                raw.save()
+            map_data, store = edit_mapdata(raw, path, ann, self.exclude_highway, trav)
+        else:
+            map_data, store = load_mapdata_with_annotations(
+                path,
+                ann,
+                exclude_highway=self.exclude_highway,
+                traversability=trav,
+            )
         self.get_logger().info(
             load_summary(
                 path,
@@ -305,6 +340,14 @@ class OSMCloud(Node):
         )
 
     def parameter_callback(self, params: list[rclpy.Parameter]) -> SetParametersResult:
+        reason = self._invalid_params({p.name: p.value for p in params})
+        if reason:
+            self.get_logger().error(f"Rejected parameter change: {reason}")
+            return SetParametersResult(successful=False, reason=reason)
+
+        # Apply, rebuild, and put everything back if the rebuild fails: a rejected change
+        # must leave the node as it was.
+        old = {name: getattr(self, name) for name in _REBUILD_ATTRS}
         rebuild_cloud = False
         rebuild_intersections = False
         for param in params:
@@ -336,26 +379,34 @@ class OSMCloud(Node):
                     self._ensure_intersection_pubs()
                 rebuild_intersections = True
 
-        if rebuild_cloud:
-            self.get_logger().info("Rebuilding grid cloud due to parameter change")
-            try:
+        try:
+            if rebuild_cloud:
+                self.get_logger().info("Rebuilding grid cloud due to parameter change")
                 self.grid_cloud = self.get_cloud()
-            except (ValueError, TypeError, RuntimeError) as e:
-                self.get_logger().error(f"Failed to rebuild grid cloud: {e}")
-                return SetParametersResult(successful=False, reason=str(e))
-
-        if rebuild_intersections and self.publish_intersections:
-            self.get_logger().info("Rebuilding intersections due to parameter change")
-            try:
+            if rebuild_intersections and self.publish_intersections:
+                self.get_logger().info("Rebuilding intersections due to parameter change")
                 self.poses, self.markers = self.get_intersections()
-            except (ValueError, TypeError, RuntimeError) as e:
-                self.get_logger().error(f"Failed to rebuild intersections: {e}")
-                return SetParametersResult(successful=False, reason=str(e))
+        except (ValueError, TypeError, RuntimeError) as e:
+            self.get_logger().error(f"Failed to rebuild after parameter change: {e}")
+            for name, value in old.items():
+                setattr(self, name, value)
+            return SetParametersResult(successful=False, reason=str(e))
 
         if rebuild_cloud or rebuild_intersections:
             self.publish_cb()
 
         return SetParametersResult(successful=True)
+
+    @staticmethod
+    def _invalid_params(values: dict[str, Any]) -> str:
+        """Return why the parameter changes in *values* are unusable, or ``""``."""
+        for name in ("grid_res", "max_path_dist"):
+            if name in values and not values[name] > 0:
+                return f"{name} must be positive, got {values[name]}"
+        for name in ("grid_min", "grid_max"):
+            if name in values and len(values[name]) != 2:
+                return f"{name} must have 2 values (x, y), got {len(values[name])}"
+        return ""
 
     def publish_cb(self) -> None:
         """
@@ -547,9 +598,15 @@ class OSMCloud(Node):
 
         """
         points = self._to_local(self.map_data.get_points())
-        grid = create_grid(tuple(self.grid_min), tuple(self.grid_max), self.grid_res)
         waypoints = split_ways_to_points(
             points, self.map_data.get_ways(), self.grid_res, self.highway_types
+        )
+        grid = create_grid(
+            tuple(self.grid_min),
+            tuple(self.grid_max),
+            self.grid_res,
+            near=waypoints,
+            max_dist=self.max_path_dist,
         )
 
         # The nearest-neighbour search is 2-D (a third all-zero column only slows the
@@ -597,7 +654,12 @@ class OSMCloud(Node):
         pose_array = PoseArray()
         pose_array.header.frame_id = self.local_frame
 
-        marker_array = MarkerArray()
+        # RViz keeps what it was sent until told otherwise, so a rebuild (new bounds,
+        # placement) would leave the old spheres behind.
+        clear = Marker()
+        clear.header.frame_id = self.local_frame
+        clear.action = Marker.DELETEALL
+        marker_array = MarkerArray(markers=[clear])
 
         marker_id = 0
         for point in transformed_points.values():
@@ -642,6 +704,8 @@ def create_grid(
     low: tuple[float, ...],
     high: tuple[float, ...],
     cell_size: float = 0.25,
+    near: np.ndarray | None = None,
+    max_dist: float = 1.0,
 ) -> np.ndarray:
     """
     Create a grid of points.
@@ -654,18 +718,43 @@ def create_grid(
         Upper bounds of the grid.
     cell_size : float
         Size of the cell.
+    near : np.array, optional
+        (N, 2) reference points. If given, only the cells within *max_dist* of one of them
+        (and a few more, from the square around each) are built, so a long thin network
+        does not cost the whole bounding box in memory.
+    max_dist : float
+        Reach of *near*.
 
     Returns
     -------
     grid : np.array
-        Grid of points.
+        Grid of points, row by row (y major).
 
     """
     low_arr = np.round(low)
     high_arr = np.round(high)
     xs = np.arange(int(low_arr[0]), int(high_arr[0]), cell_size)
     ys = np.arange(int(low_arr[1]), int(high_arr[1]), cell_size)
-    return np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2)
+    if near is None:
+        return np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2)
+
+    nx, ny = len(xs), len(ys)
+    near = np.asarray(near, dtype=float).reshape(-1, 2)
+    if not (len(near) and nx and ny):
+        return np.empty((0, 2))
+    # Cells of the squares around the reference points: a cell within max_dist of a point
+    # is at most r (+1 above, the point sits inside its own cell) indices from its cell.
+    r = int(np.ceil(max_dist / cell_size))
+    steps = np.arange(-r, r + 2)
+    offsets = np.stack(np.meshgrid(steps, steps), axis=-1).reshape(-1, 2)
+    own = np.unique(np.floor((near - (xs[0], ys[0])) / cell_size).astype(np.int64), axis=0)
+    flat = []
+    for chunk in np.array_split(own, len(own) * len(offsets) // 4_000_000 + 1):
+        cells = (chunk[:, None, :] + offsets).reshape(-1, 2)
+        cells = cells[(cells >= 0).all(axis=1) & (cells[:, 0] < nx) & (cells[:, 1] < ny)]
+        flat.append(np.unique(cells[:, 1] * nx + cells[:, 0]))
+    index = np.unique(np.concatenate(flat))
+    return np.column_stack([xs[index % nx], ys[index // nx]])
 
 
 def create_cloud(points: np.ndarray) -> PointCloud2:
@@ -798,10 +887,22 @@ def split_ways_to_points(
 
 def main() -> None:
     rclpy.init()
-    osm_cloud = OSMCloud()
-    rclpy.spin(osm_cloud)
-    osm_cloud.destroy_node()
-    rclpy.shutdown()
+    node = None
+    try:
+        try:
+            node = OSMCloud()
+        except NoMapInputError as e:
+            # Idle rather than exit: under launch's respawn an exit only restarts into the
+            # same missing parameter, a tight loop that can never fix itself.
+            node = rclpy.create_node("osm_cloud")
+            node.get_logger().error(f"{e}; idling, set one and restart")
+        rclpy.spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+    finally:
+        if node is not None:
+            node.destroy_node()
+        rclpy.try_shutdown()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 """Tests for osm_cloud pure helper functions and node construction."""
 
 import sys
+from types import SimpleNamespace
 from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
@@ -8,6 +9,7 @@ from unittest.mock import MagicMock, patch
 # tests (test_launch, test_tracker_node) still see the real rclpy.
 _ROS_STUBS = (
     "rclpy",
+    "rclpy.executors",
     "rclpy.node",
     "rclpy.qos",
     "geometry_msgs.msg",
@@ -77,11 +79,21 @@ class _FakeNode:
     def get_logger(self):
         return self._logger
 
+    def destroy_node(self):
+        pass
+
     def get_clock(self):
         return MagicMock()
 
 
 sys.modules["rclpy.node"].Node = _FakeNode
+
+
+class _ExternalShutdown(Exception):
+    """Stand-in for rclpy.executors.ExternalShutdownException (what spin raises on SIGINT)."""
+
+
+sys.modules["rclpy.executors"].ExternalShutdownException = _ExternalShutdown
 
 import json  # noqa: E402
 
@@ -91,9 +103,11 @@ import utm  # noqa: E402
 from conftest import build_footway_network_mapdata  # noqa: E402
 from shapely.geometry import LineString  # noqa: E402
 
+from map_data import osm_cloud as osm_cloud_module  # noqa: E402
 from map_data.annotations import annotation_path_for  # noqa: E402
 from map_data.map_data import MapData  # noqa: E402
 from map_data.osm_cloud import (  # noqa: E402
+    NoMapInputError,
     OSMCloud,
     create_grid,
     points_near_ref,
@@ -133,6 +147,37 @@ class TestCreateGrid:
         assert grid[:, 0].max() < 3.0
         assert grid[:, 1].min() >= 0.0
         assert grid[:, 1].max() < 3.0
+
+
+class TestCreateGridNear:
+    """With ``near`` only the cells around the reference points are built."""
+
+    @staticmethod
+    def _path(n=400):
+        t = np.linspace(0.0, 1.0, n)
+        return np.column_stack([-30.0 + 80.0 * t, -20.0 + 60.0 * t + 5.0 * np.sin(8 * t)])
+
+    @pytest.mark.parametrize(("cell", "dist"), [(0.25, 1.0), (0.4, 1.0), (0.5, 2.5), (1.0, 0.7)])
+    def test_matches_the_full_grid_once_filtered(self, cell, dist):
+        near = self._path()
+        low, high = (-40.0, -30.0), (60.0, 50.0)
+
+        full = points_near_ref(create_grid(low, high, cell), near, dist)
+        thin = points_near_ref(create_grid(low, high, cell, near=near, max_dist=dist), near, dist)
+
+        np.testing.assert_array_equal(thin, full)
+
+    def test_builds_far_fewer_cells_than_the_bounding_box(self):
+        near = self._path()
+        full = create_grid((-40.0, -30.0), (60.0, 50.0), 0.25)
+        thin = create_grid((-40.0, -30.0), (60.0, 50.0), 0.25, near=near, max_dist=1.0)
+
+        assert len(thin) < len(full) / 5
+
+    def test_points_outside_the_bounds_and_no_points(self):
+        assert create_grid((0.0, 0.0), (5.0, 5.0), 1.0, near=np.empty((0, 2))).shape == (0, 2)
+        far = np.array([[100.0, 100.0]])
+        assert create_grid((0.0, 0.0), (5.0, 5.0), 1.0, near=far, max_dist=1.0).shape == (0, 2)
 
 
 # ── points_near_ref ──────────────────────────────────────────────────────────
@@ -447,9 +492,32 @@ class TestOSMCloudInit:
         assert split.call_args.args[3] == ["footway", "road"]
         assert grid_pub.publish.call_count == 2
 
-    def test_construction_exits_without_mapdata_or_gpx_file(self):
-        with pytest.raises(SystemExit):
+    def test_construction_refuses_without_mapdata_or_gpx_file(self):
+        with pytest.raises(NoMapInputError):
             _build_osm_cloud({})
+
+    def test_main_idles_instead_of_exiting_without_a_map(self):
+        """Exiting would only make launch's respawn restart into the same missing parameter."""
+        rclpy = osm_cloud_module.rclpy
+        rclpy.spin.side_effect = KeyboardInterrupt  # Ctrl+C while idling
+        idle = rclpy.create_node.return_value
+        with patch("map_data.osm_cloud.OSMCloud", side_effect=NoMapInputError("nothing")):
+            osm_cloud_module.main()
+
+        idle.get_logger().error.assert_called_once()
+        rclpy.spin.assert_called_once_with(idle)
+        idle.destroy_node.assert_called_once()
+        rclpy.try_shutdown.assert_called()
+
+    def test_main_shuts_down_cleanly_on_ctrl_c(self):
+        rclpy = osm_cloud_module.rclpy
+        rclpy.spin.side_effect = _ExternalShutdown  # what rclpy raises on SIGINT
+        node = MagicMock()
+        with patch("map_data.osm_cloud.OSMCloud", return_value=node):
+            osm_cloud_module.main()
+
+        node.destroy_node.assert_called_once()
+        rclpy.try_shutdown.assert_called()
 
 
 class TestOSMCloudMapLoading:
@@ -701,3 +769,143 @@ class TestOSMCloudDegenerateGrid:
         published = dict(node.created_publishers)
         assert published[node.intersections_topic].publish.call_count == 0
         assert published[node.intersection_markers_topic].publish.call_count == 0
+
+
+class TestOSMCloudParameterCallback:
+    @staticmethod
+    def _change(**values):
+        params = []
+        for name, value in values.items():
+            param = MagicMock()
+            param.name, param.value = name, value
+            params.append(param)
+        return params
+
+    @pytest.fixture
+    def node(self, monkeypatch):
+        # rcl_interfaces is stubbed out in this module: give the result real attributes
+        monkeypatch.setattr(
+            osm_cloud_module,
+            "SetParametersResult",
+            lambda successful, reason="": SimpleNamespace(successful=successful, reason=reason),
+        )
+        return _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            {"grid_res": 0.0},
+            {"grid_res": -1.0},
+            {"max_path_dist": 0.0},
+            {"grid_min": [0.0]},
+            {"grid_max": [1.0, 2.0, 3.0]},
+        ],
+    )
+    def test_invalid_values_are_rejected_and_change_nothing(self, node, change):
+        before = {
+            k: getattr(node, k) for k in ("grid_res", "max_path_dist", "grid_min", "grid_max")
+        }
+        grid_pub = dict(node.created_publishers)[node.grid_topic]
+
+        result = node.parameter_callback(self._change(**change))
+
+        assert result.successful is False
+        assert result.reason
+        assert {k: getattr(node, k) for k in before} == before
+        assert grid_pub.publish.call_count == 1  # the one from construction
+
+    def test_a_failed_rebuild_restores_the_old_values(self, node):
+        old_cloud, old_max, old_auto = node.grid_cloud, node.grid_max, node.grid_bounds_auto
+        with patch.object(node, "get_cloud", side_effect=RuntimeError("boom")):
+            result = node.parameter_callback(self._change(grid_res=0.5, grid_max=[3.0, 3.0]))
+
+        assert result.successful is False
+        assert result.reason == "boom"
+        assert node.grid_res == pytest.approx(0.25)
+        assert node.grid_max == old_max
+        assert node.grid_bounds_auto == old_auto
+        assert node.grid_cloud is old_cloud
+
+    def test_a_valid_change_is_applied_and_republished(self, node):
+        grid_pub = dict(node.created_publishers)[node.grid_topic]
+
+        result = node.parameter_callback(self._change(grid_res=0.5))
+
+        assert result.successful is True
+        assert node.grid_res == pytest.approx(0.5)
+        assert grid_pub.publish.call_count == 2
+
+
+class TestOSMCloudIntersectionMarkers:
+    def test_markers_start_with_a_delete_all(self):
+        """RViz keeps old spheres until told to drop them, so a rebuild must clear first."""
+        marker_cls = MagicMock(side_effect=lambda: MagicMock())
+        marker_cls.DELETEALL, marker_cls.ADD, marker_cls.SPHERE = 3, 0, 2
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
+
+        with (
+            patch("map_data.osm_cloud.Marker", marker_cls),
+            patch("map_data.osm_cloud.MarkerArray", lambda markers: MagicMock(markers=markers)),
+        ):
+            _, markers = node.get_intersections()
+
+        assert markers.markers[0].action == 3
+
+
+class TestOSMCloudGpxMap:
+    """The GPX-only path must build the same map as the .mapdata path."""
+
+    @pytest.fixture
+    def gpx(self, tmp_path):
+        path = tmp_path / "area.gpx"
+        path.write_text(
+            '<gpx version="1.1" creator="t"><wpt lat="50.0" lon="14.0"/>'
+            '<wpt lat="50.001" lon="14.001"/></gpx>'
+        )
+        return path
+
+    @staticmethod
+    def _download(tmp_path, monkeypatch, *, ok=True):
+        """Make MapData's Overpass step "download" the small network (plus a grass way)."""
+        source = tmp_path / "network.mapdata"
+        lat0, lon0 = build_footway_network_mapdata(source)
+        built = MapData.load(str(source))
+        e0, n0, zn, zl = utm.from_latlon(lat0, lon0)
+        built.nodes_cache[107] = dict(
+            zip(("lat", "lon"), utm.to_latlon(e0 + 200.0, n0 - 60.0, zn, zl), strict=False)
+        ) | {"tags": {}}
+        built.footways_list.append(
+            Way(
+                id=5,
+                nodes=[107, 103],
+                tags={"highway": "footway", "surface": "grass"},
+                line=LineString([(e0 + 200.0, n0 - 60.0), (e0 + 200.0, n0)]).buffer(1.0),
+            )
+        )
+
+        def run_queries(self, **_):
+            self.osm_data = object() if ok else None
+
+        def run_parse(self):
+            self.footways_list, self.roads_list = built.footways_list, built.roads_list
+            self.nodes_cache, self.crossroads_list = built.nodes_cache, built.crossroads_list
+            return 0
+
+        monkeypatch.setattr(MapData, "run_queries", run_queries)
+        monkeypatch.setattr(MapData, "run_parse", run_parse)
+
+    def test_traversability_and_annotations_are_applied(self, gpx, tmp_path, monkeypatch):
+        self._download(tmp_path, monkeypatch)
+        annotation_path_for(gpx).write_text(
+            json.dumps({"version": 1, "annotations": [], "deleted_ways": [{"id": 2}]})
+        )
+
+        node = _build_osm_cloud({"gpx_file": str(gpx), "transform_mode": "auto"})
+
+        assert [w.id for w in node.map_data.footways_list] == [1, 3]  # no grass way 5, no way 2
+
+    def test_no_osm_data_fails_instead_of_latching_an_empty_grid(self, gpx, tmp_path, monkeypatch):
+        self._download(tmp_path, monkeypatch, ok=False)
+
+        with pytest.raises(RuntimeError, match="Overpass"):
+            _build_osm_cloud({"gpx_file": str(gpx), "transform_mode": "auto"})

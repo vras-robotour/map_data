@@ -487,6 +487,8 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             except (ValueError, NameValidationException) as ex:
                 raise TrackerConfigError(f"{name}: {ex}") from ex
 
+        # Called from a Flask thread while the executor spins: creating and destroying
+        # subscriptions wakes the executor, so this needs no hand-over (see the test).
         with self._reconfigure_lock:
             current = self.settings()
             changed = {name: value for name, value in new.items() if current[name] != value}
@@ -637,20 +639,34 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         ).reshape(-1, 3)
 
     # ------------------------------------------------------------------ callbacks: position
+    @staticmethod
+    def _has_position(msg: NavSatFix) -> bool:
+        """False for a no-fix message (status < 0) or one whose lat/lon is NaN/inf."""
+        return (
+            msg.status.status >= 0 and math.isfinite(msg.latitude) and math.isfinite(msg.longitude)
+        )
+
     def _gps_callback(self, msg: NavSatFix) -> None:
         with self._lock:
-            first = self.pose_gps is None
             self.gps_fix_status = int(msg.status.status)
+            if not self._has_position(msg):
+                self._dirty = True  # the UI still shows the fix status
+                return
+            first = self.pose_gps is None
             self.pose_gps = {"lat": msg.latitude, "lon": msg.longitude}
             if self.current_heading is not None:
                 self.pose_gps["heading"] = self.current_heading
             self._last_fix_time = time.time()
-            self._append_trail_locked(msg.latitude, msg.longitude)
+            # One source feeds the trail: the filtered fix when its topic is on, else this one
+            if not self.enabled_features.get("gps_ekf"):
+                self._append_trail_locked(msg.latitude, msg.longitude)
             self._dirty = True
         if first:
             self.get_logger().info(f"First GPS fix received: {msg.latitude}, {msg.longitude}")
 
     def _ekf_callback(self, msg: NavSatFix) -> None:
+        if not self._has_position(msg):
+            return
         with self._lock:
             first = self.pose_ekf is None
             self.pose_ekf = {"lat": msg.latitude, "lon": msg.longitude}

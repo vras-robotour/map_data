@@ -544,19 +544,42 @@ def load_mapdata_with_annotations(
     Returns ``(map_data, store)``.
     """
     mapdata_path = Path(mapdata_path)
+    return edit_mapdata(
+        MapData.load(str(mapdata_path)),
+        mapdata_path,
+        annotations_path,
+        exclude_highway,
+        traversability,
+    )
+
+
+def edit_mapdata(
+    md: MapData,
+    source_path: str | Path,
+    annotations_path: str | Path | None = None,
+    exclude_highway: Iterable[str] = NON_ROUTABLE_HIGHWAY_VALUES,
+    traversability: TraversabilityRules | str | Path | None = None,
+) -> tuple[MapData, dict[str, Any]]:
+    """
+    Apply the traversability rules and the annotation store to a freshly built *md*.
+
+    The second half of :func:`load_mapdata_with_annotations` (see there for the
+    arguments), for a map that did not come from a ``.mapdata`` file. *source_path*
+    is the file the map was built from: it names the default annotation store.
+    """
+    source_path = Path(source_path)
     store: dict[str, Any]
     if annotations_path == NO_ANNOTATIONS:
         store = {"version": 1, "annotations": []}
     else:
-        ann_path = str(annotations_path or annotation_path_for(mapdata_path))
+        ann_path = str(annotations_path or annotation_path_for(source_path))
         try:
             store = load_annotations(ann_path)
         except AnnotationStoreError as e:
             logger.error("Ignoring unreadable annotation store %s", e)
             store = {"version": 1, "annotations": []}
-    md = MapData.load(str(mapdata_path))
     md.apply_traversability(load_traversability(traversability).extend(exclude_highway))
     n_ann = len(store.get("annotations", []))
     if n_ann or store.get("deleted_ways") or store.get("split_ways") or store.get("tag_overrides"):
-        logger.info("Applying annotation store to %s (%d annotations)", mapdata_path.name, n_ann)
+        logger.info("Applying annotation store to %s (%d annotations)", source_path.name, n_ann)
     return apply_store(md, store), store

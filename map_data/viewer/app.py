@@ -2,13 +2,15 @@ import argparse
 import hmac
 import logging
 import os
+import signal
 import sys
 import threading
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
-from flask import Flask, Response, abort, request
+from flask import Flask, Response, abort, redirect, request
 from flask_socketio import SocketIO
 
 from ..utils.config import config_path, setup_logging
@@ -49,6 +51,7 @@ def _resolve_cors_origins() -> str | list[str] | None:
 # RequestContext.session, which became a read-only property).
 socketio = SocketIO(manage_session=False)
 tracker_node = None
+_ros_thread: threading.Thread | None = None
 # Serializes the one-time ROS init in create_app: the node and its spin/telemetry
 # threads are process-wide, so later create_app calls reuse them.
 _ros_init_lock = threading.Lock()
@@ -138,6 +141,20 @@ def telemetry_broadcaster(interval: float) -> None:
         time.sleep(interval)
 
 
+def stop_ros() -> None:
+    """Stop the executor thread and destroy the tracker node (no-op without ROS)."""
+    global tracker_node
+    if tracker_node is None:
+        return
+    import rclpy
+
+    rclpy.try_shutdown()  # makes the executor thread return from spin()
+    if _ros_thread is not None:
+        _ros_thread.join(timeout=5.0)
+    tracker_node.destroy_node()
+    tracker_node = None
+
+
 def create_app(
     data_dir: str | None = None,
     telemetry_hz: float = 2.0,
@@ -165,9 +182,24 @@ def create_app(
     # Optional access-token gate (opt-in via MAP_DATA_ACCESS_TOKEN, see above).
     # Checked fresh on every request so it's a no-op when the env var is unset.
     @app.before_request
-    def _enforce_access_token() -> None:
+    def _enforce_access_token() -> Response | None:
         if not _access_token_valid(request):
             abort(401, "Missing or invalid access token")
+        expected = _configured_access_token()
+        if (
+            expected
+            and request.method == "GET"
+            and not request.path.startswith("/socket.io")
+            and request.args.get(ACCESS_TOKEN_QUERY_PARAM) == expected
+        ):
+            # Redirect to the same URL without the token (the cookie set in
+            # _persist_access_token_cookie carries it from here on), so it stays out of
+            # access logs, the history and the Referer.
+            rest = [
+                (k, v) for k, v in request.args.items(multi=True) if k != ACCESS_TOKEN_QUERY_PARAM
+            ]
+            return redirect(request.path + (f"?{urlencode(rest)}" if rest else ""))
+        return None
 
     @app.after_request
     def _persist_access_token_cookie(response: Response) -> Response:
@@ -190,7 +222,7 @@ def create_app(
     def inject_vars() -> dict[str, bool]:
         return {"ros_available": ROS_AVAILABLE}
 
-    global tracker_node
+    global tracker_node, _ros_thread
     if ROS_AVAILABLE:
         # Outside the try below: a broken config file must stop the viewer, not silently
         # start a tracker on default topics.
@@ -210,18 +242,24 @@ def create_app(
 
                     # Start ROS2 spin in a separate thread
                     def ros_spin() -> None:
+                        from rclpy.executors import ExternalShutdownException
+
                         # The C++ events executor costs a fraction of rclpy.spin's Python wait set
                         # (measured 6 % vs 60 % CPU on a 250 Hz robot); not in every distro yet.
                         try:
-                            from rclpy.experimental.events_executor import EventsExecutor
-                        except ImportError:
-                            rclpy.spin(tracker_node)
-                            return
-                        executor = EventsExecutor()
-                        executor.add_node(tracker_node)
-                        executor.spin()
+                            try:
+                                from rclpy.experimental.events_executor import EventsExecutor
+                            except ImportError:
+                                rclpy.spin(tracker_node)
+                                return
+                            executor = EventsExecutor()
+                            executor.add_node(tracker_node)
+                            executor.spin()
+                        except ExternalShutdownException:
+                            pass  # stop_ros() shut the context down
 
-                    threading.Thread(target=ros_spin, daemon=True).start()
+                    _ros_thread = threading.Thread(target=ros_spin, daemon=True)
+                    _ros_thread.start()
 
                     # Start telemetry broadcaster
                     threading.Thread(
@@ -285,9 +323,18 @@ def main() -> None:
     except TrackerConfigError as e:
         parser.error(str(e))
 
+    # Explicit handlers: a SIGINT inherited as "ignored" (a background job of a
+    # non-interactive shell) would otherwise stay ignored, as rclpy's own handler is off.
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
     # Using socketio.run instead of app.run
     # Disable debug mode to prevent the Flask reloader from initializing the ROS node twice
-    socketio.run(app, host=args.host, port=args.port, debug=False, allow_unsafe_werkzeug=True)
+    try:
+        socketio.run(app, host=args.host, port=args.port, debug=False, allow_unsafe_werkzeug=True)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stop_ros()
 
 
 if __name__ == "__main__":

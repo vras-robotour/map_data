@@ -1,5 +1,7 @@
 """TrackerNode in a real rclpy context: config, subscription types, live reconfiguration."""
 
+import json
+import threading
 import time
 
 import pytest
@@ -179,3 +181,66 @@ def test_clear_trail_forgets_the_fixes_and_marks_the_telemetry_dirty(make_node):
     assert list(node.trail) == []
     assert node._dirty  # the browser is told at once, not only on the next fix
     assert node.clear_trail() == 0
+
+
+def _fix(lat, lon, status=0):
+    from sensor_msgs.msg import NavSatFix
+
+    msg = NavSatFix()
+    msg.latitude, msg.longitude, msg.status.status = lat, lon, status
+    return msg
+
+
+def test_trail_comes_from_the_filtered_fix_when_its_topic_is_on(make_node):
+    node = make_node({"gps_fix_topic": "/fix", "gps_filtered_topic": "/ekf", "trail_min_step": 0.0})
+    node._gps_callback(_fix(50.0, 14.0))
+    assert list(node.trail) == []  # a raw fix beside the filtered one would zigzag the trail
+    node._ekf_callback(_fix(50.1, 14.1))
+    assert list(node.trail) == [{"lat": 50.1, "lon": 14.1}]
+
+
+def test_trail_comes_from_the_raw_fix_without_a_filtered_topic(make_node):
+    node = make_node({"gps_fix_topic": "/fix", "gps_filtered_topic": ""})
+    node._gps_callback(_fix(50.0, 14.0))
+    assert list(node.trail) == [{"lat": 50.0, "lon": 14.0}]
+
+
+@pytest.mark.parametrize("callback", ["_gps_callback", "_ekf_callback"])
+@pytest.mark.parametrize(("lat", "lon", "status"), [(50.0, 14.0, -1), (float("nan"), 14.0, 0)])
+def test_a_fix_without_a_position_is_dropped(make_node, callback, lat, lon, status):
+    node = make_node({"gps_fix_topic": "/fix", "gps_filtered_topic": "/ekf"})
+    getattr(node, callback)(_fix(lat, lon, status))
+    assert node.pose_gps is None
+    assert node.pose_ekf is None
+    assert list(node.trail) == []
+    json.dumps(node.get_telemetry(), allow_nan=False)  # a NaN would break the browser's parser
+
+
+def test_apply_settings_while_the_executor_spins(make_node):
+    """The viewer calls apply_settings from a Flask thread while the node is spinning."""
+    from std_msgs.msg import Float32
+
+    node = make_node({"battery_state_topic": "", "bus_voltage_topic": "/v0"})
+    try:
+        from rclpy.experimental.events_executor import EventsExecutor
+
+        executor = EventsExecutor()
+    except ImportError:
+        executor = ros_node.rclpy.executors.SingleThreadedExecutor()
+    executor.add_node(node)
+    spinner = threading.Thread(target=executor.spin, daemon=True)
+    spinner.start()
+    pubs = {t: node.create_publisher(Float32, t, 10) for t in ("/v0", "/v1")}
+    try:
+        for i in range(10):
+            topic = f"/v{i % 2}"
+            node.apply_settings({"bus_voltage_topic": topic})
+            deadline = time.time() + 5
+            while node.bus_voltage != float(i + 1) and time.time() < deadline:
+                pubs[topic].publish(Float32(data=float(i + 1)))
+                time.sleep(0.02)
+            assert node.bus_voltage == float(i + 1), topic
+    finally:
+        executor.shutdown()
+        spinner.join(5)
+    assert not spinner.is_alive()
