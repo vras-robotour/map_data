@@ -1723,3 +1723,34 @@ def test_unhandled_exception_is_a_json_500(app_client_with_file):
         resp = client.get(f"/api/mapdata?file={filename}")
     assert resp.status_code == 500
     assert "secret" not in resp.get_json()["error"]
+
+
+# ── split ids ────────────────────────────────────────────────────────────────
+
+
+def _way_features(client, filename, way_id):
+    features = client.get(f"/api/mapdata?file={filename}").get_json()["features"]
+    return [f for f in features if str(f["properties"].get("id")).split(":")[0] == str(way_id)]
+
+
+def test_tag_override_applies_to_split_segments(app_client_3node):
+    client, _, filename = app_client_3node
+    client.post(f"/api/ways/split?file={filename}", json={"way_id": 2, "node_id": 202})
+    resp = client.put(f"/api/ways/2:0/tags?file={filename}", json={"tags": {"highway": "service"}})
+    assert resp.status_code == 204
+    segments = _way_features(client, filename, 2)
+    assert len(segments) == 2
+    for f in segments:
+        assert f["properties"]["tags"]["highway"] == "service"
+        assert f["properties"]["category"] == "road"
+
+
+def test_tag_delete_by_segment_id_removes_the_override(app_client_3node):
+    client, tmp_path, filename = app_client_3node
+    client.post(f"/api/ways/split?file={filename}", json={"way_id": 2, "node_id": 202})
+    client.put(f"/api/ways/2:1/tags?file={filename}", json={"tags": {"highway": "service"}})
+    assert client.delete(f"/api/ways/2:1/tags?file={filename}").status_code == 204
+    store = json.loads((tmp_path / "three.annotations.json").read_text())
+    assert store["tag_overrides"] == {}
+    assert not [e for e in store["change_log"] if e["type"] == "tag"]
+

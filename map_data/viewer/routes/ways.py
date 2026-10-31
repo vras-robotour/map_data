@@ -300,11 +300,9 @@ def delete_way_tags(way_id: str) -> Response:
     """
     Remove the tag override recorded for a way.
 
-    Unlike :func:`update_way_tags`, this looks the override up by
-    ``way_id`` verbatim rather than stripping a ``":<index>"`` segment
-    suffix first -- passing a virtual segment ID here will not remove an
-    override that was recorded under the original way ID. A missing
-    override is not an error (no-op removal).
+    Like :func:`update_way_tags`, a virtual segment ID's ``":<index>"``
+    suffix is stripped, so the override recorded for the original way is
+    removed. A missing override is not an error (no-op removal).
 
     Returns
     -------
@@ -314,15 +312,16 @@ def delete_way_tags(way_id: str) -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing.
+        400 if ``file`` is missing or ``way_id`` isn't a valid way ID.
 
     """
     filename = _require_args("file")
+    original_way_id_str = str(_split_way_id(way_id)[0])
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
-        store.get("tag_overrides", {}).pop(str(way_id), None)
-        store.get("tag_override_meta", {}).pop(str(way_id), None)
-        _log_remove(store, "tag", id=way_id)
+        store.get("tag_overrides", {}).pop(original_way_id_str, None)
+        store.get("tag_override_meta", {}).pop(original_way_id_str, None)
+        _log_remove(store, "tag", id=original_way_id_str)
     return Response("", 204)
 
 

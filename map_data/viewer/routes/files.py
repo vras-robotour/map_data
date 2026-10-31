@@ -27,7 +27,7 @@ from flask import (
 from flask.typing import ResponseReturnValue
 from werkzeug.exceptions import HTTPException
 
-from map_data.annotations import apply_way_edits
+from map_data.annotations import apply_tag_overrides, apply_way_edits
 from map_data.map_data import MapData
 from map_data.utils.serialization import map_data_to_dict
 
@@ -39,7 +39,6 @@ from ..helpers import (
 from .common import (
     MAX_FETCH_AREA_KM2,
     _annotation_path,
-    _apply_tag_override,
     _bbox_area_km2,
     _get_data_dir,
     _json_object,
@@ -98,9 +97,10 @@ def _merged_mapdata_geojson(path: Path, store: dict[str, Any]) -> dict[str, Any]
     :mod:`~map_data.viewer.routes.common` docstring's "MapData copy semantics" section -- this is
     safe because :func:`apply_way_edits` never mutates a ``Way`` object shared
     with the cache), applies deletions/splits/moves via
-    :func:`apply_way_edits`, converts to GeoJSON, and finally merges in
-    any tag overrides (re-deriving each affected feature's ``road``/
-    ``footway`` category from the merged ``highway`` tag).
+    :func:`apply_way_edits`, merges in tag overrides via
+    :func:`~map_data.annotations.apply_tag_overrides` (which looks split
+    segments up by their original way ID and re-sorts roads/footways), and
+    converts to GeoJSON.
 
     Split out of :func:`get_mapdata` so that all of it -- the copy, the
     re-applied edits and the rebuild -- sits behind the one call to
@@ -109,19 +109,8 @@ def _merged_mapdata_geojson(path: Path, store: dict[str, Any]) -> dict[str, Any]
     map_data = copy.copy(load_mapdata_cached(str(path)))
 
     apply_way_edits(map_data, store)
-
-    geojson = mapdata_to_geojson(map_data)
-    tag_overrides = store.get("tag_overrides", {})
-    if tag_overrides:
-        for f in geojson["features"]:
-            ov = tag_overrides.get(str(f["properties"].get("id", "")))
-            if ov:
-                f["properties"]["tags"], f["properties"]["category"] = _apply_tag_override(
-                    f["properties"].get("tags") or {},
-                    ov,
-                    f["properties"].get("category"),
-                )
-    return geojson
+    apply_tag_overrides(map_data, store)
+    return mapdata_to_geojson(map_data)
 
 
 @bp.route("/api/mapdata")
