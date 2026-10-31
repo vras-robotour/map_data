@@ -24,8 +24,6 @@ class PathGrid:
 
     Attributes
     ----------
-    grid : np.ndarray or None
-        Flat ``(N, 4)`` cell list with columns ``[x, y, 0, cost]``, built by :meth:`fill`.
     grid_2d_cache : np.ndarray or None
         ``(num_y, num_x)`` cost raster with obstacles at ``inf``, built by :meth:`fill`.
 
@@ -63,19 +61,7 @@ class PathGrid:
         self.path_cost_cap = path_cost_cap
 
         # Built by fill(): a planner that never needs the grid never pays for it.
-        self.grid: np.ndarray | None = None
         self.grid_2d_cache: np.ndarray | None = None
-
-    def create_empty_grid(self) -> np.ndarray:
-        """
-        Return the ``(N, 2)`` cell centers, row-major with *x* varying fastest.
-
-        Float ``arange`` may yield one cell more or less near the upper edge.
-        """
-        half = self.cell_size / 2.0
-        xs = np.arange(self.low[0], self.high[0], self.cell_size) + half
-        ys = np.arange(self.low[1], self.high[1], self.cell_size) + half
-        return np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2)
 
     def fill(
         self,
@@ -85,7 +71,7 @@ class PathGrid:
         max_path_dist: float = 2.0,
     ) -> list[sh.geometry.base.BaseGeometry]:
         """
-        Compute the cell costs and store them in :attr:`grid` and :attr:`grid_2d_cache`.
+        Compute the cell costs and store them in :attr:`grid_2d_cache`.
 
         A cell within *max_path_dist* of a way costs
         ``c + (default_off_path_cost - c) * (dist / max_path_dist) ** 2`` where ``c``
@@ -114,9 +100,12 @@ class PathGrid:
 
         points = map_data.get_points()
 
-        cells = self.create_empty_grid()
-        n = len(cells)
-        path_grid = np.column_stack((cells, np.zeros(n), np.full(n, self.default_off_path_cost)))
+        # Float arange may yield one cell more or less near the upper edge; ceil is the count.
+        num_x = int(np.ceil((self.high[0] - self.low[0]) / self.cell_size))
+        num_y = int(np.ceil((self.high[1] - self.low[1]) / self.cell_size))
+        xs = self.low[0] + (np.arange(num_x) + 0.5) * self.cell_size
+        ys = self.low[1] + (np.arange(num_y) + 0.5) * self.cell_size
+        grid_2d = np.full((num_y, num_x), self.default_off_path_cost, dtype=np.float32)
 
         bbox = sh.box(self.low[0], self.low[1], self.high[0], self.high[1])
         bbox_buffered = bbox.buffer(max_path_dist)
@@ -154,39 +143,18 @@ class PathGrid:
 
         if len(path_points):
             tree = cKDTree(path_points)
-            dists, indices = tree.query(
-                path_grid[:, :2], distance_upper_bound=max_path_dist, workers=-1
-            )
+            centers = np.stack(np.meshgrid(xs, ys), axis=-1)  # (num_y, num_x, 2)
+            dists, indices = tree.query(centers, distance_upper_bound=max_path_dist, workers=-1)
             mask = dists < max_path_dist
             way_costs = np.array(costs)[way_index][indices[mask]]
             final_costs = (
                 way_costs
                 + (self.default_off_path_cost - way_costs) * (dists[mask] / max_path_dist) ** 2
             )
-            path_grid[mask, 3] = np.minimum(path_grid[mask, 3], final_costs)
+            grid_2d[mask] = np.minimum(grid_2d[mask], final_costs)
 
-        self.grid = path_grid
-        grid_2d = self.get_grid_2d()
         self.grid_2d_cache = self.burn_obstacles(grid_2d, effective_obstacles)
         return effective_obstacles
-
-    def get_grid_2d(self) -> np.ndarray:
-        """
-        Rasterize :attr:`grid` into a ``(num_y, num_x)`` cost array, without obstacles.
-
-        Indices are clipped to absorb floating-point spill at the upper edge.
-        """
-        assert self.grid is not None, "fill() builds the flat grid"
-        num_x = int(np.ceil((self.high[0] - self.low[0]) / self.cell_size))
-        num_y = int(np.ceil((self.high[1] - self.low[1]) / self.cell_size))
-        grid_2d = np.full((num_x, num_y), self.default_off_path_cost, dtype=np.float32)
-        x_indices = np.floor((self.grid[:, 0] - self.low[0]) / self.cell_size).astype(int)
-        y_indices = np.floor((self.grid[:, 1] - self.low[1]) / self.cell_size).astype(int)
-        grid_2d[np.clip(x_indices, 0, num_x - 1), np.clip(y_indices, 0, num_y - 1)] = self.grid[
-            :,
-            3,
-        ]
-        return grid_2d.T
 
     def burn_obstacles(
         self,
@@ -213,7 +181,7 @@ class PathGrid:
             if ix_min > ix_max or iy_min > iy_max:
                 continue
 
-            # Cell centers, the same sampling convention as create_empty_grid and the planners.
+            # Cell centers, the same sampling convention as fill and the planners.
             x = np.linspace(
                 (ix_min + 0.5) * self.cell_size + self.low[0],
                 (ix_max + 0.5) * self.cell_size + self.low[0],
