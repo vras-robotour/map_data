@@ -1046,6 +1046,20 @@ def test_cost_grid_image_resamples_utm_cells_onto_latlon_pixels():
     assert seen_outside
 
 
+def test_cost_grid_draws_only_the_allowed_ways(app_client_with_file):
+    client, _, filename = app_client_with_file
+    bbox = "min_lat=50.0&min_lon=14.0&max_lat=50.0005&max_lon=14.0005"
+    url = f"/api/cost_grid?file={filename}&{bbox}"
+
+    def alphas(allowed):
+        data = client.get(f"{url}&allowed_ways={allowed}").get_json()
+        return set(np.unique(_decode_png_rgba(data["image"])[..., 3]).tolist())
+
+    assert 153 in alphas("footway,road")  # the footway's path cells
+    assert 153 not in alphas("road")
+    assert client.get(f"{url}&allowed_ways=footway,stairs").status_code == 400
+
+
 def test_cost_grid_oversized_bbox_rejected(app_client_with_file):
     client, _, filename = app_client_with_file
     # 0.1 x 0.1 deg near Prague is ~80 km^2 -> ~80M cells at 1 m, over the cap

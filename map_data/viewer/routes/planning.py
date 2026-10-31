@@ -178,7 +178,7 @@ def get_traversability_blocked() -> Response:
     filename = body.get("file")
     if not isinstance(filename, str) or not filename:
         abort(400, "Missing file")
-    allowed = body.get("allowed_ways", ["footway"])
+    allowed = body.get("allowed_ways") or ["footway"]  # plan_route's default
     if not isinstance(allowed, list):
         abort(400, "allowed_ways must be a list of strings")
     rules = _request_rules(body).extend(NON_ROUTABLE_HIGHWAY_VALUES)
@@ -288,6 +288,9 @@ def get_cost_grid() -> Response:
         :data:`~map_data.viewer.routes.common.MAX_GRID_CELLS` 1 m cells.
     highway_costs, surface_costs : str, optional
         JSON-encoded cost-override dicts (str -> finite non-negative number).
+    allowed_ways : str, optional
+        Comma-separated ``footway``/``road``, the way categories drawn as
+        paths; default ``footway``, as in planning.
 
     Returns
     -------
@@ -342,6 +345,9 @@ def get_cost_grid() -> Response:
             cost_dicts[name] = _validated_cost_dict(parsed, name)
     highway_costs_dict = cost_dicts["highway_costs"]
     surface_costs_dict = cost_dicts["surface_costs"]
+    highway_types = (request.args.get("allowed_ways") or "footway").split(",")
+    if not set(highway_types) <= {"footway", "road"}:
+        abort(400, "allowed_ways must be comma-separated footway/road")
 
     md, _ = get_merged_mapdata(filename)
     if md is None:
@@ -365,7 +371,7 @@ def get_cost_grid() -> Response:
         inflate_obstacles=0.0,
     )
 
-    replanner.fill_grid(md, highway_types=["footway", "road"])
+    replanner.fill_grid(md, highway_types=highway_types)
 
     # Obstacle cells are inf, not filtered out as in planning, so they can be visualized too.
     path_grid = replanner.path_grid
