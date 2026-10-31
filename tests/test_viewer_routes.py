@@ -262,6 +262,16 @@ def test_delete_way(app_client_with_file):
     assert 1 in deleted_ids
 
 
+def test_annotations_of_a_map_in_a_subfolder_sit_beside_it(app_client):
+    # Where the ROS nodes (annotation_path_for) read them.
+    client, tmp_path = app_client
+    (tmp_path / "sub").mkdir()
+    _make_mapdata(tmp_path / "sub" / "test.mapdata")
+    assert client.delete("/api/ways/1?file=sub/test.mapdata", json={}).status_code == 204
+    assert (tmp_path / "sub" / "test.annotations.json").is_file()
+    assert not (tmp_path / "test.annotations.json").exists()
+
+
 def test_get_way_not_found(app_client_with_file):
     client, _, filename = app_client_with_file
     resp = client.get(f"/api/ways/9999?file={filename}")

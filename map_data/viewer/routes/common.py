@@ -21,6 +21,7 @@ from flask.typing import ResponseReturnValue
 from werkzeug.exceptions import HTTPException
 
 from map_data.annotations import (
+    annotation_path_for,
     apply_store,
 )
 from map_data.edits import (
@@ -120,10 +121,11 @@ def _annotation_path(filename: str) -> Path:
     Returns
     -------
     Path
-        ``<data_dir>/<stem>.annotations.json``.
+        ``<stem>.annotations.json`` beside the map, where the ROS nodes'
+        :func:`~map_data.annotations.annotation_path_for` looks too.
 
     """
-    return _get_data_dir().resolve() / f"{_mapdata_path(filename).stem}.annotations.json"
+    return annotation_path_for(_mapdata_path(filename))
 
 
 def _split_way_id(way_id: Any) -> tuple[int, int | None]:
