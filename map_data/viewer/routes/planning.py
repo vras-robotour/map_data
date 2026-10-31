@@ -542,11 +542,9 @@ def create_replan() -> Response:
             planner=planner,
         )
     except RoutePlanningError as e:
-        if e.reason in ("grid_too_large", "too_few_points"):
+        if e.reason in ("grid_too_large", "too_few_points", "bad_parameter"):
             abort(400, e.message)
-        # The grid planner cannot tell "no path" from "cancelled"; the frontend
-        # expects these status strings.
-        status = "cancelled" if algorithm != GRAPH_ALGORITHM else "failed"
+        status = "cancelled" if e.reason == "cancelled" else "failed"
         logger.warning("Replan failed (%s): %s", e.reason, e.message)
         return jsonify({"retrieveNum": 1, "newPath": None, "status": status, "reason": e.reason})
 

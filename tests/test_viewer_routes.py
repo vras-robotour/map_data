@@ -1167,6 +1167,7 @@ def test_create_replan_defaults_come_from_grid_defaults(app_client_with_file, mo
         {"allowed_ways": "footway"},
         {"grid_cost_weight": "heavy"},
         {"transfer_id": 42},
+        {"algorithm": "Graph"},
     ],
 )
 def test_create_replan_invalid_params_rejected(app_client_with_file, overrides):
@@ -1177,6 +1178,14 @@ def test_create_replan_invalid_params_rejected(app_client_with_file, overrides):
         content_type="application/json",
     )
     assert resp.status_code == 400
+
+
+def test_create_replan_start_outside_the_map_fails_not_cancels(app_client_with_file):
+    client, _, filename = app_client_with_file
+    body = _replan_body(filename, points=[[49.0, 13.0], [50.0005, 14.0005]])
+    data = client.post("/api/create_replan", json=body).get_json()
+    assert data["status"] == "failed"
+    assert data["reason"] == "start_outside_map"
 
 
 def test_create_replan_missing_points_rejected(app_client_with_file):
