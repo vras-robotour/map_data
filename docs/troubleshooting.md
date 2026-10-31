@@ -103,9 +103,7 @@ The node rejects all-zero transforms, waits for a valid transform on `/tf_static
 
 ### `MapData.load()` raises `ValueError` or `JSONDecodeError`
 
-The file may be truncated (interrupted write) or a legacy pickle file (detected by a `0x80` header byte). Support for the legacy pickle format was removed for security reasons.
-
-If you have a legacy file, regenerate it with `create_mapdata -d -f <file>.gpx`.
+The file may be truncated, or a pickle file from an old version (not valid UTF-8 JSON, so it raises `ValueError`). Pickle files are not supported; regenerate the map with `create_mapdata -d -f <file>.gpx`.
 
 ### UTM zone boundary warning
 
