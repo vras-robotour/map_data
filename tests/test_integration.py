@@ -282,6 +282,21 @@ def test_create_mapdata_no_cache_bypasses_the_cache(tmp_path, monkeypatch, mock_
     mock_overpass_client.query_raw.assert_called_once()
 
 
+def test_create_mapdata_finds_a_bare_name_in_the_demo_dir(
+    tmp_path, monkeypatch, mock_overpass_client
+):
+    (tmp_path / "data").mkdir()
+    (tmp_path / "demo").mkdir()
+    gpx = tmp_path / "demo" / "map.gpx"
+    gpx.write_text('<gpx><wpt lat="50.0" lon="14.0"/><wpt lat="50.001" lon="14.001"/></gpx>')
+    monkeypatch.setattr("map_data.create_mapdata.package_share", lambda d: tmp_path / d)
+    monkeypatch.chdir(tmp_path)
+
+    process_map_data("map.gpx", download=True)
+
+    assert (tmp_path / "demo" / "map.mapdata").is_file()
+
+
 def test_save_osm_cache_failure_preserves_existing_cache(tmp_path, monkeypatch):
     md = _make_md()
     md.coords_file = str(tmp_path / "test.gpx")

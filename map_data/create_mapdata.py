@@ -14,13 +14,15 @@ def process_map_data(file_name: str, *, download: bool, use_cache: bool = False)
     """
     Download and parse (*download*) or re-save the ``.mapdata`` of *file_name*.
 
-    *file_name* is a path, or a name in the package's ``data/`` directory.
+    *file_name* is a path, or a name in the package's ``data/`` directory or the
+    bundled ``demo/`` (a source checkout; an install copies the demo into ``data/``).
     """
     p = Path(file_name)
     if p.exists():
         full_path = p.resolve()
     else:
-        full_path = package_share("data") / file_name
+        candidates = [package_share(d) / file_name for d in ("data", "demo")]
+        full_path = next((c for c in candidates if c.exists()), candidates[0])
         if not full_path.exists():
             logger.error("File '%s' not found", file_name)
             raise SystemExit(1)
