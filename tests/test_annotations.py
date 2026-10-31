@@ -303,6 +303,30 @@ def test_apply_traversability_keeps_annotation_crossroads(footway_network_mapdat
     assert ann in md.crossroads_list
 
 
+@pytest.mark.parametrize(
+    "store",
+    [
+        {"deleted_ways": [{"id": 3}]},
+        {"node_position_overrides": {"3": {"202": {"lat": 50.0, "lon": 14.01}}}},
+        {"tag_overrides": {"3": {"surface": "gravel"}}},
+    ],
+    ids=["deleted way", "moved node", "tag override"],
+)
+def test_way_edits_keep_annotation_crossroads(footway_network_mapdata, store):
+    path, _, _ = footway_network_mapdata
+    md = MapData.load(str(path))
+    ann = Way(
+        id=-1,
+        is_area=True,
+        nodes=[],
+        tags={"type": "annotation_intersection", "count": "2"},
+        line=LineString([(0, 0), (1, 1)]).buffer(1.5),
+    )
+    md.crossroads_list.append(ann)
+
+    assert ann in apply_store(md, {"version": 1, **store}).crossroads_list
+
+
 def test_apply_traversability_without_rules_is_a_noop(footway_network_mapdata):
     path, lat0, lon0 = footway_network_mapdata
     md = MapData.load(str(path))
