@@ -318,8 +318,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
     redoStack = [];
 
     try {
-        const geojson = await fetchMapData(filename);
-        const annData = await fetchAnnotations(filename);
+        const [geojson, annData] = await Promise.all([fetchMapData(filename), fetchAnnotations(filename)]);
         if (token !== _mapDataToken) return;
 
         const oldGeoLayers = { ...geoLayers };
