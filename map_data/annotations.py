@@ -21,10 +21,7 @@ import utm
 from shapely import STRtree
 from shapely.geometry import LineString, Point
 
-from map_data.map_data import MapData
-from map_data.traversability import TraversabilityRules, load_traversability
-from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES, Way
-from map_data.viewer.helpers import (
+from map_data.edits import (
     AnnotationStoreError,
     apply_added_nodes,
     apply_node_position_overrides,
@@ -39,6 +36,9 @@ from map_data.viewer.helpers import (
     rebuild_way_without_nodes,
     split_way,
 )
+from map_data.map_data import MapData
+from map_data.traversability import TraversabilityRules, load_traversability
+from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES, Way
 
 logger = logging.getLogger(__name__)
 

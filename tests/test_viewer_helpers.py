@@ -8,22 +8,21 @@ import pytest
 import utm
 from shapely.geometry import LineString, MultiPolygon, Polygon
 
-from map_data.utils import serialization
-from map_data.utils.serialization import atomic_write_json
-from map_data.utils.way import Way
-from map_data.viewer.helpers import (
+from map_data.edits import (
     AnnotationStoreError,
     annotation_store,
     apply_node_position_overrides,
     geojson_geom_to_utm,
-    geom_to_geojson,
     get_deleted_way_ids,
     load_annotations,
-    mapdata_to_geojson,
     quarantine_annotation_store,
     rebuild_way_without_nodes,
     split_way,
 )
+from map_data.utils import serialization
+from map_data.utils.serialization import atomic_write_json
+from map_data.utils.way import Way
+from map_data.viewer.helpers import geom_to_geojson, mapdata_to_geojson
 
 # Prague area — UTM zone 33U
 _ZN, _ZL = 33, "U"

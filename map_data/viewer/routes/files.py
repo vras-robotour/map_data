@@ -27,14 +27,12 @@ from flask.typing import ResponseReturnValue
 from werkzeug.exceptions import HTTPException
 
 from map_data.annotations import apply_tag_overrides, apply_way_edits
+from map_data.edits import load_annotations
 from map_data.map_data import MapData
 from map_data.utils.serialization import map_data_to_dict
 
 from ..cache import load_mapdata_cached, mapdata_geojson_cached
-from ..helpers import (
-    load_annotations,
-    mapdata_to_geojson,
-)
+from ..helpers import mapdata_to_geojson
 from .common import (
     MAX_FETCH_AREA_KM2,
     _annotation_path,

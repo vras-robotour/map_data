@@ -11,12 +11,9 @@ from flask import (
 )
 from flask.typing import ResponseReturnValue
 
+from map_data.edits import annotation_store, geojson_geom_to_utm, load_annotations
+
 from ..cache import load_mapdata_cached
-from ..helpers import (
-    annotation_store,
-    geojson_geom_to_utm,
-    load_annotations,
-)
 from .common import (
     _annotation_path,
     _json_object,

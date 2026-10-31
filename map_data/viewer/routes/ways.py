@@ -1,5 +1,7 @@
 """Way-editing routes: tag overrides, delete/hide/restore, splits, node add/delete/move."""
 
+import copy
+from dataclasses import dataclass
 from typing import Any
 
 import utm
@@ -9,10 +11,12 @@ from flask import (
     jsonify,
 )
 
-from ..cache import load_mapdata_cached
-from ..helpers import (
+from map_data.annotations import _CAT_FOR_LIST
+from map_data.edits import (
     annotation_store,
-    geom_to_geojson,
+    apply_added_nodes,
+    apply_node_position_overrides,
+    edited_nodes_cache,
     get_deleted_node_ids,
     get_deleted_way_ids,
     get_detached_node_ids,
@@ -20,18 +24,21 @@ from ..helpers import (
     get_split_node_ids,
     load_annotations,
     next_synthetic_node_id,
+    rebuild_way_without_nodes,
     split_way,
     update_segment_annotations_for_split_change,
-    way_feature,
 )
+from map_data.map_data import MapData
+from map_data.utils.way import FOOTWAY_VALUES
+
+from ..cache import load_mapdata_cached
+from ..helpers import geom_to_geojson, way_feature
 from .common import (
     _MAX_LAT,
     _MAX_LON,
     _MIN_LAT,
     _MIN_LON,
     _annotation_path,
-    _apply_segment_deletions,
-    _apply_tag_override,
     _int_param,
     _json_object,
     _log_add,
@@ -39,12 +46,191 @@ from .common import (
     _mapdata_path,
     _parse_way_id,
     _require_args,
-    _resolve_way,
-    _select_segment,
     _split_way_id,
     _validated_number,
     bp,
 )
+
+
+@dataclass
+class _ResolvedWay:
+    """
+    Result of :func:`_resolve_way`.
+
+    Attributes
+    ----------
+    way : Way or None
+        The edited way; ``None`` if not found or deleted down to nothing.
+    category : str or None
+        ``"road"``, ``"footway"`` or ``"barrier"``; ``None`` only when no way
+        has the ID, which tells "not found" from "deleted down to nothing".
+    effective_nodes_cache : dict
+        ``md``'s nodes cache plus this way's added nodes and detached split
+        ends, with its node moves applied (see
+        :func:`~map_data.edits.edited_nodes_cache`); the raw cache
+        when ``way`` is ``None``.
+
+    """
+
+    way: Any
+    category: str | None
+    effective_nodes_cache: dict[int, dict[str, Any]]
+
+
+def _resolve_way(
+    md: MapData,
+    store: dict[str, Any],
+    search_id: int,
+    *,
+    added_nodes_before_overrides: bool = False,
+) -> _ResolvedWay:
+    """
+    Find a way by its original OSM ID and apply its node deletions, added nodes and moves.
+
+    The way is a ``copy.copy`` of the cached one, which is never mutated.
+    Splitting is left to the callers, which pass the returned
+    ``effective_nodes_cache`` to :func:`~map_data.edits.split_way`.
+    A way deleted down to nothing skips the added-node and move steps.
+
+    Parameters
+    ----------
+    added_nodes_before_overrides : bool, default False
+        Apply added nodes before node moves, so that a move of an added node
+        is applied to the geometry (:func:`~map_data.viewer.routes.ways.get_way`);
+        otherwise moves come first.
+
+    """
+    nodes_cache = getattr(md, "nodes_cache", {})
+
+    way, category = next(
+        (
+            (copy.copy(w), cat)
+            for lst_name, cat in _CAT_FOR_LIST.items()
+            for w in getattr(md, lst_name)
+            if w.id == search_id
+        ),
+        (None, None),
+    )
+
+    if way is None:
+        return _ResolvedWay(way=None, category=None, effective_nodes_cache=nodes_cache)
+
+    zn, zl = md.zone_number, md.zone_letter
+
+    del_nids = get_deleted_node_ids(store, search_id)
+    if del_nids:
+        way = rebuild_way_without_nodes(way, del_nids, zn, zl, nodes_cache, category=category)
+
+    effective_nc = nodes_cache
+    if way is not None:
+        pos_overrides = get_node_position_overrides(store, search_id)
+
+        def _apply_overrides(w: Any) -> Any:
+            if not pos_overrides:
+                return w
+            return (
+                apply_node_position_overrides(
+                    w, pos_overrides, zn, zl, nodes_cache, category=category
+                )
+                or w
+            )
+
+        if added_nodes_before_overrides:
+            way = _apply_overrides(apply_added_nodes(way, store, zn, zl))
+        else:
+            way = apply_added_nodes(_apply_overrides(way), store, zn, zl)
+
+        effective_nc = edited_nodes_cache(store, nodes_cache, search_id)
+
+    return _ResolvedWay(way=way, category=category, effective_nodes_cache=effective_nc)
+
+
+def _apply_segment_deletions(
+    seg: Any,
+    seg_id: str,
+    store: dict[str, Any],
+    zn: int,
+    zl: str,
+    nodes_cache: dict[int, dict[str, Any]],
+    category: str | None,
+) -> Any:
+    """Rebuild *seg* without its segment-specific deleted nodes (keyed by *seg_id*), if any."""
+    seg_del_nids = get_deleted_node_ids(store, seg_id)
+    if not seg_del_nids:
+        return seg
+    return rebuild_way_without_nodes(seg, seg_del_nids, zn, zl, nodes_cache, category=category)
+
+
+def _select_segment(
+    way: Any,
+    way_id: str,
+    search_id: int,
+    store: dict[str, Any],
+    zn: int,
+    zl: str,
+    nodes_cache: dict[int, dict[str, Any]],
+    category: str | None,
+) -> Any:
+    """
+    Narrow *way* down to the single segment named by a virtual *way_id*.
+
+    Shared by :func:`~map_data.viewer.routes.ways.get_way_nodes` and
+    :func:`~map_data.viewer.routes.ways.get_way`. A no-op (returns *way* unchanged) if *way_id*
+    carries no ``":<index>"`` suffix or the way has no recorded splits.
+
+    Returns
+    -------
+    Any or None
+        The resolved segment (with its segment-specific node deletions
+        applied), or ``None`` if those deletions reduced it to nothing --
+        callers differ on how to report that, so it's left to them.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 for an invalid segment suffix. 404 for an out-of-range segment
+        index.
+
+    """
+    _, segment_idx = _split_way_id(way_id)
+    if segment_idx is None:
+        return way
+
+    split_nids = get_split_node_ids(store, search_id)
+    if not split_nids:
+        return way
+
+    segments = split_way(
+        way, split_nids, zn, zl, nodes_cache, get_detached_node_ids(store, search_id)
+    )
+    if segment_idx >= len(segments):
+        abort(404, "Segment not found")
+
+    return _apply_segment_deletions(
+        segments[segment_idx], way_id, store, zn, zl, nodes_cache, category
+    )
+
+
+def _apply_tag_override(
+    tags: dict[str, Any],
+    ov: dict[str, Any] | None,
+    category: str | None,
+) -> tuple[dict[str, Any], str | None]:
+    """
+    Merge a tag override into *tags* and re-derive a road/footway *category*.
+
+    Returns *tags*/*category* unchanged if *ov* is falsy. Otherwise merges
+    *ov* over *tags* and, if *category* is ``"road"`` or ``"footway"``,
+    recomputes it from the merged ``highway`` tag (any other category is
+    left alone).
+    """
+    if not ov:
+        return tags, category
+    merged = {**tags, **ov}
+    if category in ("road", "footway"):
+        hw = merged.get("highway", "")
+        category = "footway" if hw in FOOTWAY_VALUES else "road"
+    return merged, category
 
 
 @bp.route("/api/way_nodes")
@@ -523,7 +709,7 @@ def add_way_node() -> Response:
 
     Query: ``file``, ``way_id``; JSON body ``after_node_id`` (may itself be
     synthetic), ``lat``, ``lon``. The node gets the next free negative ID
-    (:func:`~map_data.viewer.helpers.next_synthetic_node_id`; OSM IDs are
+    (:func:`~map_data.edits.next_synthetic_node_id`; OSM IDs are
     positive) and is recorded in ``store["added_nodes"]``.
 
     Returns

@@ -14,12 +14,12 @@ from map_data.annotations import (
     apply_store,
     load_mapdata_with_annotations,
 )
+from map_data.edits import load_annotations
 from map_data.map_data import MapData
 from map_data.pathsolver.graph_planner import GraphPlanner
 from map_data.pathsolver.route import RoutePlanningError, plan_route
 from map_data.traversability import TraversabilityRules, load_traversability
 from map_data.utils.way import Way
-from map_data.viewer.helpers import load_annotations
 
 
 def _latlon(lat0, lon0, dx, dy):
