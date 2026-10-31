@@ -274,6 +274,14 @@ def test_mapdata_zone_check_ignores_band_letters():
     md._check_utm_zone_boundary()
 
 
+def test_mapdata_zone_check_ignores_a_latitude_band_boundary(caplog):
+    e, n, zn, zl = utm.from_latlon(48.0, 16.0)  # bands T and U meet at 48°N
+
+    MapData([np.array([[e, n]]), int(zn), zl], coords_type="array")
+
+    assert "multiple UTM zones" not in caplog.text
+
+
 def test_create_mapdata_no_cache_bypasses_the_cache(tmp_path, monkeypatch, mock_overpass_client):
     gpx = tmp_path / "map.gpx"
     gpx.write_text('<gpx><wpt lat="50.0" lon="14.0"/><wpt lat="50.001" lon="14.001"/></gpx>')

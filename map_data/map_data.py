@@ -162,12 +162,14 @@ class MapData:
             (self.max_lat, self.min_long),
             (self.max_lat, self.max_long),
         ]
+        # Band letters only label latitude; the projection changes with the zone
+        # number and hemisphere.
         zones = set()
         for lat, lon in corners:
-            _, _, zn, zl = utm.from_latlon(lat, lon)
-            zones.add((zn, zl[-1]))
+            _, _, zn, _ = utm.from_latlon(lat, lon)
+            zones.add((zn, "N" if lat >= 0 else "S"))
         if len(zones) > 1:
-            zone_strs = ", ".join(f"{zn}{zl}" for zn, zl in sorted(zones))
+            zone_strs = ", ".join(f"{zn}{hemi}" for zn, hemi in sorted(zones))
             logger.warning(
                 "Waypoints span multiple UTM zones (%s). Geometry near zone boundaries "
                 "may be distorted. Consider splitting the area into smaller regions.",
