@@ -79,6 +79,31 @@ def test_annotated_path_bridges_a_gap(footway_network_mapdata):
     assert res.length_m == pytest.approx(450.0, abs=10.0)
 
 
+def test_loader_keeps_annotation_crossroads_after_traversability(footway_network_mapdata):
+    path, lat0, lon0 = footway_network_mapdata
+    a = _latlon(lat0, lon0, 200.0, 0.0)
+    b = _latlon(lat0, lon0, 400.0, 0.0)
+    store = {
+        "version": 1,
+        "annotations": [
+            {
+                "id": "ann-1",
+                "type": "path",
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[a[1], a[0]], [b[1], b[0]]],
+                },
+                "properties": {"highway": "footway", "width": 2.0},
+            }
+        ],
+    }
+    annotation_path_for(path).write_text(json.dumps(store))
+
+    md, _ = load_mapdata_with_annotations(path)
+
+    assert any(w.tags.get("type") == "annotation_intersection" for w in md.crossroads_list)
+
+
 def test_deleted_way_is_removed(footway_network_mapdata):
     path, lat0, lon0 = footway_network_mapdata
     annotation_path_for(path).write_text(
@@ -105,6 +130,17 @@ def test_tag_override_moves_a_footway_to_roads(footway_network_mapdata):
     md, _ = load_mapdata_with_annotations(path)
     assert [w.id for w in md.footways_list] == [1, 2]
     assert [w.id for w in md.roads_list] == [3]
+
+
+def test_tag_override_applies_before_traversability(footway_network_mapdata):
+    path, _, _ = footway_network_mapdata
+    annotation_path_for(path).write_text(
+        json.dumps({"version": 1, "annotations": [], "tag_overrides": {"2": {"surface": "grass"}}})
+    )
+
+    md, _ = load_mapdata_with_annotations(path, traversability=_grass_rules())
+
+    assert [w.id for w in md.footways_list] == [1, 3]
 
 
 # ── excluded way types ─────────────────────────────────────────────────────
@@ -241,6 +277,23 @@ def test_apply_traversability_recomputes_the_crossroads(footway_network_mapdata)
     md.apply_traversability(_grass_rules())
 
     assert len(md.crossroads_list) == plain_crossroads
+
+
+def test_apply_traversability_keeps_annotation_crossroads(footway_network_mapdata):
+    path, _, _ = footway_network_mapdata
+    md = MapData.load(str(path))
+    ann = Way(
+        id=-1,
+        is_area=True,
+        nodes=[],
+        tags={"type": "annotation_intersection", "count": "2"},
+        line=LineString([(0, 0), (1, 1)]).buffer(1.5),
+    )
+    md.crossroads_list = [ann]
+
+    md.apply_traversability(_grass_rules())
+
+    assert ann in md.crossroads_list
 
 
 def test_apply_traversability_without_rules_is_a_noop(footway_network_mapdata):
