@@ -272,9 +272,7 @@ def test_mapdata_zone_check_ignores_band_letters():
     md._check_utm_zone_boundary()
 
 
-def test_create_mapdata_ignores_the_cache_by_default(
-    tmp_path, monkeypatch, mock_overpass_client
-):
+def test_create_mapdata_ignores_the_cache_by_default(tmp_path, monkeypatch, mock_overpass_client):
     gpx = tmp_path / "map.gpx"
     gpx.write_text('<gpx><wpt lat="50.0" lon="14.0"/><wpt lat="50.001" lon="14.001"/></gpx>')
     (tmp_path / "map.osm_cache.json").write_text("{}")

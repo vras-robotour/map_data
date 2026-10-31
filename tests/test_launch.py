@@ -112,7 +112,7 @@ def test_default_config_files_exist():
                 if value and value.endswith(".yaml"):
                     defaults.append(value)
 
-    assert defaults, "expected yaml defaults (config_file, osm_grid_params)"
+    assert defaults, "expected yaml defaults (osm_grid_params)"
     missing = [name for name in defaults if not (config_dir / name).is_file()]
     assert not missing, f"launch argument defaults name missing config files: {missing}"
 
