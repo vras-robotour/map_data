@@ -19,6 +19,8 @@ paths/*
 *.annotations.json
 site
 _demo_out/
+graphify-out/
+build/
 
 # Local working datasets (keep the directory, not its contents)
 data/*
