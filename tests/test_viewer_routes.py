@@ -1187,6 +1187,67 @@ def test_upload_mapdata_duplicate_name_disambiguated(app_client):
     assert (tmp_path / "dup_1.mapdata").is_file()
 
 
+def test_upload_mapdata_normalises_extension_case(app_client):
+    client, tmp_path = app_client
+    resp = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(_mapdata_bytes(tmp_path)), "UP.MAPDATA")},
+        content_type="multipart/form-data",
+    )
+    assert resp.get_json()["filename"] == "UP.mapdata"
+    assert "UP.mapdata" in client.get("/api/files").get_json()["mapdata"]
+
+
+def test_upload_mapdata_skips_a_name_with_a_leftover_store(app_client):
+    client, tmp_path = app_client
+    (tmp_path / "dup.annotations.json").write_text('{"deleted_ways": [{"id": 1}]}')
+    resp = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(_mapdata_bytes(tmp_path)), "dup.mapdata")},
+        content_type="multipart/form-data",
+    )
+    assert resp.get_json()["filename"] == "dup_1.mapdata"
+
+
+def _poll_fetch(client, task_id):
+    for _ in range(100):
+        task = client.get(f"/api/fetch_area/{task_id}").get_json()
+        if task["status"] in ("done", "failed"):
+            return task
+        time.sleep(0.05)
+    raise AssertionError("fetch task did not finish")
+
+
+def test_fetch_area_does_not_overwrite_an_existing_map(app_client, mock_overpass_client):
+    client, tmp_path = app_client
+    (tmp_path / "small.mapdata").write_text("old")
+    bbox = {"min_lat": 50.0, "max_lat": 50.001, "min_lon": 14.0, "max_lon": 14.001}
+    resp = client.post("/api/fetch_area", json={**bbox, "name": "small"})
+    task = _poll_fetch(client, resp.get_json()["task_id"])
+    assert task["result"]["filename"] == "small_1.mapdata"
+    assert (tmp_path / "small.mapdata").read_text() == "old"
+
+
+def test_upload_gpx_does_not_overwrite_an_existing_map(
+    app_client, mock_overpass_client, monkeypatch
+):
+    client, tmp_path = app_client
+    monkeypatch.chdir(tmp_path)  # MapData writes its OSM cache next to the relative GPX name
+    (tmp_path / "trk.mapdata").write_text("old")
+    gpx = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">\n'
+        '  <wpt lat="50.0" lon="14.0"/>\n'
+        '  <wpt lat="50.001" lon="14.001"/>\n'
+        "</gpx>"
+    )
+    data = {"file": (io.BytesIO(gpx.encode()), "trk.gpx")}
+    resp = client.post("/api/upload_gpx", data=data, content_type="multipart/form-data")
+    assert resp.status_code == 200
+    assert resp.get_json()["filename"] == "trk_1.mapdata"
+    assert (tmp_path / "trk.mapdata").read_text() == "old"
+
+
 # ── native export ────────────────────────────────────────────────────────────
 
 

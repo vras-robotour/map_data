@@ -166,6 +166,20 @@ def get_mapdata() -> ResponseReturnValue:
     return resp.make_conditional(request)
 
 
+def _free_mapdata_path(data_dir: Path, stem: str) -> Path:
+    """
+    Return ``<stem>.mapdata`` in *data_dir*, or ``<stem>_1.mapdata``, ``_2``, ... if taken.
+
+    A name is taken by an existing map or by a leftover annotation store, which
+    would otherwise be applied to the new map.
+    """
+    dest, counter = data_dir / f"{stem}.mapdata", 1
+    while dest.exists() or (data_dir / f"{dest.stem}.annotations.json").exists():
+        dest = data_dir / f"{stem}_{counter}.mapdata"
+        counter += 1
+    return dest
+
+
 _fetch_tasks: dict[str, dict[str, Any]] = {}
 
 #: How long a terminal ("done"/"failed") fetch task is retained, in seconds,
@@ -345,7 +359,8 @@ def fetch_area() -> Response:
     name : str
         Output filename stem; sanitized to ``[A-Za-z0-9_-]`` (aborts if
         that leaves nothing). The mapdata is saved to
-        ``<data_dir>/<name>.mapdata``.
+        ``<data_dir>/<name>.mapdata``, or ``<name>_1.mapdata``, ... if that
+        name is taken (see :func:`_free_mapdata_path`).
     grid_margin, obstacle_radius, buffer_widths : optional
         Passed through to :class:`~map_data.map_data.MapData`.
 
@@ -388,7 +403,8 @@ def fetch_area() -> Response:
 
     data_dir = _get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
-    out_path = data_dir / f"{name}.mapdata"
+    # shortcut: two fetches started at once with one name still pick the same path.
+    out_path = _free_mapdata_path(data_dir, name)
 
     corners = np.array(
         [
@@ -465,7 +481,8 @@ def upload_gpx() -> Response:
     the GPX is saved to a temp directory (never persisted in the data
     directory), a :class:`~map_data.map_data.MapData` is built from it,
     Overpass is queried and parsed, and the result is saved as
-    ``<name>.mapdata``. The temp directory is always removed afterward.
+    ``<name>.mapdata`` (suffixed like :func:`fetch_area` if taken). The temp
+    directory is always removed afterward.
 
     Parameters (multipart form)
     -----------------------------
@@ -544,7 +561,7 @@ def upload_gpx() -> Response:
                     f"{MAX_FETCH_AREA_KM2:.0f} km² limit for a single fetch.",
                 )
 
-            out_path = data_dir / f"{name}.mapdata"
+            out_path = _free_mapdata_path(data_dir, name)
             try:
                 result = _query_parse_save(md, out_path)
             except _FetchFailed as e:
@@ -564,8 +581,10 @@ def upload_mapdata() -> Response:
     """
     Upload a pre-built ``.mapdata`` file to the data directory.
 
-    Saves the upload under its original basename, disambiguating with a
-    ``_1``, ``_2``, ... suffix if a file of that name already exists, then
+    Saves the upload under its original basename with a lower-case
+    ``.mapdata`` extension (the file list matches it case-sensitively),
+    disambiguating with a ``_1``, ``_2``, ... suffix if that name is taken
+    (see :func:`_free_mapdata_path`), then
     validates it by attempting to load it; an unloadable file is deleted
     again rather than left behind.
 
@@ -591,14 +610,7 @@ def upload_mapdata() -> Response:
     data_dir = _get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    safe_name = Path(file.filename).name
-    dest = data_dir / safe_name
-    stem, suffix = dest.stem, dest.suffix
-    counter = 1
-    while dest.exists():
-        dest = data_dir / f"{stem}_{counter}{suffix}"
-        counter += 1
-
+    dest = _free_mapdata_path(data_dir, Path(file.filename).stem)
     file.save(dest)
 
     try:
