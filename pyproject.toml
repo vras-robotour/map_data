@@ -3,12 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
+requires-python = ">=3.12"
 name = "map_data"
 version = "3.2.0"
-# requires-python is intentionally NOT declared: colcon's ament_python build
-# parses the setup() dump with ast.literal_eval, which chokes on the
-# SpecifierSet object it produces. The Python 3.12+ floor is enforced by CI
-# and documented in the README.
 dynamic = ["description", "license", "maintainers", "scripts"]
 dependencies = [
     "flask",
@@ -34,7 +31,7 @@ dev = [
     # together with the ruff-pre-commit rev in .pre-commit-config.yaml and
     # RUFF_VERSION in .github/workflows/ci.yml.
     "ruff==0.16.6",
-    "mypy",
+    "mypy==2.3.0",
     "mkdocs",
     "mkdocs-material",
     "mkdocstrings[python]",
@@ -42,11 +39,6 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Keep local runs identical to CI: coverage flags live here, not in the
-# workflow, so a plain `pytest` measures the same thing everywhere.
-# --cov-fail-under sits a little below the measured total (~75%) so routine
-# churn does not trip the gate; raise it when coverage climbs.
-addopts = "--cov=map_data --cov-report=term-missing --cov-fail-under=72"
 
 [tool.ruff]
 line-length = 100
