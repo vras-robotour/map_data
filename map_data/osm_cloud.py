@@ -66,6 +66,8 @@ class OSMCloud(Node):
 
     def __init__(self) -> None:
         super().__init__("osm_cloud")
+        # Site-neutral defaults, deliberately not read from config/osm_grid.yaml: that file
+        # is the Helhest (Fixposition) profile the launch file layers on top.
         self.utm_frame: str = self.declare_parameter("utm_frame", "utm").value
         self.local_frame: str = self.declare_parameter("local_frame", "map").value
         self.earth_frame: str = self.declare_parameter("earth_frame", "FP_ECEF").value

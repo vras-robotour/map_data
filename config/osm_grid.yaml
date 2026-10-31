@@ -1,3 +1,6 @@
+# osm_cloud profile for the Helhest stack; osm_cloud.launch.py loads it after config_file.
+# The node's own defaults are site-neutral (map_data/osm_cloud.py), so this file is not a
+# copy of them: it overrides them, and keys at their default value still override config_file.
 osm_cloud:
   ros__parameters:
     # Frames: the Helhest field stack localises with a Fixposition GNSS/INS unit whose
