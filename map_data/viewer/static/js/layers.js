@@ -306,13 +306,18 @@ async function refreshMetadata(filename) {
     }
 }
 
+let _mapDataToken = 0;
+
 async function loadMapData(filename, { preserveView = false, silent = false } = {}) {
+    deselectCurrent();
+    const token = ++_mapDataToken;
     if (!silent) setStatus('Loading…', 'text-warning');
     redoStack = [];
 
     try {
         const geojson = await fetchMapData(filename);
         const annData = await fetchAnnotations(filename);
+        if (token !== _mapDataToken) return;
 
         const oldGeoLayers = { ...geoLayers };
 
@@ -415,6 +420,13 @@ function clearMapData() {
     deselectCurrent();
     clearNodes();
     if (plannerMode) plannerMode.clearAll();
+
+    if (geoLayers.costGrid) {
+        map.removeLayer(geoLayers.costGrid);
+        geoLayers.costGrid = null;
+    }
+    const showGridCheckbox = document.getElementById('planner-show-grid');
+    if (showGridCheckbox) showGridCheckbox.checked = false;
 
     currentFile = "";
     

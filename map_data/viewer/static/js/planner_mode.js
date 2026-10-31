@@ -21,6 +21,8 @@ class PlannerMode {
         this.startAtRobot = false; // waypoint 0 pinned to the robot (see onRobotPosition)
         this.robotPos = null;      // last position trackerMode published
         this.dragPoint = null;     // waypoint being dragged, see _onWpDragMove
+        this.hasPlannedPath = false;
+        this._costGridToken = 0;
 
         this.init();
     }
@@ -70,8 +72,8 @@ class PlannerMode {
             
         } catch (err) {
             console.error('Failed to fetch planner defaults:', err);
-            // Fallback
-            this.resetCosts();
+            this.highwayCosts = {};
+            this.surfaceCosts = {};
         }
     }
 
@@ -264,7 +266,7 @@ class PlannerMode {
             return;
         }
         showError('planner-rules-error', '');
-        bootstrap.Modal.getInstance(document.getElementById('planner-rules-modal')).hide();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('planner-rules-modal')).hide();
         this.refreshBlocked();
     }
 
@@ -286,7 +288,7 @@ class PlannerMode {
         filterLayers(document.getElementById('feature-search')?.value || '');
     }
 
-    showCostsModal() {
+    renderCostRows() {
         const hwContainer = document.getElementById('highway-costs-container');
         hwContainer.innerHTML = '';
         Object.entries(this.highwayCosts).sort((a,b) => a[1]-b[1]).forEach(([type, cost]) => {
@@ -298,9 +300,11 @@ class PlannerMode {
         Object.entries(this.surfaceCosts).sort((a,b) => a[1]-b[1]).forEach(([type, cost]) => {
             surfContainer.appendChild(this._createCostInputRow(type, cost, 'surface-cost-input'));
         });
-        
-        const modal = new bootstrap.Modal(document.getElementById('planner-costs-modal'));
-        modal.show();
+    }
+
+    showCostsModal() {
+        this.renderCostRows();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('planner-costs-modal')).show();
     }
 
     _createCostInputRow(label, value, className) {
@@ -339,13 +343,13 @@ class PlannerMode {
         parse(surfInputs, newSurfCosts);
         
         if (!valid) {
-            alert('All costs must be between 0.0 and 1.0');
+            setStatus('All costs must be between 0.0 and 1.0', 'text-warning');
             return;
         }
         
         this.highwayCosts = newHwCosts;
         this.surfaceCosts = newSurfCosts;
-        bootstrap.Modal.getInstance(document.getElementById('planner-costs-modal')).hide();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('planner-costs-modal')).hide();
         
         // If grid is visible, refresh it
         if (document.getElementById('planner-show-grid').checked) {
@@ -360,11 +364,12 @@ class PlannerMode {
         // reset to but an empty set of costs.
         this.highwayCosts = { ...(this.defaults.highway_costs || {}) };
         this.surfaceCosts = { ...(this.defaults.surface_costs || {}) };
-        this.showCostsModal();
+        this.renderCostRows();
     }
 
     async toggleCostGrid(show) {
         if (!show) {
+            this._costGridToken++;
             if (geoLayers.costGrid) {
                 map.removeLayer(geoLayers.costGrid);
                 geoLayers.costGrid = null;
@@ -387,6 +392,7 @@ class PlannerMode {
         if (!currentFile) return;
         const bounds = map.getBounds();
         setStatus('Fetching cost grid...', 'text-warning');
+        const token = ++this._costGridToken;
         
         try {
             const res = await api('GET', '/api/cost_grid', {
@@ -401,6 +407,11 @@ class PlannerMode {
             if (!res.ok) throw new Error(await errorText(res));
             const data = await res.json();
 
+            const showGridCheckbox = document.getElementById('planner-show-grid');
+            if (token !== this._costGridToken || !showGridCheckbox || !showGridCheckbox.checked) {
+                return;
+            }
+
             if (geoLayers.costGrid) map.removeLayer(geoLayers.costGrid);
             geoLayers.costGrid = null;
             if (!data.image) {
@@ -414,8 +425,10 @@ class PlannerMode {
 
             setStatus('Cost grid loaded', 'text-success');
         } catch (err) {
-            setStatus(`Failed to fetch cost grid: ${err.message}`, 'text-danger');
-            document.getElementById('planner-show-grid').checked = false;
+            if (token === this._costGridToken) {
+                setStatus(`Failed to fetch cost grid: ${err.message}`, 'text-danger');
+                document.getElementById('planner-show-grid').checked = false;
+            }
         }
     }
 
@@ -606,6 +619,12 @@ class PlannerMode {
         if (this.pathPolyline) map.removeLayer(this.pathPolyline);
         this.pathPolyline = null;
         this.hasPlannedPath = false;
+        if (geoLayers.costGrid) {
+            map.removeLayer(geoLayers.costGrid);
+            geoLayers.costGrid = null;
+        }
+        const showGridCheckbox = document.getElementById('planner-show-grid');
+        if (showGridCheckbox) showGridCheckbox.checked = false;
         const seeded = this.startAtRobot && this._moveStartToRobot();
         this.updateUI();
         setStatus(seeded ? 'Path cleared; start back at the robot' : 'Path cleared', 'text-info');

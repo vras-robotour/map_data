@@ -111,15 +111,6 @@ function setMode(newMode, commit = true) {
 async function initApp() {
     deleteHandler = new L.EditToolbar.Delete(map, { featureGroup: drawnItems });
     setupDrawEvents();
-    const data = await fetchFileList();
-    const sel = document.getElementById('file-select');
-    if (sel) {
-        data.mapdata.forEach(f => {
-            if (![...sel.options].some(o => o.value === f)) {
-                sel.appendChild(new Option(f, f));
-            }
-        });
-    }
 
     // Event Listeners
     document.getElementById('load-btn')?.addEventListener('click', () => {
@@ -170,7 +161,7 @@ async function initApp() {
             document.getElementById('area-name-input').focus();
             return;
         }
-        bootstrap.Modal.getInstance(document.getElementById('fetch-area-modal')).hide();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('fetch-area-modal')).hide();
         setStatus('Fetching & parsing OSM data…', 'text-warning');
 
         try {
@@ -224,7 +215,7 @@ async function initApp() {
 
     document.getElementById('ann-detail-save')?.addEventListener('click', async () => {
         const { type, props } = _collectAnnForm();
-        bootstrap.Modal.getInstance(document.getElementById('ann-detail-modal')).hide();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('ann-detail-modal')).hide();
 
         if (editingAnnId) {
             const ann = annotations.find(a => a.id === editingAnnId);
@@ -350,6 +341,20 @@ async function initApp() {
                 break;
         }
     });
+
+    try {
+        const data = await fetchFileList();
+        const sel = document.getElementById('file-select');
+        if (sel && data && Array.isArray(data.mapdata)) {
+            data.mapdata.forEach(f => {
+                if (![...sel.options].some(o => o.value === f)) {
+                    sel.appendChild(new Option(f, f));
+                }
+            });
+        }
+    } catch (err) {
+        setStatus(`Failed to fetch file list: ${err.message}`, 'text-danger');
+    }
 
     if (STATIC_BASE) await initStaticDemo();
 }

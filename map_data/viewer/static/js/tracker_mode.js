@@ -565,7 +565,7 @@ const trackerMode = (() => {
             return;
         }
         showError('tracker-topics-error', '');
-        bootstrap.Modal.getInstance($('tracker-topics-modal')).hide();
+        bootstrap.Modal.getOrCreateInstance($('tracker-topics-modal')).hide();
     }
 
     $('tracker-topics-btn')?.addEventListener('click', showTopicsModal);

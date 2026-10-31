@@ -543,7 +543,7 @@ function setupDrawEvents() {
                 min_lon: bounds.getWest(), max_lon: bounds.getEast(),
             };
             document.getElementById('area-name-input').value = '';
-            new bootstrap.Modal(document.getElementById('fetch-area-modal')).show();
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('fetch-area-modal')).show();
             return;
         }
 

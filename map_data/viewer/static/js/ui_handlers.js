@@ -262,16 +262,26 @@ function clearNodes() {
     selectedNodeIndex = -1;
 }
 
+let _nodeLoadToken = 0;
+
 async function loadNodesForEditing(feature, layer) {
     if (!currentFile) return;
     clearNodes();
+    const token = ++_nodeLoadToken;
     const wayId = feature.properties.id;
     const el = document.getElementById('props-content');
     el.innerHTML = `<span class="text-secondary" style="font-size:0.8rem;">Loading nodes…</span>`;
 
     let data;
-    try { data = await fetchWayNodes(currentFile, wayId); }
-    catch (err) { setStatus('Failed to load nodes', 'text-danger'); return; }
+    try {
+        data = await fetchWayNodes(currentFile, wayId);
+    } catch (err) {
+        if (token !== _nodeLoadToken) return;
+        el.innerHTML = `<span class="text-danger" style="font-size:0.8rem;">Failed to load nodes</span>`;
+        setStatus('Failed to load nodes', 'text-danger');
+        return;
+    }
+    if (token !== _nodeLoadToken) return;
     currentNodes = data.nodes;
 
     osmEditLayer = layer;
@@ -514,7 +524,7 @@ function openWayEditModal() {
     editingWayId = feature.properties.id;
     document.getElementById('way-edit-title').textContent = `Edit Way #${editingWayId}`;
     _renderWayEditProps(feature.properties.tags || {});
-    new bootstrap.Modal(document.getElementById('way-edit-modal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('way-edit-modal')).show();
 }
 
 function _renderWayEditProps(obj) {
@@ -539,7 +549,7 @@ document.getElementById('way-edit-save')?.addEventListener('click', async () => 
     });
     if (!res.ok) { setStatus('Save failed', 'text-danger'); return; }
     redoStack = [];
-    bootstrap.Modal.getInstance(document.getElementById('way-edit-modal'))?.hide();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('way-edit-modal')).hide();
     const existingIdx = changeLog.findIndex(c => c.type === 'tag' && String(c.id) === String(editingWayId));
     if (existingIdx >= 0) changeLog.splice(existingIdx, 1);
     changeLog.push({ type: 'tag', id: editingWayId, category: cat, label: lbl });
@@ -1159,7 +1169,7 @@ function openAnnDetailModal(geometry, mode) {
     document.getElementById('ann-width-inp').value = '1.5';
     _renderExtraProps({});
     updateAnnTypeFields();
-    new bootstrap.Modal(document.getElementById('ann-detail-modal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('ann-detail-modal')).show();
 }
 
 function openAnnEditModal(annId) {
@@ -1181,7 +1191,7 @@ function openAnnEditModal(annId) {
     const exclude = type === 'path' ? ['highway', 'width'] : ['barrier'];
     _renderExtraProps(Object.fromEntries(Object.entries(props).filter(([k]) => !exclude.includes(k))));
     updateAnnTypeFields();
-    new bootstrap.Modal(document.getElementById('ann-detail-modal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('ann-detail-modal')).show();
 }
 
 // Adds `filename` to the file picker if it is missing, selects it and loads it.
@@ -1216,7 +1226,7 @@ function handleGpxMapCreation(file) {
     if (nameInput) {
         nameInput.value = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_\-]/g, "_");
     }
-    new bootstrap.Modal(document.getElementById('gpx-upload-modal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('gpx-upload-modal')).show();
 }
 
 document.getElementById('gpx-upload-submit')?.addEventListener('click', async () => {
@@ -1225,7 +1235,7 @@ document.getElementById('gpx-upload-submit')?.addEventListener('click', async ()
         document.getElementById('gpx-name-input').focus();
         return;
     }
-    bootstrap.Modal.getInstance(document.getElementById('gpx-upload-modal')).hide();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('gpx-upload-modal')).hide();
     setStatus('Processing GPX and fetching OSM data... (may take 1–2 min)', 'text-warning');
 
     const formData = new FormData();
