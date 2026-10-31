@@ -60,6 +60,7 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - The cost grid overlay shows the planner's own grid
 - An empty multipolygon member role counts as `outer`
 - Viewer annotations with a geometry other than `LineString`, `Polygon` or `MultiPolygon` (e.g. `Point`) are rejected with 400
+- `plan_route` (and so a PlanRoute goal) rejects a negative or non-finite `inflate_obstacles` with `bad_parameter` instead of shrinking the obstacles
 
 ### Removed
 

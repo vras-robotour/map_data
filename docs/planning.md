@@ -154,7 +154,7 @@ When route planning fails, `PlanRoute.Result` sets `success = false` and provide
 
 | Reason | Meaning |
 |--------|---------|
-| `bad_parameter` | Unknown `algorithm` or `sub_algorithm`, or non-positive `cell_size` |
+| `bad_parameter` | Unknown `algorithm` or `sub_algorithm`, non-positive `cell_size`, or negative or non-finite `inflate_obstacles` |
 | `start_blocked` | Grid start coordinate lies inside an obstacle and cannot be snapped to free space |
 | `goal_blocked` | Grid goal coordinate lies inside an obstacle and cannot be snapped to free space |
 | `cancelled` | Planning request was cancelled |

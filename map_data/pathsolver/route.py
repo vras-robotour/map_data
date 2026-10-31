@@ -29,12 +29,14 @@ readable ``reason`` instead of a bare ``None``:
 ``grid_too_large``
     the requested grid would exceed ``max_grid_cells`` cells;
 ``bad_parameter``
-    an unknown ``algorithm`` / ``sub_algorithm``, or ``cell_size`` not above zero.
+    an unknown ``algorithm`` / ``sub_algorithm``, ``cell_size`` not above zero, or
+    ``inflate_obstacles`` negative or not finite.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -296,6 +298,12 @@ def plan_route(
         raise RoutePlanningError("bad_parameter", f"unknown sub_algorithm {sub_algorithm!r}")
     if not cell_size > 0:  # also NaN
         raise RoutePlanningError("bad_parameter", f"cell_size must be > 0, got {cell_size}")
+    if inflate_obstacles is not None and not (
+        math.isfinite(inflate_obstacles) and inflate_obstacles >= 0
+    ):
+        raise RoutePlanningError(
+            "bad_parameter", f"inflate_obstacles must be finite and >= 0, got {inflate_obstacles}"
+        )
     if len(points_latlon) < 2:
         raise RoutePlanningError("too_few_points", "plan_route() needs at least two waypoints")
 
