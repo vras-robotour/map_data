@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from flask import Flask, Response, abort, redirect, request
+from flask.typing import ResponseReturnValue
 from flask_socketio import SocketIO
 
 from ..utils.config import config_path, setup_logging
@@ -182,7 +183,7 @@ def create_app(
     # Optional access-token gate (opt-in via MAP_DATA_ACCESS_TOKEN, see above).
     # Checked fresh on every request so it's a no-op when the env var is unset.
     @app.before_request
-    def _enforce_access_token() -> Response | None:
+    def _enforce_access_token() -> ResponseReturnValue | None:
         if not _access_token_valid(request):
             abort(401, "Missing or invalid access token")
         expected = _configured_access_token()

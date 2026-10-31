@@ -315,6 +315,7 @@ class PathGrid:
             (row-major raster convention), matching :meth:`burn_obstacles`.
 
         """
+        assert self.grid is not None, "fill() builds the flat grid"
         num_x = int(np.ceil((self.high[0] - self.low[0]) / self.cell_size))
         num_y = int(np.ceil((self.high[1] - self.low[1]) / self.cell_size))
         grid_2d = np.full((num_x, num_y), self.default_off_path_cost, dtype=np.float32)

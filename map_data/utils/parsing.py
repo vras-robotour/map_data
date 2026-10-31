@@ -291,6 +291,8 @@ def combine_ways(
 
 def _subtract_holes(way: Way, holes: list[geometry.base.BaseGeometry]) -> None:
     """Subtract *holes* from *way*, accepting a self-intersecting outer ring."""
+    if way.line is None:
+        return
     try:
         outer = way.line if way.line.is_valid else make_valid(way.line)
         way.line = outer.difference(unary_union(holes))
