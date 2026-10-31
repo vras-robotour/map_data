@@ -100,3 +100,51 @@ jobs:
               echo "_No coverage data produced._"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  ros:
+    runs-on: ubuntu-latest
+    container: ros:jazzy
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # setup_ws.sh links map_data_interfaces into <workspace>/src from here.
+      - uses: actions/checkout@v5
+        with:
+          path: ws/src/map_data
+
+      # Not released as a binary package; pinned to the commit the jazzy branch was tested with.
+      - uses: actions/checkout@v5
+        with:
+          repository: Box-Robotics/ros2_numpy
+          ref: d5ebf723e1d2457d36fa89bf021b212e340c3c11
+          path: ws/src/ros2_numpy
+
+      - name: Set up the workspace
+        run: bash ws/src/map_data/scripts/setup_ws.sh
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          rosdep install --from-paths ws/src --ignore-src -y --skip-keys ros2_numpy
+          apt-get install -y --no-install-recommends curl python3-pytest
+
+      - name: Build
+        working-directory: ws
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build --packages-up-to map_data
+
+      - name: Run tests
+        working-directory: ws/src/map_data
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          source ../../install/setup.bash
+          python3 -m pytest -q
+
+      - name: ROS smoke test
+        working-directory: ws/src/map_data
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          source ../../install/setup.bash
+          bash scripts/ros_smoke.sh
