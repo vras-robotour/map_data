@@ -39,7 +39,7 @@ from map_data.pathsolver.route import (
     plan_route,
 )
 from map_data.traversability import TraversabilityRules
-from map_data.utils.config import package_share
+from map_data.utils.config import resolve_data_file
 from map_data.utils.gpx import create_gpx_content, create_gpx_track
 
 logger = logging.getLogger("map_data_plan")
@@ -85,23 +85,14 @@ def non_negative_float(text: str) -> float:
     return value
 
 
-def resolve_mapdata(name: str) -> Path:
-    """A path as given, else the file of that name in the package data directory."""
-    p = Path(name).expanduser()
-    if p.exists():
-        return p.resolve()
-    candidate = package_share("data") / name
-    if candidate.exists():
-        return candidate
-    raise SystemExit(f"map data file {name!r} not found (looked at {p} and {candidate})")
-
-
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="map_data_plan",
         description="Plan a route on a .mapdata file (annotations merged) without the viewer.",
     )
-    ap.add_argument("-f", "--file", required=True, help=".mapdata file (path or name in data/)")
+    ap.add_argument(
+        "-f", "--file", required=True, help=".mapdata file (path or name in data/ or demo/)"
+    )
     ap.add_argument(
         "--annotations",
         default="auto",
@@ -201,7 +192,9 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("Give at least two points (--start/--goal or several -p).")
         return 2
 
-    path = resolve_mapdata(args.file)
+    path = resolve_data_file(args.file)
+    if path is None:
+        raise SystemExit(f"map data file {args.file!r} not found")
     # None = the package's rule file; an empty rule set = --no-traversability.
     traversability = TraversabilityRules() if args.no_traversability else args.traversability
     if isinstance(traversability, str) and not Path(traversability).expanduser().is_file():

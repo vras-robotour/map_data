@@ -111,7 +111,7 @@ from map_data.pathsolver.route import (
     plan_route,
 )
 from map_data.traversability import resolve_traversability_path
-from map_data.utils.config import package_share
+from map_data.utils.config import package_share, resolve_data_file
 from map_data.utils.geodesy import latlon_to_ecef
 from map_data.utils.gpx import create_gpx_track
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
@@ -351,10 +351,7 @@ class RoutePlanner(Node):
         name = name or self.mapdata_file
         if not name:
             return None
-        p = Path(name).expanduser()
-        if not p.is_absolute():
-            p = Path(self.data_dir).expanduser() / name
-        return p if p.is_file() else None
+        return resolve_data_file(name, self.data_dir)
 
     def _load_map(self, path: Path):
         ann = None if self.annotations in ("", "auto") else self.annotations

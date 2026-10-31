@@ -303,7 +303,7 @@ def test_create_mapdata_finds_a_bare_name_in_the_demo_dir(
     (tmp_path / "demo").mkdir()
     gpx = tmp_path / "demo" / "map.gpx"
     gpx.write_text('<gpx><wpt lat="50.0" lon="14.0"/><wpt lat="50.001" lon="14.001"/></gpx>')
-    monkeypatch.setattr("map_data.create_mapdata.package_share", lambda d: tmp_path / d)
+    monkeypatch.setattr("map_data.utils.config.package_share", lambda d: tmp_path / d)
     monkeypatch.chdir(tmp_path)
 
     process_map_data("map.gpx", download=True)

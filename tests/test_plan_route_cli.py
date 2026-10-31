@@ -142,13 +142,20 @@ def test_cli_rejects_a_missing_rule_file(footway_network_mapdata):
         )
 
 
-def test_cli_plans_the_documented_demo_route(capsys):
+@pytest.mark.parametrize(
+    "name",
+    [
+        str(Path(__file__).resolve().parents[1] / "demo" / "buchlovice.mapdata"),
+        "buchlovice.mapdata",
+    ],
+)
+def test_cli_plans_the_documented_demo_route(name, capsys, tmp_path, monkeypatch):
     """The demo command in README.md and docs/planning.md, on the default footway graph."""
-    demo = Path(__file__).resolve().parents[1] / "demo" / "buchlovice.mapdata"
+    monkeypatch.chdir(tmp_path)  # a bare name is found in the package, not the cwd
     rc = main(
         [
             "-f",
-            str(demo),
+            name,
             "--start",
             "49.084416,17.336309",
             "--goal",
