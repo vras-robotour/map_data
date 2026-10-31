@@ -11,7 +11,7 @@ Every parameter of the node lives in ``config/route_planner.yaml`` (or the ``par
 given above); the launch arguments below only override what they are given, so an argument
 left unset keeps the value from the file.
 
-    ros2 action send_goal /route_planner/plan_route map_data_interfaces/action/PlanRoute \\
+    ros2 action send_goal /route_planner/plan_route map_data_interfaces/action/PlanRoute \
         "{waypoints: [{latitude: 50.1067, longitude: 14.4193}], start_from_robot: true}"
 """
 
