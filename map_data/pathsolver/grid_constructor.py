@@ -53,11 +53,9 @@ class PathGrid:
     path_cost_cap : float
         Upper bound applied to a way's combined ``highway`` + ``surface``
         cost before distance falloff is applied.
-    grid : np.ndarray
-        Flat point representation of the grid. ``(N, 2)`` columns
-        ``[x, y]`` immediately after construction (see
-        :meth:`create_empty_grid`); replaced by an ``(N, 4)`` array with
-        columns ``[x, y, 0, cost]`` after :meth:`fill` is called.
+    grid : np.ndarray or None
+        Flat point representation of the grid, ``(N, 4)`` with columns
+        ``[x, y, 0, cost]``, built by :meth:`fill` (``None`` before).
     grid_2d_cache : np.ndarray or None
         Most recent rasterized, obstacle-burned cost grid built by
         :meth:`fill`, or ``None`` before ``fill`` has been called.
@@ -104,7 +102,8 @@ class PathGrid:
         self.default_off_path_cost = default_off_path_cost
         self.path_cost_cap = path_cost_cap
 
-        self.grid = self.create_empty_grid()
+        # Built by fill(): a planner that never needs the grid never pays for it.
+        self.grid: np.ndarray | None = None
         self.grid_2d_cache: np.ndarray | None = None
 
     def create_empty_grid(self) -> np.ndarray:
@@ -123,8 +122,7 @@ class PathGrid:
         Returns
         -------
         np.ndarray
-            ``(N, 2)`` array with columns ``[x, y]`` (:meth:`fill` replaces it
-            with the ``(N, 4)`` ``[x, y, 0, cost]`` array).
+            ``(N, 2)`` array with columns ``[x, y]``.
 
         """
         half = self.cell_size / 2.0
@@ -210,10 +208,9 @@ class PathGrid:
         points = map_data.get_points()
 
         # 1. Initialize path_grid with default off-path cost
-        n = len(self.grid)
-        path_grid = np.column_stack(
-            (self.grid[:, :2], np.zeros(n), np.full(n, self.default_off_path_cost))
-        )
+        cells = self.create_empty_grid()
+        n = len(cells)
+        path_grid = np.column_stack((cells, np.zeros(n), np.full(n, self.default_off_path_cost)))
 
         bbox = sh.box(self.low[0], self.low[1], self.high[0], self.high[1])
         bbox_buffered = bbox.buffer(max_path_dist)
@@ -306,9 +303,7 @@ class PathGrid:
         construction in :meth:`create_empty_grid` — and clipped into range
         to absorb any floating-point spill at the upper edge. Note this
         reads column index 3 (cost) of :attr:`grid`, so it must be called
-        after :meth:`fill` has replaced the initial ``(N, 2)`` grid with the
-        ``(N, 4)`` cost-augmented one; calling it beforehand raises an
-        ``IndexError``. Obstacle burning is *not* applied here — see
+        after :meth:`fill` has built it. Obstacle burning is *not* applied here — see
         :meth:`burn_obstacles`.
 
         Returns
