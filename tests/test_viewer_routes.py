@@ -4,6 +4,7 @@ import io
 import json
 import math
 import os
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -14,18 +15,24 @@ import cv2
 import numpy as np
 import pytest
 import utm
-from shapely.geometry import LineString
+from conftest import STROMOVKA_FIXTURE
+from shapely.geometry import LineString, box
 
 from map_data.map_data import MapData
 from map_data.pathsolver.replan import grid_defaults
 from map_data.pathsolver.route import RoutePlanningError
 from map_data.utils.way import Way
 from map_data.viewer.app import ACCESS_TOKEN_COOKIE, MAX_CONTENT_LENGTH, create_app
-from map_data.viewer.cache import _file_signature
+from map_data.viewer.cache import _file_signature, load_mapdata_cached
 from map_data.viewer.routes import files as viewer_files
 from map_data.viewer.routes import planning as viewer_planning
 from map_data.viewer.routes import sharing as viewer_sharing
-from map_data.viewer.routes.common import MAX_FETCH_AREA_KM2, MAX_GRID_CELLS, _bbox_area_km2
+from map_data.viewer.routes.common import (
+    MAX_FETCH_AREA_KM2,
+    MAX_GRID_CELLS,
+    _bbox_area_km2,
+    get_merged_mapdata,
+)
 from map_data.viewer.tracker_routes import TRACKER_EXTENSION
 
 
@@ -937,18 +944,35 @@ def test_cost_grid_small_bbox_returns_image(app_client_with_file):
     assert {153, 102} <= alphas  # the footway's path cells and open terrain
 
 
+def test_cost_grid_shows_obstacles(tmp_path):
+    e, n, zn, zl = utm.from_latlon(50.0, 14.0)
+    md = MapData([np.array([[e, n], [e + 100, n + 100]]), int(zn), zl], coords_type="array")
+    md.barriers_list.append(
+        Way(id=2, nodes=[], tags={"barrier": "wall"}, line=box(e + 10, n + 10, e + 40, n + 40))
+    )
+    md.save(str(tmp_path / "wall.mapdata"))
+    client = create_app(data_dir=str(tmp_path)).test_client()
+
+    resp = client.get(
+        "/api/cost_grid?file=wall.mapdata&min_lat=50.0&min_lon=14.0&max_lat=50.0005&max_lon=14.0005"
+    )
+
+    rgba = _decode_png_rgba(resp.get_json()["image"])
+    assert (rgba[..., 3] == 255).any()  # the wall is drawn opaque black
+    assert not rgba[rgba[..., 3] == 255][:, :3].any()
+
+
 def test_cost_grid_image_resamples_utm_cells_onto_latlon_pixels():
     # 200 x 100 one-metre cells near Prague (meridian convergence ~0.4 deg), with
     # one column band per colour class.
     zn, zl = 33, "U"
     x0, y0, _, _ = utm.from_latlon(50.1, 14.42, zn, zl)
     low = (x0, y0)
-    xs, ys = np.meshgrid(np.arange(200) + 0.5, np.arange(100) + 0.5)
-    band_cost = np.array([0.0, 0.425, 0.95, 1.0])
+    xs, _ = np.meshgrid(np.arange(200) + 0.5, np.arange(100) + 0.5)
+    band_cost = np.array([0.0, 0.425, 0.95, np.inf])
     costs = band_cost[(xs // 50).astype(int)]
-    grid = np.column_stack([xs.ravel() + x0, ys.ravel() + y0, np.zeros(xs.size), costs.ravel()])
 
-    rgba, ((s, w), (n, e)) = viewer_planning._cost_grid_image(grid, low, 1.0, 0.9, 0.85, zn, zl)
+    rgba, ((s, w), (n, e)) = viewer_planning._cost_grid_image(costs, low, 1.0, 0.9, 0.85, zn, zl)
     expected_by_band = [(0, 255, 0, 153), (127, 127, 0, 153), (68, 68, 68, 102), (0, 0, 0, 255)]
     height, width, _ = rgba.shape
     seen_outside = False
@@ -1308,11 +1332,8 @@ def test_fetch_area_does_not_overwrite_an_existing_map(app_client, mock_overpass
     assert (tmp_path / "small.mapdata").read_text() == "old"
 
 
-def test_upload_gpx_does_not_overwrite_an_existing_map(
-    app_client, mock_overpass_client, monkeypatch
-):
+def test_upload_gpx_does_not_overwrite_an_existing_map(app_client, mock_overpass_client):
     client, tmp_path = app_client
-    monkeypatch.chdir(tmp_path)  # MapData writes its OSM cache next to the relative GPX name
     (tmp_path / "trk.mapdata").write_text("old")
     gpx = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -1326,6 +1347,9 @@ def test_upload_gpx_does_not_overwrite_an_existing_map(
     assert resp.status_code == 200
     assert resp.get_json()["filename"] == "trk_1.mapdata"
     assert (tmp_path / "trk.mapdata").read_text() == "old"
+    # the OSM response cache lands beside the map, not in the server's working directory
+    assert (tmp_path / "trk_1.osm_cache.json").is_file()
+    assert not Path("trk.osm_cache.json").exists()
 
 
 # ── native export ────────────────────────────────────────────────────────────
@@ -1334,6 +1358,29 @@ def test_upload_gpx_does_not_overwrite_an_existing_map(
 def test_export_native_missing_param(app_client):
     client, _ = app_client
     assert client.get("/api/export").status_code == 400
+
+
+def test_merged_mapdata_leaves_the_cached_map_untouched(tmp_path):
+    for src in STROMOVKA_FIXTURE.parent.glob("stromovka.*"):
+        shutil.copy(src, tmp_path / src.name)
+    app = create_app(data_dir=str(tmp_path))
+    store_path = tmp_path / "stromovka.annotations.json"
+    store = json.loads(store_path.read_text())
+    with app.test_request_context():
+        base = load_mapdata_cached(str(tmp_path / "stromovka.mapdata"))
+        victim = next(w for w in base.footways_list if w.id == 33898716)
+        store["tag_overrides"] = {str(victim.id): {"highway": "steps"}}
+        store_path.write_text(json.dumps(store))
+
+        def snapshot():
+            return list(base.footways_list), dict(base.nodes_cache), dict(victim.tags)
+
+        before = snapshot()
+        merged, _ = get_merged_mapdata("stromovka.mapdata")
+
+    assert snapshot() == before
+    assert len(merged.footways_list) < len(base.footways_list)  # the deleted ways are gone
+    assert any(w.tags.get("highway") == "steps" for w in merged.roads_list + merged.footways_list)
 
 
 def test_export_native_not_found(app_client):

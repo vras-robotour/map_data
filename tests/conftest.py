@@ -2,6 +2,7 @@
 
 import json
 import logging
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import overpy
@@ -25,6 +26,9 @@ FOOTWAY_WAYS_JSON = json.dumps(
         ],
     },
 )
+
+#: A crop of the Stromovka map (OpenStreetMap, ODbL) with a small annotation store beside it.
+STROMOVKA_FIXTURE = Path(__file__).parent / "data" / "stromovka.mapdata"
 
 EMPTY_OSM_JSON = json.dumps({"version": 0.6, "elements": []})
 
