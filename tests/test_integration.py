@@ -282,12 +282,12 @@ def test_mapdata_zone_check_ignores_a_latitude_band_boundary(caplog):
     assert "multiple UTM zones" not in caplog.text
 
 
-def test_create_mapdata_no_cache_bypasses_the_cache(tmp_path, monkeypatch, mock_overpass_client):
+def test_create_mapdata_ignores_the_cache_by_default(tmp_path, monkeypatch, mock_overpass_client):
     gpx = tmp_path / "map.gpx"
     gpx.write_text('<gpx><wpt lat="50.0" lon="14.0"/><wpt lat="50.001" lon="14.001"/></gpx>')
     (tmp_path / "map.osm_cache.json").write_text("{}")
 
-    process_map_data(str(gpx), download=True, use_cache=False)
+    process_map_data(str(gpx), download=True)
 
     mock_overpass_client.query_raw.assert_called_once()
 

@@ -25,11 +25,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  # PR runs never deploy, so they do not queue behind the gh-pages deploys.
-  group: ${{ github.event_name == 'pull_request' && format('demo-smoke-{0}', github.ref) || 'gh-pages' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
   build-demo:
     runs-on: ubuntu-latest
@@ -57,6 +52,8 @@ jobs:
   deploy-demo:
     needs: build-demo
     if: github.event_name != 'pull_request'
+    concurrency:
+      group: gh-pages
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -67,7 +64,6 @@ jobs:
           path: _demo_out
 
       - name: Deploy demo to gh-pages
-        if: github.event_name != 'pull_request'
         uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

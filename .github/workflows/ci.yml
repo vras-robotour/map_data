@@ -8,7 +8,7 @@ on:
   workflow_dispatch: {}
 
 env:
-  # Keep in sync with the ruff pin in pyproject.toml and .pre-commit-config.yaml.
+  # Keep in sync with the ruff pin in pyproject.toml.
   RUFF_VERSION: "0.16.6"
 
 permissions:
@@ -43,13 +43,6 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: uv.lock
-
       - name: Install dependencies
         # mypy needs the runtime deps to type Flask's abort() as NoReturn.
         run: uv sync --frozen
@@ -71,11 +64,6 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
         run: uv sync --frozen --python ${{ matrix.python-version }}

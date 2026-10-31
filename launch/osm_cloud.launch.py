@@ -23,7 +23,6 @@ def _resolve_data_file(name: str, mapdata_path: str) -> str:
 
 
 def launch_setup(context, *args, **kwargs):
-    config_file = resolve_config_file(LaunchConfiguration("config_file").perform(context))
     osm_grid_params = resolve_config_file(LaunchConfiguration("osm_grid_params").perform(context))
 
     mapdata_path = LaunchConfiguration("mapdata_path").perform(context)
@@ -50,7 +49,6 @@ def launch_setup(context, *args, **kwargs):
         respawn=True,
         respawn_delay=1.0,
         parameters=[
-            config_file,
             osm_grid_params,
             {
                 "mapdata_file": mapdata_file,
@@ -132,11 +130,6 @@ def generate_launch_description():
                 default_value="",
                 description="Way types the grid is drawn from: footway, road, or both "
                 '("footway,road"); empty = the value from osm_grid_params. Match route_planner\'s.',
-            ),
-            DeclareLaunchArgument(
-                "config_file",
-                default_value="helhest_jr.yaml",
-                description="Path or name (in config/) of the yaml file with topic names.",
             ),
             DeclareLaunchArgument(
                 "osm_grid_params",

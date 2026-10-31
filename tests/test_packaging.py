@@ -2,6 +2,7 @@
 
 import ast
 import re
+import sys
 import tomllib
 from pathlib import Path
 from xml.etree import ElementTree
@@ -43,20 +44,34 @@ def test_the_changelog_documents_the_released_version():
 
 def test_top_level_ros_imports_are_declared():
     """ROS package dependencies must not work only by accident of the system."""
-    ros_packages = {
-        node.findtext("name")
+    declared = {
+        node.text.strip()
         for node in ElementTree.parse(PKG / "package.xml").getroot().findall("exec_depend")
-        if node.findtext("name")
+        if node.text
     }
     imported = set()
-    for path in [*PKG.glob("map_data/*.py"), *PKG.glob("launch/*.py")]:
-        tree = ast.parse(path.read_text(), filename=str(path))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                imported.update(alias.name.split(".")[0] for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-                imported.add(node.module.split(".")[0])
+    for pattern in ("map_data/**/*.py", "launch/*.py"):
+        for path in PKG.glob(pattern):
+            tree = ast.parse(path.read_text(), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    imported.update(alias.name.split(".")[0] for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                    imported.add(node.module.split(".")[0])
 
-    py_packages = {package.removeprefix("python3-").replace("-", "_") for package in ros_packages}
-    undeclared = imported & (ros_packages | py_packages)
-    assert not undeclared, f"ROS packages imported but not declared: {sorted(undeclared)}"
+    import_to_rosdep = {
+        "yaml": "python3-yaml",
+        "cv2": "python3-opencv",
+        "flask": "python3-flask",
+        "flask_socketio": "python3-flask-socketio",
+        "gpxpy": "python3-gpxpy",
+        "numpy": "python3-numpy",
+        "overpy": "python3-overpy",
+        "shapely": "python3-shapely",
+        "utm": "python3-utm",
+        "scipy": "python3-scipy",
+    }
+    required = {import_to_rosdep.get(name, name) for name in imported}
+    allowed = set(sys.stdlib_module_names) | {"map_data", "werkzeug"} | declared
+    undeclared = required - allowed
+    assert not undeclared, f"packages imported but not declared: {sorted(undeclared)}"
