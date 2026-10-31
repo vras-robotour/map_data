@@ -22,6 +22,7 @@ class PlannerMode {
         this.dragPoint = null;     // waypoint being dragged, see _onWpDragMove
         this.hasPlannedPath = false;
         this._costGridToken = 0;
+        this._blockedToken = 0;
 
         this.init();
     }
@@ -144,6 +145,11 @@ class PlannerMode {
         document.getElementById('planner-rules-save').addEventListener('click', () => this.applyRules(true));
         for (const id of ['planner-hide-blocked', 'plan-footways', 'plan-roads']) {
             document.getElementById(id).addEventListener('change', () => this.refreshBlocked());
+        }
+        for (const id of ['plan-footways', 'plan-roads']) {
+            document.getElementById(id).addEventListener('change', () => {
+                if (document.getElementById('planner-show-grid').checked) this.fetchCostGrid();
+            });
         }
 
         document.getElementById('planner-start-at-robot')
@@ -275,13 +281,16 @@ class PlannerMode {
     }
 
     async refreshBlocked() {
+        const token = ++this._blockedToken;
         plannerBlockedIds = new Set();
         if (document.getElementById('planner-hide-blocked').checked && currentFile && !STATIC_BASE) {
             try {
                 const blocked = await this._fetchBlocked(this.rulesYaml);
+                if (token !== this._blockedToken) return;
                 plannerBlockedIds = new Set(blocked.map(([id]) => id));
                 setStatus(`Hiding ${blocked.length} ways the planner won't use`, 'text-info');
             } catch (err) {
+                if (token !== this._blockedToken) return;
                 setStatus(`Failed to evaluate rules: ${err.message}`, 'text-danger');
             }
         }
@@ -404,6 +413,7 @@ class PlannerMode {
                     max_lat: bounds.getNorth(), max_lon: bounds.getEast(),
                     highway_costs: JSON.stringify(this.highwayCosts),
                     surface_costs: JSON.stringify(this.surfaceCosts),
+                    allowed_ways: this._allowedWays().join(','),
                 },
             });
             if (!res.ok) throw new Error(await errorText(res));
@@ -472,7 +482,7 @@ class PlannerMode {
                 fillOpacity: 1,
                 draggable: true,
                 bubblingMouseEvents: false
-            }).addTo(map);
+            });
 
             // Custom drag handling for CircleMarker
             const onWpDown = (e) => {
@@ -487,7 +497,7 @@ class PlannerMode {
             const wpHit = L.circleMarker([p.lat, p.lon], {
                 radius: 14, fillOpacity: 0, opacity: 0,
                 bubblingMouseEvents: false, interactive: true,
-            }).addTo(map);
+            });
             wpHit.on('mousedown', onWpDown);
             this.markerLayer.addLayer(wpHit);
 
@@ -514,8 +524,9 @@ class PlannerMode {
     drawPathLine() {
         if (this.pathPolyline) {
             map.removeLayer(this.pathPolyline);
+            this.pathPolyline = null;
         }
-        if (this.points.length < 2) return;
+        if (!this.active || this.points.length < 2) return;
 
         const algorithm = document.querySelector('input[name="plan-mode"]:checked').value;
         // For graph mode, don't show the straight line if a path hasn't been returned by the server

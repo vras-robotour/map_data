@@ -253,6 +253,7 @@ function showProps(props, feature = null) {
 }
 
 function clearNodes() {
+    _nodeLoadToken++; // drops any node fetch still in flight
     if (nodeLayer) { map.removeLayer(nodeLayer); nodeLayer = null; }
     if (osmEditLayer) {
         osmEditLayer.off('mousedown', _onOsmWayDragDown);
@@ -457,9 +458,8 @@ async function splitCurrentWay(wayId, nodeId) {
             newLayer._osmCat = newLayer._featureRef.properties.category;
             newLayer.setStyle(HIGHLIGHT_STYLES[newLayer._osmCat]);
             showProps(newLayer._featureRef.properties, newLayer._featureRef);
-            // Clear nodes but immediately reload them for the new segment
             clearNodes();
-            loadNodesForEditing(newLayer._featureRef, newLayer);
+            toggleNodes();
         } else {
             deselectCurrent();
         }
@@ -477,8 +477,13 @@ async function toggleNodes() {
     if (nodeLayer) { clearNodes(); showProps(feature.properties, feature); return; }
 
     setStatus('Loading nodes…', 'text-secondary');
+    const token = ++_nodeLoadToken;
     try {
         const data = await fetchWayNodes(currentFile, feature.properties.id);
+        if (token !== _nodeLoadToken || feature !== currentClickedFeature) {
+            setStatus('', 'text-secondary');
+            return;
+        }
         currentNodes = data.nodes;
         nodeMarkers = [];
         nodeLayer = L.layerGroup().addTo(map);
@@ -497,7 +502,7 @@ async function toggleNodes() {
         setStatus('', 'text-secondary');
         showProps(feature.properties, feature);
     } catch (err) {
-        setStatus(`Node load failed: ${err.message}`, 'text-danger');
+        if (token === _nodeLoadToken) setStatus(`Node load failed: ${err.message}`, 'text-danger');
     }
 }
 
@@ -541,7 +546,7 @@ document.getElementById('way-edit-save')?.addEventListener('click', async () => 
     const res = await api('PUT', `/api/ways/${editingWayId}/tags`, {
         query: { file: currentFile }, body: { tags, category: cat, label: lbl }, readOnlyMsg: 'Editing',
     });
-    if (!res.ok) { setStatus('Save failed', 'text-danger'); return; }
+    if (!res.ok) { setStatus(`Save failed: ${await errorText(res)}`, 'text-danger'); return; }
     redoStack = [];
     bootstrap.Modal.getOrCreateInstance(document.getElementById('way-edit-modal')).hide();
     const existingIdx = changeLog.findIndex(c => c.type === 'tag' && String(c.id) === String(editingWayId));
@@ -653,17 +658,10 @@ async function showWay(wayId) {
 
 function focusFeatureById(wayId) {
     // Search visible layers first
-    for (const cat of ['road', 'footway', 'barrier', 'crossroad']) {
-        const catLayer = geoLayers[cat];
-        if (!catLayer) continue;
-        let found = null;
-        catLayer.eachLayer(l => { if (String(l._featureId) === String(wayId)) found = l; });
-        if (found) {
-            _highlight(found, cat);
-            showProps(found._featureRef.properties, found._featureRef);
-            try { map.fitBounds(found.getBounds(), { maxZoom: 18, padding: [40, 40] }); } catch (_) { }
-            return;
-        }
+    const shown = _reselectFeature(wayId);
+    if (shown) {
+        try { map.fitBounds(shown.getBounds(), { maxZoom: 18, padding: [40, 40] }); } catch (_) { }
+        return;
     }
     // Search hidden layers still tracked in subtypeLayers
     for (const cat of ['road', 'footway', 'barrier']) {
@@ -1135,16 +1133,7 @@ async function revertAnnotationGeometry(id) {
         return;
     }
     ann.geometry = structuredClone(baseline);
-    if (editSelectedLayer && editSelectedLayer.options._ann_id === id) {
-        if (editSelectedLayer.editing) editSelectedLayer.editing.disable();
-        editSelectedLayer = null;
-    }
     renderAnnotationLayer();
-    if (currentMode === 'edit') {
-        // Re-attach drag handlers to the rebuilt annotation layers
-        disableAnnotationEditMode();
-        enableAnnotationEditMode();
-    }
     renderAnnotationList();
     setStatus('Annotation geometry reverted', 'text-success');
 }

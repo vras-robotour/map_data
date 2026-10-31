@@ -48,6 +48,7 @@ function addAnnotationToLayer(ann) {
 }
 
 function renderAnnotationLayer() {
+    if (currentMode === 'edit') disableAnnotationEditMode(); // unbind handles from the layers being dropped
     drawnItems.clearLayers();
     annotations.forEach(addAnnotationToLayer);
     const cb = document.querySelector(`[data-layer="annotation"]`);
@@ -203,6 +204,7 @@ function updateWayWithSegments(originalWayId, segments) {
             }
         }).eachLayer(l => l.addTo(layerGroup)); // Add individual layers, not the group
     });
+    filterLayers(document.getElementById('feature-search')?.value || '');
     return firstLayer;
 }
 
@@ -285,13 +287,11 @@ function applyAnnData(annData, { withChangeLog = true } = {}) {
 }
 
 // applyAnnData plus `annotations` itself, its baselines and the side panels.
-function applyAnn(annData, { refreshAnnotations = false } = {}) {
+function applyAnn(annData) {
     annotations = annData.annotations || [];
     snapshotAnnBaselines();
     applyAnnData(annData);
-    if (refreshAnnotations) {
-        renderAnnotationLayer();
-    }
+    renderAnnotationLayer();
     renderAnnotationList();
     renderChangesPanel();
     renderHiddenPanel();
@@ -299,7 +299,11 @@ function applyAnn(annData, { refreshAnnotations = false } = {}) {
 
 async function refreshMetadata(filename) {
     try {
-        applyAnn(await fetchAnnotations(filename));
+        // Way edits don't touch annotations; keep their layers and _layer refs.
+        applyAnnData(await fetchAnnotations(filename));
+        renderAnnotationList();
+        renderChangesPanel();
+        renderHiddenPanel();
     } catch (err) {
         console.error('Failed to refresh metadata:', err);
     }
@@ -341,6 +345,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         // Remove old layers before adding new ones
         Object.values(oldGeoLayers).forEach(l => l && map.removeLayer(l));
         drawnItems.clearLayers();
+        document.getElementById('planner-show-grid').checked = false; // its overlay was just removed
 
         ['road', 'footway', 'barrier', 'crossroad'].forEach(cat => {
             const features = cat === 'barrier'
@@ -402,7 +407,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
             }
         }
 
-        applyAnn(annData, { refreshAnnotations: true });
+        applyAnn(annData);
 
         currentFile = filename;
         document.getElementById('export-btn').disabled = false;
@@ -513,8 +518,9 @@ async function _refreshAnnotationsState() {
     renderHiddenPanel();
 }
 
+// Highlights and shows the visible layer for `wayId`; returns it, or null.
 function _reselectFeature(wayId) {
-    for (const cat of ['road', 'footway', 'barrier']) {
+    for (const cat of ['road', 'footway', 'barrier', 'crossroad']) {
         const catLayer = geoLayers[cat];
         if (!catLayer) continue;
         let found = null;
@@ -522,8 +528,8 @@ function _reselectFeature(wayId) {
         if (found) {
             _highlight(found, cat);
             showProps(found._featureRef.properties, found._featureRef);
-            return true;
+            return found;
         }
     }
-    return false;
+    return null;
 }
