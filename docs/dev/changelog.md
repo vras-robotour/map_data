@@ -41,6 +41,13 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - Python >= 3.12 is declared in `pyproject.toml` and `setup.py`
 - The coverage gate (72 %) runs in CI only; plain `pytest` and `colcon test` need no `pytest-cov`
 - `package.xml` lists the launch, interface and message dependencies the nodes use
+- `route_planner` fails a plan that arrives while another runs with reason `busy` instead of queueing it, so cancels and GNSS fixes always get a thread
+- `map_data_plan`, `create_mapdata` and `route_planner` resolve map file names the same way: a path, then `data/`, then `demo/`
+- The viewer's cost-grid overlay and blocked-ways list follow the *Plan on Footways/Roads* checkboxes (`allowed_ways`); empty means footways, as in the planner
+- A wormhole transfer waits up to 10 minutes for the receiver
+- The annotations of a map in a subfolder are stored next to the map, where the ROS nodes read them
+- Pre-commit runs ruff and mypy from the locked uv environment
+- `demo/buchlovice.mapdata` regenerated from current OSM data
 
 ### Fixed
 
@@ -64,6 +71,19 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - `osm_cloud`: a rejected parameter change keeps the previously published grid and intersections
 - Viewer way edits (split, add node, move nodes) reject an unknown way with 404 and a node not on the way with 400 instead of storing them
 - Viewer: saving a dragged annotation no longer reports failure and rolls back after a successful save
+- Closed fences, walls and hedges keep their closing side; moving or deleting one of their nodes no longer fills the enclosure
+- Deleting the first or last node of a closed way keeps its node list closed for routing and the point cloud
+- `create_mapdata` without `-d` re-saves to the file it loaded
+- Way deletions, node moves and tag overrides keep the crossroads of drawn paths
+- No false "multiple UTM zones" warning where two latitude bands meet
+- An out-of-range or non-finite waypoint, or a `spacing` below 0.1 m, fails with `bad_parameter` instead of crashing `route_planner` or the CLI
+- Viewer: a way's segment list no longer returns deleted segments or ways
+- Viewer: a running fetch or GPX upload reserves its file name, so a concurrent upload cannot be overwritten
+- Viewer: a non-ASCII access token works; a wrong one gets 401 instead of 500
+- Viewer: search and Revert keep working after a split, node add, undo or redo; re-segmented ways respect hidden ways and filters
+- Viewer: no stray node markers or planner waypoints left on the map, no edit handles after a View-mode split, and the robot stays hidden when its layer is off
+- The packaging test checks undeclared imports (it could never fail)
+- Docs pull-request builds no longer cancel a pending gh-pages deploy
 
 ### Removed
 
@@ -71,6 +91,9 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - `map_data.viewer.tracker_config.topic_type`
 - `data/*` is no longer installed into `share/map_data/data`; the `demo/` map is
 - `docs/dev/node_move_detach.md`; the node-move behavior is in [Data formats](data_formats.md)
+- `PathGrid.grid`, `create_empty_grid`, `get_grid_2d`, `grid_segment_blocked` and `grid_astar(simplify_path=...)`
+- `create_mapdata --no-cache` (the cache is opt-in with `--cache`), the `config_file` argument of `osm_cloud.launch.py` and the `osm_cloud` block of `helhest_jr.yaml`
+- The OSM cache's separate bounding-box check (the query hash covers it)
 
 ## [3.2.0] — 2026-10-16
 
