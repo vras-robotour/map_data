@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 import utm
 from conftest import STROMOVKA_FIXTURE
-from shapely.geometry import LineString
+from shapely.geometry import LineString, box
 
 from map_data.map_data import MapData
 from map_data.utils.way import Way
@@ -940,18 +940,35 @@ def test_cost_grid_small_bbox_returns_image(app_client_with_file):
     assert {153, 102} <= alphas  # the footway's path cells and open terrain
 
 
+def test_cost_grid_shows_obstacles(tmp_path):
+    e, n, zn, zl = utm.from_latlon(50.0, 14.0)
+    md = MapData([np.array([[e, n], [e + 100, n + 100]]), int(zn), zl], coords_type="array")
+    md.barriers_list.append(
+        Way(id=2, nodes=[], tags={"barrier": "wall"}, line=box(e + 10, n + 10, e + 40, n + 40))
+    )
+    md.save(str(tmp_path / "wall.mapdata"))
+    client = create_app(data_dir=str(tmp_path)).test_client()
+
+    resp = client.get(
+        "/api/cost_grid?file=wall.mapdata&min_lat=50.0&min_lon=14.0&max_lat=50.0005&max_lon=14.0005"
+    )
+
+    rgba = _decode_png_rgba(resp.get_json()["image"])
+    assert (rgba[..., 3] == 255).any()  # the wall is drawn opaque black
+    assert not rgba[rgba[..., 3] == 255][:, :3].any()
+
+
 def test_cost_grid_image_resamples_utm_cells_onto_latlon_pixels():
     # 200 x 100 one-metre cells near Prague (meridian convergence ~0.4 deg), with
     # one column band per colour class.
     zn, zl = 33, "U"
     x0, y0, _, _ = utm.from_latlon(50.1, 14.42, zn, zl)
     low = (x0, y0)
-    xs, ys = np.meshgrid(np.arange(200) + 0.5, np.arange(100) + 0.5)
-    band_cost = np.array([0.0, 0.425, 0.95, 1.0])
+    xs, _ = np.meshgrid(np.arange(200) + 0.5, np.arange(100) + 0.5)
+    band_cost = np.array([0.0, 0.425, 0.95, np.inf])
     costs = band_cost[(xs // 50).astype(int)]
-    grid = np.column_stack([xs.ravel() + x0, ys.ravel() + y0, np.zeros(xs.size), costs.ravel()])
 
-    rgba, ((s, w), (n, e)) = viewer_planning._cost_grid_image(grid, low, 1.0, 0.9, 0.85, zn, zl)
+    rgba, ((s, w), (n, e)) = viewer_planning._cost_grid_image(costs, low, 1.0, 0.9, 0.85, zn, zl)
     expected_by_band = [(0, 255, 0, 153), (127, 127, 0, 153), (68, 68, 68, 102), (0, 0, 0, 255)]
     height, width, _ = rgba.shape
     seen_outside = False

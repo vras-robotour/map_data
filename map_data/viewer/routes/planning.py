@@ -183,7 +183,7 @@ def get_traversability_blocked() -> Response:
 
 
 def _cost_grid_image(
-    grid: np.ndarray,
+    costs: np.ndarray,
     low: tuple[float, float],
     cell_size: float,
     off_path_cost: float,
@@ -203,8 +203,9 @@ def _cost_grid_image(
 
     Parameters
     ----------
-    grid : np.ndarray
-        ``(N, 4)`` ``[x, y, 0, cost]`` cell centres (``PathGrid.grid``).
+    costs : np.ndarray
+        ``(ny, nx)`` cell costs, row 0 at the grid's low edge, ``inf`` for obstacles
+        (``PathGrid.grid_2d_cache``).
     low : tuple of float
         UTM ``(x, y)`` corner the grid was built from.
     cell_size : float
@@ -223,12 +224,8 @@ def _cost_grid_image(
         ``[[south, west], [north, east]]`` of the image.
 
     """
-    ix = np.floor((grid[:, 0] - low[0]) / cell_size).astype(int)
-    iy = np.floor((grid[:, 1] - low[1]) / cell_size).astype(int)
-    nx, ny = int(ix.max()) + 1, int(iy.max()) + 1
-    costs = np.full((ny, nx), np.nan)
-    costs[iy, ix] = grid[:, 3]
-
+    ny, nx = costs.shape
+    off_path_cost = float(np.float32(off_path_cost))  # the grid holds float32 costs
     xs = low[0] + np.array([0, nx, 0, nx]) * cell_size
     ys = low[1] + np.array([0, 0, ny, ny]) * cell_size
     lats, lons = utm.to_latlon(xs, ys, zone_number, zone_letter)
@@ -369,14 +366,14 @@ def get_cost_grid() -> Response:
 
     replanner.fill_grid(md, highway_types=["footway", "road"])
 
-    # grid is [N, 4] -> [x, y, 0, cost]; obstacles (cost >= 1.0) are not filtered
-    # out, unlike planning, so they can be visualized too.
+    # Obstacle cells are inf, not filtered out as in planning, so they can be visualized too.
     path_grid = replanner.path_grid
-    grid = np.asarray(path_grid.grid, dtype=float)
-    if len(grid) == 0:
+    assert path_grid.grid_2d_cache is not None  # fill_grid() ran above
+    costs = np.asarray(path_grid.grid_2d_cache, dtype=float)
+    if costs.size == 0:
         return jsonify({"image": None, "bounds": None})
     rgba, bounds = _cost_grid_image(
-        grid,
+        costs,
         low,
         cell_size,
         path_grid.default_off_path_cost,

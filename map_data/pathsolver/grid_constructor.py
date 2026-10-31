@@ -140,17 +140,10 @@ class PathGrid:
         """
         Populate the grid with path and obstacle costs and rasterize it.
 
-        This is the core cost-assignment routine. It proceeds in several
-        layered passes, each of which can only *lower or override* the
-        result of the previous one for a given cell — later passes win:
+        This is the core cost-assignment routine:
 
         1. Every grid cell starts at ``default_off_path_cost``.
-        2. Obstacle geometries have any path/road geometry subtracted out
-           of them first (so a barrier polygon that happens to overlap a
-           footway does not block the footway itself), then the flat point
-           grid (:attr:`grid`) has cells whose centers fall inside a
-           (post-subtraction) obstacle set to cost ``1.0``.
-        3. Ways in *highway_types* are sampled into a dense point cloud
+        2. Ways in *highway_types* are sampled into a dense point cloud
            (roughly one point per :attr:`cell_size` of length, via linear
            interpolation), each point tagged with its way's cost
            (``min(path_cost_cap, highway_cost + surface_cost)``). Every
@@ -159,15 +152,12 @@ class PathGrid:
            (at distance 0) up to ``default_off_path_cost`` (at
            ``max_path_dist``), via
            ``way_cost + (default_off_path_cost - way_cost) * (dist / max_path_dist) ** 2``.
-           This is combined with the previous value using ``min``, so a
-           cell that is both near a path *and* inside an obstacle's
-           bounding region ends up with the (lower) path cost in
-           :attr:`grid` — hard blocking is only guaranteed by step 4 below.
-        4. The flat grid is rasterized into a 2D array (:meth:`get_grid_2d`)
-           and obstacles are burned into it as hard ``np.inf`` costs
-           (:meth:`burn_obstacles`), independently of step 2/3. This is
-           what actually prevents a planner from crossing an obstacle; the
-           result is cached in :attr:`grid_2d_cache`.
+        3. The flat grid (:attr:`grid`) is rasterized into a 2D array
+           (:meth:`get_grid_2d`) and obstacles are burned into it as hard
+           ``np.inf`` costs (:meth:`burn_obstacles`). Any path/road geometry
+           is subtracted from the obstacles first, so a barrier polygon that
+           happens to overlap a footway does not block the footway itself.
+           The result is cached in :attr:`grid_2d_cache`.
 
         Only ways whose geometry intersects the grid bounding box buffered
         by *max_path_dist* are considered, so paths just outside the grid
@@ -191,7 +181,7 @@ class PathGrid:
         max_path_dist : float
             Radius of influence of a path centerline, in world units
             (default ``2.0``). Cells farther than this from every sampled
-            path point keep the (obstacle-adjusted) off-path cost.
+            path point keep the off-path cost.
 
         Returns
         -------
@@ -240,34 +230,7 @@ class PathGrid:
                         new_obstacles.append(diff)
             effective_obstacles = new_obstacles
 
-        # 2. Mark hard obstacles in the point grid. The flat grid is the regular
-        # lattice of create_empty_grid (row-major, x fastest), so each obstacle's
-        # bounds become an index range and only that sub-block is tested.
-        if effective_obstacles and len(path_grid):
-            num_x = len(np.arange(self.low[0], self.high[0], self.cell_size))
-            num_y = len(path_grid) // num_x
-            grid_x = path_grid[:, 0].reshape(num_y, num_x)
-            grid_y = path_grid[:, 1].reshape(num_y, num_x)
-            grid_cost = path_grid[:, 3].reshape(num_y, num_x)
-            for obstacle in effective_obstacles:
-                if obstacle.geom_type not in ("Polygon", "MultiPolygon"):
-                    continue
-                minx, miny, maxx, maxy = obstacle.bounds
-                i0 = max(0, int(np.floor((minx - self.low[0]) / self.cell_size)))
-                i1 = min(num_x, int(np.ceil((maxx - self.low[0]) / self.cell_size)) + 1)
-                j0 = max(0, int(np.floor((miny - self.low[1]) / self.cell_size)))
-                j1 = min(num_y, int(np.ceil((maxy - self.low[1]) / self.cell_size)) + 1)
-                if i0 >= i1 or j0 >= j1:
-                    continue
-
-                mask_inside = sh.contains_xy(
-                    obstacle,
-                    grid_x[j0:j1, i0:i1],
-                    grid_y[j0:j1, i0:i1],
-                )
-                np.copyto(grid_cost[j0:j1, i0:i1], 1.0, where=mask_inside)
-
-        # 3. Process ways to set their costs
+        # 2. Process ways to set their costs
         # Same helper as the graph planner's edge weights, so the two
         # planners cannot start charging different prices for a way.
         costs = [
