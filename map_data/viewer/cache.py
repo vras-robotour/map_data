@@ -24,8 +24,7 @@ from map_data.map_data import MapData
 # IMPORTANT -- shared-object cache: `load_mapdata_cached` returns the *same*
 # MapData instance to every caller for a given file signature, including
 # concurrent Flask requests. Callers MUST NOT mutate the returned object (or
-# any Way inside its lists) in place; see "MapData copy semantics" in the
-# module docstring of `viewer/routes/common.py`.
+# any Way inside its lists) in place.
 
 
 def _file_signature(path: str) -> tuple[int, int, int]:

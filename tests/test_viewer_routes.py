@@ -3,6 +3,7 @@ import io
 import json
 import math
 import os
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -13,16 +14,22 @@ import cv2
 import numpy as np
 import pytest
 import utm
+from conftest import STROMOVKA_FIXTURE
 from shapely.geometry import LineString
 
 from map_data.map_data import MapData
 from map_data.utils.way import Way
 from map_data.viewer.app import ACCESS_TOKEN_COOKIE, MAX_CONTENT_LENGTH, create_app
-from map_data.viewer.cache import _file_signature
+from map_data.viewer.cache import _file_signature, load_mapdata_cached
 from map_data.viewer.routes import files as viewer_files
 from map_data.viewer.routes import planning as viewer_planning
 from map_data.viewer.routes import sharing as viewer_sharing
-from map_data.viewer.routes.common import MAX_FETCH_AREA_KM2, MAX_GRID_CELLS, _bbox_area_km2
+from map_data.viewer.routes.common import (
+    MAX_FETCH_AREA_KM2,
+    MAX_GRID_CELLS,
+    _bbox_area_km2,
+    get_merged_mapdata,
+)
 
 
 def _make_mapdata(path):
@@ -1255,6 +1262,29 @@ def test_upload_gpx_does_not_overwrite_an_existing_map(app_client, mock_overpass
 def test_export_native_missing_param(app_client):
     client, _ = app_client
     assert client.get("/api/export").status_code == 400
+
+
+def test_merged_mapdata_leaves_the_cached_map_untouched(tmp_path):
+    for src in STROMOVKA_FIXTURE.parent.glob("stromovka.*"):
+        shutil.copy(src, tmp_path / src.name)
+    app = create_app(data_dir=str(tmp_path))
+    store_path = tmp_path / "stromovka.annotations.json"
+    store = json.loads(store_path.read_text())
+    with app.test_request_context():
+        base = load_mapdata_cached(str(tmp_path / "stromovka.mapdata"))
+        victim = next(w for w in base.footways_list if w.id == 33898716)
+        store["tag_overrides"] = {str(victim.id): {"highway": "steps"}}
+        store_path.write_text(json.dumps(store))
+
+        def snapshot():
+            return list(base.footways_list), dict(base.nodes_cache), dict(victim.tags)
+
+        before = snapshot()
+        merged, _ = get_merged_mapdata("stromovka.mapdata")
+
+    assert snapshot() == before
+    assert len(merged.footways_list) < len(base.footways_list)  # the deleted ways are gone
+    assert any(w.tags.get("highway") == "steps" for w in merged.roads_list + merged.footways_list)
 
 
 def test_export_native_not_found(app_client):

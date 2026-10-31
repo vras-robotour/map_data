@@ -93,9 +93,8 @@ def _merged_mapdata_geojson(path: Path, store: dict[str, Any]) -> dict[str, Any]
     """
     Build the ``/api/mapdata`` FeatureCollection for a mapdata *path* edited by *store*.
 
-    Loads the cached ``MapData``, takes a shallow ``copy.copy`` (see the
-    :mod:`~map_data.viewer.routes.common` docstring's "MapData copy semantics" section -- this is
-    safe because :func:`apply_way_edits` never mutates a ``Way`` object shared
+    Loads the cached ``MapData``, takes a shallow ``copy.copy`` (safe
+    because :func:`apply_way_edits` never mutates a ``Way`` object shared
     with the cache), applies deletions/splits/moves via
     :func:`apply_way_edits`, merges in tag overrides via
     :func:`~map_data.annotations.apply_tag_overrides` (which looks split
@@ -548,7 +547,7 @@ def upload_gpx() -> Response:
                 )
 
             out_path = _free_mapdata_path(data_dir, name)
-            # MapData puts its OSM cache next to coords_file; keep it beside the map, not in the temp dir
+            # MapData caches the OSM response next to coords_file: keep it beside the map
             md.coords_file = str(out_path.with_suffix(".gpx"))
             try:
                 result = _query_parse_save(md, out_path)

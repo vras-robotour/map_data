@@ -1,52 +1,6 @@
 """
 Shared helpers for the viewer routes: the ``viewer`` blueprint, data-dir path
 helpers, way resolution, request validators, and the merged ``MapData`` builder.
-
-MapData copy semantics (read before touching any way-editing code)
---------------------------------------------------------------------
-:func:`~map_data.viewer.cache.load_mapdata_cached` caches parsed
-:class:`~map_data.map_data.MapData` objects process-wide, keyed by
-``(path, mtime)``. Every request that touches a given mapdata file gets
-back the *same* cached object, so code must never mutate it (or anything
-it references) in place -- doing so would corrupt the cache for every
-subsequent request. Two copy strategies are used, chosen per call site for
-a performance/safety tradeoff:
-
-- **Shallow copy** (``copy.copy``) is used for the hot, frequently-hit
-  paths: :func:`~map_data.viewer.routes.files._merged_mapdata_geojson` (behind
-  :func:`~map_data.viewer.routes.files.get_mapdata`) copies the top-level ``MapData``, and
-  :func:`_resolve_way` (used by :func:`~map_data.viewer.routes.ways.get_way`,
-  :func:`~map_data.viewer.routes.ways.get_way_nodes`, and
-  :func:`~map_data.viewer.routes.ways._get_way_segments_geojson`) copies an individual ``Way`` out
-  of the cached lists. A shallow copy only duplicates the wrapper object -- its
-  ``roads_list``/``footways_list``/``barriers_list`` (for ``MapData``) or its
-  attributes-still-pointing-at-shared-subobjects (for a ``Way``) remain *shared* with the cached
-  instance. Consequently, **every editing helper that touches a way must itself return a fresh
-  ``copy.copy`` rather than mutating its argument** -- ``rebuild_way_without_nodes``,
-  ``apply_node_position_overrides``, ``apply_added_nodes``, and
-  ``split_way`` (all in :mod:`map_data.viewer.helpers`) follow this
-  convention; any new edit helper must too. Where a whole *list* needs to
-  change (see :func:`apply_way_edits`), it is replaced via
-  ``setattr(md, lst_name, new_lst)`` on the already-copied top-level
-  object, not mutated in place, so the cached list itself is left alone.
-- **Deep copy** (``copy.deepcopy``) is used once, in
-  :func:`get_merged_mapdata`, which backs export and path planning. That
-  path synthesizes new ``Way`` objects from annotations, reassigns
-  ``roads_list``/``footways_list`` wholesale, and reassigns ``w.tags`` for
-  tag overrides directly on ways pulled out of the copied lists; deepcopy
-  sidesteps having to audit every one of those sites for the
-  copy-before-mutate discipline above, at the cost of being noticeably
-  slower for large mapdata files. Because that cost is paid only on
-  export/planning, and only once per map and set of edits (the result is
-  cached and shared, so it is read-only to its callers), it is not worth applying
-  everywhere; :func:`~map_data.viewer.routes.files._merged_mapdata_geojson`/:func:`_resolve_way`
-  intentionally keep the cheaper shallow copy plus the manual-copy
-  discipline instead.
-
-Functions relying on this invariant: :func:`~map_data.viewer.routes.files._merged_mapdata_geojson`,
-:func:`apply_way_edits`, :func:`_resolve_way`, :func:`~map_data.viewer.routes.ways.get_way`,
-:func:`~map_data.viewer.routes.ways.get_way_nodes`,
-:func:`~map_data.viewer.routes.ways._get_way_segments_geojson`, :func:`get_merged_mapdata`.
 """
 
 import copy
@@ -70,9 +24,7 @@ from werkzeug.exceptions import HTTPException
 
 from map_data.annotations import (
     _CAT_FOR_LIST,
-    apply_tag_overrides,
-    apply_way_edits,
-    merge_annotations,
+    apply_store,
 )
 from map_data.map_data import MapData
 from map_data.pathsolver.route import MAX_GRID_CELLS as MAX_GRID_CELLS  # re-exported
@@ -164,7 +116,7 @@ def _resolve_way(
     :func:`~map_data.viewer.routes.ways.get_way_nodes`, and
     :func:`~map_data.viewer.routes.ways._get_way_segments_geojson`: find the way in ``md``'s
     ``roads_list``/``footways_list``/``barriers_list`` (making a ``copy.copy`` so the cached
-    ``MapData`` is never mutated -- see the module docstring), then apply node deletions, added
+    ``MapData`` is never mutated), then apply node deletions, added
     nodes, and node position overrides recorded in *store* for ``search_id``, in that
     order except for added-nodes vs. overrides, whose relative order is
     controlled by *added_nodes_before_overrides* because callers
@@ -681,23 +633,18 @@ def get_merged_mapdata(filename: str) -> tuple[MapData | None, dict[str, Any] | 
     :func:`~map_data.viewer.routes.planning.get_cost_grid`, and
     :func:`~map_data.viewer.routes.planning.create_replan`, all of which need a genuinely
     self-consistent ``MapData`` (not just a GeoJSON view of one) to feed to
-    :mod:`map_data.utils.serialization` or the path planner. Deep-copies the cached ``MapData`` (see
-    the module docstring's "MapData copy semantics" section for why deepcopy is used here rather
-    than the shallow-copy-plus-manual-Way-copy convention used elsewhere) before:
+    :mod:`map_data.utils.serialization` or the path planner. Applies the store to the cached
+    ``MapData`` with :func:`~map_data.annotations.apply_store`, which copies the containers
+    and leaves the cached map untouched:
 
-    1. Applying way/node deletions, splits, and node moves via
-       :func:`apply_way_edits`.
-    2. Merging tag overrides directly into each way's ``tags`` (mutating
-       the way in place -- safe only because of the deepcopy), then
-       re-sorting every way between ``roads_list``/``footways_list`` in
-       case an overridden ``highway`` tag changed its category, and
-       recomputing ``crossroads_list``.
-    3. Synthesizing a new ``Way`` for each freehand annotation
-       (``store["annotations"]``, from :func:`~map_data.viewer.routes.annotations.add_annotation`):
-       a ``"path"`` annotation becomes a road/footway (buffered by its
-       ``width`` tag if the geometry is a ``LineString``, with synthetic
-       negative node IDs registered in ``md.nodes_cache``), anything else
-       becomes a barrier.
+    1. Way/node deletions, splits, and node moves.
+    2. Tag overrides, re-sorting every way between ``roads_list``/``footways_list`` in case an
+       overridden ``highway`` tag changed its category, and recomputing ``crossroads_list``.
+    3. A new ``Way`` for each freehand annotation (``store["annotations"]``, from
+       :func:`~map_data.viewer.routes.annotations.add_annotation`): a ``"path"`` annotation
+       becomes a road/footway (buffered by its ``width`` tag if the geometry is a
+       ``LineString``, with synthetic negative node IDs registered in ``md.nodes_cache``),
+       anything else becomes a barrier.
 
     The result is cached by :func:`~map_data.viewer.cache.merged_mapdata_cached`
     (map file signature plus annotation store digest) and shared between
@@ -722,10 +669,6 @@ def get_merged_mapdata(filename: str) -> tuple[MapData | None, dict[str, Any] | 
     store = load_annotations(str(_annotation_path(filename)))
 
     def build() -> MapData:
-        md = copy.deepcopy(load_mapdata_cached(str(path)))
-        apply_way_edits(md, store)
-        apply_tag_overrides(md, store)
-        merge_annotations(md, store)
-        return md
+        return apply_store(load_mapdata_cached(str(path)), store)
 
     return merged_mapdata_cached(str(path), store, build), store
