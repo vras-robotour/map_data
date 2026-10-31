@@ -820,6 +820,19 @@ class TestOSMCloudParameterCallback:
         assert node.grid_bounds_auto == old_auto
         assert node.grid_cloud is old_cloud
 
+    def test_a_failed_second_rebuild_keeps_the_old_outputs(self, node):
+        node.publish_intersections = True
+        old_cloud, old_poses, old_markers = node.grid_cloud, node.poses, node.markers
+        with (
+            patch.object(node, "get_cloud", return_value=MagicMock(name="new cloud")),
+            patch.object(node, "get_intersections", side_effect=RuntimeError("boom")),
+        ):
+            result = node.parameter_callback(self._change(grid_max=[3.0, 3.0]))
+
+        assert result.successful is False
+        assert node.grid_cloud is old_cloud
+        assert (node.poses, node.markers) == (old_poses, old_markers)
+
     def test_a_valid_change_is_applied_and_republished(self, node):
         grid_pub = dict(node.created_publishers)[node.grid_topic]
 
