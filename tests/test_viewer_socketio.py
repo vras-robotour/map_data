@@ -13,6 +13,32 @@ def test_a_client_can_connect(tmp_path):
     client.disconnect()
 
 
+def test_a_client_without_the_access_token_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "sekret")
+    app = create_app(data_dir=str(tmp_path))
+
+    assert not socketio.test_client(app).is_connected()
+    assert not socketio.test_client(app, query_string="access_token=wrong").is_connected()
+    good = socketio.test_client(app, query_string="access_token=sekret")
+    assert good.is_connected()
+    good.disconnect()
+    header = socketio.test_client(app, headers={"X-Access-Token": "sekret"})
+    assert header.is_connected()
+    header.disconnect()
+
+
+def test_the_token_is_stripped_from_the_url_after_setting_the_cookie(tmp_path, monkeypatch):
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "sekret")
+    client = create_app(data_dir=str(tmp_path)).test_client()
+
+    resp = client.get("/?access_token=sekret&file=a.mapdata")
+    assert resp.status_code == 302
+    assert resp.headers["Location"] == "/?file=a.mapdata"
+    assert ACCESS_TOKEN_COOKIE in resp.headers["Set-Cookie"]
+    assert client.get("/").status_code == 200  # the cookie alone authenticates now
+    assert client.get("/?access_token=wrong").status_code == 401
+
+
 def test_main_exits_cleanly_on_sigint(tmp_path, monkeypatch):
     stopped = []
     monkeypatch.setattr(viewer_app, "stop_ros", lambda: stopped.append(True))

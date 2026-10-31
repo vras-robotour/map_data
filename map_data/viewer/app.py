@@ -8,8 +8,9 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
-from flask import Flask, Response, abort, request
+from flask import Flask, Response, abort, redirect, request
 from flask_socketio import SocketIO
 
 from ..utils.config import config_path, setup_logging
@@ -181,9 +182,24 @@ def create_app(
     # Optional access-token gate (opt-in via MAP_DATA_ACCESS_TOKEN, see above).
     # Checked fresh on every request so it's a no-op when the env var is unset.
     @app.before_request
-    def _enforce_access_token() -> None:
+    def _enforce_access_token() -> Response | None:
         if not _access_token_valid(request):
             abort(401, "Missing or invalid access token")
+        expected = _configured_access_token()
+        if (
+            expected
+            and request.method == "GET"
+            and not request.path.startswith("/socket.io")
+            and request.args.get(ACCESS_TOKEN_QUERY_PARAM) == expected
+        ):
+            # Redirect to the same URL without the token (the cookie set in
+            # _persist_access_token_cookie carries it from here on), so it stays out of
+            # access logs, the history and the Referer.
+            rest = [
+                (k, v) for k, v in request.args.items(multi=True) if k != ACCESS_TOKEN_QUERY_PARAM
+            ]
+            return redirect(request.path + (f"?{urlencode(rest)}" if rest else ""))
+        return None
 
     @app.after_request
     def _persist_access_token_cookie(response: Response) -> Response:
