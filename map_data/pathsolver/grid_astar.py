@@ -245,7 +245,40 @@ def grid_astar(
         # Rounding to float32 is monotonic: a step that is no shorter in float64 cannot
         # be shorter rounded, which skips the rounding for most (already reached) cells.
         # An inf cost fails the first test on its own.
-        for v, cost in ((down, c_down), (up, c_up), (left, c_left), (right, c_right)):
+        # Unrolled: a loop over the eight neighbours costs ~10% of the search.
+        if g + c_down < g_scores[down]:
+            _f32[0] = g + c_down
+            new_g = _f32[0]
+            if new_g < g_scores[down]:
+                g_scores[down] = new_g
+                parents[down] = u
+                heappush(pq, (new_g + heuristic[down], new_g, down))
+        if g + c_up < g_scores[up]:
+            _f32[0] = g + c_up
+            new_g = _f32[0]
+            if new_g < g_scores[up]:
+                g_scores[up] = new_g
+                parents[up] = u
+                heappush(pq, (new_g + heuristic[up], new_g, up))
+        if g + c_left < g_scores[left]:
+            _f32[0] = g + c_left
+            new_g = _f32[0]
+            if new_g < g_scores[left]:
+                g_scores[left] = new_g
+                parents[left] = u
+                heappush(pq, (new_g + heuristic[left], new_g, left))
+        if g + c_right < g_scores[right]:
+            _f32[0] = g + c_right
+            new_g = _f32[0]
+            if new_g < g_scores[right]:
+                g_scores[right] = new_g
+                parents[right] = u
+                heappush(pq, (new_g + heuristic[right], new_g, right))
+        # Diagonal moves must not slip between two corner-touching blocked
+        # cells: both edge-adjacent cells have to be free.
+        if c_left != inf and c_down != inf:
+            v = left - 1
+            cost = diag_costs[v]
             if g + cost < g_scores[v]:
                 _f32[0] = g + cost
                 new_g = _f32[0]
@@ -253,22 +286,35 @@ def grid_astar(
                     g_scores[v] = new_g
                     parents[v] = u
                     heappush(pq, (new_g + heuristic[v], new_g, v))
-        # Diagonal moves must not slip between two corner-touching blocked
-        # cells: both edge-adjacent cells have to be free.
-        for v, side_a, side_b in (
-            (left - 1, c_left, c_down),
-            (left + 1, c_left, c_up),
-            (right - 1, c_right, c_down),
-            (right + 1, c_right, c_up),
-        ):
-            if side_a != inf and side_b != inf:
-                cost = diag_costs[v]
-                if g + cost < g_scores[v]:
-                    _f32[0] = g + cost
-                    new_g = _f32[0]
-                    if new_g < g_scores[v]:
-                        g_scores[v] = new_g
-                        parents[v] = u
-                        heappush(pq, (new_g + heuristic[v], new_g, v))
+        if c_left != inf and c_up != inf:
+            v = left + 1
+            cost = diag_costs[v]
+            if g + cost < g_scores[v]:
+                _f32[0] = g + cost
+                new_g = _f32[0]
+                if new_g < g_scores[v]:
+                    g_scores[v] = new_g
+                    parents[v] = u
+                    heappush(pq, (new_g + heuristic[v], new_g, v))
+        if c_right != inf and c_down != inf:
+            v = right - 1
+            cost = diag_costs[v]
+            if g + cost < g_scores[v]:
+                _f32[0] = g + cost
+                new_g = _f32[0]
+                if new_g < g_scores[v]:
+                    g_scores[v] = new_g
+                    parents[v] = u
+                    heappush(pq, (new_g + heuristic[v], new_g, v))
+        if c_right != inf and c_up != inf:
+            v = right + 1
+            cost = diag_costs[v]
+            if g + cost < g_scores[v]:
+                _f32[0] = g + cost
+                new_g = _f32[0]
+                if new_g < g_scores[v]:
+                    g_scores[v] = new_g
+                    parents[v] = u
+                    heappush(pq, (new_g + heuristic[v], new_g, v))
 
     return None
