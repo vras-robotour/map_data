@@ -330,7 +330,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         });
 
         // Pre-compute hidden way IDs before building layers
-        const _loadHiddenIds = new Set(_parseWayList(annData.hidden_ways).map(d => String(d.id).split(':')[0]));
+        const hiddenIds = new Set(_parseWayList(annData.hidden_ways).map(d => String(d.id).split(':')[0]));
 
         // Reset subtype state for fresh load
         ['road', 'footway', 'barrier', 'crossroad'].forEach(cat => {
@@ -356,13 +356,13 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
             };
 
             geoLayers[cat] = L.geoJSON({ type: 'FeatureCollection', features }, layerOpts);
-            if (_loadHiddenIds.size > 0) {
-                const _toHide = [];
+            if (hiddenIds.size > 0) {
+                const toHide = [];
                 geoLayers[cat].eachLayer(l => {
                     const origId = String(l._featureId).split(':')[0];
-                    if (_loadHiddenIds.has(origId) || _loadHiddenIds.has(String(l._featureId))) _toHide.push(l);
+                    if (hiddenIds.has(origId) || hiddenIds.has(String(l._featureId))) toHide.push(l);
                 });
-                _toHide.forEach(l => geoLayers[cat].removeLayer(l));
+                toHide.forEach(l => geoLayers[cat].removeLayer(l));
             }
             const cb = document.querySelector(`[data-layer="${cat}"]`);
             if (cb && cb.checked) geoLayers[cat].addTo(map);

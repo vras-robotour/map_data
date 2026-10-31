@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import logging
 import random
 import threading
@@ -125,11 +123,11 @@ class ReplanPath:
         )
 
         # Shared with the graph planner, so both price a way alike.
-        self.HIGHWAY_COSTS, self.SURFACE_COSTS, self.PATH_COST_CAP = load_cost_tables(
+        self.highway_costs, self.surface_costs, self.path_cost_cap = load_cost_tables(
             highway_costs,
             surface_costs,
         )
-        self.DEFAULT_OFF_PATH_COST = float(defaults.get("default_off_path_cost", 0.9))
+        self.default_off_path_cost = float(defaults.get("default_off_path_cost", 0.9))
 
         # Informed sampling and post-goal improvement default on here (off in RRTStar).
         rrt_defaults = defaults.get("rrt", {})
@@ -148,10 +146,10 @@ class ReplanPath:
             low=low,
             high=high,
             cell_size=cell_size,
-            highway_costs=self.HIGHWAY_COSTS,
-            surface_costs=self.SURFACE_COSTS,
-            default_off_path_cost=self.DEFAULT_OFF_PATH_COST,
-            path_cost_cap=self.PATH_COST_CAP,
+            highway_costs=self.highway_costs,
+            surface_costs=self.surface_costs,
+            default_off_path_cost=self.default_off_path_cost,
+            path_cost_cap=self.path_cost_cap,
         )
 
         if inflate_obstacles:
@@ -186,7 +184,7 @@ class ReplanPath:
                 goal = path[i + 1][:2]
                 segment_path = [start]
                 path_seg = LineString([start, goal])
-                if self._colides(path_seg):
+                if self._collides(path_seg):
                     ends = self._free_ends(start, goal)
                     if ends is None:
                         logger.warning("leg %d: %s", i, self.failure_reason)
@@ -210,9 +208,9 @@ class ReplanPath:
                     # first/last vertex where the hop from the requested point would
                     # otherwise cross an obstacle.
                     mid = list(way[1:-1])
-                    if self._colides(LineString([start, mid[0] if mid else way[-1]])):
+                    if self._collides(LineString([start, mid[0] if mid else way[-1]])):
                         mid.insert(0, way[0])
-                    if self._colides(LineString([mid[-1] if mid else start, goal])):
+                    if self._collides(LineString([mid[-1] if mid else start, goal])):
                         mid.append(way[-1])
                     segment_path.extend(mid)
 
@@ -277,7 +275,7 @@ class ReplanPath:
 
         # 2. Smooth path if requested
         if self.smooth_path:
-            path = smooth_path(path, collision_check_func=self._colides)
+            path = smooth_path(path, collision_check_func=self._collides)
 
         # 3. The only simplification pass (grid_astar and RRTStar return raw paths).
         #    A shortcut that hits an obstacle polygon keeps its original vertices.
@@ -285,7 +283,7 @@ class ReplanPath:
             path = simplify_path_checked(
                 path,
                 self.cell_size,
-                lambda p1, p2: self._colides(LineString([p1, p2])),
+                lambda p1, p2: self._collides(LineString([p1, p2])),
             )
 
         return path
@@ -331,7 +329,7 @@ class ReplanPath:
             grid_cost_weight=self.grid_cost_weight,
         )
 
-    def _colides(self, path_seg: LineString) -> bool:
+    def _collides(self, path_seg: LineString) -> bool:
         if self.obstacles_tree is None:
             return False
         intersecting_indices = self.obstacles_tree.query(path_seg, predicate="intersects")

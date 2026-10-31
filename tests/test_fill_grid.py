@@ -59,7 +59,7 @@ def test_fill_grid_cells_on_footway_have_low_cost():
     y_idx = min(y_idx, grid_2d.shape[0] - 1)
     x_idx = min(x_idx, grid_2d.shape[1] - 1)
 
-    assert grid_2d[y_idx, x_idx] < rp.DEFAULT_OFF_PATH_COST
+    assert grid_2d[y_idx, x_idx] < rp.default_off_path_cost
 
 
 def test_fill_grid_cells_far_from_footway_have_high_cost():
@@ -72,7 +72,7 @@ def test_fill_grid_cells_far_from_footway_have_high_cost():
     # Far from footway: n0+0 → y_idx=0, far from any path
     corner_cost = grid_2d[0, 0]
     assert not np.isinf(corner_cost)
-    assert corner_cost >= rp.DEFAULT_OFF_PATH_COST - 0.05  # allow tiny float tolerance
+    assert corner_cost >= rp.default_off_path_cost - 0.05  # allow tiny float tolerance
 
 
 # ── barrier obstacles ─────────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ def test_fill_grid_no_zero_cost_cells_off_path():
                     f"cell ({ix},{iy}) at ({x},{y}), {dist_to_way:.2f}m from the "
                     f"footway, has stray zero cost"
                 )
-                assert cost == pytest.approx(rp.DEFAULT_OFF_PATH_COST)
+                assert cost == pytest.approx(rp.default_off_path_cost)
 
     # Sanity check that the test actually exercised off-path cells.
     assert off_path_cells > 0

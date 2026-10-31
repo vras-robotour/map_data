@@ -7,14 +7,14 @@ const trackerMode = (() => {
     let roadPathLayer = null;
     let trailLayer = null;
     let intersectionsLayer = null;
-    let _intersectionsKey = null;
+    let intersectionsKey = null;
     let activeEnterCircle = null;
     let activeExitCircle = null;
     let goalMarker = null;
     let enabled = false;
 
     // The robot marker's SVG, resolved once per marker element
-    let _robotSvg = null;
+    let robotSvg = null;
 
     const ROBOT_ICON_HTML = `
     <div class="robot-marker-container">
@@ -84,12 +84,12 @@ const trackerMode = (() => {
             }
 
             // Rotate marker — resolve the SVG element once and reuse it
-            if (!_robotSvg) {
+            if (!robotSvg) {
                 const el = robotMarker.getElement();
-                if (el) _robotSvg = el.querySelector('svg');
+                if (el) robotSvg = el.querySelector('svg');
             }
-            if (_robotSvg) {
-                _robotSvg.style.transform = `rotate(${heading}deg)`;
+            if (robotSvg) {
+                robotSvg.style.transform = `rotate(${heading}deg)`;
             }
         }
 
@@ -111,17 +111,17 @@ const trackerMode = (() => {
         const inter = data.mission && data.mission.intersections;
         if (inter && inter.length) {
             const key = `${inter.length}:${inter[0].lat},${inter[0].lon}`;
-            if (key !== _intersectionsKey) {
+            if (key !== intersectionsKey) {
                 if (intersectionsLayer) map.removeLayer(intersectionsLayer);
                 intersectionsLayer = L.layerGroup(inter.map(p => L.circleMarker([p.lat, p.lon], {
                     radius: 4, color: '#e879f9', weight: 1.5, fill: false, opacity: 0.8
                 }))).addTo(map);
-                _intersectionsKey = key;
+                intersectionsKey = key;
             }
         } else if (intersectionsLayer) {
             map.removeLayer(intersectionsLayer);
             intersectionsLayer = null;
-            _intersectionsKey = null;
+            intersectionsKey = null;
         }
 
         // Active intersection with the enter (red) / exit (yellow) hysteresis radii in metres
@@ -142,7 +142,7 @@ const trackerMode = (() => {
         }
 
         // Grey out the marker when the fix is stale
-        if (_robotSvg) _robotSvg.style.opacity = (data.position && data.position.stale) ? '0.35' : '1';
+        if (robotSvg) robotSvg.style.opacity = (data.position && data.position.stale) ? '0.35' : '1';
 
         // Current navigation goal
         const goal = data.position && data.position.goal;
@@ -178,7 +178,7 @@ const trackerMode = (() => {
         robotLayers().forEach(l => {
             if (l && map.hasLayer(l)) map.removeLayer(l);
         });
-        _robotSvg = null; // Leaflet recreates the element on the next addTo()
+        robotSvg = null; // Leaflet recreates the element on the next addTo()
     }
 
     function showRobot() {
@@ -420,13 +420,13 @@ const trackerMode = (() => {
 
 
     // ── Topics dialog: switch the tracker's topics live and save them to its config file ──
-    let _settings = null; // last GET /api/tracker/settings response
+    let trackerSettings = null; // last GET /api/tracker/settings response
 
     const isTopic = s => s.name.endsWith('_topic');
     const listId = type => 'tts-list-' + type.replace(/[^A-Za-z0-9]/g, '_');
 
     function expectedType(s) {
-        return s.name === 'heading_topic' ? _settings.heading_types[$('tts-heading_type').value] : s.msg_type;
+        return s.name === 'heading_topic' ? trackerSettings.heading_types[$('tts-heading_type').value] : s.msg_type;
     }
 
     // Dot left of a topic: green = published with the expected type, yellow = another type,
@@ -439,7 +439,7 @@ const trackerMode = (() => {
         $(`tts-type-${s.name}`).textContent = type.split('/').pop();
         let color = 'transparent', title = 'disabled';
         if (topic) {
-            const types = _settings.topics[topic] || _settings.topics[`/${topic}`];
+            const types = trackerSettings.topics[topic] || trackerSettings.topics[`/${topic}`];
             if (!types) { color = '#6b7280'; title = 'not published'; }
             else if (types.includes(type)) { color = '#22c55e'; title = `published as ${type}`; }
             else { color = '#facc15'; title = `published as ${types.join(', ')}; the tracker expects ${type}`; }
@@ -451,10 +451,10 @@ const trackerMode = (() => {
     function renderTopicsForm() {
         // One suggestion list per message type, from the topics on the ROS graph
         const byType = {};
-        for (const [topic, types] of Object.entries(_settings.topics)) {
+        for (const [topic, types] of Object.entries(trackerSettings.topics)) {
             for (const t of types) (byType[t] ||= []).push(topic);
         }
-        const types = new Set([..._settings.settings.map(s => s.msg_type), ...Object.values(_settings.heading_types)]);
+        const types = new Set([...trackerSettings.settings.map(s => s.msg_type), ...Object.values(trackerSettings.heading_types)]);
         $('tracker-topics-lists').replaceChildren(...[...types].filter(Boolean).map(type => {
             const dl = document.createElement('datalist');
             dl.id = listId(type);
@@ -465,7 +465,7 @@ const trackerMode = (() => {
         const form = $('tracker-topics-form');
         form.replaceChildren();
         let section = null;
-        for (const s of _settings.settings) {
+        for (const s of trackerSettings.settings) {
             if (s.section !== section) {
                 section = s.section;
                 const title = document.createElement('div');
@@ -499,7 +499,7 @@ const trackerMode = (() => {
                 field = document.createElement('select');
                 field.className = 'form-select form-select-sm bg-dark text-light border-secondary';
                 field.append(...s.choices.map(c => new Option(c, c)));
-                field.addEventListener('change', () => updateDot(_settings.settings.find(x => x.name === 'heading_topic')));
+                field.addEventListener('change', () => updateDot(trackerSettings.settings.find(x => x.name === 'heading_topic')));
             } else {
                 field = document.createElement('input');
                 field.type = 'text';
@@ -520,8 +520,8 @@ const trackerMode = (() => {
 
     // Fill the form with the live ('value') or the config file's ('saved') settings
     function fillTopicsForm(which) {
-        for (const s of _settings.settings) $(`tts-${s.name}`).value = s[which];
-        _settings.settings.filter(isTopic).forEach(updateDot);
+        for (const s of trackerSettings.settings) $(`tts-${s.name}`).value = s[which];
+        trackerSettings.settings.filter(isTopic).forEach(updateDot);
     }
 
     async function showTopicsModal() {
@@ -532,23 +532,23 @@ const trackerMode = (() => {
         try {
             const res = await api('GET', '/api/tracker/settings');
             if (!res.ok) throw new Error(await errorText(res));
-            _settings = await res.json();
+            trackerSettings = await res.json();
         } catch (err) {
             setStatus(`Failed to load tracker topics: ${err.message}`, 'text-danger');
             return;
         }
         showError('tracker-topics-error', '');
         renderTopicsForm();
-        $('tracker-topics-path').textContent = _settings.path;
+        $('tracker-topics-path').textContent = trackerSettings.path;
         const fileNote = $('tracker-topics-file-error');
-        fileNote.textContent = _settings.file_error ? `Cannot read the config file: ${_settings.file_error}`
-            : (_settings.exists ? '' : 'The config file does not exist yet; Save creates it.');
+        fileNote.textContent = trackerSettings.file_error ? `Cannot read the config file: ${trackerSettings.file_error}`
+            : (trackerSettings.exists ? '' : 'The config file does not exist yet; Save creates it.');
         fileNote.hidden = !fileNote.textContent;
         bootstrap.Modal.getOrCreateInstance($('tracker-topics-modal')).show();
     }
 
     async function applyTopics(save) {
-        const settings = Object.fromEntries(_settings.settings.map(s => [s.name, $(`tts-${s.name}`).value.trim()]));
+        const settings = Object.fromEntries(trackerSettings.settings.map(s => [s.name, $(`tts-${s.name}`).value.trim()]));
         try {
             const res = await api('PUT', '/api/tracker/settings', { body: { settings, save } });
             if (!res.ok) throw new Error(await errorText(res));
@@ -564,7 +564,7 @@ const trackerMode = (() => {
     }
 
     $('tracker-topics-btn')?.addEventListener('click', showTopicsModal);
-    $('tracker-topics-reload')?.addEventListener('click', () => _settings && fillTopicsForm('saved'));
+    $('tracker-topics-reload')?.addEventListener('click', () => trackerSettings && fillTopicsForm('saved'));
     $('tracker-topics-apply')?.addEventListener('click', () => applyTopics(false));
     $('tracker-topics-save')?.addEventListener('click', () => applyTopics(true));
 

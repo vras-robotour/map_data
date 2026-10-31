@@ -102,7 +102,7 @@ def test_replan_discards_cancel_id_even_on_planner_failure(transfer_id):
 
     replanner._astar = cancel_then_fail
     # Force the planner to be invoked by making the direct segment collide
-    replanner._colides = lambda seg: True
+    replanner._collides = lambda seg: True
 
     result = replanner.replan(np.array([[1.0, 1.0], [9.0, 9.0]]))
 
@@ -119,12 +119,12 @@ def test_replan_cancelled_mid_run_stops_and_consumes_cancel(transfer_id):
     # means the cancel lands while segment 0 is being processed.
     calls = []
 
-    def cancelling_colides(path_seg):
+    def cancelling_collides(path_seg):
         calls.append(path_seg)
         cancel_replan_backend(transfer_id)
         return False
 
-    replanner._colides = cancelling_colides
+    replanner._collides = cancelling_collides
 
     result = replanner.replan(path)
 
@@ -143,7 +143,7 @@ def test_replan_rrt_failure_falls_back_to_astar(transfer_id):
     replanner._rrt_star = lambda start, goal: None
     astar_way = np.array([[1.0, 1.0], [1.0, 9.0], [9.0, 9.0]])
     replanner._astar = lambda start, goal: astar_way
-    replanner._colides = lambda seg: True  # force a search; also keeps the corner
+    replanner._collides = lambda seg: True  # force a search; also keeps the corner
 
     result = replanner.replan(np.array([[1.0, 1.0], [9.0, 9.0]]), algorithm="rrt")
 
@@ -160,7 +160,7 @@ def test_replan_rrt_cancelled_does_not_fall_back(transfer_id):
     astar_calls = []
     replanner._rrt_star = cancel_then_fail
     replanner._astar = lambda start, goal: astar_calls.append(1)
-    replanner._colides = lambda seg: True
+    replanner._collides = lambda seg: True
 
     assert replanner.replan(np.array([[1.0, 1.0], [9.0, 9.0]]), algorithm="rrt") is None
     assert astar_calls == []
@@ -184,7 +184,7 @@ def test_fill_grid_lazily_builds_the_grid_only_for_a_colliding_leg():
     assert replanner.replan(path) is not None
     assert fills == []  # no leg collided: grid never built
 
-    replanner._colides = lambda seg: True
+    replanner._collides = lambda seg: True
     assert replanner.replan(path) is not None
     assert fills == ["md"]  # built once, reused by the second leg
 
@@ -342,4 +342,4 @@ def test_endpoint_legs_keep_the_search_ends_when_the_shortcut_collides():
     result = replanner.replan(np.array([[0.0, 0.0], [0.0, 10.0]]))
 
     np.testing.assert_allclose(result, [[0, 0], *way, [0, 10]])
-    assert not any(replanner._colides(LineString(leg)) for leg in itertools.pairwise(result))
+    assert not any(replanner._collides(LineString(leg)) for leg in itertools.pairwise(result))
