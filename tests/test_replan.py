@@ -1,3 +1,6 @@
+import random
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -199,3 +202,53 @@ def test_fill_grid_lazily_builds_the_grid_only_for_a_colliding_leg():
     replanner._colides = lambda seg: True
     assert replanner.replan(path) is not None
     assert fills == ["md"]  # built once, reused by the second leg
+
+
+# ── barrier crossing a footway ───────────────────────────────────────────────
+
+
+def _fence_across_footway(**kwargs):
+    """
+    A fence spanning the whole 20 x 10 m grid at x = 10, crossed by a buffered
+    footway along y = 5: the footway gap is the only way through.
+    """
+    from shapely.geometry import LineString
+
+    from map_data.utils.way import Way
+
+    footway = Way(
+        id=1,
+        nodes=[100, 101],
+        tags={"highway": "footway"},
+        line=LineString([(0.0, 5.0), (20.0, 5.0)]).buffer(1.5),
+    )
+    md = SimpleNamespace(
+        footways_list=[footway],
+        roads_list=[],
+        get_points=lambda: {100: np.array([[0.0, 5.0]]), 101: np.array([[20.0, 5.0]])},
+    )
+    fence = LineString([(10.0, -1.0), (10.0, 11.0)]).buffer(0.2)
+    args = {**ARGS, "high": (20, 10), "simplify_path": False, **kwargs}
+    replanner = ReplanPath([fence], rng=random.Random(0), **args)
+    replanner.fill_grid_lazily(md)
+    return replanner
+
+
+def test_astar_through_a_footway_gap_simplifies_to_a_straight_line():
+    replanner = _fence_across_footway(simplify_path=True)
+    result = replanner.replan(np.array([[1.0, 5.0], [19.0, 5.0]]))
+    np.testing.assert_allclose(result, [[1.0, 5.0], [19.0, 5.0]])
+
+
+def test_rrt_finds_the_footway_gap():
+    replanner = _fence_across_footway()
+    replanner._grid()
+    assert replanner._rrt_star(np.array([1.0, 5.0]), np.array([19.0, 5.0])) is not None
+
+
+def test_smoothing_through_a_footway_gap_is_kept():
+    replanner = _fence_across_footway(smooth_path=True)
+    replanner._grid()
+    zigzag = np.array([[1.0, 5.0], [5.0, 6.0], [10.0, 5.0], [15.0, 4.0], [19.0, 5.0]])
+    smoothed = replanner._post_process_path(zigzag)
+    assert not np.allclose(smoothed, zigzag)

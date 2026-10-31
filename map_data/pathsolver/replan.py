@@ -261,12 +261,14 @@ class ReplanPath:
         """
         Populate the grid with costs based on map data.
         """
-        self.path_grid.fill(
+        effective = self.path_grid.fill(
             map_data,
             self.obstacles,
             highway_types=highway_types,
             max_path_dist=max_path_dist,
         )
+        # The grid lets a path through a barrier it crosses; so must the segment checks.
+        self.obstacles_tree = sh.STRtree(effective) if effective else None
 
     def fill_grid_lazily(
         self,

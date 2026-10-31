@@ -59,7 +59,7 @@ class PathGrid:
         :meth:`create_empty_grid`); replaced by an ``(N, 4)`` array with
         columns ``[x, y, 0, cost]`` after :meth:`fill` is called.
     grid_2d_cache : np.ndarray or None
-        Most recent rasterized, obstacle-burned cost grid returned by
+        Most recent rasterized, obstacle-burned cost grid built by
         :meth:`fill`, or ``None`` before ``fill`` has been called.
 
     """
@@ -138,7 +138,7 @@ class PathGrid:
         obstacles: list[sh.geometry.base.BaseGeometry],
         highway_types: list[str] | None = None,
         max_path_dist: float = 2.0,
-    ) -> np.ndarray:
+    ) -> list[sh.geometry.base.BaseGeometry]:
         """
         Populate the grid with path and obstacle costs and rasterize it.
 
@@ -169,7 +169,7 @@ class PathGrid:
            and obstacles are burned into it as hard ``np.inf`` costs
            (:meth:`burn_obstacles`), independently of step 2/3. This is
            what actually prevents a planner from crossing an obstacle; the
-           result is cached in :attr:`grid_2d_cache` and returned.
+           result is cached in :attr:`grid_2d_cache`.
 
         Only ways whose geometry intersects the grid bounding box buffered
         by *max_path_dist* are considered, so paths just outside the grid
@@ -197,10 +197,11 @@ class PathGrid:
 
         Returns
         -------
-        np.ndarray
-            The rasterized cost grid, shape ``(num_y, num_x)``, with
-            obstacle cells set to ``np.inf``. Also stored in
-            :attr:`grid_2d_cache`.
+        list of shapely geometry
+            *obstacles* with the selected ways subtracted: the geometry the
+            grid actually blocks, so segment collision checks must use it too.
+            The rasterized cost grid, shape ``(num_y, num_x)`` with obstacle
+            cells set to ``np.inf``, is stored in :attr:`grid_2d_cache`.
 
         """
         if highway_types is None:
@@ -294,7 +295,7 @@ class PathGrid:
         self.grid = path_grid
         grid_2d = self.get_grid_2d()
         self.grid_2d_cache = self.burn_obstacles(grid_2d, effective_obstacles)
-        return self.grid_2d_cache
+        return effective_obstacles
 
     def get_grid_2d(self) -> np.ndarray:
         """
