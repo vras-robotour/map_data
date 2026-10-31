@@ -777,11 +777,16 @@ def delete_way_node() -> Response:
         # Added nodes (negative IDs) live in added_nodes, not in the OSM node list;
         # a detached split end is deleted per segment like a real node.
         if node_id < 0 and node_id not in get_detached_node_ids(store, way_id_int).values():
-            store["added_nodes"] = [
-                a
-                for a in store.get("added_nodes", [])
-                if not (a.get("way_id") == way_id_int and a.get("id") == node_id)
-            ]
+            added = store.get("added_nodes", [])
+            removed = next(
+                (a for a in added if a.get("way_id") == way_id_int and a.get("id") == node_id), None
+            )
+            if removed is not None:
+                added.remove(removed)
+                # Nodes added after this one would lose their anchor and vanish.
+                for a in added:
+                    if a.get("way_id") == way_id_int and a.get("after_node_id") == node_id:
+                        a["after_node_id"] = removed["after_node_id"]
             pos_ov = store.get("node_position_overrides", {}).get(str(way_id_int), {})
             pos_ov.pop(str(node_id), None)
             _log_remove(store, "add_node", way_id=way_id_int, node_id=node_id)

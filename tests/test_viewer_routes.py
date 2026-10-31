@@ -1754,3 +1754,13 @@ def test_tag_delete_by_segment_id_removes_the_override(app_client_3node):
     assert store["tag_overrides"] == {}
     assert not [e for e in store["change_log"] if e["type"] == "tag"]
 
+
+def test_deleting_an_added_node_keeps_the_one_added_after_it(app_client_with_file):
+    client, _, filename = app_client_with_file
+    url = f"/api/way_node?file={filename}&way_id=1"
+    a = client.post(url, json={"after_node_id": 101, "lat": 50.0001, "lon": 14.0001}).get_json()
+    b = client.post(url, json={"after_node_id": a["id"], "lat": 50.0002, "lon": 14.0002})
+    b = b.get_json()
+    assert client.delete(f"{url}&node_id={a['id']}").status_code == 204
+    nodes = client.get(f"/api/way_nodes?file={filename}&way_id=1").get_json()["nodes"]
+    assert [n["id"] for n in nodes] == [101, b["id"], 102]
