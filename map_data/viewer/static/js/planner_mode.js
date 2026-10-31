@@ -145,6 +145,11 @@ class PlannerMode {
         for (const id of ['planner-hide-blocked', 'plan-footways', 'plan-roads']) {
             document.getElementById(id).addEventListener('change', () => this.refreshBlocked());
         }
+        for (const id of ['plan-footways', 'plan-roads']) {
+            document.getElementById(id).addEventListener('change', () => {
+                if (document.getElementById('planner-show-grid').checked) this.fetchCostGrid();
+            });
+        }
 
         document.getElementById('planner-start-at-robot')
             .addEventListener('change', (e) => this.toggleStartAtRobot(e.target.checked));
@@ -404,6 +409,7 @@ class PlannerMode {
                     max_lat: bounds.getNorth(), max_lon: bounds.getEast(),
                     highway_costs: JSON.stringify(this.highwayCosts),
                     surface_costs: JSON.stringify(this.surfaceCosts),
+                    allowed_ways: this._allowedWays().join(','),
                 },
             });
             if (!res.ok) throw new Error(await errorText(res));
