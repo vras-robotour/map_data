@@ -88,6 +88,11 @@ function _startAnnDrag(e, type, i) {
     annDrag.type = type;
     annDrag.layer = editSelectedLayer;
     annDrag.vertexIndex = i;
+    annDrag.startLatLng = e.latlng;
+    const ann = annotations.find(a => a.id === editSelectedLayer?.options?._ann_id);
+    if (ann && editSelectedLayer && !editSelectedLayer._origGeometry) {
+        editSelectedLayer._origGeometry = structuredClone(ann.geometry);
+    }
     annDrag.dragMarker = (type === 'vertex' ? annVertexMarkers_ann : annMidpointMarkers_ann)[i] ?? null;
     map.dragging.disable();
     map.getContainer().style.cursor = type === 'vertex' ? 'grabbing' : 'crosshair';
@@ -121,7 +126,7 @@ async function _onAnnDragUp(e) {
     if (!annDrag.active) return;
     _endMapDrag(_onAnnDragMove, _onAnnDragUp);
 
-    const { type, layer, vertexIndex } = annDrag;
+    const { type, layer, vertexIndex, startLatLng } = annDrag;
     annDrag.active = false;
     annDrag.type = null;
     annDrag.layer = null;
@@ -130,15 +135,22 @@ async function _onAnnDragUp(e) {
     if (!layer) return;
 
     if (type === 'vertex') {
+        const dlat = e.latlng.lat - startLatLng.lat;
+        const dlng = e.latlng.lng - startLatLng.lng;
+        if (Math.abs(dlat) < 1e-9 && Math.abs(dlng) < 1e-9) {
+            return;
+        }
         _setAnnVertex(layer, vertexIndex, e.latlng);
-        _saveAnnotationGeometry(layer);
+        layer._isDirty = true;
+        await _saveAnnotationGeometry(layer);
         _loadAnnotationVertices(layer);
     } else if (type === 'midpoint') {
         const lls = layer.getLatLngs();
         if (Array.isArray(lls[0])) { lls[0].splice(vertexIndex + 1, 0, e.latlng); }
         else { lls.splice(vertexIndex + 1, 0, e.latlng); }
         layer.setLatLngs(lls);
-        _saveAnnotationGeometry(layer);
+        layer._isDirty = true;
+        await _saveAnnotationGeometry(layer);
         _loadAnnotationVertices(layer);
     }
 }
@@ -155,7 +167,12 @@ function _onEditDragDown(e) {
     _loadAnnotationVertices(editSelectedLayer);
     if (e.target.setStyle)
         e.target.setStyle({ ..._layerBaseStyle(e.target), color: '#ff4400', weight: 3, cursor: 'grabbing' });
+    const ann = annotations.find(a => a.id === e.target.options._ann_id);
+    if (ann && !e.target._origGeometry) {
+        e.target._origGeometry = structuredClone(ann.geometry);
+    }
     editDrag.active = true;
+    editDrag.moved = false;
     editDrag.layer = e.target;
     editDrag.startLatLng = e.latlng;
     editDrag.origLatLngs = _cloneLatLngs(e.target.getLatLngs());
@@ -168,6 +185,9 @@ function _onEditDragMove(e) {
     if (!editDrag.active) return;
     const dlat = e.latlng.lat - editDrag.startLatLng.lat;
     const dlng = e.latlng.lng - editDrag.startLatLng.lng;
+    if (Math.abs(dlat) > 1e-9 || Math.abs(dlng) > 1e-9) {
+        editDrag.moved = true;
+    }
     _applyDeltaInPlace(editDrag.layer._latlngs, editDrag.origLatLngs, dlat, dlng);
     editDrag.layer.redraw();
     // Keep vertex and midpoint markers in sync with the moving layer
@@ -195,22 +215,44 @@ function _onEditDragUp() {
     map.dragging.enable();
     map.getContainer().style.cursor = currentMode === 'edit' ? 'move' : '';
     const layer = editDrag.layer;
+    const moved = editDrag.moved;
     editDrag.layer = null;
     editDrag.origVertices = null;
-    if (layer) {
+    if (layer && moved) {
+        layer._isDirty = true;
         _saveAnnotationGeometry(layer);
         if (editSelectedLayer === layer) _loadAnnotationVertices(layer);
     }
 }
 
+function _restoreAnnotationLayerGeometry(layer, geom) {
+    if (!geom) return;
+    if (geom.type === 'LineString') {
+        layer.setLatLngs(geom.coordinates.map(c => [c[1], c[0]]));
+    } else if (geom.type === 'Polygon') {
+        layer.setLatLngs(geom.coordinates.map(ring => ring.map(c => [c[1], c[0]])));
+    }
+    layer.redraw?.();
+}
+
 async function _saveAnnotationGeometry(layer) {
     const annId = layer.options._ann_id;
-    if (!annId || !currentFile) return;
+    if (!annId || !currentFile) return true;
     const ann = annotations.find(a => a.id === annId);
-    if (!ann) return;
+    if (!ann) return true;
     const geom = layer.toGeoJSON().geometry;
-    await updateAnnotationApi(currentFile, annId, geom, ann.type, ann.properties);
+    const prevGeom = layer._origGeometry || ann.geometry;
+    const res = await updateAnnotationApi(currentFile, annId, geom, ann.type, ann.properties);
+    if (!res.ok) {
+        setStatus('Failed to save annotation', 'text-danger');
+        ann.geometry = prevGeom;
+        _restoreAnnotationLayerGeometry(layer, prevGeom);
+        return false;
+    }
     ann.geometry = geom;
+    layer._origGeometry = geom;
+    layer._isDirty = false;
+    return true;
 }
 
 function getSnappableLayers() {
@@ -247,10 +289,12 @@ function disableAnnotationEditMode() {
         osmDrag.active = false;
         _endMapDrag(_onOsmDragMove, _onOsmDragUp);
     }
-    drawnItems.eachLayer(layer => {
+    drawnItems.eachLayer(async layer => {
         layer.off('mousedown', _onEditDragDown);
         if (layer.setStyle) layer.setStyle(_layerBaseStyle(layer));
-        _saveAnnotationGeometry(layer);
+        if (layer._isDirty) {
+            await _saveAnnotationGeometry(layer);
+        }
     });
 }
 
@@ -317,7 +361,7 @@ async function _onOsmDragUp(e) {
     if (!osmDrag.active) return;
     _endMapDrag(_onOsmDragMove, _onOsmDragUp);
 
-    const { type, wayId, nodeIndex, startLatLng, origPositions, afterNodeId } = osmDrag;
+    const { type, wayId, nodeIndex, startLatLng, origPositions, origLayerLatLngs, afterNodeId } = osmDrag;
     osmDrag.active = false;
     osmDrag.type = null;
     osmDrag.wayId = null;
@@ -346,6 +390,16 @@ async function _onOsmDragUp(e) {
     const dlat = e.latlng.lat - startLatLng.lat;
     const dlng = e.latlng.lng - startLatLng.lng;
 
+    if (Math.abs(dlat) < 1e-9 && Math.abs(dlng) < 1e-9) {
+        origPositions.forEach((pos, i) => {
+            if (nodeMarkers[i]) nodeMarkers[i].setLatLng([pos.lat, pos.lon]);
+        });
+        if (origLayerLatLngs && currentClickedLayer) {
+            currentClickedLayer.setLatLngs(origLayerLatLngs);
+        }
+        return;
+    }
+
     let nodesToSave;
     if (type === 'node') {
         const newLat = origPositions[nodeIndex].lat + dlat;
@@ -367,7 +421,29 @@ async function _onOsmDragUp(e) {
     const _mtags0 = currentClickedFeature?.properties?.tags || {};
     const _mlbl = _mtags0.highway || _mtags0.barrier || '';
     const res = await moveWayNodesApi(currentFile, wayId, nodesToSave, _mcat, _mlbl);
-    if (!res.ok) { setStatus('Move failed', 'text-danger'); return; }
+    if (!res.ok) {
+        origPositions.forEach((pos, i) => {
+            if (currentNodes[i]) {
+                currentNodes[i].lat = pos.lat;
+                currentNodes[i].lon = pos.lon;
+            }
+            if (nodeMarkers[i]) {
+                nodeMarkers[i].setLatLng([pos.lat, pos.lon]);
+            }
+        });
+        const isLine = currentClickedFeature?.geometry?.type === 'LineString';
+        if (isLine && origLayerLatLngs && currentClickedLayer) {
+            currentClickedLayer.setLatLngs(origLayerLatLngs);
+            if (osmDragGhost) osmDragGhost.setLatLngs(origLayerLatLngs);
+        } else {
+            await _reloadWay(wayId);
+        }
+        if (currentClickedFeature && currentClickedLayer) {
+            await loadNodesForEditing(currentClickedFeature, currentClickedLayer);
+        }
+        setStatus('Move failed', 'text-danger');
+        return;
+    }
     redoStack = [];
 
     const isLine = currentClickedFeature?.geometry?.type === 'LineString';
@@ -467,7 +543,7 @@ function setupDrawEvents() {
                 min_lon: bounds.getWest(), max_lon: bounds.getEast(),
             };
             document.getElementById('area-name-input').value = '';
-            new bootstrap.Modal(document.getElementById('fetch-area-modal')).show();
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('fetch-area-modal')).show();
             return;
         }
 
@@ -487,21 +563,32 @@ function setupDrawEvents() {
             setTimeout(() => { if (currentMode === 'path') pathLineDraw.enable(); }, 50);
     });
 
-    map.on(L.Draw.Event.DELETED, e => {
+    map.on(L.Draw.Event.DELETED, async e => {
         const toDelete = [];
         e.layers.eachLayer(layer => {
             const annId = layer.options._ann_id;
             if (annId) toDelete.push(annId);
         });
-        Promise.all(
-            toDelete.map(id => api('DELETE', `/api/annotations/${id}`, {
-                query: { file: currentFile }, readOnlyMsg: 'Editing',
-            }))
-        ).then(() => {
+        if (toDelete.length === 0) return;
+        try {
+            const results = await Promise.all(
+                toDelete.map(id => api('DELETE', `/api/annotations/${id}`, {
+                    query: { file: currentFile }, readOnlyMsg: 'Editing',
+                }))
+            );
+            const failed = results.filter(r => !r || !r.ok);
+            if (failed.length > 0) {
+                setStatus('Failed to delete some annotations', 'text-danger');
+                loadMapData(currentFile);
+                return;
+            }
             annotations = annotations.filter(a => !toDelete.includes(a.id));
             renderAnnotationList();
             setStatus(`Deleted ${toDelete.length} annotation(s)`, 'text-success');
-        });
+        } catch (err) {
+            setStatus(`Failed to delete annotations: ${err.message}`, 'text-danger');
+            loadMapData(currentFile);
+        }
     });
 
     // Switch back to view when user cancels delete via Escape

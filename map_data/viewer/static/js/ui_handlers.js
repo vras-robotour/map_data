@@ -1,5 +1,8 @@
 // ── UI Handlers ───────────────────────────────────────────────────────────────
 
+const OSM_NODE_STYLE = { radius: 5, color: '#fff', weight: 2, fillColor: '#f0a500', fillOpacity: 0.9 };
+const OSM_NODE_SELECTED_STYLE = { radius: 6, color: '#fff', weight: 2.5, fillColor: '#ff3300', fillOpacity: 1 };
+
 function setStatus(msg, cls = 'text-secondary') {
     const el = document.getElementById('status');
     if (!el) return;
@@ -181,9 +184,9 @@ function showProps(props, feature = null) {
     }
     const tags = props.tags || {};
     const meta = [
-        ['Category', `<span class="badge bg-secondary">${props.category}</span>`],
-        ['OSM ID', props.id ?? '—'],
-        ['Role', props.in_out || '—'],
+        ['Category', `<span class="badge bg-secondary">${escHtml(props.category || '')}</span>`],
+        ['OSM ID', escHtml(String(props.id ?? '—'))],
+        ['Role', escHtml(String(props.in_out || '—'))],
     ];
     const rows = [
         ...meta.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`),
@@ -191,7 +194,7 @@ function showProps(props, feature = null) {
             ? Object.entries(tags).map(([k, v]) =>
                 `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`
             ).join('')
-            : '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No tags</td></tr>',
+            : '<tr><td colspan="2" style="color:var(--muted);font-style:italic;">No tags</td></tr>',
     ].join('');
     const el = document.getElementById('props-content');
     el.innerHTML = `<table><tbody>${rows}</tbody></table>`;
@@ -209,27 +212,42 @@ function showProps(props, feature = null) {
                     ? `<span class="node-tag-hint">${escHtml(firstTag[0])}: ${escHtml(String(firstTag[1]))}</span>`
                     : '';
                 const sel = i === selectedNodeIndex ? ' sel' : '';
-                return `<div class="node-list-item${sel}" onclick="clickNode(${i})">
+                return `<div class="node-list-item${sel}" role="button" tabindex="0" onclick="clickNode(${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();clickNode(${i});}">
           <span class="node-idx">${i + 1}</span>
-          <span>${n.id}</span>${hint}
+          <span>${escHtml(String(n.id))}</span>${hint}
         </div>`;
             }).join('');
             el.innerHTML += `<div class="node-list">${items}</div>`;
         }
-        el.innerHTML += `<button class="btn btn-sm btn-outline-secondary mt-1"
-                             style="font-size:0.72rem;width:100%;"
-                             onclick="openWayEditModal()">&#9998; Edit Properties</button>`;
-        if (hiddenWayIds.has(props.id)) {
-            el.innerHTML += `<button class="btn btn-sm btn-outline-info mt-1"
-                               style="font-size:0.72rem;width:100%;"
-                               onclick="showWay(${props.id})">&#128065; Show Object</button>`;
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn btn-sm btn-outline-secondary mt-1';
+        editBtn.style.fontSize = '0.72rem';
+        editBtn.style.width = '100%';
+        editBtn.innerHTML = '&#9998; Edit Properties';
+        editBtn.addEventListener('click', () => openWayEditModal());
+        el.appendChild(editBtn);
+
+        const isHidden = _wayHidden(props.id);
+        const hideShowBtn = document.createElement('button');
+        hideShowBtn.className = `btn btn-sm ${isHidden ? 'btn-outline-info' : 'btn-outline-secondary'} mt-1`;
+        hideShowBtn.style.fontSize = '0.72rem';
+        hideShowBtn.style.width = '100%';
+        if (isHidden) {
+            hideShowBtn.innerHTML = '&#128065; Show Object';
+            hideShowBtn.addEventListener('click', () => showWay(props.id));
+            el.appendChild(hideShowBtn);
         } else {
-            el.innerHTML += `<button class="btn btn-sm btn-outline-secondary mt-1"
-                               style="font-size:0.72rem;width:100%;"
-                               onclick="hideCurrentWay()">&#128065; Hide Object</button>`;
-            el.innerHTML += `<button class="btn btn-sm btn-outline-danger mt-1"
-                               style="font-size:0.72rem;width:100%;"
-                               onclick="deleteCurrentWay()">&#128465; Delete Object</button>`;
+            hideShowBtn.innerHTML = '&#128065; Hide Object';
+            hideShowBtn.addEventListener('click', () => hideCurrentWay());
+            el.appendChild(hideShowBtn);
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'btn btn-sm btn-outline-danger mt-1';
+            delBtn.style.fontSize = '0.72rem';
+            delBtn.style.width = '100%';
+            delBtn.innerHTML = '&#128465; Delete Object';
+            delBtn.addEventListener('click', () => deleteCurrentWay());
+            el.appendChild(delBtn);
         }
     }
 }
@@ -247,16 +265,26 @@ function clearNodes() {
     selectedNodeIndex = -1;
 }
 
+let _nodeLoadToken = 0;
+
 async function loadNodesForEditing(feature, layer) {
     if (!currentFile) return;
     clearNodes();
+    const token = ++_nodeLoadToken;
     const wayId = feature.properties.id;
     const el = document.getElementById('props-content');
     el.innerHTML = `<span class="text-secondary" style="font-size:0.8rem;">Loading nodes…</span>`;
 
     let data;
-    try { data = await fetchWayNodes(currentFile, wayId); }
-    catch (err) { setStatus('Failed to load nodes', 'text-danger'); return; }
+    try {
+        data = await fetchWayNodes(currentFile, wayId);
+    } catch (err) {
+        if (token !== _nodeLoadToken) return;
+        el.innerHTML = `<span class="text-danger" style="font-size:0.8rem;">Failed to load nodes</span>`;
+        setStatus('Failed to load nodes', 'text-danger');
+        return;
+    }
+    if (token !== _nodeLoadToken) return;
     currentNodes = data.nodes;
 
     osmEditLayer = layer;
@@ -290,7 +318,7 @@ async function loadNodesForEditing(feature, layer) {
     nodeMarkers = currentNodes.map((node, i) => {
         const [marker, hit] = makeHandle(
             [node.lat, node.lon],
-            { radius: 5, color: '#fff', weight: 2, fillColor: '#f0a500', fillOpacity: 0.9 },
+            OSM_NODE_STYLE,
             12, 'grab', e => _onOsmNodeDragDown(e, i),
         );
         nodeLayer.addLayer(marker);
@@ -323,9 +351,9 @@ async function loadNodesForEditing(feature, layer) {
     <div style="font-size:0.8rem;color:#aaa;margin-bottom:6px;">
       Editing <span class="badge bg-secondary">${escHtml(props.category)}</span>
       ${label ? `<span class="badge bg-dark ms-1">${escHtml(label)}</span>` : ''}
-      <span class="text-secondary ms-1">#${props.id}</span>
+      <span class="text-secondary ms-1">#${escHtml(String(props.id))}</span>
     </div>
-    <div style="font-size:0.75rem;color:#6c7a9c;">${currentNodes.length} nodes — drag node or way to move</div>`;
+    <div style="font-size:0.75rem;color:var(--muted);">${currentNodes.length} nodes — drag node or way to move</div>`;
     setStatus(`Editing way ${wayId}`, 'text-info');
 }
 
@@ -334,17 +362,13 @@ function clickNode(index) {
     if (!node) return;
 
     if (selectedNodeIndex >= 0 && nodeMarkers[selectedNodeIndex]) {
-        nodeMarkers[selectedNodeIndex].setStyle({
-            radius: 4, color: '#fff', weight: 1.5, fillColor: '#f0a500', fillOpacity: 0.9,
-        });
+        nodeMarkers[selectedNodeIndex].setStyle(OSM_NODE_STYLE);
     }
 
     selectedNodeIndex = index;
 
     if (nodeMarkers[index]) {
-        nodeMarkers[index].setStyle({
-            radius: 6, color: '#fff', weight: 2.5, fillColor: '#ff3300', fillOpacity: 1,
-        });
+        nodeMarkers[index].setStyle(OSM_NODE_SELECTED_STYLE);
         nodeMarkers[index].bringToFront();
     }
 
@@ -372,7 +396,7 @@ function showOsmNodeProps(node, index, total) {
 
     const tagRows = Object.entries(node.tags || {})
         .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
-        .join('') || '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No tags</td></tr>';
+        .join('') || '<tr><td colspan="2" style="color:var(--muted);font-style:italic;">No tags</td></tr>';
 
     let buttons = `
     <div class="d-flex gap-1 mt-2">
@@ -383,7 +407,7 @@ function showOsmNodeProps(node, index, total) {
 
     if (canSplit) {
         buttons += `
-      <button class="btn btn-sm btn-outline-warning" style="font-size:0.72rem;" title="Split Way"
+      <button class="btn btn-sm btn-outline-warning" style="font-size:0.72rem;" title="Split Way" aria-label="Split Way"
               onclick="splitCurrentWay(currentClickedFeature.properties.id, ${node.id})">
         ✂️
       </button>`;
@@ -462,9 +486,7 @@ async function toggleNodes() {
         nodeMarkers = [];
         nodeLayer = L.layerGroup().addTo(map);
         data.nodes.forEach((node, i) => {
-            const marker = L.circleMarker([node.lat, node.lon], {
-                radius: 4, color: '#fff', weight: 1.5, fillColor: '#f0a500', fillOpacity: 0.9,
-            }).on('click', e => {
+            const marker = L.circleMarker([node.lat, node.lon], OSM_NODE_STYLE).on('click', e => {
                 L.DomEvent.stopPropagation(e);
                 if (currentMode === 'view') clickNode(i);
             }).on('contextmenu', e => {
@@ -499,7 +521,7 @@ function openWayEditModal() {
     editingWayId = feature.properties.id;
     document.getElementById('way-edit-title').textContent = `Edit Way #${editingWayId}`;
     _renderWayEditProps(feature.properties.tags || {});
-    new bootstrap.Modal(document.getElementById('way-edit-modal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('way-edit-modal')).show();
 }
 
 function _renderWayEditProps(obj) {
@@ -524,10 +546,10 @@ document.getElementById('way-edit-save')?.addEventListener('click', async () => 
     });
     if (!res.ok) { setStatus('Save failed', 'text-danger'); return; }
     redoStack = [];
-    bootstrap.Modal.getInstance(document.getElementById('way-edit-modal'))?.hide();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('way-edit-modal')).hide();
     const existingIdx = changeLog.findIndex(c => c.type === 'tag' && String(c.id) === String(editingWayId));
     if (existingIdx >= 0) changeLog.splice(existingIdx, 1);
-    changeLog.push({ type: 'tag', id: editingWayId, category: cat, label: lbl });
+    changeLog.push({ type: 'tag', id: editingWayId, category: cat, label: lbl, tags: { ...tags } });
     await _reloadWay(editingWayId);
     setStatus(`Tags saved for way ${editingWayId}`, 'text-success');
     renderChangesPanel();
@@ -619,11 +641,16 @@ async function hideCurrentWay() {
 
 async function showWay(wayId) {
     if (!currentFile) return;
+    const origId = String(wayId).split(':')[0];
     const res = await api('PUT', `/api/ways/${wayId}/show`, { query: { file: currentFile }, readOnlyMsg: 'Editing' });
     if (res.ok) {
-        hiddenWays = hiddenWays.filter(d => d.id !== wayId);
+        hiddenWays = hiddenWays.filter(d => String(d.id).split(':')[0] !== origId && d.id !== wayId);
         hiddenWayIds.delete(wayId);
+        hiddenWayIds.delete(origId);
+        hiddenWayIds.delete(Number(origId));
         await _reloadWay(wayId);
+        renderHiddenPanel();
+        renderChangesPanel();
     }
 }
 
@@ -674,7 +701,15 @@ function _buildPanelRow({ itemClass, idClass, labelHtml, idHtml, focusId, btnCla
     const row = document.createElement('div');
     row.className = itemClass;
     row.style.cursor = 'pointer';
+    row.setAttribute('role', 'button');
+    row.setAttribute('tabindex', '0');
     row.addEventListener('click', () => focusFeatureById(focusId));
+    row.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            focusFeatureById(focusId);
+        }
+    });
 
     const info = document.createElement('div');
     info.innerHTML = `<span>${labelHtml}</span><br><span class="${idClass}">${idHtml}</span>`;
@@ -684,6 +719,7 @@ function _buildPanelRow({ itemClass, idClass, labelHtml, idHtml, focusId, btnCla
     btn.className = btnClass;
     btn.style.fontSize = '0.7rem';
     btn.title = btnTitle;
+    btn.setAttribute('aria-label', btnTitle);
     btn.innerHTML = btnHtml;
     btn.addEventListener('click', e => { e.stopPropagation(); onBtnClick(); });
     row.appendChild(btn);
@@ -874,7 +910,7 @@ const CHANGE_TYPES = {
     tag: {
         label: 'tag edit', undo: e => undoTagOverride(e.id),
         redo: (f, e, ann) => {
-            const tags = ann.tag_overrides?.[String(e.id)] || {};
+            const tags = e.tags || ann.tag_overrides?.[String(e.id)] || {};
             return () => api('PUT', `/api/ways/${e.id}/tags`, {
                 query: { file: f }, body: { tags, category: e.category, label: e.label }, readOnlyMsg: 'Editing',
             });
@@ -929,10 +965,11 @@ async function undoLastChange() {
 }
 
 async function redoLastChange() {
-    const r = redoStack.pop();
-    if (!currentFile || !r) { setStatus('Nothing to redo', 'text-secondary'); return; }
+    if (!currentFile || !redoStack.length) { setStatus('Nothing to redo', 'text-secondary'); return; }
+    const r = redoStack[redoStack.length - 1];
     const res = await r.run();
-    if (!res.ok) { setStatus('Redo failed', 'text-danger'); return; }
+    if (!res || !res.ok) { setStatus('Redo failed', 'text-danger'); return; }
+    redoStack.pop();
     if (r.type === 'way') {
         // The segments endpoint still returns deleted ways, so drop the layer
         // by hand like deleteCurrentWay does.
@@ -976,14 +1013,19 @@ function showAnnProps(ann) {
     const props = ann.properties || {};
     const propRows = Object.entries(props)
         .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
-        .join('') || '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No properties</td></tr>';
-    document.getElementById('props-content').innerHTML =
+        .join('') || '<tr><td colspan="2" style="color:var(--muted);font-style:italic;">No properties</td></tr>';
+    const el = document.getElementById('props-content');
+    el.innerHTML =
         `<table><tbody>
        <tr><td>Type</td><td><span class="badge bg-secondary">${escHtml(ann.type || 'obstacle')}</span></td></tr>
        ${propRows}
-     </tbody></table>
-     <button class="btn btn-sm btn-outline-info mt-2" style="font-size:0.72rem;width:100%;"
-             onclick="openAnnEditModal('${ann.id}')">&#9998; Edit Properties</button>`;
+     </tbody></table>`;
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn btn-sm btn-outline-info mt-2';
+    editBtn.style.cssText = 'font-size:0.72rem;width:100%;';
+    editBtn.innerHTML = '&#9998; Edit Properties';
+    editBtn.addEventListener('click', () => openAnnEditModal(ann.id));
+    el.appendChild(editBtn);
 }
 
 function renderAnnotationList() {
@@ -995,23 +1037,55 @@ function renderAnnotationList() {
     if (!annotations.length && !addedNodeEntries.length || currentAppMode === 'planner') { panel.hidden = true; return; }
     panel.hidden = false;
     count.textContent = `(${annotations.length + addedNodeEntries.length})`;
-    const annHtml = annotations.map(a => `
-    <div class="ann-item">
-      <div>
-        <span>${escHtml(a.type)}</span>
-        <br><span class="ann-id">${a.id.slice(0, 8)}…</span>
-      </div>
-      <div class="d-flex gap-1">
-        <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Revert geometry to last loaded state" onclick="revertAnnotationGeometry('${a.id}')">&#8634;</button>
-        <button class="btn btn-sm btn-outline-info py-0 px-1" style="font-size:0.7rem;"
-                onclick="openAnnEditModal('${a.id}')">&#9998;</button>
-        <button class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size:0.7rem;"
-                onclick="removeAnnotationById('${a.id}')">&#10005;</button>
-      </div>
-    </div>
-  `).join('');
-    el.innerHTML = annHtml;
+    el.innerHTML = '';
+    annotations.forEach(a => {
+        const item = document.createElement('div');
+        item.className = 'ann-item';
+
+        const info = document.createElement('div');
+        info.innerHTML = `<span>${escHtml(a.type)}</span><br><span class="ann-id">${escHtml(a.id.slice(0, 8))}…</span>`;
+        item.appendChild(info);
+
+        const btnGroup = document.createElement('div');
+        btnGroup.className = 'd-flex gap-1';
+
+        const revBtn = document.createElement('button');
+        revBtn.className = 'btn btn-sm btn-outline-warning py-0 px-1';
+        revBtn.style.fontSize = '0.7rem';
+        revBtn.title = 'Revert geometry to last loaded state';
+        revBtn.setAttribute('aria-label', 'Revert annotation geometry');
+        revBtn.innerHTML = '&#8634;';
+        revBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            revertAnnotationGeometry(a.id);
+        });
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn btn-sm btn-outline-info py-0 px-1';
+        editBtn.style.fontSize = '0.7rem';
+        editBtn.setAttribute('aria-label', 'Edit annotation properties');
+        editBtn.innerHTML = '&#9998;';
+        editBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openAnnEditModal(a.id);
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn btn-sm btn-outline-danger py-0 px-1';
+        delBtn.style.fontSize = '0.7rem';
+        delBtn.setAttribute('aria-label', 'Delete annotation');
+        delBtn.innerHTML = '&#10005;';
+        delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeAnnotationById(a.id);
+        });
+
+        btnGroup.appendChild(revBtn);
+        btnGroup.appendChild(editBtn);
+        btnGroup.appendChild(delBtn);
+        item.appendChild(btnGroup);
+        el.appendChild(item);
+    });
     addedNodeEntries.forEach(d => {
         el.appendChild(_buildPanelRow({
             itemClass: 'ann-item',
@@ -1139,7 +1213,7 @@ function openAnnDetailModal(geometry, mode) {
     document.getElementById('ann-width-inp').value = '1.5';
     _renderExtraProps({});
     updateAnnTypeFields();
-    new bootstrap.Modal(document.getElementById('ann-detail-modal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('ann-detail-modal')).show();
 }
 
 function openAnnEditModal(annId) {
@@ -1161,7 +1235,7 @@ function openAnnEditModal(annId) {
     const exclude = type === 'path' ? ['highway', 'width'] : ['barrier'];
     _renderExtraProps(Object.fromEntries(Object.entries(props).filter(([k]) => !exclude.includes(k))));
     updateAnnTypeFields();
-    new bootstrap.Modal(document.getElementById('ann-detail-modal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('ann-detail-modal')).show();
 }
 
 // Adds `filename` to the file picker if it is missing, selects it and loads it.
@@ -1196,7 +1270,7 @@ function handleGpxMapCreation(file) {
     if (nameInput) {
         nameInput.value = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_\-]/g, "_");
     }
-    new bootstrap.Modal(document.getElementById('gpx-upload-modal')).show();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('gpx-upload-modal')).show();
 }
 
 document.getElementById('gpx-upload-submit')?.addEventListener('click', async () => {
@@ -1205,7 +1279,7 @@ document.getElementById('gpx-upload-submit')?.addEventListener('click', async ()
         document.getElementById('gpx-name-input').focus();
         return;
     }
-    bootstrap.Modal.getInstance(document.getElementById('gpx-upload-modal')).hide();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('gpx-upload-modal')).hide();
     setStatus('Processing GPX and fetching OSM data... (may take 1–2 min)', 'text-warning');
 
     const formData = new FormData();

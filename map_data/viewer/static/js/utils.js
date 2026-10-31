@@ -46,6 +46,7 @@ function kvRow(cls, k = '', v = '') {
       <input class="form-control form-control-sm bg-dark text-light border-secondary ${cls}-val"
              placeholder="value" value="${escHtml(v)}" style="flex:1;font-size:0.75rem;">
       <button type="button" class="btn btn-sm btn-outline-danger px-1"
+              aria-label="Remove property"
               onclick="this.closest('.d-flex').remove()">×</button>
     </div>`;
 }
@@ -72,10 +73,18 @@ window.fetch = function (input, init) {
     return _rawFetch(input, init);
 };
 
-// Flask's abort() answers with an HTML page; pull the message out of it.
+// Flask's abort() answers with an HTML page; JSON error handlers return {"error": "..."}.
 async function errorText(res) {
-    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-    return (doc.querySelector('p') || doc.body).textContent.trim();
+    const raw = await res.text();
+    try {
+        const data = JSON.parse(raw);
+        if (data && typeof data === 'object' && data.error) {
+            return String(data.error).trim();
+        }
+    } catch (_) {}
+    const doc = new DOMParser().parseFromString(raw, 'text/html');
+    const msg = (doc.querySelector('p') || doc.body)?.textContent?.trim();
+    return msg || raw.trim();
 }
 
 // Shows `msg` in the error element `id`, or hides it when `msg` is empty.

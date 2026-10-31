@@ -1,7 +1,9 @@
 // ── Layers Management ───────────────────────────────────────────────────────
 
 function _wayHidden(id) {
-    return hiddenWayIds.has(id) || (currentAppMode === 'planner' && plannerBlockedIds.has(id));
+    const origId = String(id).split(':')[0];
+    return hiddenWayIds.has(id) || hiddenWayIds.has(origId) || hiddenWayIds.has(Number(origId))
+        || (currentAppMode === 'planner' && (plannerBlockedIds.has(id) || plannerBlockedIds.has(origId) || plannerBlockedIds.has(Number(origId))));
 }
 
 function setSubtypeVisible(cat, subtype, visible) {
@@ -52,6 +54,9 @@ function renderAnnotationLayer() {
     if (cb) {
         if (!cb.checked) map.removeLayer(drawnItems);
         else if (!map.hasLayer(drawnItems)) drawnItems.addTo(map);
+    }
+    if (typeof currentMode !== 'undefined' && currentMode === 'edit' && typeof enableAnnotationEditMode === 'function') {
+        enableAnnotationEditMode();
     }
 }
 
@@ -304,13 +309,18 @@ async function refreshMetadata(filename) {
     }
 }
 
+let _mapDataToken = 0;
+
 async function loadMapData(filename, { preserveView = false, silent = false } = {}) {
+    deselectCurrent();
+    const token = ++_mapDataToken;
     if (!silent) setStatus('Loading…', 'text-warning');
     redoStack = [];
 
     try {
         const geojson = await fetchMapData(filename);
         const annData = await fetchAnnotations(filename);
+        if (token !== _mapDataToken) return;
 
         const oldGeoLayers = { ...geoLayers };
 
@@ -324,7 +334,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         });
 
         // Pre-compute hidden way IDs before building layers
-        const _loadHiddenIds = new Set(_parseWayList(annData.hidden_ways).map(d => d.id));
+        const _loadHiddenIds = new Set(_parseWayList(annData.hidden_ways).map(d => String(d.id).split(':')[0]));
 
         // Reset subtype state for fresh load
         ['road', 'footway', 'barrier', 'crossroad'].forEach(cat => {
@@ -352,7 +362,10 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
             geoLayers[cat] = L.geoJSON({ type: 'FeatureCollection', features }, layerOpts);
             if (_loadHiddenIds.size > 0) {
                 const _toHide = [];
-                geoLayers[cat].eachLayer(l => { if (_loadHiddenIds.has(l._featureId)) _toHide.push(l); });
+                geoLayers[cat].eachLayer(l => {
+                    const origId = String(l._featureId).split(':')[0];
+                    if (_loadHiddenIds.has(origId) || _loadHiddenIds.has(String(l._featureId))) _toHide.push(l);
+                });
                 _toHide.forEach(l => geoLayers[cat].removeLayer(l));
             }
             const cb = document.querySelector(`[data-layer="${cat}"]`);
@@ -407,52 +420,59 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
 }
 
 function clearMapData() {
-  deselectCurrent();
-  clearNodes();
-  if (plannerMode) plannerMode.clearAll();
+    deselectCurrent();
+    clearNodes();
+    if (plannerMode) plannerMode.clearAll();
 
-  currentFile = "";
-  
-  // Clear all geo layers from map and reset state
-  Object.values(geoLayers).forEach(l => {
-    if (l) {
-      map.removeLayer(l);
+    if (geoLayers.costGrid) {
+        map.removeLayer(geoLayers.costGrid);
+        geoLayers.costGrid = null;
     }
-  });
-  drawnItems.clearLayers();
-  
-  // Reset layers state
-  ['road', 'footway', 'barrier', 'crossroad', 'waypoint'].forEach(cat => {
-    geoLayers[cat] = null;
-    if (cat !== 'waypoint') {
-      subtypeLayers[cat] = {};
-      subtypeFilters[cat] = {};
-      renderSubtypeFilters(cat);
-    }
-  });
+    const showGridCheckbox = document.getElementById('planner-show-grid');
+    if (showGridCheckbox) showGridCheckbox.checked = false;
 
-  // Reset data state
-  annotations = [];
-  annBaselineGeoms = {};
-  deletedWays = [];
-  deletedNodes = [];
-  tagOverrides = [];
-  hiddenWays = [];
-  hiddenWayIds.clear();
-  changeLog = [];
-  redoStack = [];
+    currentFile = "";
+    
+    // Clear all geo layers from map and reset state
+    Object.values(geoLayers).forEach(l => {
+        if (l) {
+            map.removeLayer(l);
+        }
+    });
+    drawnItems.clearLayers();
+    
+    // Reset layers state
+    ['road', 'footway', 'barrier', 'crossroad', 'waypoint'].forEach(cat => {
+        geoLayers[cat] = null;
+        if (cat !== 'waypoint') {
+            subtypeLayers[cat] = {};
+            subtypeFilters[cat] = {};
+            renderSubtypeFilters(cat);
+        }
+    });
 
-  // Reset UI elements
-  document.getElementById('file-select').value = "";
-  document.getElementById('export-btn').disabled = true;
-  document.getElementById('export-geojson-btn').disabled = true;
-  document.getElementById('feature-search').value = "";
-  
-  renderAnnotationList();
-  renderChangesPanel();
-  renderHiddenPanel();
+    // Reset data state
+    annotations = [];
+    annBaselineGeoms = {};
+    deletedWays = [];
+    deletedNodes = [];
+    tagOverrides = [];
+    hiddenWays = [];
+    hiddenWayIds.clear();
+    changeLog = [];
+    redoStack = [];
 
-  setStatus('Map cleared', 'text-secondary');
+    // Reset UI elements
+    document.getElementById('file-select').value = "";
+    document.getElementById('export-btn').disabled = true;
+    document.getElementById('export-geojson-btn').disabled = true;
+    document.getElementById('feature-search').value = "";
+    
+    renderAnnotationList();
+    renderChangesPanel();
+    renderHiddenPanel();
+
+    setStatus('Map cleared', 'text-secondary');
 }
 
 async function _reloadWay(wayId) {
