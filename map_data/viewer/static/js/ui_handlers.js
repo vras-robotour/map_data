@@ -253,6 +253,7 @@ function showProps(props, feature = null) {
 }
 
 function clearNodes() {
+    _nodeLoadToken++; // drops any node fetch still in flight
     if (nodeLayer) { map.removeLayer(nodeLayer); nodeLayer = null; }
     if (osmEditLayer) {
         osmEditLayer.off('mousedown', _onOsmWayDragDown);
@@ -477,8 +478,13 @@ async function toggleNodes() {
     if (nodeLayer) { clearNodes(); showProps(feature.properties, feature); return; }
 
     setStatus('Loading nodes…', 'text-secondary');
+    const token = ++_nodeLoadToken;
     try {
         const data = await fetchWayNodes(currentFile, feature.properties.id);
+        if (token !== _nodeLoadToken || feature !== currentClickedFeature) {
+            setStatus('', 'text-secondary');
+            return;
+        }
         currentNodes = data.nodes;
         nodeMarkers = [];
         nodeLayer = L.layerGroup().addTo(map);
@@ -497,7 +503,7 @@ async function toggleNodes() {
         setStatus('', 'text-secondary');
         showProps(feature.properties, feature);
     } catch (err) {
-        setStatus(`Node load failed: ${err.message}`, 'text-danger');
+        if (token === _nodeLoadToken) setStatus(`Node load failed: ${err.message}`, 'text-danger');
     }
 }
 
