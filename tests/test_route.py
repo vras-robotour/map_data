@@ -283,3 +283,10 @@ def test_plan_route_cell_size_defaults_to_planner_defaults(footway_network_mapda
         )
     assert e.value.reason == "grid_too_large"
     assert "cell_size=0.01" in e.value.message
+
+
+def test_viewer_uses_the_planner_grid_cell_budget():
+    from map_data.pathsolver import route
+    from map_data.viewer.routes import common
+
+    assert common.MAX_GRID_CELLS is route.MAX_GRID_CELLS

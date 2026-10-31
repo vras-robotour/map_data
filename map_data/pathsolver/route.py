@@ -49,7 +49,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Grid planners refuse requests needing more cells than this (same budget as the viewer).
+#: Grid planners and the viewer's cost grid refuse requests needing more cells than this:
+#: a 2 x 2 km box at the overlay's 1 m, or 500 x 500 m at the 0.25 m default cell size.
 MAX_GRID_CELLS = 4_000_000
 #: Margin (m) added around the waypoints' bounding box for the grid planners.
 GRID_MARGIN_M = 50.0
