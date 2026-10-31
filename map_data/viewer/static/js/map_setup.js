@@ -309,7 +309,7 @@ async function initApp() {
             case 'h': case 'H':
                 if (currentAppMode === 'viewer' && currentMode === 'view' && currentClickedFeature &&
                     ['road', 'footway', 'barrier'].includes(currentClickedFeature.properties.category)) {
-                    if (hiddenWayIds.has(currentClickedFeature.properties.id))
+                    if (_wayHidden(currentClickedFeature.properties.id))
                         showWay(currentClickedFeature.properties.id);
                     else
                         hideCurrentWay();

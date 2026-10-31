@@ -38,13 +38,14 @@ async function api(method, path, { query, body, readOnlyMsg, signal } = {}) {
 async function fetchFileList() {
     if (STATIC_BASE) return await _staticJson('api/files.json');
     const res = await api('GET', '/api/files');
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }
 
 async function fetchMapData(filename) {
     if (STATIC_BASE) return await _staticJson('api/mapdata.json');
     const res = await api('GET', '/api/mapdata', { query: { file: filename } });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }
 
@@ -75,7 +76,7 @@ async function updateAnnotationApi(filename, annId, geometry, type, properties) 
 async function fetchWayNodes(filename, wayId) {
     if (STATIC_BASE) return await _staticJson(`api/way_nodes/${String(wayId).replace(':', '_')}.json`);
     const res = await api('GET', '/api/way_nodes', { query: { file: filename, way_id: wayId } });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }
 
@@ -85,7 +86,7 @@ async function fetchWayApi(filename, wayId) {
 
 async function fetchWaySegmentsApi(filename, wayId) {
     const res = await api('GET', `/api/ways/${wayId}/segments`, { query: { file: filename }, readOnlyMsg: 'Way lookup' });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }
 
@@ -104,13 +105,26 @@ function formatFetchProgress(task) {
 
 async function fetchAreaApi(params, onProgress) {
     const res = await api('POST', '/api/fetch_area', { body: params, readOnlyMsg: 'OSM fetching' });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await errorText(res));
     const { task_id } = await res.json();
     const startedAt = Date.now();
+    let pollFailures = 0;
     while (true) {
         await new Promise(r => setTimeout(r, 1500));
-        const poll = await api('GET', `/api/fetch_area/${task_id}`);
-        if (!poll.ok) throw new Error(await poll.text());
+        let poll;
+        try {
+            poll = await api('GET', `/api/fetch_area/${task_id}`);
+        } catch (err) {
+            pollFailures++;
+            if (pollFailures >= 3) throw err;
+            continue;
+        }
+        if (!poll.ok) {
+            pollFailures++;
+            if (pollFailures >= 3) throw new Error(await errorText(poll));
+            continue;
+        }
+        pollFailures = 0;
         const task = await poll.json();
         if (task.status === 'done') return task.result;
         if (task.status === 'failed') throw new Error(task.error || 'Fetch failed');
@@ -120,12 +134,12 @@ async function fetchAreaApi(params, onProgress) {
 
 async function uploadGpxApi(formData) {
     const res = await api('POST', '/api/upload_gpx', { body: formData, readOnlyMsg: 'Uploading' });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }
 
 async function uploadMapdataApi(formData) {
     const res = await api('POST', '/api/upload_mapdata', { body: formData, readOnlyMsg: 'Uploading' });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }

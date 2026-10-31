@@ -38,7 +38,7 @@ class PlannerMode {
                 data = await _staticJson('api/planner_defaults.json');
             } else {
                 const res = await api('GET', '/api/planner_defaults');
-                if (!res.ok) throw new Error(await res.text());
+                if (!res.ok) throw new Error(await errorText(res));
                 data = await res.json();
             }
             this.defaults = data;
@@ -398,7 +398,7 @@ class PlannerMode {
                     surface_costs: JSON.stringify(this.surfaceCosts),
                 },
             });
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) throw new Error(await errorText(res));
             const data = await res.json();
 
             if (geoLayers.costGrid) map.removeLayer(geoLayers.costGrid);
@@ -759,7 +759,7 @@ class PlannerMode {
                 }
             });
 
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) throw new Error(await errorText(res));
             const data = await res.json();
 
             if (data.retrieveNum === 1) {

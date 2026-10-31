@@ -1,7 +1,9 @@
 // ── Layers Management ───────────────────────────────────────────────────────
 
 function _wayHidden(id) {
-    return hiddenWayIds.has(id) || (currentAppMode === 'planner' && plannerBlockedIds.has(id));
+    const origId = String(id).split(':')[0];
+    return hiddenWayIds.has(id) || hiddenWayIds.has(origId) || hiddenWayIds.has(Number(origId))
+        || (currentAppMode === 'planner' && (plannerBlockedIds.has(id) || plannerBlockedIds.has(origId) || plannerBlockedIds.has(Number(origId))));
 }
 
 function setSubtypeVisible(cat, subtype, visible) {
@@ -324,7 +326,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         });
 
         // Pre-compute hidden way IDs before building layers
-        const _loadHiddenIds = new Set(_parseWayList(annData.hidden_ways).map(d => d.id));
+        const _loadHiddenIds = new Set(_parseWayList(annData.hidden_ways).map(d => String(d.id).split(':')[0]));
 
         // Reset subtype state for fresh load
         ['road', 'footway', 'barrier', 'crossroad'].forEach(cat => {
@@ -352,7 +354,10 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
             geoLayers[cat] = L.geoJSON({ type: 'FeatureCollection', features }, layerOpts);
             if (_loadHiddenIds.size > 0) {
                 const _toHide = [];
-                geoLayers[cat].eachLayer(l => { if (_loadHiddenIds.has(l._featureId)) _toHide.push(l); });
+                geoLayers[cat].eachLayer(l => {
+                    const origId = String(l._featureId).split(':')[0];
+                    if (_loadHiddenIds.has(origId) || _loadHiddenIds.has(String(l._featureId))) _toHide.push(l);
+                });
                 _toHide.forEach(l => geoLayers[cat].removeLayer(l));
             }
             const cb = document.querySelector(`[data-layer="${cat}"]`);

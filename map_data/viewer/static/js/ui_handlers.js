@@ -216,20 +216,35 @@ function showProps(props, feature = null) {
             }).join('');
             el.innerHTML += `<div class="node-list">${items}</div>`;
         }
-        el.innerHTML += `<button class="btn btn-sm btn-outline-secondary mt-1"
-                             style="font-size:0.72rem;width:100%;"
-                             onclick="openWayEditModal()">&#9998; Edit Properties</button>`;
-        if (hiddenWayIds.has(props.id)) {
-            el.innerHTML += `<button class="btn btn-sm btn-outline-info mt-1"
-                               style="font-size:0.72rem;width:100%;"
-                               onclick="showWay(${props.id})">&#128065; Show Object</button>`;
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn btn-sm btn-outline-secondary mt-1';
+        editBtn.style.fontSize = '0.72rem';
+        editBtn.style.width = '100%';
+        editBtn.innerHTML = '&#9998; Edit Properties';
+        editBtn.addEventListener('click', () => openWayEditModal());
+        el.appendChild(editBtn);
+
+        const isHidden = _wayHidden(props.id);
+        const hideShowBtn = document.createElement('button');
+        hideShowBtn.className = `btn btn-sm ${isHidden ? 'btn-outline-info' : 'btn-outline-secondary'} mt-1`;
+        hideShowBtn.style.fontSize = '0.72rem';
+        hideShowBtn.style.width = '100%';
+        if (isHidden) {
+            hideShowBtn.innerHTML = '&#128065; Show Object';
+            hideShowBtn.addEventListener('click', () => showWay(props.id));
+            el.appendChild(hideShowBtn);
         } else {
-            el.innerHTML += `<button class="btn btn-sm btn-outline-secondary mt-1"
-                               style="font-size:0.72rem;width:100%;"
-                               onclick="hideCurrentWay()">&#128065; Hide Object</button>`;
-            el.innerHTML += `<button class="btn btn-sm btn-outline-danger mt-1"
-                               style="font-size:0.72rem;width:100%;"
-                               onclick="deleteCurrentWay()">&#128465; Delete Object</button>`;
+            hideShowBtn.innerHTML = '&#128065; Hide Object';
+            hideShowBtn.addEventListener('click', () => hideCurrentWay());
+            el.appendChild(hideShowBtn);
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'btn btn-sm btn-outline-danger mt-1';
+            delBtn.style.fontSize = '0.72rem';
+            delBtn.style.width = '100%';
+            delBtn.innerHTML = '&#128465; Delete Object';
+            delBtn.addEventListener('click', () => deleteCurrentWay());
+            el.appendChild(delBtn);
         }
     }
 }
@@ -619,11 +634,16 @@ async function hideCurrentWay() {
 
 async function showWay(wayId) {
     if (!currentFile) return;
+    const origId = String(wayId).split(':')[0];
     const res = await api('PUT', `/api/ways/${wayId}/show`, { query: { file: currentFile }, readOnlyMsg: 'Editing' });
     if (res.ok) {
-        hiddenWays = hiddenWays.filter(d => d.id !== wayId);
+        hiddenWays = hiddenWays.filter(d => String(d.id).split(':')[0] !== origId && d.id !== wayId);
         hiddenWayIds.delete(wayId);
+        hiddenWayIds.delete(origId);
+        hiddenWayIds.delete(Number(origId));
         await _reloadWay(wayId);
+        renderHiddenPanel();
+        renderChangesPanel();
     }
 }
 
