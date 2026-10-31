@@ -79,6 +79,8 @@ nav:
       - MapData: api/map_data.md
       - Way: api/way.md
       - Pathsolvers: api/pathsolver.md
+      - Annotations and edits: api/annotations.md
+      - Traversability: api/traversability.md
       - Viewer REST API: api/viewer_routes.md
   - Troubleshooting: troubleshooting.md
   - Developer Guide:
@@ -88,7 +90,6 @@ nav:
       - Data Formats: dev/data_formats.md
       - Contributing: dev/contributing.md
       - Testing: dev/testing.md
-      - Moving a Shared Node: dev/node_move_detach.md
       - Known Issues & Backlog: dev/todo.md
       - Changelog: dev/changelog.md
   - Demo: https://vras-robotour.github.io/map_data/demo/

@@ -1,37 +1,44 @@
 # Pathsolvers
 
-## Generic A\*
+## Route planning
 
-`astar_search` is the low-level A\* implementation shared by `GraphPlanner` and `grid_astar`.
-It works on any hashable node type — you can use it directly to build a custom planner.
-See [Using `astar_search` directly](../planning.md#using-astar_search-directly) for a worked example.
+`plan_route` is the entry point the viewer, `map_data_plan` and `route_planner` share: graph or grid planning, request validation, waypoint spacing.
 
-::: map_data.pathsolver.astar.astar_search
+```python
+from map_data.annotations import load_mapdata_with_annotations
+from map_data.pathsolver.route import RoutePlanningError, plan_route
+
+md, _ = load_mapdata_with_annotations("my_area.mapdata")
+try:
+    result = plan_route(md, [(50.1050, 14.4220), (50.1072, 14.4280)], algorithm="graph", spacing=3.0)
+except RoutePlanningError as e:
+    print(e.reason, e.message)
+else:
+    print(f"{result.length_m:.0f} m, {len(result.latlon)} waypoints")
+```
+
+::: map_data.pathsolver.route
     options:
-      show_source: true
+      show_root_heading: false
       heading_level: 3
+      members:
+        - plan_route
+        - RouteResult
+        - RoutePlanningError
+        - goal_plan_kwargs
+        - check_in_map
 
-## Graph Planner
+## Graph planner
 
 ::: map_data.pathsolver.graph_planner.GraphPlanner
     options:
       show_root_heading: false
-      members: false
-
-::: map_data.pathsolver.graph_planner.GraphPlanner.__init__
-    options:
-      show_source: true
       heading_level: 3
-
-::: map_data.pathsolver.graph_planner.GraphPlanner.plan
-    options:
-      show_source: true
-      heading_level: 3
-
-::: map_data.pathsolver.graph_planner.GraphPlanner._route_segment
-    options:
-      show_source: true
-      heading_level: 3
+      members:
+        - __init__
+        - plan
+        - snap_distance
+        - edge_factor
 
 ### Walkable areas
 
@@ -39,148 +46,21 @@ See [Using `astar_search` directly](../planning.md#using-astar_search-directly) 
     options:
       show_root_heading: false
       heading_level: 4
-
-## Grid A*
-
-::: map_data.pathsolver.grid_astar.grid_astar
-    options:
-      show_source: true
-      heading_level: 3
-
-## RRT*
-
-::: map_data.pathsolver.rrt_star.RRTStar
-    options:
-      show_root_heading: false
       members: false
 
-::: map_data.pathsolver.rrt_star.RRTStar.__init__
-    options:
-      show_source: true
-      heading_level: 3
+## Way costs
 
-::: map_data.pathsolver.rrt_star.RRTStar.find_path
+::: map_data.pathsolver.way_cost
     options:
-      show_source: true
+      show_root_heading: false
       heading_level: 3
-
-::: map_data.pathsolver.rrt_star.RRTStar._sample_point
-    options:
-      show_source: true
-      heading_level: 3
-
-::: map_data.pathsolver.rrt_star.RRTStar._nearest_node
-    options:
-      show_source: true
-      heading_level: 3
-
-::: map_data.pathsolver.rrt_star.RRTStar._steer
-    options:
-      show_source: true
-      heading_level: 3
-
-::: map_data.pathsolver.rrt_star.RRTStar._get_near_nodes
-    options:
-      show_source: true
-      heading_level: 3
-
-::: map_data.pathsolver.rrt_star.RRTStar._segment_cost
-    options:
-      show_source: true
-      heading_level: 3
-
-::: map_data.pathsolver.rrt_star.RRTStar._reconstruct_path
-    options:
-      show_source: true
-      heading_level: 3
+      members:
+        - way_cost
+        - load_cost_tables
 
 ## ReplanPath
 
-`ReplanPath` is the local replanning engine used by the viewer's **Planner** mode and the
-`replan` CLI tool. It discretizes the area around the input waypoints into a cost grid,
-assigns traversal costs based on OSM highway and surface types, then finds a collision-free
-path using either Grid A* or RRT*.
-
-### Class attributes
-
-These cost tables are loaded from `config/planner_defaults.yaml` at import time and can be
-overridden per-instance:
-
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `HIGHWAY_COSTS` | `dict[str, float]` | Per OSM `highway` value cost (0.0 = free, 1.0 = obstacle) |
-| `SURFACE_COSTS` | `dict[str, float]` | Extra penalty per OSM `surface` value |
-| `DEFAULT_OFF_PATH_COST` | `float` | Cost for cells not near any known way (default `0.9`) |
-| `PATH_COST_CAP` | `float` | Maximum cost a way cell can have (default `0.85`, keeps ways preferred over off-path) |
-
-### Constructor
-
-```python
-ReplanPath(obstacles=None, transfer_id=None, ..., *, low, high, cell_size=0.25,
-           inflate_obstacles=0.25, simplify_path=True, smooth_path=False)
-```
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `obstacles` | `list[shapely.Geometry]` | Obstacle geometries (from `ways_to_shapely(md.barriers_list)`). |
-| `transfer_id` | `str \| None` | Optional UUID for cancellation via `cancel_replan_backend()`. |
-
-**Keyword-only planning parameters:**
-
-| Keyword | Default | Description |
-|-----------|---------|-------------|
-| `low` | — | `(min_x, min_y)` lower bound of the planning area in UTM metres |
-| `high` | — | `(max_x, max_y)` upper bound of the planning area in UTM metres |
-| `cell_size` | `0.25` | Grid resolution in metres |
-| `inflate_obstacles` | `0.25` | Buffer added to obstacle geometries in metres |
-| `simplify_path` | `True` | Apply Douglas-Peucker simplification to the output |
-| `smooth_path` | `False` | Apply gradient-descent smoothing after planning |
-
-### Methods
-
-#### `fill_grid(map_data, highway_types=None, max_path_dist=2.0)`
-
-Populate the cost grid from map data. Must be called before `replan()` (or use
-`fill_grid_lazily`).
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `map_data` | — | A loaded `MapData` object |
-| `highway_types` | `["footway"]` | Which way categories to use. Pass `["footway", "road"]` to include roads. |
-| `max_path_dist` | `2.0` | Cells within this distance (m) of a known way receive an interpolated cost. Cells beyond receive `DEFAULT_OFF_PATH_COST`. |
-
-Cost model per cell: `way_cost + (DEFAULT_OFF_PATH_COST - way_cost) × (dist / max_path_dist)²`, where `way_cost = min(PATH_COST_CAP, HIGHWAY_COSTS[highway] + SURFACE_COSTS[surface])`. Obstacle cells are set to `inf`.
-
-#### `fill_grid_lazily(map_data, highway_types=None, max_path_dist=2.0)`
-
-Same arguments as `fill_grid`, but the grid is only built when the first leg that collides
-with an obstacle needs it; legs that don't are checked against the obstacle geometries alone.
-`plan_route` uses this.
-
-#### `replan(path, algorithm="astar")`
-
-Plan a path through the cost grid.
-
-| Parameter | Description |
-|-----------|-------------|
-| `path` | `np.ndarray` of shape `(N, 2+)` — input waypoints in UTM metres |
-| `algorithm` | `"astar"` (Grid A*) or `"rrt"` (RRT*; falls back to Grid A* when it finds no path for a leg) |
-
-Returns `np.ndarray` (replanned path) or `None` (no path found, or the run was cancelled).
-Segments between consecutive waypoints are processed sequentially.
-
-### Cancellation
-
-To cancel a running `replan()` call from another thread, pass a `transfer_id` UUID to the
-constructor and call:
-
-```python
-from map_data.pathsolver.replan import cancel_replan_backend
-
-cancel_replan_backend(transfer_id)
-```
-
-### Minimal usage example
+Grid planning (Grid A* or RRT*) over a box around the waypoints. `plan_route` builds one per request; use it directly to plan on a grid of your own.
 
 ```python
 import numpy as np
@@ -188,14 +68,66 @@ from map_data.map_data import MapData
 from map_data.pathsolver.replan import ReplanPath
 from map_data.utils.parsing import ways_to_shapely
 
-md = MapData.load("coords.mapdata")
-
+md = MapData.load("my_area.mapdata")
 replanner = ReplanPath(
     ways_to_shapely(md.barriers_list), low=(md.min_x, md.min_y), high=(md.max_x, md.max_y)
 )
-replanner.fill_grid(md, highway_types=["footway"], max_path_dist=2.0)
+replanner.fill_grid(md, highway_types=["footway"])
 
 start = np.array([md.min_x + 10, md.min_y + 10])
 goal = np.array([md.max_x - 10, md.max_y - 10])
-new_path = replanner.replan(np.array([start, goal]), algorithm="astar")
+path = replanner.replan(np.array([start, goal]), algorithm="astar")
+if path is None:
+    print(replanner.failure_reason)
 ```
+
+Constructor keywords left `None` (`cell_size`, `inflate_obstacles`, `simplify_path`, `smooth_path`, `grid_cost_weight`, `highway_costs`, `surface_costs`) take the values of `config/planner_defaults.yaml`; see [Planner configuration](../dev/planner_config.md). The resolved tables are the instance attributes `highway_costs`, `surface_costs`, `path_cost_cap` and `default_off_path_cost`.
+
+`replan()` returns the path, or `None` with `failure_reason` set to `no_path`, `start_blocked`, `goal_blocked` or `cancelled`. To cancel a run from another thread, construct it with a unique `transfer_id` and call `cancel_replan_backend(transfer_id)`.
+
+::: map_data.pathsolver.replan
+    options:
+      show_root_heading: false
+      heading_level: 3
+      members:
+        - grid_defaults
+        - cancel_replan_backend
+
+::: map_data.pathsolver.replan.ReplanPath
+    options:
+      show_root_heading: false
+      heading_level: 3
+      members:
+        - replan
+        - fill_grid
+        - fill_grid_lazily
+
+## Grid A*
+
+::: map_data.pathsolver.grid_astar.grid_astar
+    options:
+      heading_level: 3
+
+## RRT*
+
+::: map_data.pathsolver.rrt_star.RRTStar
+    options:
+      show_root_heading: false
+      heading_level: 3
+      members:
+        - __init__
+        - find_path
+
+## Smoothing
+
+::: map_data.pathsolver.smoothing.smooth_path
+    options:
+      heading_level: 3
+
+## Generic A\*
+
+`astar_search` works on any hashable node type; see [Using astar_search directly](../planning.md#using-astar_search-directly).
+
+::: map_data.pathsolver.astar.astar_search
+    options:
+      heading_level: 3
