@@ -49,7 +49,7 @@ source install/setup.bash
 ```
 
 !!! note "`ros2_numpy` must be built from source"
-    The `osm_cloud` node depends on [`ros2_numpy`](https://github.com/Box-Robotics/ros2_numpy),
+    The ROS 2 nodes depend on [`ros2_numpy`](https://github.com/Box-Robotics/ros2_numpy),
     which is not released as a binary package in any ROS distribution — `rosdep install`
     cannot resolve it. Clone its `jazzy` branch into your colcon workspace `src/` and build it
     alongside this package.
