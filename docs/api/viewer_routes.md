@@ -8,6 +8,8 @@ All endpoints are served by `map_data_viewer`. Handlers live in `map_data.viewer
 ## Conventions
 
 - **Errors** are JSON `{"error": "<message>"}` with the HTTP status, for every endpoint.
+- **413**: a JSON body over 10 MB, or any request over 100 MB (the multipart uploads).
+- Every response carries `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Content-Security-Policy: frame-ancestors 'none'`.
 - **409**: the file's annotation store exists but is not a readable JSON object. It is moved aside to `<store>.corrupt-<timestamp>` and never overwritten; reload to continue with an empty store.
 - **`file`** is a `.mapdata` name in the data directory. A name that resolves outside it is 400, a missing file 404.
 - **`way_id`** is an OSM way ID or a split segment `"<id>:<index>"`.
@@ -54,7 +56,7 @@ Starts a background download and parse of an OSM area; returns `{"task_id": "<uu
 - `name` is sanitized to `[A-Za-z0-9_-]`. An existing map, or a leftover `<name>.annotations.json`, is never overwritten: the map is saved as `<name>_1.mapdata`, `<name>_2.mapdata`, ...
 - `grid_margin`, `obstacle_radius`, `buffer_widths` are optional; defaults from `config/planner_defaults.yaml`.
 
-**400**: missing or invalid field, box too large, empty name.
+**400**: missing or invalid field, box too large, empty name. **429**: two Overpass fetches (`fetch_area` or `upload_gpx`) already running.
 
 ### `GET /api/fetch_area/<task_id>`
 
@@ -80,11 +82,11 @@ Builds a map around an uploaded GPX track, synchronously. `multipart/form-data`:
 
 Saved under the next free name, as for `fetch_area`; the Overpass cache is written next to it. Returns `{"filename", "roads", "footways", "barriers", "crossroads"}`.
 
-**400**: bad file, name or options, or the area (with margin) exceeds 25 km². **503**: Overpass unreachable. **500**: parsing failed.
+**400**: bad file, name or options, or the area (with margin) exceeds 25 km². **429**: two Overpass fetches already running. **503**: Overpass unreachable. **500**: parsing failed.
 
 ### `POST /api/upload_mapdata`
 
-Saves an uploaded `.mapdata` file (`multipart/form-data`, field `file`) under the next free name. A file `MapData.load` cannot read is deleted again. Returns `{"filename": "<saved name>"}`.
+Saves an uploaded `.mapdata` file (`multipart/form-data`, field `file`) under the next free name. It is checked with `MapData.load` under a temporary name first, so an unreadable file never appears. Returns `{"filename": "<saved name>"}`.
 
 **400**: missing file, wrong extension or unreadable map.
 
@@ -270,7 +272,7 @@ Failure `reason`s: `snap_too_far`, `unreachable`, `start_outside_map`, `goal_out
 
 ### `POST /api/cancel_replan`
 
-Body `{"transfer_id": "..."}`. Returns `{"success": true}`, also for an unknown or finished ID. A cancel that arrives before its plan starts still aborts it.
+Body `{"transfer_id": "..."}`. Returns `{"success": true}`, also for an unknown or finished ID. A cancel that arrives before its plan starts still aborts it. **400**: no `transfer_id`, or not a string.
 
 ### `GET /api/cost_grid`
 
@@ -304,11 +306,11 @@ A QR code of the goal as PNG or SVG; the payload is `geo:<lat>,<lon>`, also sent
 
 Body `{"gpx": "<GPX text>"}`. Starts `wormhole send` (the [magic-wormhole](https://magic-wormhole.readthedocs.io/) CLI must be on `PATH`) and waits up to 15 s for the code. Returns `{"success": true, "code": "7-guitar-academy", "transfer_id": "<uuid4>"}`; the receiver runs `wormhole receive <code>`.
 
-**400**: no `gpx`. **500**: the CLI failed to start or no code within 15 s.
+**400**: no `gpx`, or not a string. **429**: 4 transfers already running. **500**: the CLI failed to start or no code within 15 s.
 
 ### `POST /api/cancel_wormhole`
 
-Body `{"transfer_id": "..."}`. Returns `{"success": true, "message": "Transfer cancelled"}`. **400**: no `transfer_id`. **404**: unknown transfer.
+Body `{"transfer_id": "..."}`. Returns `{"success": true, "message": "Transfer cancelled"}`. **400**: no `transfer_id`, or not a string. **404**: unknown transfer.
 
 ---
 

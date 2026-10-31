@@ -74,6 +74,14 @@ def get_qr() -> ResponseReturnValue:
     return _qr_response(qr_png(text, scale=scale, caption=caption), "image/png", text, ".png")
 
 
+#: Most ``wormhole send`` subprocesses alive at once; more answer 429.
+MAX_ACTIVE_TRANSFERS = 4
+
+
+class TooManyTransfers(RuntimeError):
+    """Raised by :meth:`WormholeManager.create_transfer` when :data:`MAX_ACTIVE_TRANSFERS` run."""
+
+
 class WormholeManager:
     """
     Manage ``magic-wormhole`` subprocesses that send a GPX file to a companion app.
@@ -89,6 +97,7 @@ class WormholeManager:
     def __init__(self) -> None:
         """Initialize with no active transfers, warning once if the ``wormhole`` CLI is missing."""
         self.active_transfers: dict[str, dict[str, Any]] = {}
+        self._create_lock = threading.Lock()
         if shutil.which("wormhole") is None:
             # Not fatal: only the sharing endpoints fail.
             logger.warning("'wormhole' command not found. magic-wormhole is required for sharing.")
@@ -102,9 +111,18 @@ class WormholeManager:
 
         Raises
         ------
+        TooManyTransfers
+            If :data:`MAX_ACTIVE_TRANSFERS` transfers are already running.
         RuntimeError
             If the ``wormhole`` subprocess fails to start.
         """
+        with self._create_lock:
+            if len(self.active_transfers) >= MAX_ACTIVE_TRANSFERS:
+                raise TooManyTransfers("Too many wormhole transfers running, try again later")
+            return self._start_transfer(gpx_data)
+
+    def _start_transfer(self, gpx_data: str) -> str:
+        """Spawn the subprocess and its capture thread; :meth:`create_transfer` holds the lock."""
         transfer_id = str(uuid.uuid4())
         temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         file_path = Path(temp_dir.name) / "path.gpx"
@@ -225,15 +243,20 @@ def create_wormhole() -> ResponseReturnValue:
 
     Waits up to 15 s for the wormhole code, cancelling the transfer if it
     does not come. Returns ``{"success": true, "code": ..., "transfer_id": ...}``;
-    400 if ``gpx`` is missing, 500 if no code came in time or on an error.
+    400 if ``gpx`` is missing or not a string, 429 if :data:`MAX_ACTIVE_TRANSFERS`
+    transfers run, 500 if no code came in time or on an error.
     """
     gpx_data = _json_object().get("gpx")
     if not gpx_data:
         abort(400, "No GPX data provided")
+    if not isinstance(gpx_data, str):
+        abort(400, "gpx must be a string")
 
     try:
         transfer_id = wormhole_manager.create_transfer(gpx_data)
         code = wormhole_manager.get_transfer_code(transfer_id, timeout=15)
+    except TooManyTransfers as e:
+        abort(429, str(e))
     except Exception:
         logger.exception("Error creating wormhole")
         abort(500, "Internal server error")
@@ -249,11 +272,13 @@ def cancel_wormhole() -> ResponseReturnValue:
     Cancel the wormhole transfer with the body's ``transfer_id``.
 
     Returns ``{"success": true, "message": ...}``; 400 if the body is not
-    JSON or lacks ``transfer_id``, 404 if the transfer is unknown.
+    JSON or ``transfer_id`` is missing or not a string, 404 if the transfer is unknown.
     """
     transfer_id = _json_object().get("transfer_id")
     if not transfer_id:
         abort(400, "No transfer_id provided")
+    if not isinstance(transfer_id, str):
+        abort(400, "transfer_id must be a string")
     success, message = wormhole_manager.cancel_transfer(transfer_id)
     if not success:
         abort(404, message)

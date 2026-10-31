@@ -406,14 +406,14 @@ function showOsmNodeProps(node, index, total) {
     if (canSplit) {
         buttons += `
       <button class="btn btn-sm btn-outline-warning" style="font-size:0.72rem;" title="Split Way" aria-label="Split Way"
-              onclick="splitCurrentWay(currentClickedFeature.properties.id, ${node.id})">
+              data-node-act="split">
         ✂️
       </button>`;
     }
 
     buttons += `
       <button class="btn btn-sm btn-outline-danger" style="font-size:0.72rem;" title="Delete Node"
-              onclick="deleteCurrentNode(currentClickedFeature.properties.id, ${node.id})">
+              data-node-act="delete">
         &#128465;
       </button>
     </div>`;
@@ -424,16 +424,22 @@ function showOsmNodeProps(node, index, total) {
         style="font-size:0.62rem;" title="Copy to clipboard"
         onclick="copyToClipboard('${v}')">&#x2398;</button>`;
 
-    document.getElementById('props-content').innerHTML = `
+    const el = document.getElementById('props-content');
+    el.innerHTML = `
     <table><tbody>
       <tr><td>Type</td><td><span class="badge bg-secondary">node</span></td></tr>
-      <tr><td>OSM ID</td><td>${node.id}</td></tr>
+      <tr><td>OSM ID</td><td>${escHtml(String(node.id))}</td></tr>
       <tr><td>Index</td><td>${index + 1} / ${total}</td></tr>
       <tr><td>Lat</td><td>${lat}${copyBtn(lat)}</td></tr>
       <tr><td>Lon</td><td>${lon}${copyBtn(lon)}</td></tr>
       ${tagRows}
     </tbody></table>
     ${buttons}`;
+    // Bound here, not inline: the node ID comes from the file and must not become attribute code.
+    el.querySelector('[data-node-act="split"]')?.addEventListener('click',
+        () => splitCurrentWay(currentClickedFeature.properties.id, node.id));
+    el.querySelector('[data-node-act="delete"]')?.addEventListener('click',
+        () => deleteCurrentNode(currentClickedFeature.properties.id, node.id));
 }
 
 async function splitCurrentWay(wayId, nodeId) {

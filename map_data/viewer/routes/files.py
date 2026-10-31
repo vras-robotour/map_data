@@ -157,6 +157,9 @@ def _release_mapdata_path(path: Path) -> None:
 
 _fetch_tasks: dict[str, dict[str, Any]] = {}
 
+# Overpass fetches (fetch_area threads and upload_gpx) running at once; more answer 429.
+_overpass_slots = threading.BoundedSemaphore(2)
+
 #: How long a terminal ("done"/"failed") fetch task is retained, in seconds,
 #: before it is evicted -- either by a poll in :func:`fetch_area_status` or by
 #: the sweep in :func:`fetch_area`.
@@ -257,6 +260,7 @@ def _run_fetch_task(task_id: str, md: MapData, out_path: Path) -> None:
         _fetch_tasks[task_id] = {"status": "failed", "error": "Internal server error"}
     finally:
         _release_mapdata_path(out_path)
+        _overpass_slots.release()
 
 
 @bp.route("/api/fetch_area", methods=["POST"])
@@ -284,7 +288,7 @@ def fetch_area() -> Response:
     ------
     werkzeug.exceptions.HTTPException
         400 if a field is missing or invalid, the box is too large, or
-        ``name`` sanitizes to empty.
+        ``name`` sanitizes to empty. 429 if two Overpass fetches already run.
 
     """
     body = _json_object()
@@ -335,6 +339,8 @@ def fetch_area() -> Response:
             f"{MAX_FETCH_AREA_KM2:.0f} km² limit for a single fetch. Draw a smaller area.",
         )
 
+    if not _overpass_slots.acquire(blocking=False):
+        abort(429, "Too many OSM fetches running, try again later")
     # Also evict here, or tasks whose client stopped polling would pile up.
     now = time.time()
     for stale_id, task in list(_fetch_tasks.items()):
@@ -343,11 +349,16 @@ def fetch_area() -> Response:
     _fetch_tasks[task_id] = {"status": "pending"}
     # Reserved, as the map is only written when the background task finishes.
     out_path = _free_mapdata_path(data_dir, name, reserve=True)
-    threading.Thread(
-        target=_run_fetch_task,
-        args=(task_id, md, out_path),
-        daemon=True,
-    ).start()
+    try:
+        threading.Thread(
+            target=_run_fetch_task,
+            args=(task_id, md, out_path),
+            daemon=True,
+        ).start()
+    except BaseException:
+        _release_mapdata_path(out_path)
+        _overpass_slots.release()
+        raise
     return jsonify({"task_id": task_id})
 
 
@@ -393,8 +404,8 @@ def upload_gpx() -> Response:
     ------
     werkzeug.exceptions.HTTPException
         400 if the file, ``name`` or ``options`` is invalid or the area is
-        too large. 503 if Overpass is unreachable. 500 if parsing fails or
-        on an unexpected error.
+        too large. 429 if two Overpass fetches already run. 503 if Overpass is
+        unreachable. 500 if parsing fails or on an unexpected error.
 
     """
     if "file" not in request.files:
@@ -444,6 +455,8 @@ def upload_gpx() -> Response:
                     f"{MAX_FETCH_AREA_KM2:.0f} km² limit for a single fetch.",
                 )
 
+            if not _overpass_slots.acquire(blocking=False):
+                abort(429, "Too many OSM fetches running, try again later")
             out_path = _free_mapdata_path(data_dir, name, reserve=True)
             # MapData caches the OSM response next to coords_file: keep it beside the map
             md.coords_file = str(out_path.with_suffix(".gpx"))
@@ -454,6 +467,7 @@ def upload_gpx() -> Response:
                 abort(503 if e.stage == "query" else 500, str(e))
             finally:
                 _release_mapdata_path(out_path)
+                _overpass_slots.release()
 
             return jsonify(result)
         except Exception as e:
@@ -470,8 +484,9 @@ def upload_mapdata() -> Response:
 
     Saved as ``<stem>.mapdata`` (lower-case extension, as the file list matches it
     case-sensitively) or the next free name (:func:`_free_mapdata_path`);
-    a file that fails to load is deleted again. Returns ``{"filename": ...}``,
-    the name saved under; 400 for a missing, misnamed or unloadable file.
+    it is validated under a temp name, so an unloadable file never appears in the
+    list. Returns ``{"filename": ...}``, the name saved under; 400 for a missing,
+    misnamed or unloadable file.
     """
     if "file" not in request.files:
         abort(400, "No file part")
@@ -482,15 +497,19 @@ def upload_mapdata() -> Response:
     data_dir = _get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    dest = _free_mapdata_path(data_dir, Path(file.filename).stem)
-    file.save(dest)
-
+    dest = _free_mapdata_path(data_dir, Path(file.filename).stem, reserve=True)
+    tmp = dest.with_name(f"{dest.name}.{uuid.uuid4().hex}.tmp")
     try:
-        MapData.load(str(dest))
-    except Exception as e:
-        logger.warning("Rejected uploaded .mapdata %s: %r", dest.name, e)
-        dest.unlink(missing_ok=True)
-        abort(400, "Invalid .mapdata file")
+        file.save(tmp)
+        try:
+            MapData.load(str(tmp))
+        except Exception as e:
+            logger.warning("Rejected uploaded .mapdata %s: %r", dest.name, e)
+            abort(400, "Invalid .mapdata file")
+        tmp.replace(dest)
+    finally:
+        tmp.unlink(missing_ok=True)
+        _release_mapdata_path(dest)
 
     return jsonify({"filename": dest.name})
 

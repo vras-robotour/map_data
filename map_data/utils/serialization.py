@@ -39,7 +39,7 @@ def way_from_dict(data: dict[str, Any]) -> Way:
     return Way(
         id=data.get("id", -1),
         is_area=data.get("is_area", False),
-        nodes=data.get("nodes") or [],
+        nodes=[int(n) for n in data.get("nodes") or []],
         tags=data.get("tags") or {},
         line=line,
         in_out=data.get("in_out", ""),

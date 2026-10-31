@@ -37,6 +37,9 @@ from ..cache import load_mapdata_cached, merged_mapdata_cached
 
 bp = Blueprint("viewer", __name__)
 
+#: Cap on a JSON request body; only the multipart uploads need the app's larger MAX_CONTENT_LENGTH.
+MAX_JSON_LENGTH = 10 * 1024 * 1024  # 10 MB
+
 
 @bp.app_errorhandler(HTTPException)
 def _http_error(e: HTTPException) -> ResponseReturnValue:
@@ -198,9 +201,12 @@ def _json_object() -> dict[str, Any]:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if the body is not valid JSON or not a JSON object.
+        400 if the body is not valid JSON or not a JSON object, 413 if it is
+        larger than :data:`MAX_JSON_LENGTH`.
 
     """
+    if (request.content_length or 0) > MAX_JSON_LENGTH:
+        abort(413, f"JSON body is larger than {MAX_JSON_LENGTH // 2**20} MB")
     body = request.get_json(force=True)
     if body is None:
         return {}

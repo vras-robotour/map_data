@@ -3,6 +3,7 @@ import hmac
 import importlib.util
 import logging
 import os
+import re
 import signal
 import sys
 import threading
@@ -67,6 +68,24 @@ ACCESS_TOKEN_COOKIE = "map_data_access_token"
 # after a CORS preflight, which the HTTP API never grants; static/js/utils.js sets it.
 CSRF_CUSTOM_HEADER = "X-Requested-With"
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+SECURITY_HEADERS = {
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Content-Security-Policy": "frame-ancestors 'none'",
+}
+
+_TOKEN_IN_URL = re.compile(rf"({ACCESS_TOKEN_QUERY_PARAM}=)[^&\s]*")
+
+
+def _redact_token(record: logging.LogRecord) -> bool:
+    """Logging filter: blank ``access_token`` values; werkzeug puts the request line in args."""
+    if isinstance(record.args, tuple):
+        record.args = tuple(
+            _TOKEN_IN_URL.sub(r"\1***", a) if isinstance(a, str) else a for a in record.args
+        )
+    return True
 
 
 def _configured_access_token() -> str | None:
@@ -178,7 +197,9 @@ def create_app(
             rest = [
                 (k, v) for k, v in request.args.items(multi=True) if k != ACCESS_TOKEN_QUERY_PARAM
             ]
-            return redirect(request.path + (f"?{urlencode(rest)}" if rest else ""))
+            # One leading "/": "/\host" or "//host" would be a scheme-relative redirect off-site.
+            path = "/" + request.path.lstrip("/\\")
+            return redirect(path + (f"?{urlencode(rest)}" if rest else ""))
         return None
 
     @app.after_request
@@ -193,6 +214,11 @@ def create_app(
                 httponly=True,
                 samesite="Lax",
             )
+        return response
+
+    @app.after_request
+    def _security_headers(response: Response) -> Response:
+        response.headers.update(SECURITY_HEADERS)
         return response
 
     @app.context_processor
@@ -287,6 +313,7 @@ def main() -> None:
     data_dir = str(Path(args.data_dir).resolve()) if args.data_dir else None
 
     setup_logging()
+    logging.getLogger("werkzeug").addFilter(_redact_token)
     tracker_config = Path(args.config).resolve() if args.config else None
     if tracker_config and not tracker_config.is_file():
         logger.warning("%s does not exist yet: default topics, Save creates it", tracker_config)
