@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from pathlib import Path
 
 import gpxpy
 
@@ -36,3 +37,15 @@ def create_gpx_track(
     track.segments.append(segment)
     gpx.tracks.append(track)
     return gpx.to_xml()
+
+
+def mission_gpx_path(name: str, mission_dir: str | Path) -> Path | None:
+    """
+    ``mission_dir/name`` resolved, or ``None`` unless *name* is a plain ``.gpx`` file name.
+
+    A path, ``..`` or a symlink that leads out of *mission_dir* is refused: the name may
+    come from a remote client.
+    """
+    mission = Path(mission_dir).expanduser().resolve()
+    out = (mission / name).resolve()
+    return out if out.parent == mission and out.suffix == ".gpx" else None

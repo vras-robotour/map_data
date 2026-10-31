@@ -28,6 +28,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 
 import map_data.map_data as md
 from map_data.annotations import edit_mapdata, load_mapdata_with_annotations, load_summary
+from map_data.pathsolver.route import MAX_GRID_CELLS
 from map_data.traversability import resolve_traversability_path
 from map_data.utils.densify import densify_ways
 from map_data.utils.geodesy import apply_transform, ecef_to_latlon, utm_to_local_via_ecef
@@ -38,6 +39,9 @@ TRANSFORM_MODES = ("tf", "auto", "geodetic")
 # Smallest plausible norm of an ECEF position [m] (the Earth's surface is ~6.37e6 m out);
 # see OSMCloud._placement_error.
 MIN_ECEF_NORM = 1.0e6
+# Parameter limits: a finer grid or a wider path band makes clouds too big to build.
+MIN_GRID_RES = 0.05
+MAX_PATH_DIST = 50.0
 # How far the placement transform has to move before the map is rebuilt; a periodically
 # re-broadcast /tf_static usually repeats the same numbers.
 PLACEMENT_EPS = 1e-6
@@ -211,7 +215,9 @@ class OSMCloud(Node):
             t.transform.translation.y = center_y
             self.tf_static_pub.sendTransform(t)
         else:
-            self.utm_to_local = self._poll_tf(self.local_frame, self.utm_frame)
+            self.utm_to_local = self._poll_tf(
+                self.local_frame, self.utm_frame, self._placement_error
+            )
             self.get_logger().info(f"Got UTM to local transform: {self.utm_to_local}")
 
         if self.transform_mode == "geodetic":
@@ -381,7 +387,7 @@ class OSMCloud(Node):
             if rebuild_intersections and self.publish_intersections:
                 self.get_logger().info("Rebuilding intersections due to parameter change")
                 poses, markers = self.get_intersections()
-        except (ValueError, TypeError, RuntimeError) as e:
+        except Exception as e:  # a failed rebuild must roll back, whatever it raised
             self.get_logger().error(f"Failed to rebuild after parameter change: {e}")
             for name, value in old.items():
                 setattr(self, name, value)
@@ -393,15 +399,28 @@ class OSMCloud(Node):
 
         return SetParametersResult(successful=True)
 
-    @staticmethod
-    def _invalid_params(values: dict[str, Any]) -> str:
+    def _invalid_params(self, values: dict[str, Any]) -> str:
         """Return why the parameter changes in *values* are unusable, or ``""``."""
-        for name in ("grid_res", "max_path_dist"):
-            if name in values and not values[name] > 0:
-                return f"{name} must be positive, got {values[name]}"
+        for name in ("grid_res", "max_path_dist", "grid_min", "grid_max"):
+            if name in values and not np.isfinite(np.asarray(values[name], dtype=float)).all():
+                return f"{name} must be finite, got {values[name]}"
+        if "grid_res" in values and not values["grid_res"] >= MIN_GRID_RES:
+            return f"grid_res must be >= {MIN_GRID_RES}, got {values['grid_res']}"
+        if "max_path_dist" in values and not 0 < values["max_path_dist"] <= MAX_PATH_DIST:
+            return f"max_path_dist must be in (0, {MAX_PATH_DIST}], got {values['max_path_dist']}"
         for name in ("grid_min", "grid_max"):
             if name in values and len(values[name]) != 2:
                 return f"{name} must have 2 values (x, y), got {len(values[name])}"
+        if "grid_min" in values or "grid_max" in values or not self.grid_bounds_auto:
+            lo = np.asarray(values.get("grid_min", self.grid_min), dtype=float)
+            hi = np.asarray(values.get("grid_max", self.grid_max), dtype=float)
+            res = values.get("grid_res", self.grid_res)
+            cells = float(np.prod(np.abs(hi - lo))) / res**2
+            if cells > MAX_GRID_CELLS:
+                return (
+                    f"the grid would have {cells:.3g} cells, more than {MAX_GRID_CELLS:.0e}; "
+                    "use a coarser grid_res or smaller bounds"
+                )
         return ""
 
     def publish_cb(self) -> None:
@@ -480,7 +499,7 @@ class OSMCloud(Node):
             self.grid_cloud = self.get_cloud()
             if self.publish_intersections:
                 self.poses, self.markers = self.get_intersections()
-        except (ValueError, TypeError, RuntimeError) as e:
+        except Exception as e:  # raised into a /tf_static callback, it would stop the node
             self.get_logger().error(f"Failed to rebuild the map: {e}")
             return
         self.publish_cb()
@@ -489,11 +508,13 @@ class OSMCloud(Node):
         """
         Return why *matrix* cannot place the map yet, or ``""`` when it can.
 
-        Only the geodetic mode can tell: ``local_frame``'s origin must sit near the Earth's
-        surface in ECEF. A Fixposition unit without a fusion fix publishes
-        ``FP_ECEF -> FP_ENU0`` as all zeros, which would collapse the map into a
-        metre-wide box and leave the grid empty.
+        Every mode refuses a non-finite transform. Only the geodetic mode can tell more:
+        ``local_frame``'s origin must sit near the Earth's surface in ECEF. A Fixposition
+        unit without a fusion fix publishes ``FP_ECEF -> FP_ENU0`` as all zeros, which
+        would collapse the map into a metre-wide box and leave the grid empty.
         """
+        if not np.isfinite(matrix).all():
+            return "non-finite transform"
         if self.transform_mode != "geodetic":
             return ""
         try:
@@ -501,7 +522,7 @@ class OSMCloud(Node):
         except np.linalg.LinAlgError:
             return "the transform is singular"
         norm = float(np.linalg.norm(origin))
-        if norm < MIN_ECEF_NORM:
+        if not norm >= MIN_ECEF_NORM:
             return (
                 f"{self.local_frame} origin is only {norm:.0f} m from the centre of the "
                 f"Earth, so {self.earth_frame} does not carry a position yet"

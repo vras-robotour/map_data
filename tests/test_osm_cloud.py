@@ -646,6 +646,15 @@ class TestOSMCloudPlacementTransform:
 
         assert node._placement_error(ecef_to_local) == ""
 
+    @pytest.mark.parametrize("mode", ["geodetic", "tf", "auto"])
+    def test_non_finite_transform_is_rejected_in_every_mode(self, mode):
+        node = self._geodetic_node()
+        node.transform_mode = mode
+        matrix = np.eye(4)
+        matrix[0, 3] = float("nan")
+
+        assert node._placement_error(matrix) == "non-finite transform"
+
     def test_utm_modes_do_not_check_the_origin(self):
         node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
 
@@ -793,6 +802,15 @@ class TestOSMCloudParameterCallback:
             {"max_path_dist": 0.0},
             {"grid_min": [0.0]},
             {"grid_max": [1.0, 2.0, 3.0]},
+            {"grid_res": float("nan")},
+            {"grid_res": float("inf")},
+            {"grid_res": 0.01},
+            {"max_path_dist": float("nan")},
+            {"max_path_dist": 51.0},
+            {"grid_min": [float("nan"), 0.0]},
+            {"grid_max": [float("inf"), 1.0]},
+            # 10 x 10 km at 0.25 m: 1.6e9 cells
+            {"grid_min": [0.0, 0.0], "grid_max": [10000.0, 10000.0]},
         ],
     )
     def test_invalid_values_are_rejected_and_change_nothing(self, node, change):
@@ -819,6 +837,19 @@ class TestOSMCloudParameterCallback:
         assert node.grid_max == old_max
         assert node.grid_bounds_auto == old_auto
         assert node.grid_cloud is old_cloud
+
+    def test_a_finer_grid_res_over_explicit_bounds_is_rejected_by_cell_count(self, node):
+        node.grid_min, node.grid_max, node.grid_bounds_auto = [0.0, 0.0], [500.0, 500.0], False
+
+        assert node.parameter_callback(self._change(grid_res=0.25)).successful is True
+        assert node.parameter_callback(self._change(grid_res=0.1)).successful is False
+
+    def test_any_rebuild_error_restores_the_old_values(self, node):
+        with patch.object(node, "get_cloud", side_effect=KeyError("boom")):
+            result = node.parameter_callback(self._change(grid_res=0.5))
+
+        assert result.successful is False
+        assert node.grid_res == pytest.approx(0.25)
 
     def test_a_failed_second_rebuild_keeps_the_old_outputs(self, node):
         node.publish_intersections = True

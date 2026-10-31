@@ -42,6 +42,22 @@ def resolve_data_file(name: str, data_dir: str | Path | None = None) -> Path | N
     return next((c for c in (base / name, package_share("demo") / name) if c.is_file()), None)
 
 
+def resolve_client_data_file(name: str, data_dir: str | Path | None = None) -> Path | None:
+    """
+    :func:`resolve_data_file` for a *name* from a remote client, which may not leave the
+    data directories: only a relative path without ``..`` that resolves inside *data_dir*
+    (default: the package ``data/``) or the package ``demo/``.
+    """
+    if Path(name).is_absolute() or ".." in Path(name).parts:
+        return None
+    base = Path(data_dir).expanduser() if data_dir else package_share("data")
+    for d in (base.resolve(), package_share("demo").resolve()):
+        p = (d / name).resolve()
+        if p.is_relative_to(d) and p.is_file():
+            return p
+    return None
+
+
 def config_path(filename: str) -> Path:
     """Where a config file of the package would live (need not exist)."""
     return package_share("config") / filename

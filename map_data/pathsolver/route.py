@@ -28,9 +28,11 @@ readable ``reason`` instead of a bare ``None``:
     the start or goal lies too far outside the map's area (wrong map file?);
 ``grid_too_large``
     the requested grid would exceed ``max_grid_cells`` cells;
+``route_too_long``
+    the route would have more than :data:`MAX_ROUTE_POINTS` vertices;
 ``bad_parameter``
-    an unknown ``algorithm`` / ``sub_algorithm``, ``cell_size`` not above zero, or
-    ``inflate_obstacles`` negative or not finite.
+    an unknown ``algorithm`` / ``sub_algorithm``, ``cell_size`` not finite and above zero,
+    ``inflate_obstacles`` negative or not finite, or ``spacing`` not finite.
 """
 
 from __future__ import annotations
@@ -61,6 +63,8 @@ logger = logging.getLogger(__name__)
 #: Grid planners and the viewer's cost grid refuse requests needing more cells than this:
 #: a 2 x 2 km box at the overlay's 1 m, or 500 x 500 m at the 0.25 m default cell size.
 MAX_GRID_CELLS = 4_000_000
+#: Routes with more vertices than this fail with ``route_too_long`` (600 km at 3 m spacing).
+MAX_ROUTE_POINTS = 200_000
 #: Margin (m) added around the waypoints' bounding box for the grid planners.
 GRID_MARGIN_M = 50.0
 #: Two paths are "the same" when no vertex moved more than this (m).
@@ -220,12 +224,14 @@ def goal_plan_kwargs(goal: Any, defaults: Mapping[str, Any]) -> dict[str, Any]:
     ``cell_size`` or ``inflate_obstacles`` takes the value of that name in *defaults* (the
     ``route_planner`` node's parameters); a negative ``spacing`` keeps the planner's own
     vertices. ``simplify_path`` and ``smooth_path`` are used as sent: a bool has no unset.
+    A ``max_snap_distance`` above the default (or NaN) also takes the default.
     """
+    max_snap, default_snap = goal.max_snap_distance, defaults["max_snap_distance"]
     return {
         "algorithm": goal.algorithm or defaults["algorithm"],
         "highway_types": list(goal.highway_types) or list(defaults["highway_types"]),
         "spacing": defaults["spacing"] if goal.spacing == 0.0 else max(goal.spacing, 0.0),
-        "max_snap_distance": goal.max_snap_distance or defaults["max_snap_distance"],
+        "max_snap_distance": max_snap if 0 < max_snap <= default_snap else default_snap,
         "cell_size": goal.cell_size or defaults["cell_size"],
         "inflate_obstacles": goal.inflate_obstacles or defaults["inflate_obstacles"],
         "simplify_path": bool(goal.simplify_path),
@@ -311,17 +317,20 @@ def plan_route(
         raise RoutePlanningError("bad_parameter", f"unknown algorithm {algorithm!r}")
     if sub_algorithm is not None and sub_algorithm not in GRID_ALGORITHMS:
         raise RoutePlanningError("bad_parameter", f"unknown sub_algorithm {sub_algorithm!r}")
-    if not cell_size > 0:  # also NaN
-        raise RoutePlanningError("bad_parameter", f"cell_size must be > 0, got {cell_size}")
+    if not (math.isfinite(cell_size) and cell_size > 0):
+        raise RoutePlanningError(
+            "bad_parameter", f"cell_size must be finite and > 0, got {cell_size}"
+        )
     if inflate_obstacles is not None and not (
         math.isfinite(inflate_obstacles) and inflate_obstacles >= 0
     ):
         raise RoutePlanningError(
             "bad_parameter", f"inflate_obstacles must be finite and >= 0, got {inflate_obstacles}"
         )
-    if not (spacing <= 0.0 or spacing >= MIN_SPACING_M):  # also NaN
+    if not (spacing <= 0.0 or MIN_SPACING_M <= spacing < math.inf):  # also NaN
         raise RoutePlanningError(
-            "bad_parameter", f"spacing must be 0, negative or >= {MIN_SPACING_M} m, got {spacing}"
+            "bad_parameter",
+            f"spacing must be <= 0 or finite and >= {MIN_SPACING_M} m, got {spacing}",
         )
     if len(points_latlon) < 2:
         raise RoutePlanningError("too_few_points", "plan_route() needs at least two waypoints")
@@ -343,7 +352,7 @@ def plan_route(
                 surface_costs=surface_costs,
             )
         snap = [planner.snap_distance(p) for p in utm_path]
-        too_far = [i for i, d in enumerate(snap) if d > max_snap_distance]
+        too_far = [i for i, d in enumerate(snap) if not d <= max_snap_distance]  # also NaN
         if too_far:
             i = too_far[0]
             raise RoutePlanningError(
@@ -400,6 +409,12 @@ def plan_route(
             > SIGNIFICANT_CHANGE_TOLERANCE
         )
     )
+    n_points = len(res) + (path_length(res) / spacing if spacing > 0.0 else 0.0)
+    if n_points > MAX_ROUTE_POINTS:
+        raise RoutePlanningError(
+            "route_too_long",
+            f"the route would have ~{n_points:.0f} waypoints, more than {MAX_ROUTE_POINTS}",
+        )
     if spacing > 0.0:
         res = densify(res, spacing)
 

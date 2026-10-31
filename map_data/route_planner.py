@@ -66,12 +66,18 @@ the next one, and their names are a stable interface for clients such as the vie
 
 Cancelling a PlanRoute goal stops its grid search (the goal UUID is its
 ``transfer_id``); the goal ends as canceled with reason ``cancelled``.
+
+Besides the :mod:`~map_data.pathsolver.route` reasons, a goal fails with ``busy``,
+``no_fix``, ``file_not_found`` or ``internal_error`` (a bug, logged with its traceback).
+A goal may only name files inside ``data_dir`` (``mapdata_file``) and ``mission_dir``
+(``save_gpx``); one with more than :data:`MAX_GOAL_WAYPOINTS` waypoints is rejected.
 """
 
 from __future__ import annotations
 
 import threading
 import time
+import traceback
 from collections import OrderedDict
 from pathlib import Path
 
@@ -111,9 +117,9 @@ from map_data.pathsolver.route import (
     plan_route,
 )
 from map_data.traversability import resolve_traversability_path
-from map_data.utils.config import package_share, resolve_data_file
+from map_data.utils.config import package_share, resolve_client_data_file, resolve_data_file
 from map_data.utils.geodesy import latlon_to_ecef
-from map_data.utils.gpx import create_gpx_track
+from map_data.utils.gpx import create_gpx_track, mission_gpx_path
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 from map_data_interfaces.action import PlanRoute
 
@@ -129,6 +135,8 @@ PLANNER_PARAMETERS = (
     "simplify_path",
     "smooth_path",
 )
+#: PlanRoute goals with more waypoints than this are rejected.
+MAX_GOAL_WAYPOINTS = 100
 #: GraphPlanners kept per (map, way set, snap distance); a small LRU.
 PLANNER_CACHE_SIZE = 4
 
@@ -244,21 +252,31 @@ class RoutePlanner(Node):
 
     def _goal_topic_cb(self, msg: GeoPointStamped) -> None:
         """A single goal (QR code, operator) planned from the robot with the defaults."""
-        defaults = self._planner_defaults()
-        goal = PlanRoute.Goal()
-        goal.waypoints = [msg.position]
-        goal.start_from_robot = True
-        goal.simplify_path = defaults["simplify_path"]
-        goal.smooth_path = defaults["smooth_path"]
-        self.get_logger().info(
-            f"Goal on {self.goal_topic}: {msg.position.latitude:.7f}, {msg.position.longitude:.7f}"
-        )
-        result = self._plan(goal, feedback=None)
-        self._log_result(result)
+        try:
+            defaults = self._planner_defaults()
+            goal = PlanRoute.Goal()
+            goal.waypoints = [msg.position]
+            goal.start_from_robot = True
+            goal.simplify_path = defaults["simplify_path"]
+            goal.smooth_path = defaults["smooth_path"]
+            self.get_logger().info(
+                f"Goal on {self.goal_topic}: "
+                f"{msg.position.latitude:.7f}, {msg.position.longitude:.7f}"
+            )
+            result = self._plan(goal, feedback=None)
+            self._log_result(result)
+        except Exception:  # an exception here would stop the executor
+            self.get_logger().error(f"Goal on {self.goal_topic} failed:\n{traceback.format_exc()}")
 
     def _goal_cb(self, goal: PlanRoute.Goal) -> GoalResponse:
         if not goal.waypoints:
             self.get_logger().warning("PlanRoute goal rejected: no waypoints")
+            return GoalResponse.REJECT
+        if len(goal.waypoints) > MAX_GOAL_WAYPOINTS:
+            self.get_logger().warning(
+                f"PlanRoute goal rejected: {len(goal.waypoints)} waypoints, "
+                f"more than {MAX_GOAL_WAYPOINTS}"
+            )
             return GoalResponse.REJECT
         return GoalResponse.ACCEPT
 
@@ -348,10 +366,12 @@ class RoutePlanner(Node):
 
     # ------------------------------------------------------------------ planning
     def _resolve_mapdata(self, name: str) -> Path | None:
-        name = name or self.mapdata_file
-        if not name:
+        """A goal's *name* (only inside ``data_dir``), or else the ``mapdata_file`` parameter."""
+        if name:
+            return resolve_client_data_file(name, self.data_dir)
+        if not self.mapdata_file:
             return None
-        return resolve_data_file(name, self.data_dir)
+        return resolve_data_file(self.mapdata_file, self.data_dir)
 
     def _load_map(self, path: Path):
         ann = None if self.annotations in ("", "auto") else self.annotations
@@ -393,7 +413,7 @@ class RoutePlanner(Node):
             res.success = False
             res.reason = reason
             res.message = message
-            self._publish_status(f"FAILED {reason}: {message}")
+            self._publish_status(f"FAILED {reason}: {message!r}")
             return res
 
         # Never wait for the lock: a blocked callback holds an executor thread, and enough of
@@ -405,7 +425,9 @@ class RoutePlanner(Node):
             if path is None:
                 name = goal.mapdata_file or self.mapdata_file
                 return fail(
-                    "file_not_found", f"map data file '{name}' not found in {self.data_dir}"
+                    "file_not_found",
+                    f"map data file {name!r} not found in {self.data_dir} "
+                    "(a goal may only name a file inside it)",
                 )
 
             points: list[tuple[float, float]] = []
@@ -444,7 +466,7 @@ class RoutePlanner(Node):
             if algorithm == GRAPH_ALGORITHM:
                 planner = self._graph_planner(path, md, highway_types, kwargs["max_snap_distance"])
                 goal_snap = planner.snap_distance(goal_utm)
-                if goal_snap > self.default_goal_max_snap:
+                if not goal_snap <= self.default_goal_max_snap:  # also NaN
                     return fail(
                         "snap_too_far",
                         f"the goal is {goal_snap:.1f} m from the nearest "
@@ -494,6 +516,9 @@ class RoutePlanner(Node):
                 self.pub_route_path.publish(res.route_local)
             self._publish_status(f"PLANNED {res.message}")
             return res
+        except Exception as e:  # a bug must fail the goal, not kill the node
+            self.get_logger().error(f"PlanRoute failed internally:\n{traceback.format_exc()}")
+            return fail("internal_error", f"{type(e).__name__}: {e}")
         finally:
             self._lock.release()
 
@@ -549,9 +574,13 @@ class RoutePlanner(Node):
             return ""
         if not save_gpx:
             save_gpx = time.strftime("route_%Y%m%d-%H%M%S.gpx")
-        out = Path(save_gpx).expanduser()
-        if not out.is_absolute():
-            out = Path(self.mission_dir).expanduser() / out
+        out = mission_gpx_path(save_gpx, self.mission_dir)
+        if out is None:
+            self.get_logger().error(
+                f"Not saving the route: save_gpx {save_gpx!r} is not a .gpx file name "
+                f"in {self.mission_dir}"
+            )
+            return ""
         try:
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(create_gpx_track(route.latlon, name=out.stem))
@@ -567,7 +596,7 @@ class RoutePlanner(Node):
         if result.success:
             self.get_logger().info(f"Route planned: {result.message}")
         else:
-            self.get_logger().error(f"Route planning failed ({result.reason}): {result.message}")
+            self.get_logger().error(f"Route planning failed ({result.reason}): {result.message!r}")
 
 
 def _transfer_id(handle) -> str:

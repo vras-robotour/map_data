@@ -2,8 +2,9 @@
 # screen but without the GUI. Served by `ros2 run map_data route_planner`.
 
 # --- Goal ---
-# .mapdata file: a name in the node's data_dir or an absolute path; empty = the
-# node's mapdata_file parameter.
+# .mapdata file: a relative name inside the node's data_dir (no absolute path, no ..);
+# empty = the node's mapdata_file parameter.
+# At most 100 waypoints; a goal with more is rejected.
 string mapdata_file
 # Ordered waypoints (lat/lon; altitude ignored). With start_from_robot=false at
 # least two are needed; with start_from_robot=true one goal is enough.
@@ -17,7 +18,8 @@ string[] highway_types
 # Maximum distance (m) between consecutive output waypoints; 0 = the node's
 # default; negative = keep the planner's own vertices.
 float64 spacing
-# graph: reject waypoints farther than this (m) from every allowed way; 0 = default (100).
+# graph: reject waypoints farther than this (m) from every allowed way; 0, NaN or more
+# than the node's max_snap_distance parameter = that parameter (default 100).
 float64 max_snap_distance
 # grid planners only; 0 = the node's defaults.
 float64 cell_size
@@ -25,15 +27,15 @@ float64 inflate_obstacles
 # grid planners only; used as sent (false = off), unlike the fields above.
 bool simplify_path
 bool smooth_path
-# GPX output: "" = <mission_dir>/route_<stamp>.gpx, "-" = do not save, else a file
-# name (in mission_dir) or an absolute path.
+# GPX output: "" = <mission_dir>/route_<stamp>.gpx, "-" = do not save, else a .gpx
+# file name in mission_dir (no directories; anything else is not saved).
 string save_gpx
 ---
 # --- Result ---
 bool success
 # Failure reason on failure (too_few_points, start_outside_map, goal_outside_map,
-# snap_too_far, unreachable, no_path, grid_too_large, no_fix, file_not_found, ...) or a
-# summary on success.
+# snap_too_far, unreachable, no_path, grid_too_large, route_too_long, no_fix,
+# file_not_found, internal_error, ...) or a summary on success.
 string message
 string reason
 # The route in WGS84, header.frame_id = "wgs84".

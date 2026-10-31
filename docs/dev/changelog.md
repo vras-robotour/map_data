@@ -90,6 +90,7 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - Viewer: no stray node markers or planner waypoints left on the map, no edit handles after a View-mode split, and the robot stays hidden when its layer is off
 - The packaging test checks undeclared imports (it could never fail)
 - Docs pull-request builds no longer cancel a pending gh-pages deploy
+- `route_planner` and `osm_cloud` refuse untrusted input: a goal may only read `.mapdata` from `data_dir` and write `.gpx` into `mission_dir`, at most 100 waypoints, non-finite or oversized values and transforms are rejected (`route_too_long`, `internal_error` instead of a crash), and `route_planner` respawns
 
 ### Removed
 

@@ -142,7 +142,7 @@ allowing dynamic updates via `ros2 param set`.
 - **`save_gpx` field:**
     - Empty string (`""`): automatically writes a timestamped track to `mission_dir/route_<timestamp>.gpx`.
     - `"-"`: disables GPX file output.
-    - Explicit filename or path: writes to that path (resolved under `mission_dir` if relative).
+    - A `.gpx` file name: writes `mission_dir/<name>`. A path, `..` or another suffix is refused (logged, nothing saved), since any host on the network can send goals.
 - **`spacing` semantics:**
     - `spacing > 0`: resamples the path so consecutive waypoints are at most `spacing` meters apart. Below `0.1` fails with `bad_parameter`.
     - `spacing == 0`: uses the node's default spacing (`3.0 m`).
@@ -154,7 +154,7 @@ When route planning fails, `PlanRoute.Result` sets `success = false` and provide
 
 | Reason | Meaning |
 |--------|---------|
-| `bad_parameter` | Unknown `algorithm` or `sub_algorithm`, non-positive `cell_size`, negative or non-finite `inflate_obstacles`, a positive `spacing` below `0.1`, or a waypoint UTM cannot express (latitude outside -80..84, non-finite) |
+| `bad_parameter` | Unknown `algorithm` or `sub_algorithm`, non-positive or non-finite `cell_size`, negative or non-finite `inflate_obstacles`, a positive `spacing` below `0.1` or infinite, or a waypoint UTM cannot express (latitude outside -80..84, non-finite) |
 | `start_blocked` | Grid start coordinate lies inside an obstacle and cannot be snapped to free space |
 | `goal_blocked` | Grid goal coordinate lies inside an obstacle and cannot be snapped to free space |
 | `cancelled` | Planning request was cancelled |
@@ -165,8 +165,10 @@ When route planning fails, `PlanRoute.Result` sets `success = false` and provide
 | `unreachable` | Graph planner found no connection between endpoints in the way network |
 | `no_path` | Grid planner found no collision-free path between endpoints |
 | `grid_too_large` | Requested bounding area exceeds `max_grid_cells` |
+| `route_too_long` | The route would have more than 200 000 waypoints (`MAX_ROUTE_POINTS`) |
 | `too_few_points` | Fewer than two waypoints supplied without `start_from_robot` |
-| `file_not_found` | Map data file could not be found or loaded |
+| `file_not_found` | Map data file could not be found or loaded; a goal's `mapdata_file` must be a relative name inside `data_dir` |
+| `internal_error` | A bug in the planner; the node logs the traceback and keeps running |
 | `no_fix` | `start_from_robot` requested but no recent GNSS fix was received on `gps_fix_topic` |
 
 ### Python library usage
