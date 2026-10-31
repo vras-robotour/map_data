@@ -354,7 +354,7 @@ The `map_data` package has four layers: **data ingestion**, **representation**, 
 | `waypoints` | `np.ndarray` | `(N, 2)` UTM input waypoints |
 | `min_x`, `max_x`, `min_y`, `max_y` | `float` | UTM bounding box including `grid_margin` |
 
-**OSM cache.** The raw Overpass response is saved as `<stem>.osm_cache.json` next to the source GPX. It is reused when the stored box matches within 1 × 10⁻⁶° (≈ 11 cm), the query hash matches and it is younger than 30 days (`OSM_CACHE_MAX_AGE`). `run_all()` and `create_mapdata --no-cache` bypass it.
+**OSM cache.** The raw Overpass response is saved as `<stem>.osm_cache.json` next to the source GPX. It is reused when the stored box matches within 1 × 10⁻⁶° (≈ 11 cm), the query hash matches and it is younger than 30 days (`OSM_CACHE_MAX_AGE`). `run_queries()` uses it by default (the viewer's fetch and GPX upload); `run_all()` bypasses it, and `create_mapdata` uses it only with `--cache`.
 
 **Serialization.** `MapData.save()` writes JSON (`.mapdata`) atomically; `MapData.load()` reads it and recomputes the node-based crossroads. See [Data formats](data_formats.md).
 
@@ -460,7 +460,7 @@ The `PlanRoute` action is defined in the nested `map_data_interfaces/` package.
 
 ## Data flow
 
-1. **Create the map:** `create_mapdata -d <file>.gpx`, or *Fetch area* / GPX upload in the viewer, writes `<name>.mapdata`.
+1. **Create the map:** `create_mapdata -f <file>.gpx -d`, or *Fetch area* / GPX upload in the viewer, writes `<name>.mapdata`.
 2. **Inspect and annotate:** the viewer renders the map; edits go to `<name>.annotations.json`.
 3. **Plan:** the viewer's Planner, `map_data_plan` or a `PlanRoute` goal to `route_planner` load the map with its annotations and traversability rules and call `plan_route`.
 4. **Drive:** `osm_cloud` publishes the same map for the navigation stack; the viewer's Tracker shows the robot and its route.
