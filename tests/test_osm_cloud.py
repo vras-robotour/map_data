@@ -149,6 +149,37 @@ class TestCreateGrid:
         assert grid[:, 1].max() < 3.0
 
 
+class TestCreateGridNear:
+    """With ``near`` only the cells around the reference points are built."""
+
+    @staticmethod
+    def _path(n=400):
+        t = np.linspace(0.0, 1.0, n)
+        return np.column_stack([-30.0 + 80.0 * t, -20.0 + 60.0 * t + 5.0 * np.sin(8 * t)])
+
+    @pytest.mark.parametrize(("cell", "dist"), [(0.25, 1.0), (0.4, 1.0), (0.5, 2.5), (1.0, 0.7)])
+    def test_matches_the_full_grid_once_filtered(self, cell, dist):
+        near = self._path()
+        low, high = (-40.0, -30.0), (60.0, 50.0)
+
+        full = points_near_ref(create_grid(low, high, cell), near, dist)
+        thin = points_near_ref(create_grid(low, high, cell, near=near, max_dist=dist), near, dist)
+
+        np.testing.assert_array_equal(thin, full)
+
+    def test_builds_far_fewer_cells_than_the_bounding_box(self):
+        near = self._path()
+        full = create_grid((-40.0, -30.0), (60.0, 50.0), 0.25)
+        thin = create_grid((-40.0, -30.0), (60.0, 50.0), 0.25, near=near, max_dist=1.0)
+
+        assert len(thin) < len(full) / 5
+
+    def test_points_outside_the_bounds_and_no_points(self):
+        assert create_grid((0.0, 0.0), (5.0, 5.0), 1.0, near=np.empty((0, 2))).shape == (0, 2)
+        far = np.array([[100.0, 100.0]])
+        assert create_grid((0.0, 0.0), (5.0, 5.0), 1.0, near=far, max_dist=1.0).shape == (0, 2)
+
+
 # ── points_near_ref ──────────────────────────────────────────────────────────
 
 

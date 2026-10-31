@@ -598,9 +598,15 @@ class OSMCloud(Node):
 
         """
         points = self._to_local(self.map_data.get_points())
-        grid = create_grid(tuple(self.grid_min), tuple(self.grid_max), self.grid_res)
         waypoints = split_ways_to_points(
             points, self.map_data.get_ways(), self.grid_res, self.highway_types
+        )
+        grid = create_grid(
+            tuple(self.grid_min),
+            tuple(self.grid_max),
+            self.grid_res,
+            near=waypoints,
+            max_dist=self.max_path_dist,
         )
 
         # The nearest-neighbour search is 2-D (a third all-zero column only slows the
@@ -693,6 +699,8 @@ def create_grid(
     low: tuple[float, ...],
     high: tuple[float, ...],
     cell_size: float = 0.25,
+    near: np.ndarray | None = None,
+    max_dist: float = 1.0,
 ) -> np.ndarray:
     """
     Create a grid of points.
@@ -705,18 +713,43 @@ def create_grid(
         Upper bounds of the grid.
     cell_size : float
         Size of the cell.
+    near : np.array, optional
+        (N, 2) reference points. If given, only the cells within *max_dist* of one of them
+        (and a few more, from the square around each) are built, so a long thin network
+        does not cost the whole bounding box in memory.
+    max_dist : float
+        Reach of *near*.
 
     Returns
     -------
     grid : np.array
-        Grid of points.
+        Grid of points, row by row (y major).
 
     """
     low_arr = np.round(low)
     high_arr = np.round(high)
     xs = np.arange(int(low_arr[0]), int(high_arr[0]), cell_size)
     ys = np.arange(int(low_arr[1]), int(high_arr[1]), cell_size)
-    return np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2)
+    if near is None:
+        return np.stack(np.meshgrid(xs, ys), axis=-1).reshape(-1, 2)
+
+    nx, ny = len(xs), len(ys)
+    near = np.asarray(near, dtype=float).reshape(-1, 2)
+    if not (len(near) and nx and ny):
+        return np.empty((0, 2))
+    # Cells of the squares around the reference points: a cell within max_dist of a point
+    # is at most r (+1 above, the point sits inside its own cell) indices from its cell.
+    r = int(np.ceil(max_dist / cell_size))
+    steps = np.arange(-r, r + 2)
+    offsets = np.stack(np.meshgrid(steps, steps), axis=-1).reshape(-1, 2)
+    own = np.unique(np.floor((near - (xs[0], ys[0])) / cell_size).astype(np.int64), axis=0)
+    flat = []
+    for chunk in np.array_split(own, len(own) * len(offsets) // 4_000_000 + 1):
+        cells = (chunk[:, None, :] + offsets).reshape(-1, 2)
+        cells = cells[(cells >= 0).all(axis=1) & (cells[:, 0] < nx) & (cells[:, 1] < ny)]
+        flat.append(np.unique(cells[:, 1] * nx + cells[:, 0]))
+    index = np.unique(np.concatenate(flat))
+    return np.column_stack([xs[index % nx], ys[index // nx]])
 
 
 def create_cloud(points: np.ndarray) -> PointCloud2:
