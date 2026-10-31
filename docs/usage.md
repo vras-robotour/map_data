@@ -88,15 +88,14 @@ reclassify the ways, so tag CSV edits need a new download.
 | `-h, --help` | | Show help message and exit |
 | `-f FILE, --file FILE` | `buchlovice.gpx` | GPX file (a path, or a name in the package's `data/` directory or the bundled `demo/`). Without `-d`, its `.mapdata` sibling is re-saved |
 | `-d, --download` | `false` | Download fresh data from OSM within the waypoint bounds and parse it |
-| `--cache` | | Use the local OSM response cache (30-day expiry; ignored by `--no-cache`) |
-| `--no-cache` | | Bypass cache and refetch fresh data from OSM |
+| `--cache` | | Use the local OSM response cache (30-day expiry) |
 
 ### OSM caching
 
 Downloaded OSM responses are cached locally keyed by the query hash and bounding box.
 If `--cache` is active and a cache entry exists for the exact bounding box and query within
 30 days (`OSM_CACHE_MAX_AGE = 30 days`), `create_mapdata` reuses the cached response without
-querying Overpass again. Pass `--no-cache` to force a network refetch.
+querying Overpass again.
 
 ### Output file location
 
@@ -175,7 +174,6 @@ ros2 launch map_data osm_cloud.launch.py \
 
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `config_file` | `helhest_jr.yaml` | Parameter file in `config/` (or path) with topic configurations |
 | `osm_grid_params` | `osm_grid.yaml` | Parameter file in `config/` (or path) with OSM grid parameters |
 | `mapdata_path` | package share `data` | Directory where bare map filenames are resolved |
 | `mapdata_file` | `""` | Map data filename (resolved in `mapdata_path` or absolute) |

@@ -58,12 +58,11 @@ def main() -> None:
     parser.add_argument(
         "--cache",
         action="store_true",
-        help="Use the local OSM response cache (30 days; ignored by --no-cache)",
+        help="Use the local OSM response cache (30 days)",
     )
-    parser.add_argument("--no-cache", action="store_true", help="Refetch OSM data")
     args = parser.parse_args()
 
-    process_map_data(args.file, download=args.download, use_cache=args.cache and not args.no_cache)
+    process_map_data(args.file, download=args.download, use_cache=args.cache)
 
 
 if __name__ == "__main__":
