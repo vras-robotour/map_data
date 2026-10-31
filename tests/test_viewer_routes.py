@@ -1518,3 +1518,117 @@ def test_unreadable_store_on_read_is_409(app_client_with_file):
         (tmp_path / "test.annotations.json").write_text("{not json")
         assert client.get(url).status_code == 409
     assert len(list(tmp_path.glob("test.annotations.json.corrupt-*"))) == 2
+
+
+# ── bad input never reaches the annotation store ─────────────────────────────
+
+_SEED_STORE = '{"version": 1, "annotations": [], "deleted_ways": [{"id": 99}]}'
+
+
+@pytest.fixture
+def seeded_store(app_client_with_file):
+    """A client plus a store file whose bytes every rejected request must leave alone."""
+    client, tmp_path, filename = app_client_with_file
+    ann_path = tmp_path / "test.annotations.json"
+    ann_path.write_text(_SEED_STORE)
+    yield client, filename
+    assert ann_path.read_text() == _SEED_STORE
+    assert client.get(f"/api/mapdata?file={filename}").status_code == 200
+
+
+@pytest.mark.parametrize(
+    "nodes",
+    [
+        [{"id": "abc", "lat": 50.0, "lon": 14.0}],
+        [{"id": 101, "lat": "x", "lon": 14.0}],
+        [{"id": 101, "lat": 95.0, "lon": 14.0}],
+        [{"id": 101, "lat": 50.0}],
+        [{"id": 1.5, "lat": 50.0, "lon": 14.0}],
+        [{"id": 101, "lat": 50.0, "lon": 14.0}, {"id": 102, "lat": None, "lon": 14.0}],
+        [5],
+    ],
+)
+def test_move_rejects_bad_nodes(seeded_store, nodes):
+    client, filename = seeded_store
+    resp = client.put(f"/api/way_nodes/move?file={filename}&way_id=1", json={"nodes": nodes})
+    assert resp.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"after_node_id": 101, "lat": "x", "lon": 14.0},
+        {"after_node_id": 101, "lat": 50.0, "lon": 200.0},
+        {"after_node_id": 101, "lat": True, "lon": 14.0},
+        {"after_node_id": "abc", "lat": 50.0, "lon": 14.0},
+    ],
+)
+def test_add_node_rejects_bad_body(seeded_store, body):
+    client, filename = seeded_store
+    assert client.post(f"/api/way_node?file={filename}&way_id=1", json=body).status_code == 400
+
+
+_LINE = {"type": "LineString", "coordinates": [[14.0, 50.0], [14.001, 50.001]]}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"geometry": "x"},
+        {"geometry": {"type": "LineString", "coordinates": [[14.0, 50.0]]}},
+        {"geometry": {"type": "Polygon", "coordinates": "x"}},
+        {"geometry": {"type": "LineString", "coordinates": [[14.0, 95.0], [14.0, 96.0]]}},
+        {"geometry": _LINE, "properties": []},
+        {"geometry": _LINE, "properties": {"width": "abc"}},
+        {"geometry": _LINE, "properties": {"width": -1}},
+        {"geometry": _LINE, "type": ["path"]},
+    ],
+)
+def test_annotation_rejects_bad_body(seeded_store, body):
+    client, filename = seeded_store
+    assert client.post(f"/api/annotations?file={filename}", json=body).status_code == 400
+
+
+def test_annotation_update_rejects_bad_geometry(app_client_with_file):
+    client, tmp_path, filename = app_client_with_file
+    ann = client.post(f"/api/annotations?file={filename}", json={"geometry": _LINE}).get_json()
+    before = (tmp_path / "test.annotations.json").read_text()
+    resp = client.put(
+        f"/api/annotations/{ann['id']}?file={filename}",
+        json={"geometry": {"type": "LineString", "coordinates": [[14.0, 50.0]]}},
+    )
+    assert resp.status_code == 400
+    assert (tmp_path / "test.annotations.json").read_text() == before
+
+
+@pytest.mark.parametrize(
+    ("method", "url", "body"),
+    [
+        ("post", "/api/ways/split", {"way_id": 4242, "node_id": 101}),
+        ("post", "/api/ways/split", {"way_id": 1.0, "node_id": 101}),
+        ("delete", "/api/ways/1", [1]),
+        ("put", "/api/ways/1/tags", ["highway"]),
+        ("put", "/api/ways/1/tags", {"tags": {"highway": ["footway"]}}),
+        ("put", "/api/ways/abc/hide", {}),
+        ("delete", "/api/ways/1:-1", {}),
+        ("put", "/api/ways/1:x/restore", {}),
+    ],
+)
+def test_way_edits_reject_bad_ids_and_bodies(seeded_store, method, url, body):
+    client, filename = seeded_store
+    resp = getattr(client, method)(f"{url}?file={filename}", json=body)
+    assert resp.status_code in (400, 404)
+
+
+def test_get_way_rejects_negative_segment(app_client_with_file):
+    client, _, filename = app_client_with_file
+    assert client.get(f"/api/ways/1:-1?file={filename}").status_code == 400
+    assert client.get(f"/api/way_nodes?file={filename}&way_id=1:-1").status_code == 400
+
+
+def test_upload_gpx_rejects_bad_options(app_client):
+    client, _ = app_client
+    for options in ("{not json", "[1]"):
+        data = {"file": (io.BytesIO(b"<gpx/>"), "t.gpx"), "options": options}
+        resp = client.post("/api/upload_gpx", data=data, content_type="multipart/form-data")
+        assert resp.status_code == 400

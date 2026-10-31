@@ -48,6 +48,7 @@ from .common import (
     MAX_INFLATE_OBSTACLES_M,
     MIN_CELL_SIZE_M,
     _bbox_area_km2,
+    _json_object,
     _validated_bbox,
     _validated_cost_dict,
     _validated_number,
@@ -138,7 +139,7 @@ def save_traversability() -> Response:
     The text is written verbatim, so comments survive. route_planner picks it
     up on its next goal; osm_cloud reads it only at startup and needs a restart.
     """
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     if body.get("traversability") is None:
         abort(400, "Missing traversability")
     _request_rules(body)
@@ -157,7 +158,7 @@ def get_traversability_blocked() -> Response:
     blocked when its category is not allowed or the rules (plus the always
     excluded stairs) refuse it. Returns ``{"blocked": [[way_id, reason], ...]}``.
     """
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     filename = body.get("file")
     if not isinstance(filename, str) or not filename:
         abort(400, "Missing file")
@@ -489,7 +490,7 @@ def create_replan() -> Response:
         exist.
 
     """
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     path_data = body.get("points")  # [[lat, lon], ...]
     filename = body.get("file")
     highway_types = body.get("allowed_ways", ["footway"])

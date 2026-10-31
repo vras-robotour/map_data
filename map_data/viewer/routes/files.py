@@ -42,6 +42,7 @@ from .common import (
     _apply_tag_override,
     _bbox_area_km2,
     _get_data_dir,
+    _json_object,
     _mapdata_path,
     _require_args,
     _validated_bbox,
@@ -360,7 +361,7 @@ def fetch_area() -> Response:
         the box is degenerate/inverted, or ``name`` sanitizes to empty.
 
     """
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     for field in ("min_lat", "min_lon", "max_lat", "max_lon", "name"):
         if field not in body:
             abort(400, f"Missing field: {field}")
@@ -506,7 +507,12 @@ def upload_gpx() -> Response:
     if not name:
         abort(400, "name is empty after sanitizing")
 
-    parse_opts = json.loads(request.form.get("options", "{}"))
+    try:
+        parse_opts = json.loads(request.form.get("options", "{}"))
+    except ValueError:
+        abort(400, "options must be JSON")
+    if not isinstance(parse_opts, dict):
+        abort(400, "options must be a JSON object")
     grid_margin = parse_opts.get("grid_margin")
     obstacle_radius = parse_opts.get("obstacle_radius")
     buffer_widths = parse_opts.get("buffer_widths")
