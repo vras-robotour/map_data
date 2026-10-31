@@ -314,6 +314,15 @@ def test_plan_route_rejects_bad_parameters(footway_network_mapdata, kwargs):
     assert e.value.reason == "bad_parameter"
 
 
+@pytest.mark.parametrize("bad", [(91.0, 14.0), (float("nan"), 14.0), (50.0, float("inf"))])
+def test_plan_route_rejects_unprojectable_waypoints(footway_network_mapdata, bad):
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    with pytest.raises(RoutePlanningError) as e:
+        plan_route(md, [(lat0, lon0), bad])
+    assert e.value.reason == "bad_parameter"
+
+
 def test_plan_route_reports_a_blocked_goal(footway_network_mapdata):
     from shapely.geometry import box
 

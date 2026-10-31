@@ -429,12 +429,12 @@ class RoutePlanner(Node):
             kwargs = goal_plan_kwargs(goal, self._planner_defaults())
             algorithm = kwargs["algorithm"]
             highway_types = kwargs["highway_types"]
-            start_utm, goal_utm = latlon_to_utm_path(
-                [points[0], points[-1]], md.zone_number, md.zone_letter
-            )
             # Before the snap check, so a point off the map is reported as such; the file is
             # named because a start off the map is nearly always the wrong one loaded.
             try:
+                start_utm, goal_utm = latlon_to_utm_path(
+                    [points[0], points[-1]], md.zone_number, md.zone_letter
+                )
                 check_in_map(md, start_utm, "start", self.outside_map_tolerance)
                 check_in_map(md, goal_utm, "goal", self.outside_map_tolerance)
             except RoutePlanningError as e:

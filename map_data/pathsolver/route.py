@@ -133,9 +133,19 @@ def latlon_to_utm_path(
     zone_number: int,
     zone_letter: str,
 ) -> np.ndarray:
-    """``[(lat, lon), ...]`` -> ``(N, 2)`` UTM array forced into the map's zone."""
+    """
+    ``[(lat, lon), ...]`` -> ``(N, 2)`` UTM array forced into the map's zone.
+
+    Raises ``bad_parameter`` for a non-finite coordinate or one UTM cannot express
+    (latitude outside -80..84, longitude outside -180..180).
+    """
     pts = np.asarray(points, dtype=np.float64).reshape(-1, 2)
-    e, n, _, _ = utm.from_latlon(pts[:, 0], pts[:, 1], zone_number, zone_letter)
+    if not np.isfinite(pts).all():
+        raise RoutePlanningError("bad_parameter", "waypoint latitude/longitude must be finite")
+    try:
+        e, n, _, _ = utm.from_latlon(pts[:, 0], pts[:, 1], zone_number, zone_letter)
+    except utm.error.OutOfRangeError as err:
+        raise RoutePlanningError("bad_parameter", f"waypoint out of range: {err}") from err
     return np.stack([e, n], axis=-1).reshape(-1, 2)
 
 
