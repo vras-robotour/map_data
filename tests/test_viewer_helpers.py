@@ -142,14 +142,15 @@ def test_atomic_write_json_new_file_gets_the_umask_default(tmp_path):
     assert (tmp_path / "new.json").stat().st_mode & 0o777 == 0o666 & ~serialization._UMASK
 
 
-def test_atomic_write_json_fsyncs_before_replacing(tmp_path):
+def test_atomic_write_json_fsyncs_the_file_then_the_directory(tmp_path):
     calls = []
     with (
         patch.object(serialization.os, "fsync", side_effect=lambda fd: calls.append("fsync")),
         patch.object(serialization.os, "replace", side_effect=lambda *a: calls.append("replace")),
     ):
         atomic_write_json(tmp_path / "x.json", {})
-    assert calls == ["fsync", "replace"]
+    # The second fsync makes the rename itself durable.
+    assert calls == ["fsync", "replace", "fsync"]
 
 
 # ── get_deleted_way_ids ───────────────────────────────────────────────────────

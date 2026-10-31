@@ -34,7 +34,7 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - A cancel that arrives before its plan starts still aborts it; cancelling a PlanRoute goal stops its grid search
 - Viewer `create_replan` reports `status: "cancelled"` only for a cancel; invalid parameters are 400
 - The viewer strips `access_token` from the URL after setting the cookie and shuts down cleanly on SIGINT/SIGTERM
-- Atomic writes keep the file mode and fsync; used for traversability and tracker settings saves
+- Atomic writes keep the file mode and fsync the file and its directory; used for traversability and tracker settings saves
 - The tracker trail takes one GPS source (the filtered fix when enabled) and ignores no-fix messages
 - `ReplanPath` cost attributes are lowercase: `highway_costs`, `surface_costs`, `path_cost_cap`, `default_off_path_cost`
 - Store IO and the way-edit pipeline moved from `map_data.viewer.helpers` to `map_data.edits`
