@@ -1,5 +1,6 @@
 import argparse
 import hmac
+import importlib.util
 import logging
 import os
 import signal
@@ -12,7 +13,7 @@ from urllib.parse import urlencode
 
 from flask import Flask, Response, abort, redirect, request
 from flask.typing import ResponseReturnValue
-from flask_socketio import SocketIO
+from flask_socketio import SocketIO, emit
 
 from ..utils.config import config_path, setup_logging
 from .ros_node import ROS_AVAILABLE, TrackerNode
@@ -102,6 +103,9 @@ def _authenticate_socketio_connection() -> bool | None:
     if not _access_token_valid(request):
         logger.warning("Rejected SocketIO connection: missing or invalid access token")
         return False
+    # The broadcast carries only what changed, so a new browser gets the full state first
+    if tracker_node is not None:
+        emit("telemetry", tracker_node.snapshot())
     return None
 
 
@@ -298,6 +302,11 @@ def main() -> None:
     # non-interactive shell) would otherwise stay ignored, as rclpy's own handler is off.
     signal.signal(signal.SIGINT, signal.default_int_handler)
     signal.signal(signal.SIGTERM, signal.default_int_handler)
+    if importlib.util.find_spec("simple_websocket") is None:
+        logger.warning(
+            "simple-websocket is not installed: browsers fall back to HTTP long-polling, "
+            "one request per telemetry message (pip install simple-websocket)"
+        )
     # debug=False: the Flask reloader would initialize the ROS node twice.
     try:
         socketio.run(app, host=args.host, port=args.port, debug=False, allow_unsafe_werkzeug=True)

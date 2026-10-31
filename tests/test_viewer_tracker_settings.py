@@ -128,3 +128,15 @@ def test_delete_trail_clears_it_on_the_node(client):
     assert c.delete("/api/tracker/trail").get_json() == {"dropped": 2}
     assert tracker.trail == []  # cleared where it is recorded, not just in the browser
     assert c.delete("/api/tracker/trail").get_json() == {"dropped": 0}
+
+
+def test_a_connecting_browser_gets_the_full_telemetry(tmp_path, monkeypatch):
+    from map_data.viewer import app as viewer_app
+
+    app = create_app(data_dir=str(tmp_path), tracker_config=tmp_path / "tracker.yaml")
+    snapshot = {"position": {"trail": [{"lat": 50.0, "lon": 14.0}]}, "mission": {}}
+    monkeypatch.setattr(
+        viewer_app, "tracker_node", type("T", (), {"snapshot": lambda _: snapshot})()
+    )
+    received = viewer_app.socketio.test_client(app).get_received()
+    assert received == [{"name": "telemetry", "args": [snapshot], "namespace": "/"}]

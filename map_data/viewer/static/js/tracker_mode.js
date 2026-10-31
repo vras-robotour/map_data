@@ -8,6 +8,11 @@ const trackerMode = (() => {
     let trailLayer = null;
     let intersectionsLayer = null;
     let intersectionsKey = null;
+    // Geometry the telemetry sends only when it changes, and the trail it sends as appends
+    const GEOMETRY = ['waypoints', 'sequence', 'sequence_window', 'road_path', 'intersections'];
+    let geometry = {};
+    let trail = [];
+    let trailTotal = 0;
     let activeEnterCircle = null;
     let activeExitCircle = null;
     let goalMarker = null;
@@ -31,6 +36,7 @@ const trackerMode = (() => {
         socket = io();
 
         socket.on('telemetry', (data) => {
+            mergeTelemetry(data);
             // The robot is drawn in every app mode; the status panel only in tracker mode
             updateMap(data);
 
@@ -38,6 +44,27 @@ const trackerMode = (() => {
                 updateUI(data);
             }
         });
+    }
+
+    // Fill in the geometry a message left out (unchanged) and grow the trail by its appends,
+    // so the rest of the code always sees the complete state.
+    function mergeTelemetry(data) {
+        const mission = data.mission;
+        GEOMETRY.forEach(k => {
+            if (k in mission) geometry[k] = mission[k];
+            else mission[k] = geometry[k];
+        });
+        const pos = data.position;
+        if (pos.trail) {
+            trail = pos.trail;
+        } else if (pos.trail_append) {
+            // Skip fixes already held (a broadcast that crossed the connect snapshot)
+            const fresh = pos.trail_append.slice(
+                Math.max(0, pos.trail_append.length - (pos.trail_total - trailTotal)));
+            trail = trail.concat(fresh).slice(-pos.trail_length);
+        }
+        trailTotal = pos.trail_total;
+        pos.trail = trail;
     }
 
     function updateMap(data) {
@@ -584,6 +611,7 @@ const trackerMode = (() => {
             const res = await api('DELETE', '/api/tracker/trail');
             if (!res.ok) throw new Error(await errorText(res));
             const { dropped } = await res.json();
+            trail = [];
             if (trailLayer) {
                 map.removeLayer(trailLayer);
                 trailLayer = null;

@@ -293,3 +293,30 @@ def test_collision_action_names_match_nav2():
 
     for name in ("DO_NOTHING", "STOP", "SLOWDOWN", "APPROACH", "LIMIT"):
         assert ros_node._COLLISION_ACTIONS[getattr(State, name)] == name
+
+
+def test_telemetry_sends_geometry_only_when_it_changes(make_node):
+    node = make_node({"gps_fix_topic": "/fix", "gps_filtered_topic": "", "trail_min_step": 0.0})
+    route = [{"lat": 50.0, "lon": 14.0}, {"lat": 50.1, "lon": 14.1}]
+    node._set(sequence_gps=route)
+    node._gps_callback(_fix(50.0, 14.0))
+
+    first = node.get_telemetry()
+    assert first["position"]["trail"] == [{"lat": 50.0, "lon": 14.0}]
+    assert first["mission"]["sequence"] == route
+
+    node._gps_callback(_fix(50.123456789, 14.0))
+    second = node.get_telemetry()
+    assert "trail" not in second["position"]
+    assert second["position"]["trail_append"] == [{"lat": 50.1234568, "lon": 14.0}]
+    assert second["position"]["trail_total"] == 2
+    assert "sequence" not in second["mission"]
+
+    full = node.snapshot()  # a connecting browser; the broadcast state stays as it was
+    assert len(full["position"]["trail"]) == 2
+    assert full["mission"]["sequence"] == route
+    node._set(bus_voltage=24.0)
+    assert set(node.get_telemetry()["mission"]) == {"current_waypoint_index"}
+
+    node.clear_trail()
+    assert node.get_telemetry()["position"]["trail"] == []

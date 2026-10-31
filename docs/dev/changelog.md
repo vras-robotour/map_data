@@ -21,6 +21,7 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 
 ### Changed
 
+- Tracker telemetry sends paths, intersections and waypoints only when they change and the trail as appends, with coordinates rounded to 7 decimals (a 500-fix trail plus a route: ~45 KB per message down to a few KB); a connecting browser gets the full state. The viewer warns at startup when `simple-websocket` is missing (long-polling fallback)
 - PlanRoute goal `simplify_path` and `smooth_path` are used as sent; `false` now turns them off. The node's parameters apply to `~/goal` goals only
 - `route_planner` reads its planner parameters on every goal, so `ros2 param set` applies to the next one
 - `config/planner_defaults.yaml` is the single source of grid planner defaults (`grid_defaults()`) for `ReplanPath`, `plan_route`, `map_data_plan`, `route_planner` and the viewer

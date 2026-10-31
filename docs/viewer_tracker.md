@@ -155,4 +155,13 @@ grey = not published, hollow = disabled).
 | `*_feedback_topic` | Nav2 action feedback | Action feedback topics reporting current waypoint index |
 
 Telemetry is broadcast to the browser over WebSocket at **2 Hz** by default, configurable
-via `map_data_viewer --telemetry-rate <Hz>`.
+via `map_data_viewer --telemetry-rate <Hz>`. A message goes out only when something changed;
+the paths, intersections and waypoints only when they changed, and the trail as the fixes
+added since the previous message. A browser receives the full state when it connects.
+
+!!! note "WebSocket needs `simple-websocket`"
+    Without the `simple-websocket` Python package the browser falls back to HTTP
+    long-polling, one request per message; the viewer logs a warning at startup. pip and
+    `uv sync` install it, but `rosdep` has no key for it: on a ROS install add it with
+    `pip install simple-websocket` (or `apt install python3-simple-websocket` where the
+    distribution packages it).

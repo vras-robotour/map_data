@@ -54,6 +54,10 @@ source install/setup.bash
     cannot resolve it. Clone its `jazzy` branch into your colcon workspace `src/` and build it
     alongside this package.
 
+`map_data_viewer` also wants `simple-websocket` (`pip install simple-websocket`), which
+`rosdep` cannot install; without it the browser polls over HTTP instead of a WebSocket
+(see [Tracker](viewer_tracker.md)).
+
 To check the ROS 2 runtime nodes, run the smoke test script:
 
 ```bash

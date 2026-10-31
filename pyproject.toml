@@ -36,6 +36,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]  # tests import scripts.bench
 
 [tool.ruff]
 line-length = 100

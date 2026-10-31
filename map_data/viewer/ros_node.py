@@ -83,6 +83,16 @@ ROAD_PATH_SUBSAMPLE = 5
 # like a planner path would cut every corner: thin it only once it gets long.
 SEQUENCE_MAX_POINTS = 200
 SPEECH_HISTORY = 5  # spoken messages kept for the sidebar
+LATLON_DIGITS = 7  # ~1 cm; keeps the telemetry JSON short
+# Mission lists sent only when they change. Their callbacks replace the lists, never
+# mutate them, so an identity check detects a change.
+GEOMETRY = {
+    "waypoints": "waypoints_gps",
+    "sequence": "sequence_gps",
+    "sequence_window": "sequence_window_gps",
+    "road_path": "road_path_gps",
+    "intersections": "intersections_gps",
+}
 
 # Ordered like nav2's SpeedLimit / CollisionMonitor enums
 # nav2_msgs/CollisionMonitorState action_type constants.
@@ -117,7 +127,10 @@ def xyz_to_latlon(xyz: np.ndarray, to_ecef: np.ndarray | None) -> list[dict[str,
     if to_ecef is not None:
         pts = pts @ to_ecef[:3, :3].T + to_ecef[:3, 3]
     lla = ecef_to_latlon_array(pts)
-    return [{"lat": float(lat), "lon": float(lon)} for lat, lon, _ in lla]
+    return [
+        {"lat": round(float(lat), LATLON_DIGITS), "lon": round(float(lon), LATLON_DIGITS)}
+        for lat, lon, _ in lla
+    ]
 
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -219,6 +232,10 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
     def _reset_state_locked(self) -> None:
         """Forget all telemetry (at start and when the topics change); hold self._lock."""
         self.trail: deque[dict[str, float]] = deque(maxlen=self.trail_length)
+        self._trail_total = 0  # fixes ever appended; the broadcast sends the new ones
+        self._trail_full = True  # the next broadcast sends the whole trail
+        self._sent_trail_total = 0
+        self._sent_geometry: dict[str, Any] = {}
         self._last_fix_time: float | None = None
         self._stale_reported = False
 
@@ -547,6 +564,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         with self._lock:
             dropped = len(self.trail)
             self.trail.clear()
+            self._trail_full = True
             self._dirty = True
         return dropped
 
@@ -590,39 +608,72 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         }
 
     def get_telemetry(self) -> dict[str, Any] | None:
+        """
+        Telemetry for the periodic broadcast, or None when nothing changed.
+
+        The mission geometry is included only when it changed since the last call and
+        the trail as the fixes appended since then (``trail_append``); :meth:`snapshot`
+        gives a newly connected browser the rest.
+        """
         with self._lock:
-            age = None if self._last_fix_time is None else time.time() - self._last_fix_time
-            stale = age is not None and age > self.stale_after
+            age, stale = self._fix_age_locked()
             # Emit once more when the fix goes stale so the UI can flag it
             if not self._dirty and not (stale and not self._stale_reported):
                 return None
             self._dirty = False
             self._stale_reported = stale
-            return {
-                "enabled_features": dict(self.enabled_features),
-                "position": {
-                    "gps": dict(self.pose_gps) if self.pose_gps else {},
-                    "ekf": dict(self.pose_ekf) if self.pose_ekf else {},
-                    "goal": dict(self.goal_gps) if self.goal_gps else None,
-                    "fix_age": None if age is None else round(age, 1),
-                    "stale": stale,
-                    "stale_after": self.stale_after,
-                    "trail": list(self.trail),
-                    "active_intersection": (
-                        dict(self.active_intersection_gps) if self.active_intersection_gps else None
-                    ),
-                    "intersection_thresholds": dict(self.intersection_thresholds),
-                },
-                "mission": {
-                    "waypoints": list(self.waypoints_gps),
-                    "current_waypoint_index": self.current_waypoint,
-                    "sequence": list(self.sequence_gps),
-                    "sequence_window": list(self.sequence_window_gps),
-                    "road_path": list(self.road_path_gps),
-                    "intersections": list(self.intersections_gps),
-                },
-                "status": self._build_status_locked(),
-            }
+            data = self._telemetry_locked(age, stale)
+            new = self._trail_total - self._sent_trail_total
+            if self._trail_full or new > len(self.trail):
+                data["position"]["trail"] = list(self.trail)
+            elif new:
+                data["position"]["trail_append"] = list(self.trail)[-new:]
+            self._trail_full = False
+            self._sent_trail_total = self._trail_total
+            for key, attr in GEOMETRY.items():
+                value = getattr(self, attr)
+                if value is not self._sent_geometry.get(key):
+                    data["mission"][key] = list(value)
+                    self._sent_geometry[key] = value
+            return data
+
+    def snapshot(self) -> dict[str, Any]:
+        """The complete telemetry, for a browser that just connected (no state changes)."""
+        with self._lock:
+            data = self._telemetry_locked(*self._fix_age_locked())
+            data["position"]["trail"] = list(self.trail)
+            for key, attr in GEOMETRY.items():
+                data["mission"][key] = list(getattr(self, attr))
+            return data
+
+    def _fix_age_locked(self) -> tuple[float | None, bool]:
+        """Seconds since the last fix and whether it is stale; hold self._lock."""
+        age = None if self._last_fix_time is None else time.time() - self._last_fix_time
+        return age, age is not None and age > self.stale_after
+
+    def _telemetry_locked(self, age: float | None, stale: bool) -> dict[str, Any]:
+        """Telemetry without the trail and the mission geometry; hold self._lock."""
+        return {
+            "enabled_features": dict(self.enabled_features),
+            "position": {
+                "gps": dict(self.pose_gps) if self.pose_gps else {},
+                "ekf": dict(self.pose_ekf) if self.pose_ekf else {},
+                "goal": dict(self.goal_gps) if self.goal_gps else None,
+                "fix_age": None if age is None else round(age, 1),
+                "stale": stale,
+                "stale_after": self.stale_after,
+                "trail_total": self._trail_total,
+                "trail_length": self.trail_length,
+                "active_intersection": (
+                    dict(self.active_intersection_gps) if self.active_intersection_gps else None
+                ),
+                "intersection_thresholds": dict(self.intersection_thresholds),
+            },
+            "mission": {
+                "current_waypoint_index": self.current_waypoint,
+            },
+            "status": self._build_status_locked(),
+        }
 
     # ------------------------------------------------------------------ geometry -> lat/lon
     def _tf_static_callback(self, msg: TFMessage) -> None:
@@ -665,7 +716,10 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         else:
             zone_number, zone_letter = 33, "U"
         lat, lon = utm.to_latlon(xyz[:, 0], xyz[:, 1], zone_number, zone_letter, strict=False)
-        return [{"lat": float(a), "lon": float(b)} for a, b in zip(lat, lon, strict=True)]
+        return [
+            {"lat": round(float(a), LATLON_DIGITS), "lon": round(float(b), LATLON_DIGITS)}
+            for a, b in zip(lat, lon, strict=True)
+        ]
 
     @staticmethod
     def _poses_xyz(poses: list[Any]) -> np.ndarray:
@@ -719,7 +773,8 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             last = self.trail[-1]
             if haversine_m(last["lat"], last["lon"], lat, lon) < self.trail_min_step:
                 return
-        self.trail.append({"lat": lat, "lon": lon})
+        self.trail.append({"lat": round(lat, LATLON_DIGITS), "lon": round(lon, LATLON_DIGITS)})
+        self._trail_total += 1
 
     def _set_heading(self, heading: float) -> None:
         heading = round(heading, 1)
