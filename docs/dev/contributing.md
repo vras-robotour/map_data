@@ -2,86 +2,49 @@
 
 ## Prerequisites
 
-- Python 3.12+
-- [`uv`](https://docs.astral.sh/uv/) (preferred) or plain `pip`
-- ROS2 Jazzy or later — **optional**; only needed for the `osm_cloud` node
+- Python 3.12 (pinned in `.python-version`; ROS 2 Jazzy's Python)
+- [`uv`](https://docs.astral.sh/uv/)
+- ROS 2 Jazzy, only for the ROS nodes (`osm_cloud`, `route_planner`, the viewer's Tracker)
 
-## Getting the code
+## Setup
 
 ```bash
 git clone https://github.com/vras-robotour/map_data.git
 cd map_data
+uv sync                  # runtime + the dev dependency group, from uv.lock
+uv run pre-commit install
 ```
 
-## Setting up the development environment
+`uv sync` installs the locked versions in `uv.lock`. After changing dependencies in `pyproject.toml`, run `uv lock` and commit `uv.lock`.
 
-Install the package in editable mode together with the documentation and tooling dependencies:
+For a ROS 2 workspace, clone into `<ws>/src/map_data` and run `scripts/setup_ws.sh`; it symlinks the nested `map_data_interfaces` package into `<ws>/src` so `colcon` finds it. See [Installation](../index.md#with-ros-2-colcon).
+
+## Checks
 
 ```bash
-uv pip install -e ".[dev]"
+uv run python -m pytest       # tests, see Testing
+uv run ruff check --fix .
+uv run ruff format .
+uv run mypy map_data/
+uv run mkdocs build --strict  # docs; mkdocs serve for a live preview
 ```
 
-!!! warning "Use `uv pip`, not plain `pip`"
-    The project uses `uv` for package management. Plain `pip` may install into the wrong interpreter on machines with multiple Python environments.
+The pre-commit hook runs ruff and mypy on every commit. CI runs the same checks, the test suite with a 72 % coverage gate and a ROS 2 build with the smoke test; see [Testing](testing.md#ci).
 
-## Running the tests
-
-```bash
-pytest tests/ -v
-```
-
-All tests are standalone — no ROS2 context or network access is required. See the [Testing](testing.md) page for a full breakdown of test files, design principles, and guidance on adding new tests.
-
-## Running the docs locally
-
-```bash
-mkdocs serve
-```
-
-The site is served at `http://127.0.0.1:8000` with live reload.
-
-To build a static copy:
-
-```bash
-mkdocs build
-```
+The ruff and mypy versions are pinned in three places that must match: `pyproject.toml` (dev group), `.pre-commit-config.yaml` and `RUFF_VERSION` in `.github/workflows/ci.yml`.
 
 ## Code style
 
-The project uses [Ruff](https://docs.astral.sh/ruff/) for both formatting and linting. Configuration lives in `pyproject.toml`.
+Configuration lives in `pyproject.toml`.
 
-Before submitting a pull request, run:
-
-```bash
-ruff check --fix .
-ruff format .
-```
-
-Key style rules enforced:
-
-- **Line length** — 100 characters.
-- **Import order** — isort-compatible, `map_data` is treated as first-party.
-- **Type annotations** — modern PEP 585/604 style (`list[str]`, `X | None`). Add return annotations to all new functions; parameter annotations are required for public API methods.
-- **Docstrings** — public methods use NumPy-style docstrings (matches the `mkdocstrings` configuration). Internal helpers can omit docstrings when the name is self-explanatory.
-- **Comments** — only add a comment when the *why* is non-obvious. Do not annotate what the code does.
-
-!!! tip "Editor integration"
-    If you use Neovim with LazyVim, enable the `lazyvim.plugins.extras.lang.python` extra and add a `conform.nvim` plugin spec with `ruff_format` to get format-on-save automatically.
-
-## Type checking
-
-The project uses [mypy](https://mypy-lang.org/) for static type checking. Configuration lives in `pyproject.toml` under `[tool.mypy]`.
-
-```bash
-mypy map_data/
-```
-
-Third-party libraries without complete type stubs (numpy, shapely, overpy, flask_socketio, rclpy, etc.) are covered by `ignore_missing_imports`. A small number of remaining false positives — mostly from numpy/shapely returning loosely-typed values, or from patterns mypy can't narrow (e.g. Flask's `nonlocal`-captured variables) — are silenced with targeted `# type: ignore[<code>]` comments that include a short reason. New code should be fully typed rather than relying on ignores.
+- **Line length**: 100.
+- **Types**: PEP 585/604 annotations (`list[str]`, `X | None`); return annotations on new functions. Third-party modules without stubs are in mypy's `ignore_missing_imports`; a remaining `# type: ignore[<code>]` carries a short reason.
+- **Docstrings**: NumPy style on public API (rendered by mkdocstrings); state what the code does, not its history.
+- **Comments**: only for a non-obvious *why*.
 
 ## Submitting changes
 
-1. Create a feature branch from `master`.
-2. Make your changes and add or update tests where relevant.
-3. Run `pytest tests/` and ensure all tests pass.
-4. Run `ruff check . && ruff format --check .` and `mypy map_data/` and ensure both are clean.
-5. Open a pull request against `master` with a clear description of what changed and why.
+1. Branch from `master`.
+2. Add or update tests and docs with the change; add a line to the *Unreleased* section of the [changelog](changelog.md).
+3. Make sure the checks above pass.
+4. Open a pull request against `master`.
