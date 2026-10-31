@@ -1,158 +1,75 @@
-# Tag Configuration
+# Tag configuration
 
-The `parameters/` directory contains six CSV files that control how OSM tags are mapped to the three semantic categories used internally: **barrier**, **obstacle**, and **traversable way**. Modifying these files lets you tune which real-world features are treated as physical obstacles without changing any Python code.
+The six CSV files in `parameters/` decide which OSM features become barriers. `MapData._load_tag_configs()` reads them at construction into the instance attributes `BARRIER_TAGS`, `NOT_BARRIER_TAGS`, `ANTI_BARRIER_TAGS`, `OBSTACLE_TAGS`, `NOT_OBSTACLE_TAGS` and `ANTI_OBSTACLE_TAGS`.
 
----
-
-## Overview
-
-OSM features carry arbitrary `key=value` tag pairs. The classification pipeline reads all tags on a feature and applies three ranked rule sets for each category. The rules are loaded by `MapData._load_tag_configs()` at construction time and are available as instance attributes (`BARRIER_TAGS`, `NOT_BARRIER_TAGS`, etc.).
-
----
-
-## Barrier classification (ways and polygons)
-
-Barriers are OSM *ways* (linear or area features) — walls, buildings, water bodies, fences, etc. — that the planner treats as impassable polygons.
-
-### `barrier_tags.csv` — inclusion list
-
-A way is a **candidate barrier** if any of its tags matches a row in this file.
-
-Representative rows:
-
-```
-barrier,*
-waterway,*
-man_made,*
-building,*
-natural,water
-natural,cliff
-leisure,playground
-```
-
-The wildcard `*` in the value column means *any value for this key*.
-
-### `not_barrier_tags.csv` — exclusion list
-
-If a way matches `barrier_tags.csv` but also matches a row in `not_barrier_tags.csv`, it is **removed from barrier consideration**. This handles cases where a broad wildcard rule would otherwise capture features that are clearly traversable.
-
-Representative rows:
-
-```
-man_made,bridge
-man_made,pier
-amenity,parking
-amenity,university
-sport,orienteering
-```
-
-For example, `man_made,*` in `barrier_tags.csv` would classify a bridge as a barrier. The `man_made,bridge` row in `not_barrier_tags.csv` prevents that.
-
-### `anti_barrier_tags.csv` — override list (highest priority)
-
-If a way matches any row in `anti_barrier_tags.csv`, it is **unconditionally removed from the barrier list**, regardless of what `barrier_tags.csv` or `not_barrier_tags.csv` say. This is the highest-priority rule.
-
-All rows (the file is short):
-
-```
-location,underground
-location,underwater
-location,overhead
-```
-
-These cover tunnels, underwater infrastructure, and overhead cables that share OSM keys with surface barriers but are not physical obstacles at ground level.
-
----
-
-## Obstacle classification (standalone nodes)
-
-Obstacles are OSM *nodes* (point features) that are not part of any way — individual bollards, trees, gateposts, information terminals, etc. They are buffered to a 2 m radius circle and appended to `barriers_list`.
-
-### `obstacle_tags.csv` — inclusion list
-
-A standalone node is a **candidate obstacle** if any of its tags matches a row in this file.
-
-Representative rows:
-
-```
-barrier,block
-barrier,bollard
-barrier,gate
-waterway,*
-natural,tree
-information,board
-```
-
-### `not_obstacle_tags.csv` — exclusion list
-
-Nodes that match `obstacle_tags.csv` but also match a row here are excluded.
-
-```
-barrier,entrance
-barrier,coupure
-man_made,surveillance
-historic,archaeological_site
-```
-
-### `anti_obstacle_tags.csv` — override list
-
-Nodes matching any row here are unconditionally excluded from obstacle classification.
-
-```
-barrier,entrance
-barrier,coupure
-barrier,sally_port
-historic,city_gate
-```
+| Feature | Include | Wildcard exceptions | Override |
+|---|---|---|---|
+| Ways and multipolygon relations | `barrier_tags.csv` | `not_barrier_tags.csv` | `anti_barrier_tags.csv` |
+| Standalone nodes | `obstacle_tags.csv` | `not_obstacle_tags.csv` | `anti_obstacle_tags.csv` |
 
 ---
 
 ## CSV format
 
-Each file uses two columns with no header row:
+Two columns, no header:
 
 ```
 key,value
 ```
 
-- `key` — the OSM tag key (e.g. `barrier`, `natural`, `man_made`)
-- `value` — the OSM tag value, or `*` to match any value for that key
+- `key`: OSM tag key (`barrier`, `natural`, `man_made`).
+- `value`: OSM tag value, or `*` for any value of that key.
 
-The files are read with `numpy.genfromtxt(..., dtype=str, delimiter=",")`. Rows with duplicate keys are merged into a list: `{key: [value1, value2, ...]}`.
-
----
-
-## Evaluation order
-
-For a given OSM feature, the classification logic in `map_data/utils/parsing.py` (`separate_ways`, `parse_osm_nodes`) applies the three rule sets in the following priority order:
-
-```
-anti_* (highest)  >  not_*  >  *_tags (lowest)
-```
-
-A match in `anti_*` always wins. A match in `not_*` overrides a match in `*_tags`. Only if neither exclusion list matches does the inclusion list apply.
+Rows with the same key merge into `{key: [value1, value2, ...]}`.
 
 ---
 
-## How to add a new barrier type
+## Precedence
 
-To classify `amenity,playground` as a barrier (it is already in `barrier_tags.csv` as the broad `amenity,*` rule, but this shows the procedure for a specific value):
+`Way.is_barrier(yes_tags, not_tags, anti_tags)` in `map_data/utils/way.py` decides both cases:
 
-1. Open `parameters/barrier_tags.csv`.
-2. Add a line:
-   ```
-   amenity,playground
-   ```
-3. Ensure `amenity,playground` is **not** present in `not_barrier_tags.csv`. If it is, remove that row.
-4. Re-run `create_mapdata` (or call `map_data_instance.run_parse()`) to regenerate the classification with the updated rules.
+1. **Override.** A feature with any tag listed in the `anti_*` file is never a barrier.
+2. **Exact match.** A tag whose exact `key,value` is in the include file makes the feature a barrier. The `not_*` file has no effect on exact matches.
+3. **Wildcard match.** A tag whose key has `*` in the include file makes the feature a barrier, unless that `key,value` is in the `not_*` file.
+
+So `not_*` only carves exceptions out of wildcard rules: `man_made,*` plus `man_made,bridge` in `not_barrier_tags.csv` keeps bridges traversable. To suppress an exact match, remove it from the include file or add it to the `anti_*` file.
+
+Each tag is checked independently: a feature with one excepted tag and another matching tag is still a barrier.
 
 ---
 
-## How to make a barrier traversable
+## Barrier ways
 
-To prevent a feature from being classified as a barrier — for example, to allow passage through `barrier,gate` nodes at ground level — add a row to the appropriate exclusion file:
+`separate_ways` in `map_data/utils/parsing.py` sorts every parsed way:
 
-- Add `barrier,gate` to `not_obstacle_tags.csv` to exclude gate nodes from obstacle classification.
-- Add `man_made,bridge` to `not_barrier_tags.csv` (it is already there) to exclude bridge ways from barrier classification.
+- any `highway` value in `FOOTWAY_VALUES` → footway, buffered to `buffer_widths.footway` (default 3 m full width);
+- any other `highway` value → road, buffered to `buffer_widths.road` (default 7 m);
+- otherwise, if `is_barrier` with the barrier tables → barrier. Closed ways and multipolygons stay polygons; open lines are buffered to `buffer_widths.barrier` (default 2 m).
 
-After editing any CSV file, re-run `create_mapdata` or call `MapData.run_parse()` for the change to take effect. The tag configuration is loaded once at `MapData` construction and is not re-read during the viewer session.
+The `highway` check runs first, so a way tagged both `highway=*` and `barrier=*` is a road or footway.
+
+`anti_barrier_tags.csv` holds `location,underground`, `location,underwater` and `location,overhead`: tunnels and overhead lines that share keys with surface barriers.
+
+## Obstacle nodes
+
+`parse_osm_nodes` checks nodes that are not part of any parsed way. A node that passes `is_barrier` with the obstacle tables becomes a circle of radius `obstacle_radius` (default 2 m) and is added to `barriers_list`.
+
+`anti_obstacle_tags.csv` holds passable openings in walls (`barrier,entrance`, `barrier,coupure`, `barrier,sally_port`, `historic,city_gate`).
+
+Buffer widths and the obstacle radius come from `config/planner_defaults.yaml`; see [Planner configuration](planner_config.md).
+
+---
+
+## Common edits
+
+Make a specific value a barrier:
+
+1. Add `key,value` to `barrier_tags.csv` (ways) or `obstacle_tags.csv` (nodes).
+2. If the key already has a `*` rule, make sure the value is not in the matching `not_*` file.
+
+Make a feature passable:
+
+- covered by a wildcard rule: add `key,value` to the `not_*` file;
+- an exact match, or a tag that should cancel every other match (`location,underground`): add it to the `anti_*` file.
+
+Tag tables are read when `MapData` is constructed. After editing a CSV, regenerate the `.mapdata` file with `create_mapdata` or the viewer's GPX upload; existing `.mapdata` files keep their old classification.

@@ -18,7 +18,7 @@ is useful when an annotation store was pruned for another area.
 
 Planner defaults come from `config/planner_defaults.yaml` (`cell_size`, `inflate_obstacles`,
 `simplify_path`, `smooth_path`, `max_path_dist`, `grid_cost_weight`). `route_planner` exposes
-these as ROS 2 parameters that are re-read per goal.
+the first four as ROS 2 parameters, re-read on every goal.
 
 ### Goal QR codes (Planner screen)
 
@@ -154,7 +154,7 @@ When route planning fails, `PlanRoute.Result` sets `success = false` and provide
 
 | Reason | Meaning |
 |--------|---------|
-| `bad_parameter` | Invalid `algorithm`, invalid `highway_types`, or non-positive `cell_size` |
+| `bad_parameter` | Unknown `algorithm` or `sub_algorithm`, or non-positive `cell_size` |
 | `start_blocked` | Grid start coordinate lies inside an obstacle and cannot be snapped to free space |
 | `goal_blocked` | Grid goal coordinate lies inside an obstacle and cannot be snapped to free space |
 | `cancelled` | Planning request was cancelled |
@@ -192,8 +192,8 @@ Which OSM ways the robot may drive on is decided from their tags by
 applied when a map is loaded for planning (`load_mapdata_with_annotations`), ensuring that
 `route_planner`, `osm_cloud`, and intersection generation all observe the same network.
 
-> [!WARNING] Keep traversability rules in sync between nodes
-> Both `route_planner` and `osm_cloud` must be configured with the same traversability file. If they differ, `osm_cloud` may publish intersection rings and cost clouds for ways that `route_planner` refuses to route over. `route_planner` detects rule file modifications automatically on each new goal, whereas `osm_cloud` reads the rule file once at startup and must be restarted after edits.
+!!! warning "Keep traversability rules in sync between nodes"
+    Both `route_planner` and `osm_cloud` must be configured with the same traversability file. If they differ, `osm_cloud` may publish intersection rings and cost clouds for ways that `route_planner` refuses to route over. `route_planner` detects rule file modifications automatically on each new goal, whereas `osm_cloud` reads the rule file once at startup and must be restarted after edits.
 
 ```yaml
 default:
@@ -242,7 +242,7 @@ path within the polygon boundary between entry and exit points.
 ### Grid A\*
 
 Discretizes the area around the route into a uniform grid and runs A\* on it.
-Each cell is marked free or occupied based on OSM barrier polygons (optionally inflated).
+Each cell carries a cost (see [Cost grid](#cost-grid)); cells inside barrier polygons are impassable.
 Grid A\* is complete (finds a path if one exists) and provides predictable runtime. Resolution
 and obstacle inflation are tuned via `--cell-size` and `--inflate-obstacles`.
 
@@ -262,7 +262,7 @@ one value per grid cell representing a `cell_size × cell_size` meter patch.
 
 **Cell cost assignment:**
 
-1. Barrier polygons (inflated by `inflate_obstacles`) are rasterized as impassable (`cost = inf`).
+1. Barrier polygons (inflated by `inflate_obstacles`, minus the ways of `highway_types` that cross them, such as a footway through a gate) are rasterized as impassable (`cost = inf`).
 2. For each remaining cell, the distance to the nearest way centerline is computed.
 3. If that distance is $\le$ `max_path_dist`, the cell receives a blended cost:
 
@@ -315,8 +315,8 @@ value.
 
 ## Using astar_search directly
 
-`astar_search` is the generic A\* implementation that powers both `GraphPlanner` and
-`grid_astar`. You can use it directly to build a custom planner for any graph-like problem.
+`astar_search` is the generic A\* implementation `GraphPlanner` uses (`grid_astar` has its
+own array-based loop). You can use it directly to build a custom planner for any graph-like problem.
 
 ```python
 from map_data.pathsolver.astar import astar_search

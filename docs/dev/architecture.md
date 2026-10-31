@@ -1,6 +1,6 @@
-# Architecture Overview
+# Architecture overview
 
-This page describes the internal structure of the `map_data` package. The system is organised into four main layers: **data ingestion**, **representation**, **planning**, and **visualisation**.
+The `map_data` package has four layers: **data ingestion**, **representation**, **planning** and **visualization**.
 
 ---
 
@@ -174,7 +174,7 @@ This page describes the internal structure of the `map_data` package. The system
   svg.appendChild(defs);
 
   const boxes = {
-    GPX:{x:478, y:72,  w:184,h:70,  title:'GPX / YAML file',  mono:true,                       kind:'input'},
+    GPX:{x:478, y:72,  w:184,h:70,  title:'GPX file',  mono:true,                       kind:'input'},
     OA :{x:738, y:72,  w:184,h:70,  title:'Overpass API',                                        kind:'input'},
     MD :{x:540, y:244, w:320,h:104, title:'MapData',           sub:'run_queries · run_parse',    kind:'dark'},
     RL :{x:100, y:474, w:200,h:84,  title:'roads',             mono:true,accent:'rl'},
@@ -186,8 +186,8 @@ This page describes the internal structure of the `map_data` package. The system
     RP :{x:392, y:744, w:240,h:116, title:'ReplanPath',        sub:'Grid A* / RRT*'},
     VW :{x:760, y:744, w:240,h:116, title:'Viewer',            sub:'Flask + Leaflet'},
     ANN:{x:1032,y:744, w:240,h:116, title:'annotations sidecar',sub:'.annotations.json',kind:'sidecar'},
-    ROS:{x:430, y:990, w:540,h:116, title:'ROS2 nodes',
-         sub:'osm_cloud · TrackerNode · create_mapdata',kind:'dark'},
+    ROS:{x:430, y:990, w:540,h:116, title:'ROS 2 nodes',
+         sub:'osm_cloud · route_planner · TrackerNode',kind:'dark'},
   };
   const topAt=(b,i,n)=>{const p=22,u=b.w-2*p;return{x:b.x+p+(n<=1?u/2:u*i/(n-1)),y:b.y}};
   const bot  =b=>({x:b.x+b.w/2,y:b.y+b.h});
@@ -196,7 +196,7 @@ This page describes the internal structure of the `map_data` package. The system
     {x:500, y:200,w:400, h:172,label:'data ingestion'},
     {x:60,  y:422,w:1280,h:172,label:'representation'},
     {x:80,  y:682,w:592, h:222,label:'planning'},
-    {x:720, y:682,w:592, h:222,label:'visualisation',tagSide:'right'},
+    {x:720, y:682,w:592, h:222,label:'visualization',tagSide:'right'},
   ];
   for(const g of groups)
     svg.appendChild(el('rect',{x:g.x,y:g.y,width:g.w,height:g.h,rx:6,ry:6,class:'group-rect'}));
@@ -268,7 +268,7 @@ This page describes the internal structure of the `map_data` package. The system
     flow(`M ${vw.x+vw.w} ${y} L ${an.x} ${y}`,'flow-main','h-main',1,null,2.2,'h-main');
   }
 
-  // GP & RP -> ROS2 ; MD -> ROS2 (right detour)
+  // GP & RP -> ROS 2 ; MD -> ROS 2 (right detour)
   {
     const ros=boxes.ROS;
     const eGP={x:ros.x+ros.w*0.18,y:ros.y},eRP={x:ros.x+ros.w*0.36,y:ros.y},eMD={x:ros.x+ros.w*0.78,y:ros.y};
@@ -324,139 +324,146 @@ This page describes the internal structure of the `map_data` package. The system
 
 ---
 
+
 ## MapData
 
-`MapData` (defined in `map_data/map_data.py`) is the central data class. It accepts either a path to a `.gpx` (or `.yaml`) file or a pre-converted UTM coordinate array, queries the Overpass API for all OSM features inside the derived bounding box, and parses the responses into categorised `Way` lists.
+`MapData` (`map_data/map_data.py`) is the central data class. It takes a `.gpx` file (waypoints or a track) or a UTM coordinate array, downloads the OSM data around it and parses it into `Way` lists.
 
-**Overpass queries.** Three concurrent HTTP requests are fired in a thread pool, each covering the full bounding box with no server-side tag filtering:
+**Bounding box.** The waypoints' axis-aligned UTM bounding box, expanded by `grid_margin` (default 150 m, `config/planner_defaults.yaml`) on every side. `MapData(..., grid_margin=...)` overrides it.
 
-- ways query — every way in the bounding box (`way(bbox); >;`), plus a down-recursion that brings in every way's constituent nodes.
-- relations query — every relation that references at least one of those ways (`way(bbox); <;`). `parse_osm_rels()` uses these to stamp relation tags onto member ways and mark them inner/outer — this is what makes untagged multipolygon members (lakes, forests, courtyard buildings, whose classifying tag lives on the relation) still show up as obstacles.
-- nodes query — every standalone node in the bounding box (`node(bbox)`).
+**Overpass query.** `run_queries()` sends one union query for the box: every way, its nodes, the relations that reference it, and every node. Nothing is filtered server-side; `run_parse()` classifies client-side. `OverpassClient` (`map_data/utils/overpass.py`) rotates endpoints, retries, and rejects error bodies.
 
-An earlier revision filtered these queries server-side by tag family (Overpass `["key"]` existence filters) to shrink the download. That was reverted: unioning a dozen-plus separate tag-indexed clauses is markedly more expensive for the Overpass query planner than a single bbox scan, and it made queries slow enough to trip the public instances' rate limiting and timeouts — sometimes returning incomplete results instead of failing loudly. A plain bbox query, while larger, is filtered client-side in `run_parse()` and is far more reliable in practice.
+**Parsing.** `run_parse()`:
 
-The bounding box is the convex hull of the input waypoints expanded by `grid_margin` metres on all sides (default: 150 m); `grid_margin` is a per-call override accepted by `MapData.__init__`, `parse_osm_nodes`, and `separate_ways`.
+1. `parse_osm_ways` builds a `Way` per OSM way (closed ways become polygons, except linear barriers such as fences and walls).
+2. `parse_osm_rels` merges multipolygon relation members into rings, stamps the relation's tags onto untagged outers and subtracts inner rings.
+3. `parse_osm_nodes` turns standalone obstacle nodes into circles.
+4. `separate_ways` sorts ways into roads, footways and barriers (see [Tag configuration](tag_configuration.md)).
+5. `parse_intersections` adds a crossroad wherever a footway/road node branches.
 
-**Core attributes after parsing:**
+**Attributes after parsing:**
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `roads_list` | `list[Way]` | Vehicle-intended highway ways, buffered to 7 m wide polygons |
-| `footways_list` | `list[Way]` | Pedestrian footways, buffered to 3 m wide polygons |
-| `barriers_list` | `list[Way]` | Physical barriers, buildings, water, and obstacle nodes |
-| `crossroads_list` | `list[Way]` | Footway intersection points (buffered 1.5 m circles) |
-| `nodes_cache` | `dict[int, dict]` | Mapping of OSM node ID to `{lat, lon, tags}` |
-| `zone_number` | `int` | UTM zone number inferred from the input waypoints |
-| `zone_letter` | `str` | UTM zone letter inferred from the input waypoints |
-| `waypoints` | `np.ndarray` | `(N, 2)` UTM easting/northing array of the input waypoints |
-| `min_x/max_x/min_y/max_y` | `float` | UTM bounding box including margins |
+| `roads_list` | `list[Way]` | Non-footway `highway` ways, buffered to 7 m wide polygons |
+| `footways_list` | `list[Way]` | Footway-class `highway` ways, buffered to 3 m wide polygons |
+| `barriers_list` | `list[Way]` | Barrier polygons, buffered barrier lines and obstacle circles |
+| `crossroads_list` | `list[Way]` | Junction circles of radius `CROSSROAD_RADIUS` (1.5 m) |
+| `nodes_cache` | `dict[int, dict]` | OSM node ID → `{lat, lon, tags}` |
+| `zone_number`, `zone_letter` | `int`, `str` | UTM zone of the input waypoints |
+| `waypoints` | `np.ndarray` | `(N, 2)` UTM input waypoints |
+| `min_x`, `max_x`, `min_y`, `max_y` | `float` | UTM bounding box including `grid_margin` |
 
-**OSM caching.** After a successful Overpass query, the raw responses are saved to a `.osm_cache.json` sidecar file next to the source `.gpx`/`.yaml` file. On the next load, if the file exists and the stored bounding box matches the current one (within 1 × 10⁻⁶ °, ≈ 11 cm), the cache is used and the network round-trip is skipped. The cache is invalidated automatically whenever the bounding box changes.
+**OSM cache.** The raw Overpass response is saved as `<stem>.osm_cache.json` next to the source GPX. It is reused when the stored box matches within 1 × 10⁻⁶° (≈ 11 cm), the query hash matches and it is younger than 30 days (`OSM_CACHE_MAX_AGE`). `run_queries()` uses it by default (the viewer's fetch and GPX upload); `run_all()` bypasses it, and `create_mapdata` uses it only with `--cache`.
 
-**Serialisation.** `MapData.save()` writes a JSON file (`.mapdata` extension) using `json.dump`. `MapData.load(path)` reads it back. Support for the legacy pickle format has been removed for security reasons; legacy files must be re-parsed from the source GPX/YAML.
+**Serialization.** `MapData.save()` writes JSON (`.mapdata`) atomically; `MapData.load()` reads it and recomputes the node-based crossroads. See [Data formats](data_formats.md).
+
+**Traversability.** `MapData.apply_traversability(rules)` removes the roads and footways the [traversability rules](../planning.md#traversability-rules) refuse and recomputes the crossroads. It runs at load time (`load_mapdata_with_annotations`), not at parse time, so the `.mapdata` file keeps the full OSM classification.
 
 ---
 
 ## Way objects
 
-Every OSM feature is stored as a `Way` instance (`map_data/utils/way.py`). A `Way` holds:
+Every OSM feature is a `Way` (`map_data/utils/way.py`):
 
-- `id` — OSM way/node ID (positive integer) or a synthetic negative integer for merged multipolygon segments or viewer-drawn annotations
-- `is_area` — `True` if the geometry is a closed polygon
-- `nodes` — ordered list of OSM node IDs
-- `tags` — dict of OSM tag key-value pairs
-- `line` — Shapely geometry (`Polygon` for closed/buffered features, `LineString` for open features)
-- `in_out` — `"outer"` or `"inner"` for multipolygon relation members
+- `id`: OSM way or node ID; negative or string IDs for merged relation rings, viewer-drawn annotations and split segments;
+- `is_area`: `True` when `line` is a polygon;
+- `nodes`: ordered OSM node IDs;
+- `tags`: OSM tags;
+- `line`: Shapely geometry in UTM. Roads, footways and open barrier lines are buffered to `Polygon`s during parsing; `MapData.centre_line(way)` recovers a footway's centerline;
+- `in_out`: `"outer"` or `"inner"` for multipolygon members, else `None`.
 
-All geometry is stored in UTM coordinates (same zone as the input waypoints). Ways are buffered during parsing: roads receive a 7 m half-width buffer and footways a 3 m half-width buffer, converting `LineString` geometries to `Polygon`.
+---
+
+## Annotations and edits
+
+Viewer edits live in `<stem>.annotations.json` next to the `.mapdata` file, which is never modified.
+
+- `map_data/edits.py`: the annotation store (load, quarantine of an unreadable store, the locked `annotation_store()` context manager) and the way-edit pipeline that rebuilds a way's `nodes` and `line` from deleted, moved, added and split nodes.
+- `map_data/annotations.py`: `apply_store(md, store)` merges a store into a `MapData` (way edits, tag overrides, drawn paths and obstacles, `join_ways`). `load_mapdata_with_annotations()` loads a map, merges its store and applies the traversability rules in one call; `edit_mapdata()` does the same for an already loaded map. The viewer, `map_data_plan`, `route_planner` and `osm_cloud` all use it, so they see the same map.
+
+`join_ways` gives ways that meet without a shared node ID a junction node: a drawn path's loose end or a moved end node within `JOIN_DISTANCE_M` (5 m) of another way, and every crossing of a drawn path.
 
 ---
 
 ## Pathsolvers
 
-The package provides two independent path-planning back-ends.
+`map_data/pathsolver/route.py` is the shared entry point: `plan_route(md, points_latlon, algorithm=...)` validates the request, runs the graph or grid planner and returns a `RouteResult`, or raises `RoutePlanningError` with a machine-readable `reason`. The viewer, `map_data_plan` and `route_planner` all call it.
 
 ### GraphPlanner
 
 `map_data/pathsolver/graph_planner.py`
 
-Builds an undirected weighted graph directly from the OSM way network (`roads_list` and/or `footways_list`). Edge weights are Euclidean distances in metres. Planning uses A* with a straight-line distance heuristic.
-
-Waypoints passed to `GraphPlanner.plan()` are first snapped to the nearest graph edge using an STRtree spatial index. Ways connect by shared node id only. The annotation merge (`join_ways` in `map_data/annotations.py`) therefore gives viewer-drawn paths (negative-ID ways) and moved end nodes real junction nodes: where an end lies within 5 m of another way, and where a drawn path crosses one. For a map that was not merged there, the planner still splices a drawn path's loose ends into the graph itself, by projecting them onto the nearest edge within 5 m and inserting synthetic junction nodes (ids from -2000000 down).
-
-This planner is well-suited for route planning on well-mapped pedestrian or road networks where staying on designated paths is required.
+A* over the OSM way network (`footway` and/or `road`). Ways connect by shared node ID. An edge weighs `length × (1 + way cost + rule cost)` (see [Planner configuration](planner_config.md)); reported lengths stay geometric. Waypoints snap to the nearest edge through an STRtree; a waypoint farther than `max_snap_distance` fails with `snap_too_far`. Open pedestrian areas (`WalkableArea`, `walkable_area.py`) are crossed through a visibility graph instead of walked around their rim.
 
 ### ReplanPath
 
 `map_data/pathsolver/replan.py`
 
-Orchestrates cost-grid planning. Grid construction and smoothing are handled by dedicated sub-modules:
+Cost-grid planning over a box around the waypoints:
 
 | Module | Class / function | Responsibility |
 |--------|-----------------|----------------|
-| `pathsolver/grid_constructor.py` | `PathGrid` | Builds the cost raster at `cell_size` metre resolution; assigns per-cell costs from highway type, surface, and barrier geometry |
-| `pathsolver/grid_astar.py` | `grid_astar` | Fast, optimal A* search on the discrete grid |
-| `pathsolver/rrt_star.py` | `RRTStar` | Sampling-based planner; supports Informed RRT* (ellipsoidal sampling after first path found) and adaptive neighbor radius (`γ·√(log n/n)`) for asymptotic optimality |
-| `pathsolver/smoothing.py` | `smooth_path` | Gradient-descent path smoothing with optional collision checking |
+| `grid_constructor.py` | `PathGrid` | Cost raster at `cell_size`; cells near a way take its cost, obstacle cells are `inf` |
+| `grid_astar.py` | `grid_astar` | 8-connected A* on the raster |
+| `rrt_star.py` | `RRTStar` | Sampling planner with informed sampling and an adaptive rewiring radius |
+| `smoothing.py` | `smooth_path` | Gradient-descent smoothing with collision checks |
+| `way_cost.py` | `way_cost`, `load_cost_tables` | `highway`/`surface` cost shared with `GraphPlanner` |
 
-Each `PathGrid` cell cost is determined by:
+`replan()` plans each leg between consecutive waypoints. A straight leg that hits no obstacle is kept. Otherwise blocked ends are moved to the nearest free cell within `SNAP_RADIUS_M` (2 m), and the leg fails fast when start and goal lie in disconnected free regions. RRT* falls back to A* when it finds no path. The result is then smoothed (optional) and simplified. On failure it returns `None` and sets `failure_reason` (`no_path`, `start_blocked`, `goal_blocked`, `cancelled`).
 
-- the OSM highway type and surface material of the nearest way within `max_path_dist` metres (configured via `highway_costs` and `surface_costs` in `planner_defaults.yaml`)
-- a fixed `default_off_path_cost` for cells not covered by any way
-- barrier polygons inflated by `inflate_obstacles` metres, set to cost 1.0 (impassable)
-
-Key parameters now exposed in `planner_defaults.yaml`: `grid_cost_weight`, `obstacle_radius`, and `buffer_widths` (per road type).
+Defaults come from `grid_defaults()`; see [Planner configuration](planner_config.md).
 
 ---
 
 ## Viewer
 
-The viewer (`map_data/viewer/`) is a single-page web application with three switchable modes.
+`map_data/viewer/` is a single-page Flask + Leaflet application.
 
-**Back-end** (`app.py`, `routes/`, `helpers.py`, `cache.py`):
+**Back-end:**
 
-- `routes/` holds the one `viewer` blueprint, split by concern: `files` (page, file list,
-  mapdata, fetch, uploads, export), `annotations`, `ways` (way and node editing), `planning`
-  (planner defaults, traversability, cost grid, replan), `sharing` (goal QR codes, wormhole) and
-  `common` (the blueprint, path helpers, way resolution, validators, `get_merged_mapdata`)
+| Module | Responsibility |
+|---|---|
+| `app.py` | App factory, Socket.IO, CLI (`map_data_viewer`), optional ROS 2 thread |
+| `routes/` | The `viewer` blueprint: `files` (page, file list, map, fetch, uploads, export), `annotations`, `ways` (way and node edits), `planning` (planner defaults, traversability, cost grid, replan), `sharing` (goal QR codes, wormhole), `common` (JSON errors, path helpers, way resolution, validators, `get_merged_mapdata`) |
+| `helpers.py` | GeoJSON conversion |
+| `cache.py` | Read caches keyed on file signature and annotation-store digest |
+| `ros_node.py` | `TrackerNode`, the Tracker's ROS 2 subscriber |
+| `tracker_routes.py`, `tracker_config.py` | Tracker settings API and its parameter file |
 
-- Serves GeoJSON representations of the `MapData` contents and handles annotation CRUD
-- `/api/fetch_area` runs Overpass queries in a background thread and returns a task ID immediately; the client polls `/api/fetch_area/<task_id>` for completion, preventing UI hangs on long fetches
-- `/export` writes a human-readable JSON snapshot of the annotated map; `/export/geojson` writes the same merged data as a GeoJSON `FeatureCollection`
-- `cache.py` manages the OSM response cache sidecar
+Every error is JSON `{"error": message}`; see [Viewer REST API](../api/viewer_routes.md).
 
-**Front-end modes** (Leaflet + Bootstrap, `static/js/`):
+**Front-end modes** (`static/js/`):
 
 | Mode | Entry point | Purpose |
 |------|------------|---------|
-| Viewer | `ui_handlers.js`, `layers.js` | Inspect, edit, annotate, and search OSM features |
-| Planner | `planner_mode.js` | Place waypoints, trigger replanning, download GPX (track or waypoint format) |
-| Tracker | `tracker_mode.js` | Live robot position overlaid on the map via WebSocket / ROS2 |
-
-**Sidecar annotation files.** All viewer edits are persisted alongside the `.mapdata` file as `<stem>.annotations.json`. This design keeps the map data immutable while allowing iterative annotation without re-running the Overpass query. The viewer merges the sidecar at load time to produce the rendered view.
+| Viewer | `ui_handlers.js`, `layers.js`, `draw_handlers.js` | Inspect, edit, annotate and search OSM features |
+| Planner | `planner_mode.js` | Waypoints, route planning, GPX download, goal QR codes |
+| Tracker | `tracker_mode.js` | Live robot telemetry over Socket.IO |
 
 ---
 
-## ROS2 nodes
+## Executables
 
-| Node | File | Purpose |
-|------|------|---------|
-| `create_mapdata` | `map_data/create_mapdata.py` | CLI node: reads a GPX/YAML file, runs `MapData.run_all()`, writes the `.mapdata` file |
-| `osm_cloud` | `map_data/osm_cloud.py` | ROS2 node: publishes the parsed OSM features as `sensor_msgs/PointCloud2` messages for use in Nav2 or custom navigation stacks |
-| `TrackerNode` | `map_data/viewer/ros_node.py` | ROS2 node embedded in the viewer: subscribes to robot pose and streams it to the Leaflet front-end via WebSocket for live position display |
+| Executable | File | Kind | Purpose |
+|------|------|------|---------|
+| `create_mapdata` | `map_data/create_mapdata.py` | CLI | Build a `.mapdata` from a GPX file |
+| `map_data_info` | `map_data/info.py` | CLI | Statistics and validation of a `.mapdata` file |
+| `map_data_plan` | `map_data/plan_route_cli.py` | CLI | Plan a route offline (`plan_route`) |
+| `map_data_viewer` | `map_data/viewer/app.py` | CLI, optional ROS 2 | Web viewer; with ROS 2 also runs `TrackerNode` |
+| `osm_cloud` | `map_data/osm_cloud.py` | ROS 2 node | Publishes the way network as a cost-grid `PointCloud2`, intersections as `PoseArray` and markers |
+| `route_planner` | `map_data/route_planner.py` | ROS 2 node | `PlanRoute` action server on `~/plan_route`; publishes the route latched |
+
+The `PlanRoute` action is defined in the nested `map_data_interfaces/` package.
 
 ---
 
 ## Data flow
 
-A typical session follows this sequence:
-
-1. **Create `.mapdata`** — run `create_mapdata` with a GPX waypoint file. The node queries Overpass, parses the OSM data, and writes `<name>.mapdata` to disk. Or download and parse data inside the viewer.
-2. **Visualize data** — run the viewer and load parsed data in the browser. If the data were parsed through the viewer they will be shown automatically.
-3. **Annotate** — use the viewer drawing tools to mark obstacles, draw alternative path segments, delete or hide erroneous ways, adjust node positions, and override OSM tags. Changes are saved automatically to `<name>.annotations.json`.
-4. **Export** — click the Export button to produce `<name>.exported.mapdata`, a human-readable JSON snapshot of the annotated map suitable for downstream processing. Click the GeoJSON button to produce `<name>.geojson`, the same data for use in QGIS/geojson.io.
-5. **Plan path** — instantiate `GraphPlanner` or `ReplanPath` with the loaded `MapData` object and call `plan()` with the desired waypoints.
+1. **Create the map:** `create_mapdata -f <file>.gpx -d`, or *Fetch area* / GPX upload in the viewer, writes `<name>.mapdata`.
+2. **Inspect and annotate:** the viewer renders the map; edits go to `<name>.annotations.json`.
+3. **Plan:** the viewer's Planner, `map_data_plan` or a `PlanRoute` goal to `route_planner` load the map with its annotations and traversability rules and call `plan_route`.
+4. **Drive:** `osm_cloud` publishes the same map for the navigation stack; the viewer's Tracker shows the robot and its route.
 
 ---
 
@@ -465,71 +472,61 @@ A typical session follows this sequence:
 ```
 map_data/                          # repository root
 ├── map_data/                      # Python package
-│   ├── __init__.py                # package version
-│   ├── map_data.py                # MapData — central data class
-│   ├── info.py                    # map_data_info CLI tool
-│   ├── create_mapdata.py          # ROS2 node / CLI: parse & save
-│   ├── osm_cloud.py               # ROS2 node: PointCloud2 publisher
+│   ├── map_data.py                # MapData
+│   ├── annotations.py             # apply an annotation store to a MapData
+│   ├── edits.py                   # annotation store IO, way-edit pipeline
+│   ├── traversability.py          # tag rules: which ways may be driven on
+│   ├── create_mapdata.py          # create_mapdata CLI
+│   ├── info.py                    # map_data_info CLI
+│   ├── plan_route_cli.py          # map_data_plan CLI
+│   ├── osm_cloud.py               # osm_cloud ROS 2 node
+│   ├── route_planner.py           # route_planner ROS 2 action server
 │   ├── pathsolver/
-│   │   ├── astar.py               # graph A* primitives
+│   │   ├── route.py               # plan_route, RoutePlanningError, goal_plan_kwargs
 │   │   ├── graph_planner.py       # GraphPlanner (on-network A*)
-│   │   ├── grid_constructor.py    # PathGrid — cost raster builder
-│   │   ├── grid_astar.py          # grid A* search
-│   │   ├── replan.py              # ReplanPath orchestrator
-│   │   ├── rrt_star.py            # RRTStar (Informed + adaptive radius)
-│   │   └── smoothing.py           # gradient-descent path smoother
+│   │   ├── walkable_area.py       # crossing open pedestrian areas
+│   │   ├── astar.py               # generic A*
+│   │   ├── way_cost.py            # highway/surface cost tables
+│   │   ├── replan.py              # ReplanPath, grid_defaults
+│   │   ├── grid_constructor.py    # PathGrid cost raster
+│   │   ├── grid_astar.py          # grid A*
+│   │   ├── rrt_star.py            # RRTStar
+│   │   └── smoothing.py           # gradient-descent smoother
 │   ├── utils/
-│   │   ├── config.py              # YAML loading + setup_logging()
-│   │   ├── gpx.py                 # GPX writing (create_gpx_content / create_gpx_track)
-│   │   ├── overpass.py            # Overpass API client
-│   │   ├── parsing.py             # OSM feature classification & buffering
-│   │   ├── serialization.py       # .mapdata JSON read / write
-│   │   └── way.py                 # Way dataclass
+│   │   ├── config.py              # config lookup, setup_logging
+│   │   ├── densify.py             # resample ways to a max step
+│   │   ├── geodesy.py             # UTM / WGS84 / ECEF
+│   │   ├── gpx.py                 # GPX writing
+│   │   ├── launch.py              # launch-file helpers
+│   │   ├── overpass.py            # OverpassClient
+│   │   ├── parsing.py             # OSM parsing and classification
+│   │   ├── qr.py                  # goal QR codes
+│   │   ├── serialization.py       # .mapdata JSON, atomic writes
+│   │   └── way.py                 # Way
 │   └── viewer/
-│       ├── app.py                 # Flask app factory + SocketIO
-│       ├── routes/                # REST API endpoints, one module per concern
-│       ├── helpers.py             # GeoJSON conversion helpers
-│       ├── cache.py               # OSM response cache
-│       ├── ros_node.py            # TrackerNode (optional ROS2)
-│       ├── templates/
-│       │   └── index.html         # single-page app shell
-│       └── static/
-│           ├── css/style.css
-│           └── js/
-│               ├── api.js         # fetch wrappers for all REST calls
-│               ├── draw_handlers.js  # Leaflet.Draw event handlers
-│               ├── layers.js      # layer management & feature search
-│               ├── map_setup.js   # Leaflet map init & mode switching
-│               ├── planner_mode.js   # Planner mode (waypoints, replan, GPX)
-│               ├── state.js       # shared mutable state
-│               ├── tracker_mode.js   # Tracker mode (live robot position)
-│               ├── ui_handlers.js    # sidebar & edit panel handlers
-│               └── utils.js       # shared helpers
-├── config/                        # YAML configuration
-│   ├── planner_defaults.yaml      # planner cost & buffer defaults
-│   ├── osm_grid.yaml              # osm_cloud grid parameters
-│   ├── tracker.yaml               # viewer tracker topics (generic defaults)
-│   └── helhest_jr.yaml            # helhest-jr topics (viewer tracker, osm_cloud)
-├── data/                          # default location for .mapdata files
-├── docs/                          # MkDocs documentation source
-├── launch/                        # ROS2 launch files
-├── parameters/                    # ROS2 parameter files
-├── resource/                      # ROS2 ament resource marker
-├── tests/                         # pytest test suite
-│   ├── test_astar.py
-│   ├── test_core.py
-│   ├── test_errors.py
-│   ├── test_fill_grid.py
-│   ├── test_graph_planner.py
-│   ├── test_integration.py
-│   ├── test_overpass.py
-│   ├── test_parsing.py
-│   ├── test_rrt.py
-│   ├── test_smoothing.py
-│   ├── test_viewer_helpers.py
-│   └── test_viewer_routes.py
-├── pyproject.toml                 # build metadata, ruff config
-├── package.xml                    # ROS2 package manifest
-├── setup.py / setup.cfg           # ROS2 ament_python build shims
-└── mkdocs.yml                     # documentation site config
+│       ├── app.py                 # Flask app, Socket.IO, CLI
+│       ├── routes/                # REST API, one module per concern
+│       ├── helpers.py             # GeoJSON conversion
+│       ├── cache.py               # read caches
+│       ├── ros_node.py            # TrackerNode
+│       ├── tracker_routes.py      # Tracker settings API
+│       ├── tracker_config.py      # Tracker parameter file
+│       ├── templates/index.html   # page shell
+│       └── static/                # css/, js/ (one module per mode and concern)
+├── map_data_interfaces/           # PlanRoute action (separate ament_cmake package)
+├── config/                        # planner_defaults, traversability, route_planner, osm_grid, tracker, helhest_jr
+├── parameters/                    # tag classification CSVs
+├── launch/                        # osm_cloud.launch.py, route_planner.launch.py
+├── demo/                          # demo map, installed to share/map_data/data
+├── data/                          # local maps (untracked)
+├── scripts/
+│   ├── setup_ws.sh                # symlink map_data_interfaces into the workspace
+│   ├── ros_smoke.sh               # ROS 2 runtime smoke test
+│   └── build_static_demo.sh       # static viewer demo for GitHub Pages
+├── tests/                         # pytest suite
+│   └── data/                      # Stromovka .mapdata fixture (ODbL)
+├── docs/                          # MkDocs source
+├── pyproject.toml, uv.lock        # Python metadata, locked dev environment
+├── package.xml, setup.py, setup.cfg, resource/   # ament_python packaging
+└── mkdocs.yml
 ```

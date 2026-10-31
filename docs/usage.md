@@ -13,7 +13,7 @@ When `create_mapdata` (or `MapData.run_all()`) is called, a single Overpass API 
 is sent covering the bounding box of the GPX waypoints:
 
 ```text
-[out:json][timeout:50];way(bbox)->.w;(.w; .w >; .w <; node(bbox););out;
+[out:json][timeout:170];way(bbox)->.w;(.w; .w >; .w <; node(bbox););out;
 ```
 
 This retrieves:
@@ -77,15 +77,16 @@ map_data_info coords.mapdata --validate
 
 ## Parsing and creating files
 
-`create_mapdata` creates a `.mapdata` file from a `.gpx` waypoint file, or re-parses an
-existing `.mapdata` file with current tag configurations.
+`create_mapdata -d` builds a `.mapdata` file from a `.gpx` file. Without `-d` it loads the
+`.mapdata` file of the same name and saves it again (current file format); it does not
+reclassify the ways, so tag CSV edits need a new download.
 
 ### Command-line options
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-h, --help` | | Show help message and exit |
-| `-f FILE, --file FILE` | `buchlovice.gpx` | GPX file name to parse (with `-d`), or `.mapdata` file to re-parse (without `-d`) |
+| `-f FILE, --file FILE` | `buchlovice.gpx` | GPX file (a path, or a name in the package's `data/` directory). Without `-d`, its `.mapdata` sibling is re-saved |
 | `-d, --download` | `false` | Download fresh data from OSM within the waypoint bounds and parse it |
 | `--cache` | | Use the local OSM response cache (30-day expiry; ignored by `--no-cache`) |
 | `--no-cache` | | Bypass cache and refetch fresh data from OSM |
@@ -110,10 +111,10 @@ create_mapdata -d -f coords.gpx
 ros2 run map_data create_mapdata -d -f coords.gpx
 ```
 
-Re-parse an existing `.mapdata` file (for example after editing tag CSVs):
+Rebuild after editing the tag CSVs (`--cache` skips the download when the cached response is still valid):
 
 ```bash
-create_mapdata -f coords.mapdata
+create_mapdata -d -f coords.gpx --cache
 ```
 
 ## Publishing a point cloud of footways, roads, and intersections
@@ -151,7 +152,7 @@ rejected (`SetParametersResult(successful=False)`).
 | `grid_res` | `0.25` | Grid resolution / point spacing (m) |
 | `grid_max` | `[0.0, 0.0]` | Upper bounds of the local-frame grid (m); `[0, 0]` enables auto-calculation |
 | `grid_min` | `[0.0, 0.0]` | Lower bounds of the local-frame grid (m); `[0, 0]` enables auto-calculation |
-| `publish_intersections` | `true` | Whether to publish footway intersections |
+| `publish_intersections` | `false` | Whether to publish footway intersections (`true` in `osm_grid.yaml`) |
 | `republish_period` | `0.0` | Periodic re-publish interval (s); `0.0` publishes once (latched) and on changes |
 
 ### Static transform placement

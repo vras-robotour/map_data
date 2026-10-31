@@ -105,8 +105,6 @@ map_data_viewer
 map_data_viewer --data-dir /path/to/data --host 0.0.0.0 --port 8080
 ```
 
-Set `THUNDERFOREST_API_KEY` and/or `SEZNAM_API_KEY` in the environment before launching to make those keys available to the viewer for the corresponding optional basemap tile layers.
-
 ## License
 
 BSD 3-Clause License. See [LICENSE](LICENSE) for more information.

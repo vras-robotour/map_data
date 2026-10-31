@@ -60,8 +60,9 @@ from `config/planner_defaults.yaml`.
 |-----------|---------|-------------|
 | Cell Size (m) | `0.25` | Grid resolution for all-terrain planning |
 | Obstacle Inflation (m) | `0.25` | Safety buffer added around barrier polygons |
-| Simplify Path | on | Drop redundant intermediate waypoints (Douglas-Peucker) |
+| Simplify Path | on | Drop vertices whose shortcut stays collision-free (Douglas-Peucker) |
 | Smooth Path | off | Apply gradient-descent smoothing to the planned path |
+| Grid Cost Weight | `5.0` | How strongly the cell cost weighs against path length in all-terrain planning |
 | Show Cost Grid | off | Overlay the traversal cost grid of the current view on the map for debugging |
 
 ### Highway costs

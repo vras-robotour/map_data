@@ -1,12 +1,12 @@
-# Data Formats
+# Data formats
 
-This page documents every file format produced or consumed by the `map_data` package.
+File formats the `map_data` package reads and writes.
 
 ---
 
 ## `.mapdata` file format
 
-A `.mapdata` file is a **JSON text file** written by `MapData.save()` via `json.dump`. It is not a pickle file and it is not binary. Legacy files created before the JSON migration were Python pickle — support for these has been removed for security reasons. Legacy files must be re-parsed from their source GPX/YAML file to be converted to the JSON format.
+A `.mapdata` file is JSON, written atomically by `MapData.save()`. Pickle files are not supported; rebuild them from the source GPX with `create_mapdata`.
 
 Read a `.mapdata` file with:
 
@@ -15,8 +15,6 @@ from map_data.map_data import MapData
 
 md = MapData.load("route.mapdata")
 ```
-
-Never open `.mapdata` files with `pickle.load` directly — use `MapData.load()`.
 
 ### Top-level JSON structure
 
@@ -33,11 +31,9 @@ Never open `.mapdata` files with `pickle.load` directly — use `MapData.load()`
 }
 ```
 
-`format_version` is the schema version (currently `1`, see `FORMAT_VERSION` in
-`map_data/utils/serialization.py`). Files written before the marker existed have no such key and
-are read as the pre-versioning schema; a file whose version is *newer* than the one this build
-knows is rejected with a `ValueError` rather than half-read. Every way key is optional on load, so
-a file written by an older version falls back to the `Way` defaults for the keys added since.
+`format_version` is the schema version (`FORMAT_VERSION` in `map_data/utils/serialization.py`, `1`). A file without the key is read as version 0; a file with a newer version than the build knows raises `ValueError`. Every way key is optional on load; a missing key takes the `Way` default.
+
+`MapData.load()` recomputes the node-based crossroads, so the saved `crossroads` list only matters for drawn-path intersections (`type=annotation_intersection`).
 
 ### `metadata` object
 
@@ -49,48 +45,49 @@ a file written by an older version falls back to the `Way` defaults for the keys
 | `min_y` / `max_y` | float | UTM northing bounding box (includes margins) |
 | `min_lat` / `max_lat` | float | WGS-84 latitude bounding box |
 | `min_long` / `max_long` | float | WGS-84 longitude bounding box |
-| `coords_file` | str or null | Path of the source GPX/YAML file, or `null` if constructed from an array |
+| `coords_file` | str or null | Path of the source GPX file, or `null` if built from an array |
 
 ### Way object (within `roads`, `footways`, `barriers`, `crossroads`)
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | int or str | OSM way/node ID, or a negative synthetic ID for merged segments |
-| `is_area` | bool | `true` if the geometry is a closed polygon |
+| `id` | int or str | OSM way or node ID; negative for synthetic ways (drawn annotations, merged relation rings), `"<id>:<index>"` for a split segment in an export |
+| `is_area` | bool | `true` if `line` is a polygon |
 | `nodes` | list[int] | Ordered list of OSM node IDs |
 | `tags` | object | OSM tag key-value pairs |
-| `line` | str | Shapely WKT representation of the geometry (UTM coordinates, 6 decimals) |
+| `line` | str or null | WKT geometry in UTM, 6 decimals. Roads, footways and open barrier lines are buffered `POLYGON`s |
 | `in_out` | str or null | `"outer"` or `"inner"` for multipolygon relation members; `null` otherwise |
 
-### Human-readable export
+### Export
 
-The viewer's **Export** button writes `<stem>.exported.mapdata` — a JSON file with the same schema as above but with all viewer annotations (deleted ways, tag overrides, node position overrides, drawn annotations) applied. This file can be used as a clean, annotation-resolved snapshot for downstream tools.
-
-The **GeoJSON** button next to it writes the same annotation-resolved data as `<stem>.geojson` — a
-standard GeoJSON `FeatureCollection` (see `mapdata_to_geojson` in `map_data/viewer/helpers.py`) for
-use in QGIS, geojson.io, or other GIS tools.
+The viewer's **Export** button downloads `<stem>.exported.mapdata`: the same schema with every annotation applied (`apply_store`). **GeoJSON** downloads the same merged map as `<stem>.geojson`, a `FeatureCollection` (`mapdata_to_geojson` in `map_data/viewer/helpers.py`) for QGIS or geojson.io. Nothing is written to the data directory.
 
 ---
 
 ## `.annotations.json` sidecar format
 
-Annotation files are written alongside the `.mapdata` file as `<stem>.annotations.json`. They store all edits made in the viewer without modifying the original map data. The viewer merges the sidecar at load time.
+`<stem>.annotations.json` next to the `.mapdata` file holds every viewer edit; the `.mapdata` file is never modified. `apply_store()` in `map_data/annotations.py` merges it; the viewer, `map_data_plan`, `route_planner` and `osm_cloud` load maps with it (`load_mapdata_with_annotations`).
+
+A store that exists but is not a readable JSON object raises `AnnotationStoreError` and is never overwritten; the viewer answers 409 and moves it aside to `<path>.corrupt-<timestamp>` (`quarantine_annotation_store`).
 
 ### Top-level keys
 
 | Key | Type | Description |
 |-----|------|-------------|
 | `version` | int | Schema version (currently `1`) |
-| `annotations` | list | Drawn geometry annotations (obstacles, path segments) |
-| `deleted_ways` | list | Ways removed from the map view |
-| `hidden_ways` | list | Ways temporarily hidden but not deleted |
-| `tag_overrides` | object | Per-way OSM tag edits |
-| `split_ways` | object | Node IDs at which a way is split into segments |
+| `annotations` | list | Drawn obstacles and paths |
+| `deleted_ways` | list | Deleted ways and segments |
+| `hidden_ways` | list | Ways hidden in the viewer only |
+| `tag_overrides` | object | Replacement tags per way |
+| `tag_override_meta` | object | `{category, label}` of each overridden way, for the change list |
+| `split_ways` | object | Node IDs a way is split at |
 | `detached_nodes` | list | Synthetic node that starts the segment after a split |
-| `deleted_nodes` | object | Node IDs deleted from specific ways |
-| `node_position_overrides` | object | Dragged node position corrections |
-| `change_log` | list | Audit log of all user-initiated changes |
-| `change_log_migration` | str | Internal migration version tag |
+| `added_nodes` | list | Synthetic nodes inserted into ways |
+| `deleted_nodes` | list | Nodes deleted from ways or segments |
+| `node_position_overrides` | object | Moved node positions |
+| `change_log` | list | The viewer's undoable change list |
+
+Every key except `version` and `annotations` is optional.
 
 ### `annotations` list
 
@@ -98,7 +95,7 @@ Each entry is a GeoJSON Feature-like object:
 
 ```json
 {
-  "id": "ann_1715600000000",
+  "id": "3f6c2a1e-8d4b-4c47-9a51-2b7e0f9d6c13",
   "type": "obstacle",
   "geometry": {
     "type": "Polygon",
@@ -109,7 +106,7 @@ Each entry is a GeoJSON Feature-like object:
 }
 ```
 
-`type` is either `"obstacle"` (drawn barrier polygon) or `"path"` (drawn navigable path segment).
+`id` is a uuid4. `type` is `"path"` (a drawn way: a road or footway, buffered by half its `width` property; `highway` defaults to `path`) or anything else, usually `"obstacle"` (a barrier).
 
 ### `deleted_ways` list
 
@@ -121,7 +118,7 @@ Each entry is a GeoJSON Feature-like object:
 
 ### `hidden_ways` list
 
-Same structure as `deleted_ways`. Hidden ways are still included in export but are not rendered in the viewer.
+Same structure as `deleted_ways`, by original way ID. Hiding only affects rendering: export and planning still use hidden ways, and hiding adds no `change_log` entry.
 
 ### `tag_overrides` object
 
@@ -160,14 +157,25 @@ Undoing the split removes the entry and the position overrides of both ends.
 Positions of moved nodes, including detached ends, are also what the graph
 planner uses.
 
-### `deleted_nodes` object
+### `added_nodes` list
 
-Keys are way IDs as strings; values are lists of OSM node IDs deleted from that way:
+Nodes inserted with the viewer's *add node* tool. `id` is negative and shared with the `detached_nodes` ID space (`next_synthetic_node_id`); the node goes after `after_node_id` in the way's node list.
 
 ```json
-{
-  "123456789": [9876540, 9876541]
-}
+[
+  {"id": -4, "way_id": 123456789, "after_node_id": 9876542, "lat": 50.1236, "lon": 14.5681}
+]
+```
+
+### `deleted_nodes` list
+
+Nodes deleted from a way, or from one segment when `way_id` is a `"<id>:<index>"` string:
+
+```json
+[
+  {"way_id": 123456789, "node_id": 9876540},
+  {"way_id": "123456789:1", "node_id": 9876541}
+]
 ```
 
 ### `node_position_overrides` object
@@ -194,15 +202,16 @@ its edge, is put after the end in the way's node list. The stored position is no
 
 ### `change_log` list
 
-An ordered audit log. Each entry has a `type` field and optional `ts` (ISO timestamp for user-initiated changes):
+The viewer's change list, in order. Each entry has a `type`, its key fields and `ts` (Unix time in seconds, float):
 
 ```json
 [
-  {"type": "way",  "id": 123456789, "category": "barrier", "label": "building", "ts": "2025-11-01T10:00:00Z"},
-  {"type": "node", "way_id": 123456789, "node_id": 9876540, "ts": "2025-11-01T10:01:00Z"},
-  {"type": "tag",  "id": 987654321},
-  {"type": "move", "id": 123456789, "category": "footway", "label": ""},
-  {"type": "split","way_id": 123456789, "node_id": 9876543}
+  {"type": "way",      "id": 123456789, "ts": 1761900000.12},
+  {"type": "node",     "way_id": 123456789, "node_id": 9876540, "ts": 1761900060.5},
+  {"type": "add_node", "way_id": 123456789, "node_id": -4, "ts": 1761900070.0},
+  {"type": "tag",      "id": "987654321", "ts": 1761900080.3},
+  {"type": "move",     "id": 123456789, "category": "footway", "label": "", "ts": 1761900090.9},
+  {"type": "split",    "way_id": 123456789, "node_id": 9876543, "ts": 1761900100.4}
 ]
 ```
 
@@ -210,7 +219,7 @@ An ordered audit log. Each entry has a `type` field and optional `ts` (ISO times
 
 ## GPX waypoint format
 
-`MapData` reads standard **GPX 1.1** files (used for map creation, e.g. `create_mapdata` and `osm_cloud`'s `gpx_file` parameter). It reads `<wpt>` elements if the file has any; otherwise it falls back to track points (`<trkpt>`) from `<trk>` elements, and then to route points (`<rtept>`) from `<rte>` elements. Loading fails if none of the three are present.
+`MapData` reads GPX 1.1 files (`create_mapdata`, the viewer's GPX upload, `osm_cloud`'s `gpx_file` parameter). It reads `<wpt>` elements if the file has any; otherwise it falls back to track points (`<trkpt>`) from `<trk>` elements, and then to route points (`<rtept>`) from `<rte>` elements. Loading fails if none of the three are present.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>

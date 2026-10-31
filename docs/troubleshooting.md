@@ -42,10 +42,11 @@ Try widening the `highway_types` list to include `"road"` or check the map in th
 
 ### `ReplanPath.replan()` returns `None`
 
-`ReplanPath.replan()` returns `None` when:
+`ReplanPath.replan()` returns `None` and sets `failure_reason`:
 
-- **No path exists:** No collision-free path exists between waypoints given the current obstacle inflation. Try reducing `inflate_obstacles` (for example from `0.25` to `0.1`), adjusting `cell_size`, or verifying in the viewer that barrier polygons do not completely block the route.
-- **Request was cancelled:** The planning request was cancelled via `cancel_replan_backend()` or an action goal cancellation.
+- **`start_blocked` / `goal_blocked`:** the start or goal lies inside an obstacle with no free cell within 2 m. Move the point or reduce `inflate_obstacles`.
+- **`no_path`:** No collision-free path exists between waypoints given the current obstacle inflation. Try reducing `inflate_obstacles` (for example from `0.25` to `0.1`), adjusting `cell_size`, or verifying in the viewer that barrier polygons do not completely block the route.
+- **`cancelled`:** The planning request was cancelled via `cancel_replan_backend()` or an action goal cancellation.
 
 ---
 
@@ -102,10 +103,8 @@ The node rejects all-zero transforms, waits for a valid transform on `/tf_static
 
 ### `MapData.load()` raises `ValueError` or `JSONDecodeError`
 
-The file may be truncated (interrupted write) or a legacy pickle file (detected by a `0x80` header byte). Support for the legacy pickle format was removed for security reasons.
-
-If you have a legacy file, regenerate it with `create_mapdata -d -f <file>.gpx`.
+The file may be truncated, or a pickle file from an old version (not valid UTF-8 JSON, so it raises `ValueError`). Pickle files are not supported; regenerate the map with `create_mapdata -d -f <file>.gpx`.
 
 ### UTM zone boundary warning
 
-If the log prints `WARNING: ways span multiple UTM zones`, the `.mapdata` bounding box crosses a UTM zone boundary. Path planning will still work, but geometry accuracy degrades near the boundary because all features are projected into a single UTM zone. For affected areas, consider splitting the route into segments that stay within one zone.
+If the log prints `Waypoints span multiple UTM zones (...)`, the map's bounding box crosses a UTM zone boundary. Path planning will still work, but geometry accuracy degrades near the boundary because all features are projected into a single UTM zone. For affected areas, consider splitting the route into segments that stay within one zone.
