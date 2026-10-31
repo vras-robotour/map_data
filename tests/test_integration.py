@@ -8,6 +8,7 @@ from conftest import EMPTY_OSM_JSON as _EMPTY_JSON
 from conftest import FOOTWAY_WAYS_JSON as _WAYS_JSON
 from shapely.geometry import LineString
 
+from map_data.create_mapdata import process_map_data
 from map_data.map_data import MapData
 from map_data.utils.serialization import FORMAT_VERSION
 from map_data.utils.way import Way
@@ -222,6 +223,63 @@ def test_osm_cache_bbox_mismatch_returns_none(tmp_path):
     md.min_lat += 1.0
     result = md._load_osm_cache()
     assert result is None
+
+
+def test_osm_cache_query_hash_mismatch_returns_none(tmp_path, monkeypatch):
+    md = _make_md()
+    md.coords_file = str(tmp_path / "test.gpx")
+    md._save_osm_cache(_WAYS_JSON)
+    monkeypatch.setattr(md, "_osm_query_hash", lambda: "changed")
+
+    assert md._load_osm_cache() is None
+
+
+def test_osm_cache_stale_returns_none(tmp_path, monkeypatch):
+    md = _make_md()
+    md.coords_file = str(tmp_path / "test.gpx")
+    md._save_osm_cache(_WAYS_JSON)
+    path = tmp_path / "test.osm_cache.json"
+    data = json.loads(path.read_text())
+    data["created"] -= 31 * 24 * 60 * 60
+    path.write_text(json.dumps(data))
+
+    assert md._load_osm_cache() is None
+
+
+def test_mapdata_bbox_covers_all_utm_corners():
+    e, n, zn, zl = utm.from_latlon(_LAT, _LON)
+    md = MapData(
+        [np.array([[e, n], [e + 100_000, n + 100_000]]), int(zn), zl],
+        coords_type="array",
+    )
+
+    corners = [
+        utm.to_latlon(x, y, md.zone_number, md.zone_letter)
+        for x in (md.min_x, md.max_x)
+        for y in (md.min_y, md.max_y)
+    ]
+
+    assert md.min_lat == pytest.approx(min(lat for lat, _ in corners), abs=1e-8)
+    assert md.min_long == pytest.approx(min(lon for _, lon in corners), abs=1e-8)
+    assert md.max_lat == pytest.approx(max(lat for lat, _ in corners), abs=1e-8)
+    assert md.max_long == pytest.approx(max(lon for _, lon in corners), abs=1e-8)
+
+
+def test_mapdata_zone_check_ignores_band_letters():
+    e, n, zn, _ = utm.from_latlon(_LAT, _LON)
+    md = MapData([np.array([[e, n]]), int(zn), "X"], coords_type="array")
+
+    md._check_utm_zone_boundary()
+
+
+def test_create_mapdata_no_cache_bypasses_the_cache(tmp_path, monkeypatch, mock_overpass_client):
+    gpx = tmp_path / "map.gpx"
+    gpx.write_text('<gpx><wpt lat="50.0" lon="14.0"/><wpt lat="50.001" lon="14.001"/></gpx>')
+    (tmp_path / "map.osm_cache.json").write_text("{}")
+
+    process_map_data(str(gpx), download=True, use_cache=False)
+
+    mock_overpass_client.query_raw.assert_called_once()
 
 
 def test_save_osm_cache_failure_preserves_existing_cache(tmp_path, monkeypatch):

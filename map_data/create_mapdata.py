@@ -10,7 +10,7 @@ from map_data.utils.config import package_share, setup_logging
 logger = logging.getLogger(__name__)
 
 
-def process_map_data(file_name: str, *, download: bool) -> None:
+def process_map_data(file_name: str, *, download: bool, use_cache: bool = False) -> None:
     """
     Process map data based on command-line arguments.
     """
@@ -28,7 +28,7 @@ def process_map_data(file_name: str, *, download: bool) -> None:
     try:
         if download:
             map_data = md.MapData(str(full_path))
-            map_data.run_queries()
+            map_data.run_queries(use_cache=use_cache)
             if map_data.run_parse() != 0:
                 logger.error("Failed to parse map data")
                 raise SystemExit(1)
@@ -53,9 +53,15 @@ def main() -> None:
         help="GPX file name (default: buchlovice.gpx)",
     )
     parser.add_argument("-d", "--download", action="store_true", help="Download data from OSM")
+    parser.add_argument(
+        "--cache",
+        action="store_true",
+        help="Use the local OSM response cache (30 days; ignored by --no-cache)",
+    )
+    parser.add_argument("--no-cache", action="store_true", help="Refetch OSM data")
     args = parser.parse_args()
 
-    process_map_data(args.file, download=args.download)
+    process_map_data(args.file, download=args.download, use_cache=args.cache and not args.no_cache)
 
 
 if __name__ == "__main__":
