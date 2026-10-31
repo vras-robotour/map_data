@@ -100,7 +100,7 @@ SETTINGS: tuple[Setting, ...] = (
 SETTING_DEFAULTS: dict[str, str] = {s.name: s.default for s in SETTINGS}
 
 # Parameters only the config file sets (not editable in the web app)
-TUNING_DEFAULTS: dict[str, float | int | bool] = {
+TUNING_DEFAULTS: dict[str, str | float | int | bool] = {
     "battery_low_voltage": 22.0,
     "tf_static_only": True,
     "stale_after": 3.0,
@@ -108,6 +108,7 @@ TUNING_DEFAULTS: dict[str, float | int | bool] = {
     "trail_min_step": 0.5,
     "intersection_enter_threshold": 5.0,
     "intersection_exit_threshold": 6.0,
+    "planner_node": "/route_planner",
 }
 
 DEFAULTS: dict[str, Any] = {**SETTING_DEFAULTS, **TUNING_DEFAULTS}

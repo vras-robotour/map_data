@@ -19,7 +19,7 @@ import math
 import threading
 import time
 from collections import deque
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -46,10 +46,12 @@ try:
     )
     from nav2_msgs.msg import BehaviorTreeLog, CollisionMonitorState, SpeedLimit
     from nav_msgs.msg import Odometry, Path
+    from rcl_interfaces.msg import ParameterType
+    from rcl_interfaces.srv import GetParameters
     from rclpy.exceptions import NameValidationException
     from rclpy.expand_topic_name import expand_topic_name
     from rclpy.node import Node
-    from rclpy.parameter import Parameter
+    from rclpy.parameter import Parameter, parameter_value_to_python
     from rclpy.qos import (
         DurabilityPolicy,
         HistoryPolicy,
@@ -198,6 +200,13 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         self._subscribe()
         # A plan and goal are volatile: a planner that exits takes them with it
         self.create_timer(1.0, self._drop_orphaned_plan)
+        # The route_planner node whose parameters seed the viewer's planner toggles
+        self.planner_node: str = self.get_parameter("planner_node").value
+        self._planner_client = (
+            self.create_client(GetParameters, f"{self.planner_node}/get_parameters")
+            if self.planner_node
+            else None
+        )
 
         enabled = [k for k, v in self.enabled_features.items() if v]
         self.get_logger().info(
@@ -462,6 +471,32 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
     def settings(self) -> dict[str, str]:
         """Current topics, frames and heading_type (see ``tracker_config.SETTINGS``)."""
         return {name: self.get_parameter(name).value for name in SETTING_DEFAULTS}
+
+    def planner_parameters(
+        self, names: Sequence[str], timeout: float = 0.5
+    ) -> dict[str, Any] | None:
+        """
+        Current values of *names* on :attr:`planner_node` (``{}`` if it lacks one of them).
+
+        ``None`` when the node is not on the graph or does not answer within *timeout*
+        seconds, so a web request never waits on an absent planner.
+        """
+        client = self._planner_client
+        if client is None or not client.service_is_ready():
+            return None
+        future = client.call_async(GetParameters.Request(names=list(names)))
+        deadline = time.monotonic() + timeout
+        while not future.done():  # the executor thread completes it
+            if time.monotonic() > deadline:
+                client.remove_pending_request(future)
+                return None
+            time.sleep(0.01)
+        values = future.result().values
+        return {
+            name: parameter_value_to_python(value)
+            for name, value in zip(names, values, strict=False)
+            if value.type != ParameterType.PARAMETER_NOT_SET
+        }
 
     def apply_settings(self, values: Mapping[str, Any]) -> bool:
         """

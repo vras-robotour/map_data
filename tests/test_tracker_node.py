@@ -244,3 +244,38 @@ def test_apply_settings_while_the_executor_spins(make_node):
         executor.shutdown()
         spinner.join(5)
     assert not spinner.is_alive()
+
+
+def test_planner_parameters_come_from_the_route_planner_node(make_node):
+    """The viewer's planner toggles start from route_planner's parameters, read live."""
+    import os
+
+    ns = f"/test_{os.getpid()}"  # keeps a real /route_planner on the same domain out
+    node = make_node({"planner_node": f"{ns}/route_planner"})
+    names = ("cell_size", "inflate_obstacles", "simplify_path", "smooth_path")
+    assert node.planner_parameters(names) is None  # not running: no wait
+
+    planner = ros_node.Node("route_planner", namespace=ns)
+    for name, value in zip(names, (0.5, 0.0, False, True), strict=True):
+        planner.declare_parameter(name, value)
+    try:
+        from rclpy.experimental.events_executor import EventsExecutor
+
+        executor = EventsExecutor()
+    except ImportError:
+        executor = ros_node.rclpy.executors.SingleThreadedExecutor()
+    executor.add_node(node)
+    executor.add_node(planner)
+    spinner = threading.Thread(target=executor.spin, daemon=True)
+    spinner.start()
+    try:
+        deadline = time.time() + 5
+        while (params := node.planner_parameters(names)) is None and time.time() < deadline:
+            time.sleep(0.05)
+        assert params == dict(zip(names, (0.5, 0.0, False, True), strict=True))
+        assert node.planner_parameters(("cell_size", "not_declared")) == {}
+    finally:
+        executor.shutdown()
+        spinner.join(5)
+        planner.destroy_node()
+    assert not spinner.is_alive()

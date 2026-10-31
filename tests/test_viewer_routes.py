@@ -1,3 +1,4 @@
+import ast
 import base64
 import io
 import json
@@ -5,6 +6,7 @@ import math
 import os
 import threading
 import time
+from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import quote
 
@@ -15,6 +17,7 @@ import utm
 from shapely.geometry import LineString
 
 from map_data.map_data import MapData
+from map_data.pathsolver.replan import grid_defaults
 from map_data.pathsolver.route import RoutePlanningError
 from map_data.utils.way import Way
 from map_data.viewer.app import ACCESS_TOKEN_COOKIE, MAX_CONTENT_LENGTH, create_app
@@ -23,6 +26,7 @@ from map_data.viewer.routes import files as viewer_files
 from map_data.viewer.routes import planning as viewer_planning
 from map_data.viewer.routes import sharing as viewer_sharing
 from map_data.viewer.routes.common import MAX_FETCH_AREA_KM2, MAX_GRID_CELLS, _bbox_area_km2
+from map_data.viewer.tracker_routes import TRACKER_EXTENSION
 
 
 def _make_mapdata(path):
@@ -1011,6 +1015,60 @@ def test_cost_grid_malformed_cost_dict_rejected(app_client_with_file, bad_costs)
         f"&highway_costs={quote(bad_costs, safe='')}",
     )
     assert resp.status_code == 400
+
+
+# ── planner_defaults ─────────────────────────────────────────────────────────
+
+
+class _FakeTracker:
+    planner_node = "/route_planner"
+
+    def __init__(self, params):
+        self.params = params
+        self.asked = None
+
+    def planner_parameters(self, names):
+        self.asked = names
+        return self.params
+
+
+def test_node_planner_parameters_are_route_planner_parameters():
+    src = (Path(__file__).resolve().parents[1] / "map_data" / "route_planner.py").read_text()
+    assign = next(
+        n
+        for n in ast.parse(src).body
+        if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "PLANNER_PARAMETERS"
+    )
+    assert set(viewer_planning.NODE_PLANNER_PARAMETERS) <= set(ast.literal_eval(assign.value))
+
+
+def test_planner_defaults_from_yaml_without_planner_node(app_client):
+    client, _ = app_client
+    client.application.extensions.pop(TRACKER_EXTENSION, None)
+    data = client.get("/api/planner_defaults").get_json()
+    assert data["source"] == "yaml"
+    assert "node" not in data
+    assert data["cell_size"] == grid_defaults()["cell_size"]
+
+
+@pytest.mark.parametrize("answer", [None, {}])
+def test_planner_defaults_from_yaml_when_planner_node_is_silent(app_client, answer):
+    client, _ = app_client
+    client.application.extensions[TRACKER_EXTENSION] = _FakeTracker(answer)
+    assert client.get("/api/planner_defaults").get_json()["source"] == "yaml"
+
+
+def test_planner_defaults_from_planner_node(app_client):
+    client, _ = app_client
+    node = _FakeTracker({"simplify_path": False, "cell_size": 0.5})
+    client.application.extensions[TRACKER_EXTENSION] = node
+    data = client.get("/api/planner_defaults").get_json()
+    assert node.asked == viewer_planning.NODE_PLANNER_PARAMETERS
+    assert (data["source"], data["node"]) == ("route_planner", "/route_planner")
+    assert (data["simplify_path"], data["cell_size"]) == (False, 0.5)
+    # Keys the node does not report keep the file's values
+    assert data["smooth_path"] == grid_defaults()["smooth_path"]
+    assert data["highway_costs"]
 
 
 # ── create_replan ────────────────────────────────────────────────────────────

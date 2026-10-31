@@ -14,6 +14,7 @@ import yaml
 from flask import (
     Response,
     abort,
+    current_app,
     jsonify,
     request,
 )
@@ -58,6 +59,9 @@ from .common import (
 
 logger = logging.getLogger(__name__)
 
+#: route_planner parameters (its PLANNER_PARAMETERS) that seed the planner toggles.
+NODE_PLANNER_PARAMETERS = ("cell_size", "inflate_obstacles", "simplify_path", "smooth_path")
+
 
 @lru_cache(maxsize=4)
 def _graph_planner(
@@ -89,13 +93,25 @@ def get_planner_defaults() -> Response:
     """
     Return the default path-planning parameters as JSON.
 
+    When the viewer runs under ROS and the tracker's ``planner_node`` answers, its
+    :data:`NODE_PLANNER_PARAMETERS` replace the file's values. The viewer only reads
+    them: the toggles a plan request sends are what it plans with.
+
     Returns
     -------
     Response
-        JSON dict of planner defaults from ``config/planner_defaults.yaml``.
+        JSON dict of planner defaults from ``config/planner_defaults.yaml``, plus
+        ``source`` (``"route_planner"`` or ``"yaml"``) and, for ``"route_planner"``,
+        ``node`` (the node's name).
 
     """
-    return jsonify(load_config("planner_defaults.yaml"))
+    from ..tracker_routes import TRACKER_EXTENSION  # tracker_routes imports this package
+
+    cfg = load_config("planner_defaults.yaml")
+    node = current_app.extensions.get(TRACKER_EXTENSION)
+    if node is not None and (params := node.planner_parameters(NODE_PLANNER_PARAMETERS)):
+        return jsonify({**cfg, **params, "source": "route_planner", "node": node.planner_node})
+    return jsonify({**cfg, "source": "yaml"})
 
 
 def _traversability_path() -> Path:
