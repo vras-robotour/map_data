@@ -27,6 +27,20 @@ def test_a_client_without_the_access_token_is_rejected(tmp_path, monkeypatch):
     header.disconnect()
 
 
+def test_a_non_ascii_token_is_compared_not_crashed_on(tmp_path, monkeypatch):
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "heslo-č")
+    app = create_app(data_dir=str(tmp_path))
+    client = app.test_client()
+
+    assert client.get("/api/files?access_token=%C3%A9").status_code == 401
+    assert client.get("/?access_token=heslo-%C4%8D").status_code == 302
+    assert client.get("/api/files").status_code == 200  # by the cookie just set
+    assert not socketio.test_client(app, query_string="access_token=%C3%A9").is_connected()
+    good = socketio.test_client(app, query_string="access_token=heslo-%C4%8D")
+    assert good.is_connected()
+    good.disconnect()
+
+
 def test_the_token_is_stripped_from_the_url_after_setting_the_cookie(tmp_path, monkeypatch):
     monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "sekret")
     client = create_app(data_dir=str(tmp_path)).test_client()

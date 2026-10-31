@@ -80,10 +80,11 @@ def _access_token_valid(req: Any) -> bool:
     # either on a request that carries them to a same-origin-only API), so
     # they authenticate any method.
     supplied = req.headers.get(ACCESS_TOKEN_HEADER) or req.args.get(ACCESS_TOKEN_QUERY_PARAM)
+    # Bytes, as compare_digest raises TypeError on a non-ASCII str.
     if supplied:
-        return hmac.compare_digest(supplied, expected)
+        return hmac.compare_digest(supplied.encode(), expected.encode())
     cookie = req.cookies.get(ACCESS_TOKEN_COOKIE)
-    if not cookie or not hmac.compare_digest(cookie, expected):
+    if not cookie or not hmac.compare_digest(cookie.encode(), expected.encode()):
         return False
     # Cookie alone suffices for safe methods; anything else also needs the CSRF header,
     # since the browser attaches the cookie to cross-site requests too. SocketIO is
