@@ -673,6 +673,9 @@ def rebuild_way_without_nodes(
         return None
     w = copy.copy(way)
     w.nodes = [way.nodes[i] for i in keep]
+    # Re-close the node list too: the graph planner and densify walk way.nodes.
+    if node_ids[0] == node_ids[-1] and w.nodes[0] != w.nodes[-1]:
+        w.nodes.append(w.nodes[0])
     # way.line is typed Optional at the Way level, but every Way reaching this
     # function already has a concrete geometry from OSM parsing / prior edits.
     geom: BaseGeometry = way.line

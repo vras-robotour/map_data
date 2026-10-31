@@ -204,6 +204,16 @@ def test_rebuild_way_without_nodes_basic():
     assert len(result.nodes) == 3
 
 
+def test_rebuild_way_without_nodes_keeps_a_closed_way_closed():
+    coords = [(_E0, _N0), (_E0 + 50, _N0), (_E0 + 50, _N0 + 50), (_E0, _N0 + 50), (_E0, _N0)]
+    way = _make_way(8, [1, 2, 3, 4, 1], coords)
+
+    result = rebuild_way_without_nodes(way, {1}, _ZN, _ZL, None)
+
+    assert result.nodes == [2, 3, 4, 2]
+    assert result.line.is_closed
+
+
 def test_rebuild_way_without_nodes_too_few_nodes():
     way = _make_way(7, [1, 2], [(_E0, _N0), (_E0 + 10, _N0 + 10)])
     result = rebuild_way_without_nodes(way, {2}, _ZN, _ZL, None)
