@@ -539,6 +539,44 @@ w => {
 """
 
 
+# Renderer sweep: N synthetic 20-vertex polygons on a canvas vs an SVG renderer, in the live page.
+_SWEEP_JS = r"""
+async n => {
+  const out = {};
+  const c = map.getCenter();
+  const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+  for (const kind of ['canvas', 'svg']) {
+    const renderer = kind === 'canvas' ? L.canvas() : L.svg();
+    const group = L.featureGroup();
+    let seed = 1;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < n; i++) {
+      const cx = c.lat + (rnd() - 0.5) * 0.02, cy = c.lng + (rnd() - 0.5) * 0.03;
+      const ring = Array.from({ length: 20 }, (_, k) => [cx + 0.0002 * Math.sin(k / 3.2), cy + 0.0002 * Math.cos(k / 3.2)]);
+      group.addLayer(L.polygon(ring, { renderer, weight: 1 }));
+    }
+    map.setView(c, 15, { animate: false });
+    const t0 = performance.now();
+    group.addTo(map);
+    await frame();
+    const add = performance.now() - t0;
+    const deltas = [];
+    let last = performance.now();
+    for (let i = 0; i < 20; i++) {
+      map.panBy([40, 20], { animate: false });
+      await new Promise(r => requestAnimationFrame(r));
+      const t = performance.now(); deltas.push(t - last); last = t;
+    }
+    deltas.sort((a, b) => a - b);
+    map.removeLayer(group);
+    await frame();
+    out[kind] = { add_ms: add, pan_median_ms: deltas[10], pan_p95_ms: deltas[18] };
+  }
+  return out;
+}
+"""
+
+
 # ── aggregation / reporting ──────────────────────────────────────────────────
 def summarize(reps: list[dict]) -> dict:
     keys: dict[str, list] = {}
@@ -579,7 +617,7 @@ def report(title, summ, compare=None):
         print(line)
 
 
-def top_functions(profile, n=10):
+def top_functions(profile, n=14):
     nodes = {x["id"]: x for x in profile["nodes"]}
     self_us: dict[tuple, float] = {}
     for nid, dt in zip(profile["samples"], profile["timeDeltas"]):
@@ -867,6 +905,9 @@ def main() -> int:
         action="store_true",
         help="1 rep with Chrome tracing; print main-thread ms per bucket (script/gc/style/layout/paint) per step",
     )
+    ap.add_argument(
+        "--sweep", action="store_true", help="canvas vs SVG renderer on N synthetic polygons"
+    )
     ap.add_argument("--flows", action="store_true", help="only run the behaviour checks")
     ap.add_argument(
         "--svg", action="store_true", help="experiment: SVG renderer instead of preferCanvas"
@@ -894,7 +935,22 @@ def main() -> int:
     try:
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=not args.headed)
-            if not args.flows:
+            if args.sweep:
+                r = Rep(browser, base, patches, False)
+                r.page.goto(base + "/", wait_until="load")
+                r.settle(500)
+                print(
+                    "\n== renderer sweep (synthetic 20-vertex polygons; add = addTo -> next frame)"
+                )
+                for n in (1000, 5000, 20000):
+                    res = r.ev(_SWEEP_JS, n)
+                    for kind, v in res.items():
+                        print(
+                            f"  n={n:6d} {kind:6s} "
+                            + "  ".join(f"{k}={x:7.1f}" for k, x in v.items())
+                        )
+                r.ctx.close()
+            elif not args.flows:
                 compare = json.loads(args.compare.read_text()) if args.compare else {}
                 all_summ = {}
                 for name in maps:
