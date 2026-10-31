@@ -552,6 +552,20 @@ def test_split_undo_moves_segment_deletion_to_plain_id(app_client_3node, tmp_pat
     assert 2 not in _mapdata_way_ids(client, filename)
 
 
+def test_way_segments_skip_deleted_ways(app_client_3node):
+    client, _, filename = app_client_3node
+    client.post(f"/api/ways/split?file={filename}", json={"way_id": 2, "node_id": 202})
+
+    def seg_ids():
+        resp = client.get(f"/api/ways/2/segments?file={filename}")
+        return [f["properties"]["id"] for f in resp.get_json()["segments"]]
+
+    client.delete(f"/api/ways/2:1?file={filename}", json={})
+    assert seg_ids() == ["2:0"]
+    client.delete(f"/api/ways/2?file={filename}", json={})
+    assert seg_ids() == []
+
+
 def _way_nodes(client, filename, way_id):
     return client.get(f"/api/way_nodes?file={filename}&way_id={way_id}").get_json()["nodes"]
 
