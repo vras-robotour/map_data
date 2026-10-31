@@ -27,17 +27,17 @@ Run-to-run spread on this (shared, loaded) machine is ~5-15 %, so only changes b
 
 Findings: everything is a few ms when caches are warm. The expensive requests are (1) the GET
 `/api/mapdata` after **every** edit (456 ms strom, 58 ms robotour: the cache key contains the store
-digest, so each edit is a full miss and all ~3000 geometries were re-projected UTM -> lon/lat and
-the crossroads recomputed up to 3x), (2) the first request after a start (map parse ~300 ms plus
+digest, so each edit is a full miss, re-projecting all ~3000 geometries UTM -> lon/lat and
+recomputing crossroads up to 3x), (2) the first request after a start (map parse ~300 ms plus
 the same projection), (3) the grid planners (1.3-1.8 s on strom; `pathsolver`, not the viewer's).
 
 ### Attempts
 
 | Idea | Baseline -> Result | Verdict | Why |
 |---|---|---|---|
-| Cache the GeoJSON of a geometry by value (`lru_cache` on `geom_to_geojson`; shapely hashes by coordinates, so nothing to invalidate) | GET /api/mapdata after an edit 456 -> 224 ms (strom), 58 -> 36 (robotour); export/geojson warm 351 -> 107 | **kept** (17c6a8e) | An edit touches a handful of ways; the other ~3000 geometries (and unchanged recomputed crossroads) now hit. Responses byte-identical on 4 maps x 6 edit states (216 responses). Cold unchanged. |
-| Recompute crossroads once after the way-edit and tag-override passes (`apply_way_and_tag_edits`) | GET after edit 206 -> 154 ms (strom, A/B x3), 29 -> 23 (robotour) | **kept** (f632911) | `recompute_crossroads` (~50 ms strom) ran after each pass and its result was thrown away by the next. Also speeds up `apply_store` (planning, export). Identical output; test counts the calls. |
-| Build `join_ways` edge LineStrings with one `shapely.linestrings` call | POST replan graph after an edit 212 -> 191 ms (strom, A/B x3) | **kept** (6ad421b) | ~6000 `LineString()` constructions took ~80 ms of the merged-map build. Small (10 %) but consistent and 6 lines. Identical output. |
+| Cache the GeoJSON of a geometry by value (`lru_cache` on `geom_to_geojson`; shapely hashes by coordinates, so nothing to invalidate) | GET /api/mapdata after an edit 456 -> 224 ms (strom), 58 -> 36 (robotour); export/geojson warm 351 -> 107 | **kept** | An edit touches a handful of ways; the other ~3000 geometries (and unchanged recomputed crossroads) hit. Responses byte-identical on 4 maps x 6 edit states (216 responses). Cold unchanged. |
+| Recompute crossroads once after the way-edit and tag-override passes (`apply_way_and_tag_edits`) | GET after edit 206 -> 154 ms (strom, A/B x3), 29 -> 23 (robotour) | **kept** | `recompute_crossroads` (~50 ms strom) ran after each pass and its result was thrown away by the next. Also speeds up `apply_store` (planning, export). Identical output; test counts the calls. |
+| Build `join_ways` edge LineStrings with one `shapely.linestrings` call | POST replan graph after an edit 212 -> 191 ms (strom, A/B x3) | **kept** | ~6000 `LineString()` constructions took ~80 ms of the merged-map build. Small (10 %) but consistent and 6 lines. Identical output. |
 | gzip `/api/mapdata` in `after_request` (level 1, > 64 KB, only when `Accept-Encoding: gzip`), live server + `curl --limit-rate` | strom 4.2 -> 1.46 MB; fast link 10 -> 153 ms; 100 Mbit 342 -> 240 ms; 24 Mbit 1396 -> 583 ms; robotour (0.4 MB) 8 -> 21 ms | **reverted** | On a gigabit LAN/loopback it is a 15x loss (compressing 4 MB costs ~150 ms); it only wins below ~100 Mbit/s, and caching the compressed body would still add ~150 ms to every post-edit GET. Not justified for the stated load; revisit if operators work over slow WiFi/VPN (the prototype is ~15 lines). |
 | `json.dumps(indent=None)` for `/api/export` | warm 105 -> 29 ms for the dump (of 138) | **not applied** | Changes the downloaded file's format (diff-friendly indent=2) for an imperceptible gain on a manual download. |
 | Batch the UTM projection of all geometries in one call for the cold path | not built; analysis: `utm.to_latlon` costs ~1.6 us/point (100k points = 160 ms), a per-point cost, not per-call overhead | **not tried** | Vectorising was already in place per ring; batching saves at most the ~1400 call overheads. The real lever (pyproj) is a new dependency. |
@@ -118,7 +118,7 @@ End to end (baseline -> all kept changes, same run conditions as above):
 
 Graph warm is unchanged by design (±0.2 ms is run-to-run drift between sessions).
 
-Left alone: `grid_astar` is now near its pure-Python floor (heap operations alone are
+Left alone: `grid_astar` is near its pure-Python floor (heap operations alone are
 ~25%); a bigger win needs a different search (fewer expansions changes which of several
 equal-cost routes is returned) or native code, both out of scope here. `MapData.get_points`
 (~30 ms per grid goal) belongs to map loading.
@@ -148,9 +148,9 @@ delete, zero console errors) still passes.
 Inputs: `strom.mapdata` (11 MB file, 4.2 MB GeoJSON, 980 ways + 407 crossroads, 993-entry change log),
 `demo/buchlovice.mapdata` (1.2 MB GeoJSON, 249 ways).
 
-### Result (original → now, 7 reps)
+### Result (7 reps)
 
-| Metric | strom before | strom now | demo before | demo now |
+| Metric | strom baseline | strom optimized | demo baseline | demo optimized |
 |---|---|---|---|---|
 | Load: click Load → layers rendered | 325 ± 35 | **226 ± 20** | 175 ± 56 | **124 ± 15** |
 | Load total blocking time | 128 ± 33 | **50 ± 6** | 21 ± 39 | **0 ± 1** |
@@ -175,7 +175,7 @@ re-projection/raster of ~1 400 vector layers, which is already native (`(program
 |---|---|---|---|
 | Changes panel: build rows 100 at a time, rest on scroll (`_fillPanelList`) | strom load 325 ± 35 → 281 ± 23; undo 171 ± 23 → 137 ± 23; drag release 190 → 147 ± 7; DOM 10 864 → 2 827 | **kept** | 993 change-log rows were rebuilt and re-laid-out on load and after every edit (trace: layout 97 ms, style 42 ms on load). Same rows, same count, scroll position preserved. |
 | `content-visibility:auto` on `.change-item`/`.ann-item` (CSS only) | strom load 325 ± 35 → 299 ± 12 (within spread); undo 171 → 144 ± 8 | reverted | Layout only halved (boxes still exist), DOM/JS cost unchanged; the batching above removes the cost instead. |
-| One shared SVG renderer for edit handles + way ghost (`handleRenderer()`), was one `L.svg()` per marker | strom select long way 73 ± 17 → 50 ± 10 (client part 62 → 31); drag mousemove 12 → 3.5; demo 77 → 51 | **kept** | Selecting a 109-node way created 434 `<svg>` renderers (each re-laid out on every pan/zoom). Add order inside the shared SVG keeps the ghost under the handles; node drag, way drag, midpoint insert and annotation vertex drag re-verified. |
+| One shared SVG renderer for edit handles + way ghost (`handleRenderer()`), replacing one `L.svg()` per marker | strom select long way 73 ± 17 → 50 ± 10 (client part 62 → 31); drag mousemove 12 → 3.5; demo 77 → 51 | **kept** | Selecting a 109-node way created 434 `<svg>` renderers (each re-laid out on every pan/zoom). Add order inside the shared SVG keeps the ghost under the handles; node drag, way drag, midpoint insert and annotation vertex drag re-verified. |
 | Fit map before adding layers (layers were projected at the old zoom and again by `fitBounds`); bounds from coordinates instead of a throw-away `L.geoJSON` | strom load 280 ± 2 → 240 ± 8; TBT 92 → 51; demo 151 → 127 | **kept** | Removes a full second `_project` pass over all layers. Heap +1.8 MB after load (layers keep projections at final zoom). |
 | Bounds from coordinates alone, layers still added before fit | strom load 280 ± 2 → 287 ± 41 | reverted | Neutral; only the reordering above helps. |
 | Fetch `/api/mapdata` and `/api/annotations` in parallel | strom load 240 ± 8 → 219 ± 5; demo 127 → 124 (within spread) | **kept** | Hides one round trip (more on a real LAN than loopback); no behaviour change, same error path. |

@@ -31,7 +31,7 @@ uv run mkdocs build --strict  # docs; mkdocs serve for a live preview
 
 The pre-commit hook runs ruff and mypy on every commit. CI runs the same checks, the test suite with a 72 % coverage gate and a ROS 2 build with the smoke test; see [Testing](testing.md#ci).
 
-Tool versions are pinned and must match: ruff in `pyproject.toml` (dev group), `.pre-commit-config.yaml` and `RUFF_VERSION` in `.github/workflows/ci.yml`; mypy in `pyproject.toml` and `.pre-commit-config.yaml`.
+Tool versions are pinned: ruff in `pyproject.toml` (dev group) and `RUFF_VERSION` in `.github/workflows/ci.yml`; mypy in `pyproject.toml`. Pre-commit delegates to the `uv`-managed environment.
 
 ## Code style
 

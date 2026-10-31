@@ -371,7 +371,7 @@ Every OSM feature is a `Way` (`map_data/utils/way.py`):
 - `nodes`: ordered OSM node IDs;
 - `tags`: OSM tags;
 - `line`: Shapely geometry in UTM. Roads, footways and open barrier lines are buffered to `Polygon`s during parsing; `MapData.centre_line(way)` recovers a footway's centerline;
-- `in_out`: `"outer"` or `"inner"` for multipolygon members, else `None`.
+- `in_out`: `"outer"` or `"inner"` for multipolygon members, else `""`.
 
 ---
 

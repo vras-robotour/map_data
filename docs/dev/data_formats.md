@@ -56,7 +56,7 @@ md = MapData.load("route.mapdata")
 | `nodes` | list[int] | Ordered list of OSM node IDs |
 | `tags` | object | OSM tag key-value pairs |
 | `line` | str or null | WKT geometry in UTM, 6 decimals. Roads, footways and open barrier lines are buffered `POLYGON`s |
-| `in_out` | str or null | `"outer"` or `"inner"` for multipolygon relation members; `null` otherwise |
+| `in_out` | str | `"outer"` or `"inner"` for multipolygon relation members, else `""` |
 
 ### Export
 
