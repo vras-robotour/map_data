@@ -616,6 +616,17 @@ def test_fetch_area_rejects_oversized_bbox(app_client):
     assert "km" in resp.get_data(as_text=True)
 
 
+def test_fetch_area_limit_counts_the_download_margin(app_client):
+    client, _ = app_client
+    box = {"min_lat": 50.0, "max_lat": 50.044, "min_lon": 14.0, "max_lon": 14.068}
+    assert _bbox_area_km2(box["min_lat"], box["min_lon"], box["max_lat"], box["max_lon"]) < (
+        MAX_FETCH_AREA_KM2
+    )
+    resp = client.post("/api/fetch_area", json={**box, "name": "edge", "grid_margin": 150})
+    assert resp.status_code == 400
+    assert "margin" in resp.get_json()["error"]
+
+
 def test_fetch_area_rejects_non_numeric_bbox(app_client):
     client, _ = app_client
     resp = client.post(

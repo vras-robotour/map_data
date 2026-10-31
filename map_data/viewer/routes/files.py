@@ -207,33 +207,17 @@ def _query_parse_save(
     }
 
 
-def _run_fetch_task(
-    task_id: str,
-    waypoints: Any,
-    zone_number: Any,
-    zone_letter: Any,
-    out_path: Path,
-    grid_margin: Any,
-    obstacle_radius: Any,
-    buffer_widths: Any,
-) -> None:
+def _run_fetch_task(task_id: str, md: MapData, out_path: Path) -> None:
     """
     Fetch, parse, and save OSM data for a bounding box; the target of :func:`fetch_area`'s thread.
 
-    *waypoints* are the box's ``(4, 2)`` UTM corners. Progress goes to
+    *md* is the unqueried map of the box. Progress goes to
     ``_fetch_tasks[task_id]``: ``"querying"`` (with a ``"detail"``),
     ``"parsing"``, then ``"done"`` (with ``"result"``) or ``"failed"`` (with
     ``"error"``). Exceptions are recorded as failures, never raised: there is
     no request to report them to.
     """
     try:
-        md = MapData(
-            (waypoints, zone_number, zone_letter),
-            coords_type="array",
-            grid_margin=grid_margin,
-            obstacle_radius=obstacle_radius,
-            buffer_widths=buffer_widths,
-        )
 
         def _report(detail: str) -> None:
             _fetch_tasks[task_id] = {"status": "querying", "detail": detail}
@@ -291,14 +275,6 @@ def fetch_area() -> Response:
         body["min_lat"], body["min_lon"], body["max_lat"], body["max_lon"]
     )
 
-    area_km2 = _bbox_area_km2(min_lat, min_lon, max_lat, max_lon)
-    if area_km2 > MAX_FETCH_AREA_KM2:
-        abort(
-            400,
-            f"Requested area is {area_km2:.1f} km², which exceeds the "
-            f"{MAX_FETCH_AREA_KM2:.0f} km² limit for a single fetch. Draw a smaller area.",
-        )
-
     name = re.sub(r"[^a-zA-Z0-9_\-]", "_", str(body["name"]).strip())
     if not name:
         abort(400, "name is empty after sanitizing")
@@ -321,7 +297,24 @@ def fetch_area() -> Response:
         ],
     )
     easting, northing, zone_number, zone_letter = utm.from_latlon(corners[:, 0], corners[:, 1])
-    waypoints = np.column_stack([easting, northing])
+    try:
+        md = MapData(
+            (np.column_stack([easting, northing]), zone_number, zone_letter),
+            coords_type="array",
+            grid_margin=grid_margin,
+            obstacle_radius=obstacle_radius,
+            buffer_widths=buffer_widths,
+        )
+    except (TypeError, ValueError) as e:
+        abort(400, f"Invalid parse options: {e}")
+    # The download is the box plus grid_margin, so the limit applies to that.
+    area_km2 = _bbox_area_km2(md.min_lat, md.min_long, md.max_lat, md.max_long)
+    if area_km2 > MAX_FETCH_AREA_KM2:
+        abort(
+            400,
+            f"Requested area with its margin is {area_km2:.1f} km², which exceeds the "
+            f"{MAX_FETCH_AREA_KM2:.0f} km² limit for a single fetch. Draw a smaller area.",
+        )
 
     # Also evict here, or tasks whose client stopped polling would pile up.
     now = time.time()
@@ -331,16 +324,7 @@ def fetch_area() -> Response:
     _fetch_tasks[task_id] = {"status": "pending"}
     threading.Thread(
         target=_run_fetch_task,
-        args=(
-            task_id,
-            waypoints,
-            zone_number,
-            zone_letter,
-            out_path,
-            grid_margin,
-            obstacle_radius,
-            buffer_widths,
-        ),
+        args=(task_id, md, out_path),
         daemon=True,
     ).start()
     return jsonify({"task_id": task_id})
