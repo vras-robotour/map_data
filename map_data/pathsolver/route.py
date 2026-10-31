@@ -115,6 +115,10 @@ def path_length(path_utm: np.ndarray) -> float:
     return float(geometry.LineString(pts[:, :2]).length)
 
 
+#: Smallest positive ``spacing`` (m): a finer one would densify a route into millions of points.
+MIN_SPACING_M = 0.1
+
+
 def densify(path_utm: np.ndarray, spacing: float) -> np.ndarray:
     """
     Resample a polyline so that consecutive vertices are at most ``spacing``
@@ -264,7 +268,8 @@ def plan_route(
     value fails with ``bad_parameter``.
 
     ``spacing`` > 0 resamples the result so waypoints are at most that far
-    apart (a waypoint follower wants a few metres). ``changed`` and
+    apart (a waypoint follower wants a few metres; below :data:`MIN_SPACING_M`
+    fails with ``bad_parameter``). ``changed`` and
     ``snap_distances`` are computed before resampling.
 
     ``planner`` lets a caller reuse a prebuilt :class:`GraphPlanner` for ``md``
@@ -313,6 +318,10 @@ def plan_route(
     ):
         raise RoutePlanningError(
             "bad_parameter", f"inflate_obstacles must be finite and >= 0, got {inflate_obstacles}"
+        )
+    if not (spacing <= 0.0 or spacing >= MIN_SPACING_M):  # also NaN
+        raise RoutePlanningError(
+            "bad_parameter", f"spacing must be 0, negative or >= {MIN_SPACING_M} m, got {spacing}"
         )
     if len(points_latlon) < 2:
         raise RoutePlanningError("too_few_points", "plan_route() needs at least two waypoints")

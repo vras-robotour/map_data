@@ -144,7 +144,7 @@ allowing dynamic updates via `ros2 param set`.
     - `"-"`: disables GPX file output.
     - Explicit filename or path: writes to that path (resolved under `mission_dir` if relative).
 - **`spacing` semantics:**
-    - `spacing > 0`: resamples the path so consecutive waypoints are at most `spacing` meters apart.
+    - `spacing > 0`: resamples the path so consecutive waypoints are at most `spacing` meters apart. Below `0.1` fails with `bad_parameter`.
     - `spacing == 0`: uses the node's default spacing (`3.0 m`).
     - Negative spacing (`spacing < 0`, e.g. `-1.0`): preserves raw planner vertices without densification.
 

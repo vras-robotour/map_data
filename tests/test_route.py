@@ -304,6 +304,9 @@ def test_viewer_uses_the_planner_grid_cell_budget():
         {"algorithm": "astar", "inflate_obstacles": -1.0},
         {"algorithm": "astar", "inflate_obstacles": float("nan")},
         {"algorithm": "astar", "inflate_obstacles": float("inf")},
+        # Would densify a few hundred metres into millions of points.
+        {"spacing": 1e-5},
+        {"spacing": float("nan")},
     ],
 )
 def test_plan_route_rejects_bad_parameters(footway_network_mapdata, kwargs):
