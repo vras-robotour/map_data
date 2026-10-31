@@ -110,7 +110,7 @@ def _authenticate_socketio_connection() -> bool | None:
 
 
 def telemetry_broadcaster(interval: float) -> None:
-    """Thread body: emit the tracker's telemetry over SocketIO every *interval* seconds."""
+    """Thread body: emit tracker telemetry deltas over SocketIO every *interval* seconds."""
     global tracker_node
     while True:
         if tracker_node:
@@ -272,7 +272,7 @@ def main() -> None:
         f"(default: the package's config/{DEFAULT_CONFIG_NAME})",
     )
 
-    # Filter out ROS-specific arguments before parsing
+    # argparse does not recognize ROS arguments (--ros-args, -r, etc.)
     try:
         from rclpy.utilities import remove_ros_args
 

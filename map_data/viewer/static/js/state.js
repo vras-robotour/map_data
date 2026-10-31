@@ -3,7 +3,7 @@
 const MAX_FETCH_AREA_KM2 = 25.0;
 
 // ── State ────────────────────────────────────────────────────────────────────
-let currentAppMode = 'viewer'; // 'viewer' or 'planner'
+let currentAppMode = 'viewer'; // 'viewer', 'planner', or 'tracker'
 let plannerMode = null; // Will hold the PlannerMode instance
 let currentFile = '';
 let currentMode = 'view';
@@ -23,7 +23,7 @@ let tagOverrides = [];            // [{id, category, label, tags}, ...] from ann
 let hiddenWays = [];            // [{id, category, label}, ...] from annotations store
 let changeLog = [];            // [{type:'way'|'node'|'tag'|'move'|'split'|'add_node', ...data}], oldest first
 let redoStack = [];            // [{type, label, wayId, run}] forward replays for undone changeLog entries
-let hiddenWayIds = new Set();     // Set<number> for O(1) lookup
+let hiddenWayIds = new Set();     // Set of way IDs for O(1) lookup
 let plannerBlockedIds = new Set(); // way IDs the Paths-only planner won't use, hidden in planner mode
 let editSelectedLayer = null;   // annotation layer selected in edit mode
 let annVertexLayer = null;      // LayerGroup for annotation vertex/midpoint markers in edit mode

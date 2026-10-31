@@ -447,7 +447,6 @@ async function splitCurrentWay(wayId, nodeId) {
         const data = await res.json();
         setStatus('Way split successfully', 'text-success');
 
-        // Surgical update
         const originalWayId = String(wayId).split(':')[0];
         const newLayer = updateWayWithSegments(originalWayId, data.segments);
 
@@ -624,7 +623,7 @@ async function hideCurrentWay() {
     });
     if (!res.ok) { setStatus('Hide failed', 'text-danger'); return; }
     if (currentClickedLayer && geoLayers[cat]) {
-        // Kept in subtypeLayers so Show can bring it back, so drop the highlight now
+        // Kept in subtypeLayers so Show can bring it back; drop the highlight
         currentClickedLayer.setStyle(STYLES[cat]);
         geoLayers[cat].removeLayer(currentClickedLayer);
     }
@@ -800,7 +799,6 @@ async function undoWaySplit(wayId, nodeId) {
         const data = await res.json();
         setStatus('Split reverted', 'text-success');
 
-        // Surgical update
         const newLayer = updateWayWithSegments(wayId, data.segments);
 
         // If the split was focused, update focus to the merged way

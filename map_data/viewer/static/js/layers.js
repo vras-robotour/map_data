@@ -189,7 +189,6 @@ function updateWayWithSegments(originalWayId, segments) {
         toRemove.forEach(l => removeWayLayer(cat, l));
     });
 
-    // Add new segments
     let firstLayer = null;
     segments.forEach(f => {
         const cat = f.properties.category;
@@ -430,16 +429,14 @@ function clearMapData() {
     if (showGridCheckbox) showGridCheckbox.checked = false;
 
     currentFile = "";
-    
-    // Clear all geo layers from map and reset state
+
     Object.values(geoLayers).forEach(l => {
         if (l) {
             map.removeLayer(l);
         }
     });
     drawnItems.clearLayers();
-    
-    // Reset layers state
+
     ['road', 'footway', 'barrier', 'crossroad', 'waypoint'].forEach(cat => {
         geoLayers[cat] = null;
         if (cat !== 'waypoint') {
@@ -449,7 +446,6 @@ function clearMapData() {
         }
     });
 
-    // Reset data state
     annotations = [];
     annBaselineGeoms = {};
     deletedWays = [];
@@ -460,7 +456,6 @@ function clearMapData() {
     changeLog = [];
     redoStack = [];
 
-    // Reset UI elements
     document.getElementById('file-select').value = "";
     document.getElementById('export-btn').disabled = true;
     document.getElementById('export-geojson-btn').disabled = true;

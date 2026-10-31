@@ -468,7 +468,7 @@ def upload_mapdata() -> Response:
     """
     Save an uploaded ``.mapdata`` file to the data directory.
 
-    Saved as ``<stem>.mapdata`` (lower-case, as the file list matches it
+    Saved as ``<stem>.mapdata`` (lower-case extension, as the file list matches it
     case-sensitively) or the next free name (:func:`_free_mapdata_path`);
     a file that fails to load is deleted again. Returns ``{"filename": ...}``,
     the name saved under; 400 for a missing, misnamed or unloadable file.

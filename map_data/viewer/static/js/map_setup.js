@@ -57,7 +57,6 @@ function setMode(newMode, commit = true) {
         try { pathLineDraw.disable(); } catch (_) { }
     }
 
-    // Update button highlight
     document.querySelectorAll('.mode-btn').forEach(btn =>
         btn.classList.toggle('active', btn.dataset.mode === newMode)
     );
@@ -66,7 +65,6 @@ function setMode(newMode, commit = true) {
     const cursors = { view: '', edit: 'move', add: 'crosshair', delete: 'pointer', fetch: 'crosshair' };
     map.getContainer().style.cursor = cursors[newMode] ?? '';
 
-    // Activate new mode
     if (newMode === 'add') {
         initDrawControl();
         drawControl.addTo(map);
@@ -108,7 +106,6 @@ async function initApp() {
     deleteHandler = new L.EditToolbar.Delete(map, { featureGroup: drawnItems });
     setupDrawEvents();
 
-    // Event Listeners
     document.getElementById('load-btn')?.addEventListener('click', () => {
         const file = document.getElementById('file-select').value;
         if (file) loadMapData(file);

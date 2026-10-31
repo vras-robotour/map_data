@@ -1,11 +1,12 @@
 """
 ROS 2 side of the viewer's Tracker mode.
 
-``TrackerNode`` subscribes to a configurable set of robot topics and turns them into one
-JSON-serialisable telemetry snapshot (``get_telemetry``) that ``app.py`` pushes to the
-browser over a WebSocket. Every topic is a parameter; an empty topic disables the feature
-and hides its UI row. The parameters come from a config file (see :mod:`.tracker_config`)
-and the topics and frames can be switched at runtime with ``apply_settings``.
+``TrackerNode`` subscribes to a configurable set of robot topics and turns them into
+JSON-serialisable telemetry deltas (``get_telemetry``, with ``snapshot`` on connect) that
+``app.py`` pushes to the browser over Socket.IO. Every topic is a parameter; an empty
+topic disables the feature and hides its UI row. The parameters come from a config file
+(see :mod:`.tracker_config`) and the topics and frames can be switched at runtime with
+``apply_settings``.
 
 Geometry (paths, goals) may arrive in any TF frame. With ``earth_frame`` set (e.g.
 ``FP_ECEF`` on a Fixposition stack) poses are transformed into that ECEF frame through TF
@@ -94,7 +95,6 @@ GEOMETRY = {
     "intersections": "intersections_gps",
 }
 
-# Ordered like nav2's SpeedLimit / CollisionMonitor enums
 # nav2_msgs/CollisionMonitorState action_type constants.
 _COLLISION_ACTIONS: dict[int, str] = {
     0: "DO_NOTHING",
@@ -205,7 +205,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             history=HistoryPolicy.KEEP_LAST,
             depth=10,
         )
-        # Latched publishers (goal, sequence): receive the last message when starting late
+        # Latched publishers (sequence, intersections): receive the last message when starting late
         self._qos_latched = QoSProfile(
             depth=1,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
@@ -282,7 +282,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
 
     # ------------------------------------------------------------------ subscriptions
     def _subscribe(self) -> None:
-        """Subscribe to every configured topic and publish the resulting feature flags."""
+        """Subscribe to every configured topic and record the resulting feature flags."""
         self.earth_frame: str = self.get_parameter("earth_frame").value
         self.utm_frame: str = self.get_parameter("utm_frame").value
         qos_best_effort = self._qos_best_effort
@@ -495,7 +495,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         self, names: Sequence[str], timeout: float = 0.5
     ) -> dict[str, Any] | None:
         """
-        Current values of *names* on :attr:`planner_node` (``{}`` if it lacks one of them).
+        Current values of *names* on :attr:`planner_node` (omitting any that are unset).
 
         ``None`` when the node is not on the graph or does not answer within *timeout*
         seconds, so a web request never waits on an absent planner.

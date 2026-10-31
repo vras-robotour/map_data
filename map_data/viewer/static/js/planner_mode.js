@@ -85,7 +85,7 @@ class PlannerMode {
         this.markerLayer.addTo(map);
         this.redraw();
         if (this.startAtRobot) this._moveStartToRobot();
-        this.updateUI(); // Ensure UI state is correct
+        this.updateUI();
         // Enable map click for adding points
         map.on('click', this.handleMapClick, this);
         this._refilter();
@@ -363,8 +363,7 @@ class PlannerMode {
         this.highwayCosts = newHwCosts;
         this.surfaceCosts = newSurfCosts;
         bootstrap.Modal.getOrCreateInstance(document.getElementById('planner-costs-modal')).hide();
-        
-        // If grid is visible, refresh it
+
         if (document.getElementById('planner-show-grid').checked) {
             this.fetchCostGrid();
         }
@@ -469,7 +468,6 @@ class PlannerMode {
         if (this.points.length === 0) return;
 
         this.points.forEach((p, i) => {
-            // Create marker
             const isStart = i === 0;
             const isEnd = i === this.points.length - 1;
             const color = isStart ? '#2ecc71' : (isEnd ? '#e74c3c' : '#3498db');
@@ -687,7 +685,6 @@ class PlannerMode {
             this.updateUI();
             setStatus(`Imported ${points.length} points`, 'text-success');
 
-            // Zoom to fit
             const bounds = L.latLngBounds(this.points.map(p => [p.lat, p.lon]));
             map.fitBounds(bounds, { padding: [50, 50] });
 
@@ -739,7 +736,7 @@ class PlannerMode {
             return;
         }
 
-        // Plan from where the robot is now, not where it was when the toggle went on
+        // Plan from the robot's current position
         if (this.startAtRobot) this._moveStartToRobot();
 
         if (this.points.length < 2) {
