@@ -52,7 +52,7 @@ def smooth_path(
 
         if collision_check_func:
             if collision_check_func(LineString(new_path)):
-                return best_path  # Return best collision-free state found so far
+                return best_path
             best_path = np.copy(new_path)
 
     return new_path

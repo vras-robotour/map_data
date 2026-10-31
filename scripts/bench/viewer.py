@@ -52,7 +52,7 @@ def clear_caches() -> None:
     planning._graph_planner.cache_clear()
     clear = getattr(
         helpers.geom_to_geojson, "cache_clear", None
-    )  # absent before the geometry cache
+    )  # absent if geom_to_geojson is not cached
     if clear:
         clear()
 

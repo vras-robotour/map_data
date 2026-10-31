@@ -56,7 +56,7 @@ outside_map_tolerance : float
     ``start_outside_map`` / ``goal_outside_map`` (default 100 m); the message names the
     loaded file, as a start off the map usually means the wrong one.
 fix_max_age : float
-    Seconds after which the last fix is considered stale (0 = never).
+    Seconds after which the last fix is considered stale (default 10 s, 0 = never).
 
 The eight planner parameters (``algorithm`` ... ``smooth_path``, see
 :data:`PLANNER_PARAMETERS`) are read on every goal, so ``ros2 param set`` applies to

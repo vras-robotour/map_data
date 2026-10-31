@@ -85,6 +85,14 @@ class MapData:
             A ``.gpx`` path (``coords_type="file"``) or
             ``(waypoints, zone_number, zone_letter)`` with ``(N, 2)`` UTM
             waypoints (``coords_type="array"``).
+        coords_type : str, default "file"
+            ``"file"`` to load a GPX file, or ``"array"`` for a UTM waypoint tuple.
+        grid_margin : float, optional
+            Margin (m) around waypoints for map bounds (default 150 m).
+        obstacle_radius : float, optional
+            Buffer radius (m) for point obstacles (default from config).
+        buffer_widths : dict of {str: float}, optional
+            Buffer widths (m) by way category (road, footway, barrier).
 
         """
         if coords_type == "file":

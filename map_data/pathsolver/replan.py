@@ -264,7 +264,7 @@ class ReplanPath:
         if path is None or len(path) <= 2:
             return path
 
-        # 1. Remove points that are extremely close to each other
+        # Remove coincident points (< 0.05 m apart).
         dist_sq = np.sum(np.diff(path, axis=0) ** 2, axis=1)
         mask = np.ones(len(path), dtype=bool)
         mask[1:] = dist_sq > 0.05**2
@@ -273,12 +273,11 @@ class ReplanPath:
         if len(path) <= 2:
             return path
 
-        # 2. Smooth path if requested
         if self.smooth_path:
             path = smooth_path(path, collision_check_func=self._collides)
 
-        # 3. The only simplification pass (grid_astar and RRTStar return raw paths).
-        #    A shortcut that hits an obstacle polygon keeps its original vertices.
+        # The only simplification pass (grid_astar and RRTStar return raw paths).
+        # A shortcut that hits an obstacle polygon keeps its original vertices.
         if self.simplify_path:
             path = simplify_path_checked(
                 path,

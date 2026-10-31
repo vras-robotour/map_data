@@ -45,7 +45,6 @@ def astar_search[N](
         cost = visited[u][0]
 
         if u == goal_node:
-            # Path found, reconstruct
             path = []
             curr: N | None = u
             while curr is not None:

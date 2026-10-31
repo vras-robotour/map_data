@@ -154,10 +154,16 @@ def grid_astar(
     ----------
     grid : np.ndarray
         ``(Y, X)`` cell costs, ``inf`` is blocked.
-    low : tuple
-        ``(min_x, min_y)`` of the grid.
+    start_utm : tuple or np.ndarray
+        Start coordinates (easting, northing) in UTM.
+    goal_utm : tuple or np.ndarray
+        Goal coordinates (easting, northing) in UTM.
+    low : tuple of float
+        ``(min_x, min_y)`` of the grid in UTM.
     cs : float
-        Cell size.
+        Cell size (m).
+    grid_cost_weight : float, optional
+        Weight multiplier for non-zero cell costs (default 5.0).
 
     Returns
     -------
@@ -224,7 +230,6 @@ def grid_astar(
             continue
 
         if u == goal_flat:
-            # Path found, reconstruct
             path_indices = []
             curr = u
             while curr != -1:

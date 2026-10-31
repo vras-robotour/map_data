@@ -85,9 +85,9 @@ def load_summary(
     crossroads: bool = False,
 ) -> str:
     """
-    One-line "loaded <map>: ..." summary of a map from :func:`edit_mapdata`.
+    One-line "loaded <map>: ..." summary of a loaded map.
 
-    *annotations* is the store argument it was loaded with (``None`` for the
+    *annotations* is the store argument used when loading (``None`` for the
     default sidecar), *trav_path* the resolved traversability rule file.
     """
     if annotations == NO_ANNOTATIONS:
