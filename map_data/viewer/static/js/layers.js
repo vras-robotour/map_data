@@ -285,13 +285,11 @@ function applyAnnData(annData, { withChangeLog = true } = {}) {
 }
 
 // applyAnnData plus `annotations` itself, its baselines and the side panels.
-function applyAnn(annData, { refreshAnnotations = false } = {}) {
+function applyAnn(annData) {
     annotations = annData.annotations || [];
     snapshotAnnBaselines();
     applyAnnData(annData);
-    if (refreshAnnotations) {
-        renderAnnotationLayer();
-    }
+    renderAnnotationLayer();
     renderAnnotationList();
     renderChangesPanel();
     renderHiddenPanel();
@@ -299,7 +297,11 @@ function applyAnn(annData, { refreshAnnotations = false } = {}) {
 
 async function refreshMetadata(filename) {
     try {
-        applyAnn(await fetchAnnotations(filename));
+        // Way edits don't touch annotations; keep their layers and _layer refs.
+        applyAnnData(await fetchAnnotations(filename));
+        renderAnnotationList();
+        renderChangesPanel();
+        renderHiddenPanel();
     } catch (err) {
         console.error('Failed to refresh metadata:', err);
     }
@@ -402,7 +404,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
             }
         }
 
-        applyAnn(annData, { refreshAnnotations: true });
+        applyAnn(annData);
 
         currentFile = filename;
         document.getElementById('export-btn').disabled = false;
