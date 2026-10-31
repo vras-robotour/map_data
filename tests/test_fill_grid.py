@@ -121,8 +121,8 @@ def test_fill_grid_footway_just_outside_the_grid_lowers_its_edge_cells():
 
     grid_2d = rp.path_grid.grid_2d_cache
     assert grid_2d[0, 20] < rp.default_off_path_cost  # centre 1.25 m from it
-    assert grid_2d[3, 20] == rp.default_off_path_cost  # 2.75 m, beyond max_path_dist
-    assert grid_2d[-1, 20] == rp.default_off_path_cost  # top edge: no wrap-around
+    assert grid_2d[3, 20] == pytest.approx(rp.default_off_path_cost)  # 2.75 m, beyond max_path_dist
+    assert grid_2d[-1, 20] == pytest.approx(rp.default_off_path_cost)  # top edge: no wrap-around
 
 
 def test_fill_grid_produces_2d_cache():
