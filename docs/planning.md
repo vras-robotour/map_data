@@ -154,10 +154,11 @@ When route planning fails, `PlanRoute.Result` sets `success = false` and provide
 
 | Reason | Meaning |
 |--------|---------|
-| `bad_parameter` | Unknown `algorithm` or `sub_algorithm`, non-positive `cell_size`, or negative or non-finite `inflate_obstacles` |
+| `bad_parameter` | Unknown `algorithm` or `sub_algorithm`, non-positive `cell_size`, negative or non-finite `inflate_obstacles`, a positive `spacing` below `0.1`, or a waypoint UTM cannot express (latitude outside -80..84, non-finite) |
 | `start_blocked` | Grid start coordinate lies inside an obstacle and cannot be snapped to free space |
 | `goal_blocked` | Grid goal coordinate lies inside an obstacle and cannot be snapped to free space |
 | `cancelled` | Planning request was cancelled |
+| `busy` | Another plan is still running; the goal is not queued, send it again |
 | `start_outside_map` | Start coordinate lies farther than `outside_map_tolerance` outside the map area |
 | `goal_outside_map` | Goal coordinate lies farther than `outside_map_tolerance` outside the map area |
 | `snap_too_far` | Waypoint exceeds maximum snap distance to the nearest allowed way |

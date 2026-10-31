@@ -184,7 +184,7 @@ class RoutePlanner(Node):
 
         self._fix: NavSatFix | None = None
         self._fix_time = 0.0
-        self._lock = threading.Lock()  # one plan at a time
+        self._lock = threading.Lock()  # one plan at a time; a second one fails "busy"
         # (key, mtime, MapData)
         self._map_cache: tuple[tuple[str, str, str], float, object] | None = None
         # (map key, mtime, highway types, snap distance) -> GraphPlanner; small LRU
@@ -263,7 +263,7 @@ class RoutePlanner(Node):
         return GoalResponse.ACCEPT
 
     def _cancel_cb(self, handle) -> CancelResponse:
-        # Stops a grid search in progress, or one still waiting for the planner lock.
+        # Stops a grid search in progress.
         cancel_replan_backend(_transfer_id(handle))
         return CancelResponse.ACCEPT
 
@@ -399,7 +399,11 @@ class RoutePlanner(Node):
             self._publish_status(f"FAILED {reason}: {message}")
             return res
 
-        with self._lock:
+        # Never wait for the lock: a blocked callback holds an executor thread, and enough of
+        # them leave none for cancels and GNSS fixes.
+        if not self._lock.acquire(blocking=False):
+            return fail("busy", "another plan is running; try again when it has finished")
+        try:
             path = self._resolve_mapdata(goal.mapdata_file)
             if path is None:
                 name = goal.mapdata_file or self.mapdata_file
@@ -493,6 +497,8 @@ class RoutePlanner(Node):
                 self.pub_route_path.publish(res.route_local)
             self._publish_status(f"PLANNED {res.message}")
             return res
+        finally:
+            self._lock.release()
 
     # ------------------------------------------------------------------ outputs
     def _geo_path(self, route: RouteResult, stamp: TimeMsg) -> GeoPath:
