@@ -267,3 +267,19 @@ def test_plan_route_reuses_a_prebuilt_planner(footway_network_mapdata):
     assert reused.length_m == pytest.approx(fresh.length_m)
     assert again.latlon == reused.latlon
     assert reused.snap_distances == pytest.approx(fresh.snap_distances)
+
+
+def test_plan_route_cell_size_defaults_to_planner_defaults(footway_network_mapdata, monkeypatch):
+    from map_data.pathsolver import replan
+
+    monkeypatch.setattr(replan, "load_config", lambda name: {"cell_size": 0.01})
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    with pytest.raises(RoutePlanningError) as e:
+        plan_route(
+            md,
+            [_latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 60.0, 0.0)],
+            algorithm="astar",
+        )
+    assert e.value.reason == "grid_too_large"
+    assert "cell_size=0.01" in e.value.message

@@ -87,6 +87,7 @@ from map_data.annotations import (
     load_summary,
 )
 from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE, GraphPlanner
+from map_data.pathsolver.replan import grid_defaults
 from map_data.pathsolver.route import (
     GRAPH_ALGORITHM,
     OUTSIDE_MAP_TOLERANCE_M,
@@ -150,10 +151,12 @@ class RoutePlanner(Node):
         self.outside_map_tolerance = float(
             p("outside_map_tolerance", OUTSIDE_MAP_TOLERANCE_M).value
         )
-        self.default_cell_size = float(p("cell_size", 0.25).value)
-        self.default_inflate = float(p("inflate_obstacles", 0.25).value)
-        self.default_simplify = bool(p("simplify_path", True).value)
-        self.default_smooth = bool(p("smooth_path", False).value)
+        # Unset, these four take config/planner_defaults.yaml, like map_data_plan and the viewer.
+        grid = grid_defaults()
+        self.default_cell_size = float(p("cell_size", float(grid["cell_size"])).value)
+        self.default_inflate = float(p("inflate_obstacles", float(grid["inflate_obstacles"])).value)
+        self.default_simplify = bool(p("simplify_path", bool(grid["simplify_path"])).value)
+        self.default_smooth = bool(p("smooth_path", bool(grid["smooth_path"])).value)
 
         self._fix: NavSatFix | None = None
         self._fix_time = 0.0

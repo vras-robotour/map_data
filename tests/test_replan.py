@@ -252,3 +252,55 @@ def test_smoothing_through_a_footway_gap_is_kept():
     zigzag = np.array([[1.0, 5.0], [5.0, 6.0], [10.0, 5.0], [15.0, 4.0], [19.0, 5.0]])
     smoothed = replanner._post_process_path(zigzag)
     assert not np.allclose(smoothed, zigzag)
+
+
+# ── defaults from planner_defaults.yaml ──────────────────────────────────────
+
+YAML_GRID = {
+    "cell_size": 0.5,
+    "inflate_obstacles": 0.0,
+    "simplify_path": False,
+    "smooth_path": True,
+    "max_path_dist": 3.0,
+    "grid_cost_weight": 7.0,
+}
+
+
+@pytest.fixture
+def yaml_grid(monkeypatch):
+    monkeypatch.setattr(replan_mod, "load_config", lambda name: dict(YAML_GRID))
+
+
+def test_replan_path_defaults_come_from_planner_defaults(yaml_grid):
+    replanner = ReplanPath([], low=(0, 0), high=(10, 10))
+    assert replanner.cell_size == 0.5
+    assert replanner.simplify_path is False
+    assert replanner.smooth_path is True
+    assert replanner.max_path_dist == 3.0
+    assert replanner.grid_cost_weight == 7.0
+    assert replanner.path_grid.cell_size == 0.5
+
+
+def test_explicit_arguments_override_planner_defaults(yaml_grid):
+    replanner = ReplanPath(
+        [], low=(0, 0), high=(10, 10), cell_size=1.0, simplify_path=True, grid_cost_weight=1.0
+    )
+    assert (replanner.cell_size, replanner.simplify_path, replanner.grid_cost_weight) == (
+        1.0,
+        True,
+        1.0,
+    )
+
+
+def test_cli_defaults_come_from_planner_defaults(yaml_grid):
+    from map_data.plan_route_cli import build_parser
+
+    args = build_parser().parse_args(["-f", "x.mapdata"])
+    assert (args.cell_size, args.inflate_obstacles, args.simplify, args.smooth) == (
+        0.5,
+        0.0,
+        False,
+        True,
+    )
+    args = build_parser().parse_args(["-f", "x.mapdata", "--simplify", "--no-smooth"])
+    assert (args.simplify, args.smooth) == (True, False)

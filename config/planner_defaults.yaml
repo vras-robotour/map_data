@@ -20,6 +20,9 @@ surface_costs:
   grass: 0.5
   sand: 0.4
 default_off_path_cost: 0.9
+# Grid planner (astar / rrt) defaults for the viewer, map_data_plan and route_planner
+# (map_data.pathsolver.replan.grid_defaults). max_path_dist is how far (m) a way lowers
+# the cost of the cells around it.
 max_path_dist: 2.0
 cell_size: 0.25
 inflate_obstacles: 0.25

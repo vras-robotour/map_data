@@ -3,7 +3,7 @@
 import logging
 import random
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import shapely as sh
@@ -23,6 +23,29 @@ if TYPE_CHECKING:
     from map_data.map_data import MapData
 
 logger = logging.getLogger(__name__)
+
+
+#: Grid-planner settings used where ``config/planner_defaults.yaml`` lacks them.
+GRID_DEFAULTS: dict[str, Any] = {
+    "cell_size": 0.25,
+    "inflate_obstacles": 0.25,
+    "simplify_path": True,
+    "smooth_path": False,
+    "max_path_dist": 2.0,
+    "grid_cost_weight": GRID_COST_WEIGHT,
+}
+
+
+def grid_defaults() -> dict[str, Any]:
+    """
+    The grid planner's default settings: ``config/planner_defaults.yaml`` over
+    :data:`GRID_DEFAULTS`, read on every call so file edits apply to the next plan.
+
+    The single source for :class:`ReplanPath`, :func:`~map_data.pathsolver.route.plan_route`,
+    ``map_data_plan`` and the ``route_planner`` node's parameter defaults.
+    """
+    cfg = load_config("planner_defaults.yaml")
+    return {key: cfg.get(key, value) for key, value in GRID_DEFAULTS.items()}
 
 
 _cancel_lock = threading.Lock()
@@ -60,19 +83,25 @@ class ReplanPath:
         *,
         low: tuple[float, float] = (0.0, 0.0),
         high: tuple[float, float] = (0.0, 0.0),
-        cell_size: float = 0.25,
-        inflate_obstacles: float = 0.25,
-        simplify_path: bool = True,
-        smooth_path: bool = False,
+        cell_size: float | None = None,
+        inflate_obstacles: float | None = None,
+        simplify_path: bool | None = None,
+        smooth_path: bool | None = None,
     ) -> None:
+        # None = the grid_defaults() value.
+        grid = grid_defaults()
+        cell_size = grid["cell_size"] if cell_size is None else cell_size
+        if inflate_obstacles is None:
+            inflate_obstacles = grid["inflate_obstacles"]
         self.low = low
         self.cell_size = cell_size
-        self.simplify_path = simplify_path
-        self.smooth_path = smooth_path
+        self.simplify_path = grid["simplify_path"] if simplify_path is None else simplify_path
+        self.smooth_path = grid["smooth_path"] if smooth_path is None else smooth_path
+        self.max_path_dist = float(grid["max_path_dist"])
         self.transfer_id = transfer_id
         defaults = load_config("planner_defaults.yaml")
         self.grid_cost_weight = (
-            grid_cost_weight if grid_cost_weight is not None else GRID_COST_WEIGHT
+            grid_cost_weight if grid_cost_weight is not None else grid["grid_cost_weight"]
         )
 
         # The highway/surface cost tables and their cap are the one place that
@@ -120,7 +149,7 @@ class ReplanPath:
         else:
             self.obstacles = obstacles or []
 
-        self._deferred_fill: tuple[MapData, list[str] | None, float] | None = None
+        self._deferred_fill: tuple[MapData, list[str] | None, float | None] | None = None
 
         # Spatial index for faster collision checking
         self.obstacles_tree = sh.STRtree(self.obstacles) if self.obstacles else None
@@ -256,16 +285,18 @@ class ReplanPath:
         self,
         map_data: "MapData",
         highway_types: list[str] | None = None,
-        max_path_dist: float = 2.0,
+        max_path_dist: float | None = None,
     ) -> None:
         """
         Populate the grid with costs based on map data.
+
+        ``max_path_dist`` ``None`` takes ``max_path_dist`` from ``planner_defaults.yaml``.
         """
         effective = self.path_grid.fill(
             map_data,
             self.obstacles,
             highway_types=highway_types,
-            max_path_dist=max_path_dist,
+            max_path_dist=self.max_path_dist if max_path_dist is None else max_path_dist,
         )
         # The grid lets a path through a barrier it crosses; so must the segment checks.
         self.obstacles_tree = sh.STRtree(effective) if effective else None
@@ -274,7 +305,7 @@ class ReplanPath:
         self,
         map_data: "MapData",
         highway_types: list[str] | None = None,
-        max_path_dist: float = 2.0,
+        max_path_dist: float | None = None,
     ) -> None:
         """
         :meth:`fill_grid`, deferred until the first leg that hits an obstacle needs the

@@ -7,12 +7,10 @@ from collections.abc import Callable, Iterator
 import numpy as np
 from shapely.geometry import LineString
 
-from map_data.utils.config import load_config
-
 logger = logging.getLogger(__name__)
 
-_DEFAULTS = load_config("planner_defaults.yaml")
-GRID_COST_WEIGHT = _DEFAULTS.get("grid_cost_weight", 5.0)
+#: Fallback for a direct call; ReplanPath passes planner_defaults.yaml's grid_cost_weight.
+GRID_COST_WEIGHT = 5.0
 
 
 def _bresenham_cells(

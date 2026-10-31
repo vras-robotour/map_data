@@ -39,7 +39,7 @@ import utm
 from shapely import geometry
 
 from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE, GraphPlanner
-from map_data.pathsolver.replan import ReplanPath
+from map_data.pathsolver.replan import ReplanPath, grid_defaults
 from map_data.traversability import TraversabilityRules
 from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
@@ -190,10 +190,10 @@ def plan_route(
     highway_types: Sequence[str] | None = None,
     max_snap_distance: float = DEFAULT_MAX_SNAP_DISTANCE,
     spacing: float = 0.0,
-    cell_size: float = 0.25,
-    inflate_obstacles: float = 0.25,
-    simplify_path: bool = True,
-    smooth_path: bool = False,
+    cell_size: float | None = None,
+    inflate_obstacles: float | None = None,
+    simplify_path: bool | None = None,
+    smooth_path: bool | None = None,
     grid_cost_weight: float | None = None,
     highway_costs: dict[str, float] | None = None,
     surface_costs: dict[str, float] | None = None,
@@ -244,7 +244,9 @@ def plan_route(
     ``highway_costs``/``surface_costs`` price the ``highway``/``surface`` tags
     for *both* planners: the grid planner's cells and the graph planner's edge
     weights (``length * (1 + cost)``). ``None`` takes
-    ``config/planner_defaults.yaml``.
+    ``config/planner_defaults.yaml``, as does ``None`` for ``cell_size``,
+    ``inflate_obstacles``, ``simplify_path``, ``smooth_path`` and ``grid_cost_weight``
+    (see :func:`~map_data.pathsolver.replan.grid_defaults`).
 
     A first or last point more than ``outside_map_tolerance`` metres outside the map's
     area fails with ``start_outside_map`` / ``goal_outside_map`` (see :func:`check_in_map`).
@@ -252,6 +254,8 @@ def plan_route(
     Raises :class:`RoutePlanningError` on failure.
     """
     highway_types = list(highway_types) if highway_types else ["footway"]
+    if cell_size is None:
+        cell_size = float(grid_defaults()["cell_size"])
     if len(points_latlon) < 2:
         raise RoutePlanningError("too_few_points", "plan_route() needs at least two waypoints")
 
