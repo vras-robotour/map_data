@@ -254,6 +254,8 @@ class MapData:
 
     def _osm_query(self) -> str:
         bbox = f"{self.min_lat},{self.min_long},{self.max_lat},{self.max_long}"
+        # Server-side timeout below the HTTP one, so Overpass reports a slow query
+        # as an error instead of the client giving up mid-response.
         ql_timeout = REQUEST_TIMEOUT - 10
         return (
             f"[out:json][timeout:{ql_timeout}];way({bbox})->.w;(.w; .w >; .w <; node({bbox}););out;"
@@ -291,13 +293,7 @@ class MapData:
                     self.osm_data = result
                     return
 
-        bbox = f"{self.min_lat},{self.min_long},{self.max_lat},{self.max_long}"
-        # Server-side timeout below the HTTP one, so Overpass reports a slow query
-        # as an error instead of the client giving up mid-response.
-        ql_timeout = REQUEST_TIMEOUT - 10
-        query = (
-            f"[out:json][timeout:{ql_timeout}];way({bbox})->.w;(.w; .w >; .w <; node({bbox}););out;"
-        )
+        query = self._osm_query()
 
         def _on_attempt(endpoint: str, attempt: int, retries: int) -> None:
             if progress_cb is not None:
@@ -482,7 +478,7 @@ class MapData:
                         id=node_id,
                         is_area=True,
                         tags={"type": "footway_intersection", "count": str(count)},
-                        line=geometry.Point(e, n).buffer(1.5),
+                        line=geometry.Point(e, n).buffer(CROSSROAD_RADIUS),
                     ),
                 )
         return crossroads
