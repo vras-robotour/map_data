@@ -736,7 +736,7 @@ class PlannerMode {
             return;
         }
 
-        // Plan from the robot's current position
+        // Plan from the robot's latest position, not the one when the toggle went on
         if (this.startAtRobot) this._moveStartToRobot();
 
         if (this.points.length < 2) {
