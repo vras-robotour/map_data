@@ -54,7 +54,7 @@ Whether a way may be driven on at all is decided by the traversability rules, no
 | `inflate_obstacles` | 0.25 m | Buffer added around every obstacle polygon before rasterizing and collision checks. |
 | `simplify_path` | `true` | Drop vertices whose shortcut stays collision-free (`simplify_path_checked`). |
 | `smooth_path` | `false` | Gradient-descent smoothing (`smooth_path`). Runs before simplification. |
-| `grid_margin` | 150 m | Added to each side of the waypoint bounding box; sets the Overpass query area and the planning grid extent. |
+| `grid_margin` | 150 m | Added to each side of the GPX waypoints' bounding box when a map is built; sets the Overpass query area and the map extent (`min_x` ... `max_y`). The grid planners use a separate box: the route's waypoints plus `GRID_MARGIN_M` (50 m), clipped to the map. |
 | `path_cost_cap` | 0.85 | Upper bound of a way's cost. Below `default_off_path_cost`, so any mapped way is cheaper than open terrain. |
 | `grid_cost_weight` | 5.0 | Grid A* and RRT* step cost is `length × (1 + cell cost × grid_cost_weight)`. |
 | `obstacle_radius` | 2.0 m | Radius of the circle a point obstacle (bollard, tree) becomes. |
