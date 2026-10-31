@@ -713,12 +713,12 @@ def create_grid(
     steps = np.arange(-r, r + 2)
     offsets = np.stack(np.meshgrid(steps, steps), axis=-1).reshape(-1, 2)
     own = np.unique(np.floor((near - (xs[0], ys[0])) / cell_size).astype(np.int64), axis=0)
-    flat = []
+    mask = np.zeros((ny, nx), dtype=bool)
     for chunk in np.array_split(own, len(own) * len(offsets) // 4_000_000 + 1):
         cells = (chunk[:, None, :] + offsets).reshape(-1, 2)
         cells = cells[(cells >= 0).all(axis=1) & (cells[:, 0] < nx) & (cells[:, 1] < ny)]
-        flat.append(np.unique(cells[:, 1] * nx + cells[:, 0]))
-    index = np.unique(np.concatenate(flat))
+        mask[cells[:, 1], cells[:, 0]] = True
+    index = np.flatnonzero(mask.ravel())
     return np.column_stack([xs[index % nx], ys[index // nx]])
 
 

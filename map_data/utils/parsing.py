@@ -46,13 +46,22 @@ def parse_osm_ways(
     force_zone_letter: str | None = None,
 ) -> dict[int, Way]:
     ways = {}
+    lats: list[float] = []
+    lons: list[float] = []
     for way in osm_ways_data.ways:
-        lats = np.array([float(n.lat) for n in way.nodes])
-        lons = np.array([float(n.lon) for n in way.nodes])
-        easting, northing, _, _ = utm.from_latlon(
-            lats, lons, force_zone_number=force_zone_number, force_zone_letter=force_zone_letter
-        )
-        coords = list(zip(easting, northing, strict=True))
+        lats.extend(float(n.lat) for n in way.nodes)
+        lons.extend(float(n.lon) for n in way.nodes)
+    eastings, northings, _, _ = utm.from_latlon(
+        np.array(lats),
+        np.array(lons),
+        force_zone_number=force_zone_number,
+        force_zone_letter=force_zone_letter,
+    )
+    cursor = 0
+    for way in osm_ways_data.ways:
+        end = cursor + len(way.nodes)
+        coords = list(zip(eastings[cursor:end], northings[cursor:end], strict=True))
+        cursor = end
 
         for n in way.nodes:
             if n.id not in nodes_cache:
