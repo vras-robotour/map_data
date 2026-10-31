@@ -836,6 +836,22 @@ class TestOSMCloudParameterCallback:
         assert grid_pub.publish.call_count == 2
 
 
+class TestOSMCloudIntersectionMarkers:
+    def test_markers_start_with_a_delete_all(self):
+        """RViz keeps old spheres until told to drop them, so a rebuild must clear first."""
+        marker_cls = MagicMock(side_effect=lambda: MagicMock())
+        marker_cls.DELETEALL, marker_cls.ADD, marker_cls.SPHERE = 3, 0, 2
+        node = _build_osm_cloud({"mapdata_file": "fake.mapdata", "transform_mode": "auto"})
+
+        with (
+            patch("map_data.osm_cloud.Marker", marker_cls),
+            patch("map_data.osm_cloud.MarkerArray", lambda markers: MagicMock(markers=markers)),
+        ):
+            _, markers = node.get_intersections()
+
+        assert markers.markers[0].action == 3
+
+
 class TestOSMCloudGpxMap:
     """The GPX-only path must build the same map as the .mapdata path."""
 

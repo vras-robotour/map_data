@@ -654,7 +654,12 @@ class OSMCloud(Node):
         pose_array = PoseArray()
         pose_array.header.frame_id = self.local_frame
 
-        marker_array = MarkerArray()
+        # RViz keeps what it was sent until told otherwise, so a rebuild (new bounds,
+        # placement) would leave the old spheres behind.
+        clear = Marker()
+        clear.header.frame_id = self.local_frame
+        clear.action = Marker.DELETEALL
+        marker_array = MarkerArray(markers=[clear])
 
         marker_id = 0
         for point in transformed_points.values():
