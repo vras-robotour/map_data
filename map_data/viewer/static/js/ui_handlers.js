@@ -307,9 +307,7 @@ async function loadNodesForEditing(feature, layer) {
         });
     }
     if (osmDragGhost) {
-        // Node and midpoint markers use SVG renderer and are added to the map after the ghost,
-        // so they sit higher in the SVG DOM and receive their own mousedown events directly.
-        // The ghost only needs to handle clicks on the way body (i.e. way drag).
+        // The ghost only gets mousedowns on the way body (way drag).
         osmDragGhost.on('mousedown', _onOsmWayDragDown);
         osmDragGhost.addTo(map);
     }
@@ -327,7 +325,6 @@ async function loadNodesForEditing(feature, layer) {
     });
 
     // Midpoint handles between consecutive nodes for inserting new nodes.
-    // Added after node markers so they sit below nodes in the SVG DOM.
     midpointMarkers = [];
     for (let i = 0; i < currentNodes.length - 1; i++) {
         const a = currentNodes[i], b = currentNodes[i + 1];
@@ -693,10 +690,8 @@ function focusFeatureById(wayId) {
     });
 }
 
-// Rows for the changes/hidden/annotation panels are built with DOM APIs
-// (createElement/addEventListener) instead of inline onclick attribute
-// strings, so IDs and labels read back from the annotation store are never
-// interpolated into executable attribute code.
+// Panel rows are built with DOM APIs, not inline onclick strings, so IDs and
+// labels from the annotation store never become executable attribute code.
 function _buildPanelRow({ itemClass, idClass, labelHtml, idHtml, focusId, btnClass, btnTitle, btnHtml, onBtnClick }) {
     const row = document.createElement('div');
     row.className = itemClass;

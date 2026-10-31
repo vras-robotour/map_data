@@ -1,12 +1,9 @@
 """
 QR codes for Robotour goals.
 
-The competition passes a goal as a QR code with a geo URI payload
-(``geo:lat,lon``, RFC 5870). :func:`geo_uri` formats the payload the way the
-robot's ``qr_goal`` node parses it. :func:`qr_svg` renders it as vector art
-(crisp at any size, the right choice for a screen or a printout);
-:func:`qr_png` renders it with OpenCV's ``QRCodeEncoder`` (no extra dependency)
-as a bitmap for anything that needs pixels.
+A goal is a QR code with a ``geo:lat,lon`` payload (RFC 5870), formatted by
+:func:`geo_uri` as the robot's ``qr_goal`` node parses it. :func:`qr_svg` renders
+vector art, :func:`qr_png` a bitmap via OpenCV's ``QRCodeEncoder``.
 """
 
 from __future__ import annotations
@@ -75,9 +72,8 @@ def qr_image(text: str, scale: int = 12, caption: str | None = None) -> np.ndarr
     caption = text if caption is None else caption
     if caption:
         font = cv2.FONT_HERSHEY_SIMPLEX
-        # Size the caption off the code's width and derive the stroke weight
-        # from that size, so the caption keeps the same proportions at every
-        # scale instead of jumping a pixel between, say, 12 and 20.
+        # Font size and stroke follow the image width, so the caption keeps its
+        # proportions at every scale.
         font_scale = max(0.4, img.shape[1] / 600.0)
         (tw, th), base = cv2.getTextSize(caption, font, font_scale, 1)
         if tw > img.shape[1] * 0.96:  # long payload: shrink until it fits

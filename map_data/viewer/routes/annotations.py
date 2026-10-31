@@ -11,12 +11,9 @@ from flask import (
 )
 from flask.typing import ResponseReturnValue
 
+from map_data.edits import annotation_store, geojson_geom_to_utm, load_annotations
+
 from ..cache import load_mapdata_cached
-from ..helpers import (
-    annotation_store,
-    geojson_geom_to_utm,
-    load_annotations,
-)
 from .common import (
     _annotation_path,
     _json_object,
@@ -69,22 +66,9 @@ def _validated_annotation_body(filename: str) -> dict[str, Any]:
 @bp.route("/api/annotations")
 def get_annotations() -> Response:
     """
-    Return the raw annotation store (all recorded edits) for a mapdata file.
+    Return a mapdata file's whole annotation store (every edit, not only ``annotations``).
 
-    Note this is the *whole* store, not just the freehand ``annotations``
-    list -- also includes deletions, splits, moves, tag overrides, etc.
-
-    Returns
-    -------
-    Response
-        JSON annotation store, as returned by
-        :func:`~map_data.viewer.helpers.load_annotations`.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing.
-
+    Query: ``file``. 400 if it is missing, 404 if the file doesn't exist.
     """
     filename = _require_args("file")
     return jsonify(load_annotations(str(_annotation_path(filename))))
@@ -93,25 +77,12 @@ def get_annotations() -> Response:
 @bp.route("/api/annotations", methods=["POST"])
 def add_annotation() -> ResponseReturnValue:
     """
-    Add a freehand annotation (a user-drawn obstacle or path) to a mapdata file.
+    Add a freehand annotation (a drawn obstacle or path) to ``store["annotations"]``.
 
-    Appends to ``store["annotations"]`` (distinct from way/node edits --
-    these are geometries with no corresponding OSM way, consumed by
-    :func:`~map_data.viewer.routes.common.get_merged_mapdata` to synthesize new ``Way`` objects) and
-    persists the store.
-
-    Returns
-    -------
-    Response
-        The newly created annotation (with a generated ``id``) as JSON,
-        with status 201.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing or the body is invalid (see
-        :func:`_validated_annotation_body`).
-
+    Query: ``file``; JSON body ``geometry``, ``type`` and ``properties``
+    (see :func:`_validated_annotation_body`). Returns the annotation, with a
+    new ``id``, and 201; 400 if ``file`` or the body is invalid.
+    :func:`~map_data.annotations.merge_annotations` turns it into a ``Way``.
     """
     filename = _require_args("file")
     body = _validated_annotation_body(filename)
@@ -123,33 +94,23 @@ def add_annotation() -> ResponseReturnValue:
         "properties": body.get("properties", {}),
     }
     with annotation_store(ann_path) as store:
-        store["annotations"].append(ann)
+        store.setdefault("annotations", []).append(ann)
     return jsonify(ann), 201
 
 
 @bp.route("/api/annotations/<ann_id>", methods=["PUT"])
 def update_annotation(ann_id: str) -> Response:
     """
-    Replace the geometry (and optionally type/properties) of a freehand annotation.
+    Replace the geometry (and the ``type``/``properties`` given) of a freehand annotation.
 
-    Returns
-    -------
-    Response
-        The updated annotation as JSON.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing or the body is invalid (see
-        :func:`_validated_annotation_body`). 404 if no annotation with
-        ``ann_id`` exists for this file.
-
+    Returns the updated annotation; 400 if ``file`` or the body is invalid,
+    404 if there is no annotation *ann_id*.
     """
     filename = _require_args("file")
     body = _validated_annotation_body(filename)
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
-        ann = next((a for a in store["annotations"] if a["id"] == ann_id), None)
+        ann = next((a for a in store.get("annotations", []) if a["id"] == ann_id), None)
         if ann is None:
             abort(404, "Annotation not found")
         ann["geometry"] = body["geometry"]
@@ -161,27 +122,17 @@ def update_annotation(ann_id: str) -> Response:
 
 
 @bp.route("/api/annotations/<ann_id>", methods=["DELETE"])
-def delete_annotation(ann_id: str) -> ResponseReturnValue:
+def delete_annotation(ann_id: str) -> Response:
     """
-    Delete a freehand annotation from a mapdata file's annotation store.
+    Delete a freehand annotation.
 
-    Returns
-    -------
-    Response
-        Empty body, status 204.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing. 404 if no annotation with ``ann_id``
-        exists for this file.
-
+    Returns 204; 400 if ``file`` is missing, 404 if there is no annotation *ann_id*.
     """
     filename = _require_args("file")
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
-        before = len(store["annotations"])
-        store["annotations"] = [a for a in store["annotations"] if a["id"] != ann_id]
-        if len(store["annotations"]) == before:
+        anns = store.get("annotations", [])
+        store["annotations"] = [a for a in anns if a["id"] != ann_id]
+        if len(store["annotations"]) == len(anns):
             abort(404, "Annotation not found")
-    return "", 204
+    return Response("", 204)

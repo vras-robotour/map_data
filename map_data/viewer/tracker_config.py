@@ -119,13 +119,6 @@ def settings_metadata() -> list[dict[str, Any]]:
     return [{**asdict(s), "choices": list(s.choices)} for s in SETTINGS]
 
 
-def topic_type(name: str, settings: Mapping[str, str]) -> str:
-    """Message type TrackerNode subscribes to setting ``name`` with."""
-    if name == "heading_topic":
-        return HEADING_TYPES.get(settings.get("heading_type", ""), "")
-    return next((s.msg_type for s in SETTINGS if s.name == name), "")
-
-
 def validate_settings(values: Any) -> dict[str, str]:
     """
     Check web-app settings: known names, whitespace-free strings, a valid ``heading_type``.

@@ -117,7 +117,7 @@ def test_saved_mapdata_carries_format_version(tmp_path):
 
 
 def test_legacy_mapdata_without_version_loads(tmp_path):
-    """Files written before the marker existed stay readable."""
+    """A file without a format_version marker still loads."""
     md = _make_md()
     path = tmp_path / "test.mapdata"
     md.save(str(path))
@@ -166,7 +166,7 @@ def test_save_mapdata_failure_preserves_existing_file(tmp_path, monkeypatch):
     with pytest.raises(OSError, match="disk full"):
         md.save(str(path))
 
-    # The previously good file is untouched and no temp files are left behind.
+    # The existing file is untouched and no temp files are left behind.
     assert path.read_text() == good_content
     assert not list(tmp_path.glob("*.tmp"))
 
@@ -292,7 +292,7 @@ def test_save_osm_cache_failure_preserves_existing_cache(tmp_path, monkeypatch):
     md._save_osm_cache(_EMPTY_JSON)
     monkeypatch.undo()
 
-    # The previously good cache is untouched and no temp files remain.
+    # The existing cache is untouched and no temp files remain.
     assert md._load_osm_cache() == _WAYS_JSON
     assert not list(tmp_path.glob("*.tmp"))
 

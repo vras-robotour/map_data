@@ -14,7 +14,7 @@ from map_data.viewer.ros_node import (
     yaw_from_quaternion,
 )
 
-# FP_ENU0 origin of the Stromovka bag (2026-08-21)
+# FP_ENU0 origin of a Stromovka bag
 ORIGIN_LAT, ORIGIN_LON, ORIGIN_ALT = 50.1048328, 14.4296035, 237.9
 
 

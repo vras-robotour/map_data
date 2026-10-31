@@ -62,7 +62,7 @@ map_data_tracker:
     sequence_poses_topic: "/goal_sequence"           # road_follower's current waypoint window (PoseArray, FP_ECEF)
     road_path_topic: ""                              # path_centerline on the jetson, cyan
     intersections_topic: ""                          # osm_cloud crossroads (FP_ENU0), magenta rings
-    active_intersection_topic: ""                                     # enter/exit circles
+    active_intersection_topic: ""                    # enter/exit circles
     intersection_enter_threshold: 5.0                # keep equal to road_and_gps_follower.yaml
     intersection_exit_threshold: 6.0
     planner_node: "/route_planner"                   # its parameters seed the Planner toggles ("" = off)

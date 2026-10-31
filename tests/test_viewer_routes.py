@@ -385,7 +385,7 @@ def test_restore_way(app_client_with_file):
         data=json.dumps({"category": "footway", "label": ""}),
         content_type="application/json",
     )
-    # Now restore
+    # Then restore
     resp = client.put(
         f"/api/ways/1/restore?file={filename}",
         data=json.dumps({}),
@@ -497,8 +497,8 @@ def _mapdata_way_ids(client, filename):
 
 
 def test_unsplit_way_segment_keeps_plain_id(app_client_3node):
-    # A single-way reload used to label an unsplit way "2:0"; deleting that layer
-    # stored a segment deletion the full load ignores, so the way came back.
+    # An unsplit way keeps its plain id, so deleting it is a way deletion
+    # the full map load honours.
     client, _, filename = app_client_3node
     seg = client.get(f"/api/ways/2/segments?file={filename}").get_json()["segments"]
     assert [f["properties"]["id"] for f in seg] == [2]

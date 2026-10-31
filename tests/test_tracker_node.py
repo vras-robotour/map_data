@@ -7,13 +7,20 @@ import time
 import pytest
 
 from map_data.viewer import ros_node
-from map_data.viewer.tracker_config import SETTINGS, TrackerConfigError, topic_type
+from map_data.viewer.tracker_config import HEADING_TYPES, SETTINGS, TrackerConfigError
 
 pytestmark = pytest.mark.skipif(
     not ros_node.ROS_AVAILABLE, reason="needs ROS 2 (rclpy, nav2_msgs, ...)"
 )
 
 TOPICS = [s.name for s in SETTINGS if s.name.endswith("_topic")]
+
+
+def topic_type(name, settings):
+    """Message type TrackerNode subscribes to setting ``name`` with."""
+    if name == "heading_topic":
+        return HEADING_TYPES.get(settings.get("heading_type", ""), "")
+    return next((s.msg_type for s in SETTINGS if s.name == name), "")
 
 
 @pytest.fixture

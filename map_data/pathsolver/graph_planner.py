@@ -1,9 +1,4 @@
-"""
-Graph-based path planning on OSM ways.
-
-This module provides the GraphPlanner class which builds a graph from
-OpenStreetMap ways and finds paths using Dijkstra or A*.
-"""
+"""Graph-based path planning with A* along OSM ways."""
 
 import itertools
 import logging
@@ -24,34 +19,22 @@ from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES, Way
 
 logger = logging.getLogger(__name__)
 
-#: Two consecutive route vertices closer than this (metres) are considered the
-#: same point and only the first is kept. Deliberately coarse: projections of a
-#: waypoint onto an edge and the edge's own nodes routinely land a few
-#: centimetres apart, which would otherwise show up as a cluster of stacked
-#: points in the exported route.
+#: Consecutive route vertices closer than this (m) are one point. Coarse on purpose:
+#: a waypoint's projection and the edge's own nodes often land centimetres apart.
 TOLERANCE = 0.05
 
-#: Longest out-and-back excursion (metres) that :func:`_drop_stacked_points`
-#: collapses. A waypoint snapping just past a junction makes the route leave
-#: that junction, touch the projection and come straight back; such spurs are
-#: sub-metre artefacts, while a genuine visit to a dead end is far longer and
-#: must be preserved. Real routes show a wide gap either side of this value
-#: (a 900 m park loop had spurs of 0.07-0.65 m and no other step below 7 m),
-#: so the exact figure is not delicate.
+#: Longest out-and-back excursion (m) that :func:`_drop_stacked_points` collapses.
+#: Snapping artefacts are sub-metre; a genuine dead-end visit is far longer, so the
+#: exact figure is not delicate.
 MAX_SPUR_LENGTH = 1.0
 
-#: Shortest final leg (metres) worth keeping for ``keep_goal``. A goal closer
-#: than this to its projection onto the network is already on the path as far
-#: as a waypoint follower is concerned, and appending it would only add a
-#: stacked point (see :func:`_drop_stacked_points`).
+#: Shortest final leg (m) worth appending for ``keep_goal``; a closer goal is
+#: already on the path for a waypoint follower.
 MIN_GOAL_LEG_LENGTH = 1.0
 
-#: Default maximum distance (in metres) between a waypoint and the nearest
-#: graph edge for the waypoint to be snapped onto the network. Deliberately
-#: generous — unlike annotation splicing (5 m), waypoints come from user
-#: clicks or GPS fixes that can legitimately sit well off the mapped network —
-#: while still rejecting waypoints that would otherwise snap to an arbitrarily
-#: distant, unrelated edge.
+#: Farthest (m) a waypoint may be from the nearest edge to be snapped onto it.
+#: Generous (annotation splicing uses 5 m): clicks and GPS fixes can sit well off
+#: the network, but must not snap to an unrelated distant edge.
 DEFAULT_MAX_SNAP_DISTANCE = 100.0
 
 if TYPE_CHECKING:
@@ -63,22 +46,13 @@ if TYPE_CHECKING:
 
 class GraphPlanner:
     """
-    Graph-based path planner that routes along the OSM road and footway network.
+    A* planner over an undirected graph of a map's footways and/or roads, in UTM.
 
-    Builds an undirected weighted graph from the ways stored in a
-    :class:`~map_data.map_data.MapData` instance. Manually annotated paths
-    (negative-ID ways) are spliced into the graph by projecting their
-    endpoints onto the nearest OSM edge, so annotations extend the
-    traversable network seamlessly.
-
-    Walkable areas (closed ``area=yes`` or multipolygon ways, e.g. pedestrian
-    squares) can be crossed rather than only walked around: A* may hop between
-    any two of an area's entries along the shortest path inside it (see
-    :mod:`map_data.pathsolver.walkable_area`), and a waypoint inside an area
-    stays where it is instead of snapping to its rim.
-
-    Planning is performed with A* (see :meth:`plan`). The planner operates
-    entirely in UTM coordinates.
+    Annotation ways (negative ids) are spliced in by projecting their loose ends
+    onto the nearest edge. Walkable areas (closed ``area=yes`` or multipolygon
+    ways) can be crossed: A* may hop between any two of an area's entries (see
+    :mod:`map_data.pathsolver.walkable_area`), and a waypoint inside an area is
+    not snapped to its rim.
     """
 
     def __init__(
@@ -93,45 +67,26 @@ class GraphPlanner:
         path_cost_cap: float | None = None,
     ) -> None:
         """
-        Initialize the graph planner.
+        Build the graph from *map_data*'s ways.
 
         Parameters
         ----------
-        map_data : MapData
-            Parsed map data containing the OSM ways and node cache.
         highway_types : list of str, optional
-            Way categories to include in the graph. Supported values are
-            ``"footway"`` and ``"road"``. Defaults to ``["footway"]``.
+            ``"footway"`` and/or ``"road"``. Defaults to ``["footway"]``.
         max_snap_distance : float
-            Maximum distance (metres) a waypoint passed to :meth:`plan` may
-            be from the nearest graph edge to be snapped onto it. Waypoints
-            farther than this fail the plan instead of snapping to an
-            arbitrarily distant edge
-            (default :data:`DEFAULT_MAX_SNAP_DISTANCE`).
+            A waypoint farther than this from every edge fails :meth:`plan`.
         exclude_highway : iterable of str
-            ``highway`` tag values never routed over, whatever their category
-            (default :data:`~map_data.utils.way.NON_ROUTABLE_HIGHWAY_VALUES`,
-            i.e. stairs). A map loaded through
-            :func:`~map_data.annotations.load_mapdata_with_annotations` has
-            them removed already; this filter also covers callers that pass a
-            raw :meth:`MapData.load` map.
+            ``highway`` values never routed over (stairs by default). Covers raw
+            :meth:`MapData.load` maps; annotated maps have them removed already.
         traversability : TraversabilityRules or str or Path, optional
-            Tag rules deciding which ways may be driven on at all and what
-            extra cost they carry (``None`` = the package's
-            ``config/traversability.yaml``, see
-            :mod:`map_data.traversability`). ``exclude_highway`` is folded into
-            them. Ways the rules reject are left out of the graph, again as a
-            safety net for raw maps.
+            Tag rules for which ways are drivable and their extra cost (``None`` =
+            ``config/traversability.yaml``). ``exclude_highway`` is folded in.
         highway_costs, surface_costs : mapping, optional
-            Cost per ``highway`` / ``surface`` tag value; ``None`` takes the
-            tables from ``config/planner_defaults.yaml``, the very ones the
-            grid planner uses (:mod:`map_data.pathsolver.way_cost`). An edge of
-            a way weighs ``length * (1 + way cost + rule cost)``, so a gravel
-            detour is taken only when it is enough shorter; the *reported*
-            route length stays geometric.
+            Tag cost tables shared with the grid planner (``None`` =
+            ``config/planner_defaults.yaml``). An edge weighs
+            ``length * (1 + way cost + rule cost)``; reported lengths stay geometric.
         path_cost_cap : float, optional
-            Upper bound of the ``highway`` + ``surface`` cost (``None`` = the
-            config value).
+            Upper bound of the ``highway`` + ``surface`` cost (``None`` = config).
 
         """
         self.map_data = map_data
@@ -200,8 +155,7 @@ class GraphPlanner:
             # annotation merge joins drawn paths by real nodes, map_data.annotations.join_ways).
             if tree:
                 for way in self._allowed_ways:
-                    # way.id >= 0 check fails if way.id is a string (virtual ID for split ways).
-                    # All split ways (strings) and OSM ways (positive ints) should be skipped here.
+                    # Only annotations (negative int ids) are spliced, not OSM or split ways.
                     if not isinstance(way.id, int) or way.id >= 0:
                         continue
                     if not way.nodes:
@@ -257,7 +211,7 @@ class GraphPlanner:
             target_nodes = way_nodes[way_idx]
             seg_splits.sort(key=lambda x: x[0], reverse=True)
             for segment_idx, s_list in seg_splits:
-                # Sort splits on this segment by distance from segment start
+                # Farthest first: each insert at segment_idx + 1 lands before the last.
                 s_list.sort(key=lambda x: x[0], reverse=True)
                 for _, proj_node_id, ann_node_id, dist_to_edge in s_list:
                     target_nodes.insert(segment_idx + 1, proj_node_id)
@@ -319,8 +273,8 @@ class GraphPlanner:
         for way, ring in candidates:
             # The outline comes from the nodes (a parsed map's way.line is buffered),
             # the holes from way.line, the only place they are kept.
-            # ponytail: a parsed map's holes are shrunk by half the buffer width
-            # (1.5 m for a footway); keep the unbuffered relation rings if that bites.
+            # shortcut: a parsed map's holes are shrunk by half the buffer width (1.5 m
+            # for a footway); keep the unbuffered relation rings if that bites.
             lines = getattr(way.line, "geoms", [way.line])
             holes = [r.coords for g in lines if isinstance(g, Polygon) for r in g.interiors]
             polygon = Polygon([self.nodes[n].ravel()[:2] for n in ring], holes)
@@ -431,10 +385,9 @@ class GraphPlanner:
         *positions* gives the world coordinate of the two temporary snapped
         nodes (everything else resolves through :attr:`nodes`); *extra_adj*
         gives their (and their edge endpoints') extra adjacency, and
-        *extra_via* the geometry of those extra hops that cross an area. Kept
-        as plain dicts rather than one mixing them under string/int keys, so
-        none needs a cast to satisfy the type checker. Besides the graph's own
-        edges, an entry of a walkable area neighbours the area's other entries.
+        *extra_via* the geometry of those extra hops that cross an area. Besides
+        the graph's own edges, an entry of a walkable area neighbours the area's
+        other entries.
         """
 
         def get_pos(node: int | str) -> np.ndarray:
@@ -490,43 +443,26 @@ class GraphPlanner:
         keep_goal: bool = False,
     ) -> np.ndarray | None:
         """
-        Plan a path through a sequence of UTM waypoints along the graph.
+        Route through ``(N, 2)`` UTM waypoints, each consecutive pair independently.
 
-        Each consecutive pair of waypoints is routed independently. The
-        waypoints are snapped to the nearest graph edge before planning,
-        so they do not need to lie exactly on the network; the returned
-        route consists of on-network points only, the requested waypoints
-        being represented by their projections rather than repeated
-        verbatim (see :func:`_drop_stacked_points`).
+        Waypoints are represented by their projections onto the network (or
+        themselves inside a walkable area), not repeated verbatim.
 
         Parameters
         ----------
-        path_utm : np.ndarray
-            Array of shape ``(N, 2)`` containing ``[x, y]`` UTM coordinates
-            of the desired waypoints, in order. At least two waypoints are
-            required.
         keep_start : bool
-            Prepend the first waypoint verbatim instead of starting the route
-            at its projection. For planning from the robot's own pose, where
-            the route has to begin where the robot actually is; the leading
-            off-network leg is then the robot's way onto the network. Only the
-            first waypoint is treated this way — doing it for a waypoint in
-            the middle of the route would produce a spur out to it and back.
+            Prepend the first waypoint verbatim, for planning from the robot's
+            own pose. Only the first: a middle waypoint would become a spur.
         keep_goal : bool
-            Append the last waypoint verbatim after its projection, so the
-            route ends at the requested coordinate rather than
-            :attr:`max_snap_distance` metres short of it. The final,
-            off-network leg is skipped when the projection is already within
-            :data:`MIN_GOAL_LEG_LENGTH` of the goal.
+            Append the last waypoint verbatim unless its projection is within
+            :data:`MIN_GOAL_LEG_LENGTH` of it.
 
         Returns
         -------
         np.ndarray or None
-            Concatenated path as an ``(M, 2)`` UTM coordinate array with
-            coincident vertices and sub-metre spurs removed, or
-            ``None`` if fewer than two waypoints were given, a waypoint is
-            farther than :attr:`max_snap_distance` from the network, or any
-            segment could not be routed.
+            ``(M, 2)`` path without stacked points or short spurs, or ``None`` if
+            fewer than two waypoints were given, a waypoint is beyond
+            :attr:`max_snap_distance`, or a leg could not be routed.
 
         """
         if len(path_utm) < 2:
@@ -546,9 +482,7 @@ class GraphPlanner:
                 id_g: np.asarray(path_utm[i + 1], dtype=float)[:2],
             }
 
-            # Positions, adjacency and crossing geometry of the two temporary
-            # nodes, kept in separate dicts (rather than one mixing them under
-            # string/int keys) so none needs a cast to satisfy the type checker.
+            # Separate dicts, not one keyed by str and int, so none needs a cast for mypy.
             positions: dict[int | str, np.ndarray] = {}
             extra_adj: dict[int | str, list[tuple[int | str, float]]] = {}
             extra_via: dict[tuple[int | str, int | str], list[np.ndarray]] = {}

@@ -35,7 +35,7 @@ def test_way_serialization():
 
 
 def test_way_from_dict_missing_keys_uses_defaults():
-    """A way stored by an older format version lacks the newer keys."""
+    """A way dict without the optional keys loads with their defaults."""
     way = way_from_dict({"id": 7})
 
     assert way.id == 7

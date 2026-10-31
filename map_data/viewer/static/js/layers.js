@@ -175,8 +175,8 @@ function updateWayWithSegments(originalWayId, segments) {
         const layerGroup = geoLayers[cat];
         if (!layerGroup) return;
 
-        // Check if ID matches original or starts with "original:". Hidden or
-        // filtered-out layers are only in subtypeLayers, so search both.
+        // Match the way and its "<id>:n" segments. Hidden or filtered-out
+        // layers are only in subtypeLayers, so search both.
         const toRemove = new Set();
         const match = l => {
             const sid = String(l._featureId || '');
@@ -207,10 +207,7 @@ function updateWayWithSegments(originalWayId, segments) {
 }
 
 // ── Annotation-store metadata parsing ───────────────────────────────────────
-// The /api/annotations response is parsed into deletedWays/deletedNodes/
-// tagOverrides/hiddenWays/changeLog the same way everywhere it's consumed
-// (initial load, a metadata-only refresh, or a single-way reload) — this is
-// that shared parsing, applied directly to the matching globals.
+// Shared by initial load, metadata refresh and single-way reload.
 
 function _parseWayList(list) {
     return (list || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
@@ -225,7 +222,7 @@ function _parseDeletedNodes(dn) {
 function _parseTagOverrides(annData) {
     const tagOvMap = annData.tag_overrides || {};
     const tagOvMeta = annData.tag_override_meta || {};
-    // Use string keys downstream: server stores tag ids as strings, tagOverrides.id is a number (+sid)
+    // Server keys overrides by string way id; tagOverrides.id is numeric, so compare via String(id).
     return Object.entries(tagOvMap).map(([sid, tags]) => ({
         id: +sid,
         category: tagOvMeta[sid]?.category || 'unknown',
@@ -273,10 +270,9 @@ function _buildChangeLog(annData, deletedWaysList, deletedNodesList, tagOverride
     ];
 }
 
-// Parses deleted/hidden ways & nodes, tag overrides, and (unless
-// `withChangeLog` is false) the change log out of an /api/annotations
-// response into the matching globals. Does not touch `annotations` itself —
-// callers that need it set it (and call snapshotAnnBaselines()) separately.
+// Parses an /api/annotations response into deletedWays/deletedNodes/
+// tagOverrides/hiddenWays (and changeLog unless `withChangeLog` is false).
+// Leaves `annotations` alone; see applyAnn.
 function applyAnnData(annData, { withChangeLog = true } = {}) {
     deletedWays = _parseWayList(annData.deleted_ways);
     deletedNodes = _parseDeletedNodes(annData.deleted_nodes);
@@ -334,7 +330,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         });
 
         // Pre-compute hidden way IDs before building layers
-        const _loadHiddenIds = new Set(_parseWayList(annData.hidden_ways).map(d => String(d.id).split(':')[0]));
+        const hiddenIds = new Set(_parseWayList(annData.hidden_ways).map(d => String(d.id).split(':')[0]));
 
         // Reset subtype state for fresh load
         ['road', 'footway', 'barrier', 'crossroad'].forEach(cat => {
@@ -360,13 +356,13 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
             };
 
             geoLayers[cat] = L.geoJSON({ type: 'FeatureCollection', features }, layerOpts);
-            if (_loadHiddenIds.size > 0) {
-                const _toHide = [];
+            if (hiddenIds.size > 0) {
+                const toHide = [];
                 geoLayers[cat].eachLayer(l => {
                     const origId = String(l._featureId).split(':')[0];
-                    if (_loadHiddenIds.has(origId) || _loadHiddenIds.has(String(l._featureId))) _toHide.push(l);
+                    if (hiddenIds.has(origId) || hiddenIds.has(String(l._featureId))) toHide.push(l);
                 });
-                _toHide.forEach(l => geoLayers[cat].removeLayer(l));
+                toHide.forEach(l => geoLayers[cat].removeLayer(l));
             }
             const cb = document.querySelector(`[data-layer="${cat}"]`);
             if (cb && cb.checked) geoLayers[cat].addTo(map);
@@ -421,7 +417,6 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
 
 function clearMapData() {
     deselectCurrent();
-    clearNodes();
     if (plannerMode) plannerMode.clearAll();
 
     if (geoLayers.costGrid) {
@@ -478,9 +473,8 @@ function clearMapData() {
 async function _reloadWay(wayId) {
     if (!currentFile) return;
 
-    // Always use the segments endpoint so that split segments are removed and
-    // re-added atomically — the old non-split path used strict id equality which
-    // failed to remove virtual "id:n" layers when the original numeric id was given.
+    // Reload via the segments endpoint so all "<id>:n" segment layers of a
+    // split way are replaced together.
     const originalWayId = String(wayId).split(':')[0];
 
     try {
@@ -491,7 +485,7 @@ async function _reloadWay(wayId) {
         clearNodes();
         await _refreshAnnotationsState();
 
-        // Try the exact id first, then the bare original id, then any segment
+        // Try the exact id, then the original id, then its first ten segments
         let reselected = _reselectFeature(wayId);
         if (!reselected) reselected = _reselectFeature(originalWayId);
         if (!reselected) {

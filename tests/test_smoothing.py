@@ -81,7 +81,7 @@ def test_smooth_partial_collision_returns_best_intermediate():
 
 
 def test_smooth_3d_path_only_xy_smoothed():
-    """Z column passes through unchanged (endpoints fix it, interior untouched by smoothing)."""
+    """A 3D path smooths without error and keeps its endpoints."""
     n = 6
     path = np.column_stack([np.linspace(0, 5, n), np.ones(n) * 2.0, np.linspace(0, 10, n)])
     result = smooth_path(path)
@@ -112,7 +112,7 @@ def test_smooth_collision_check_receives_linesting():
 
 
 def _smooth_path_scalar(path, weight_data=0.5, weight_smooth=0.3, tolerance=0.001):
-    """Reference scalar Gauss-Seidel implementation (the pre-vectorisation behaviour)."""
+    """Reference scalar Gauss-Seidel implementation."""
     new_path = np.copy(path)
     change = tolerance
     while change >= tolerance:

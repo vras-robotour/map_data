@@ -29,8 +29,8 @@ function _applyDeltaInPlace(lls, orig, dlat, dlng) {
 }
 
 function escHtml(s) {
-    // textContent -> innerHTML escapes &, <, > but not quotes; the two fixups
-    // keep attribute values (value="${escHtml(v)}") safe as before.
+    // textContent -> innerHTML escapes &, <, > but not quotes; the quote
+    // replacements make the result safe inside attribute values too.
     if (s === null || s === undefined) return '';
     return Object.assign(document.createElement('span'), { textContent: String(s) }).innerHTML
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -52,12 +52,10 @@ function kvRow(cls, k = '', v = '') {
 }
 
 // ── CSRF header on same-origin API calls ─────────────────────────────────────
-// When the server runs with MAP_DATA_ACCESS_TOKEN set, cookie-authenticated
-// state-changing requests must also carry a custom header as CSRF proof
-// (cross-site pages can't set custom headers without a CORS preflight, which
-// the server never grants). Wrapping fetch here covers every API call site in
-// one place; cross-origin URLs (e.g. tile/CDN hosts) are left untouched so
-// they don't suddenly require a preflight.
+// With MAP_DATA_ACCESS_TOKEN set, the server requires a custom header on
+// cookie-authenticated state-changing requests as CSRF proof (cross-site pages
+// can't set one without a CORS preflight, which the server never grants).
+// Cross-origin URLs (tile/CDN hosts) are left alone so they need no preflight.
 const _rawFetch = window.fetch.bind(window);
 window.fetch = function (input, init) {
     if (typeof input === 'string' || input instanceof URL) {
@@ -120,10 +118,9 @@ function _layerBaseStyle(layer) {
     return _annStyle(ann || {});
 }
 
-// Builds a visible circle-marker handle plus a larger transparent hit-target
-// marker at the same point, both wired to the same mousedown handler and
-// hover cursor — the pattern every draggable vertex/midpoint/node handle uses.
-// Returns [visible, hit]; the caller adds both to whatever layer group it uses.
+// Visible circle-marker handle plus a larger transparent hit target at the same
+// point, sharing the mousedown handler and cursor. Returns [visible, hit]; the
+// caller adds both to its layer group.
 function makeHandle(latlng, style, hitRadius, cursor, onDown) {
     const visible = L.circleMarker(latlng, { bubblingMouseEvents: false, renderer: L.svg(), ...style });
     visible.on('mousedown', onDown);
@@ -139,9 +136,8 @@ function makeHandle(latlng, style, hitRadius, cursor, onDown) {
     return [visible, hit];
 }
 
-// Opens a Leaflet popup styled as a small context menu at `latlng`, with one
-// button per [label, onClick] entry. The popup is closed before the handler
-// runs, same as every context menu in the app already did by hand.
+// Context-menu popup at `latlng` with one button per [label, onClick] entry;
+// the popup is closed before the handler runs.
 function showMenu(latlng, entries, { minWidth = 150 } = {}) {
     const container = document.createElement('div');
     container.className = 'context-menu';

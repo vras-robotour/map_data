@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 
 def process_map_data(file_name: str, *, download: bool, use_cache: bool = False) -> None:
     """
-    Process map data based on command-line arguments.
+    Download and parse (*download*) or re-save the ``.mapdata`` of *file_name*.
+
+    *file_name* is a path, or a name in the package's ``data/`` directory.
     """
-    # Try to use file_name as a direct path first
     p = Path(file_name)
     if p.exists():
         full_path = p.resolve()
     else:
-        # Fallback to the package share directory (ROS2) or the repo data directory
         full_path = package_share("data") / file_name
         if not full_path.exists():
             logger.error("File '%s' not found", file_name)

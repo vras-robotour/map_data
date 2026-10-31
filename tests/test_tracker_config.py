@@ -13,7 +13,6 @@ from map_data.viewer.tracker_config import (
     load_tracker_config,
     node_parameters,
     save_tracker_config,
-    topic_type,
     validate_settings,
 )
 
@@ -134,11 +133,6 @@ class TestValidateSettings:
     def test_rejects(self, values):
         with pytest.raises(TrackerConfigError):
             validate_settings(values)
-
-
-def test_heading_topic_type_follows_heading_type():
-    assert topic_type("heading_topic", {"heading_type": "odometry"}) == "nav_msgs/msg/Odometry"
-    assert topic_type("gps_fix_topic", {}) == "sensor_msgs/msg/NavSatFix"
 
 
 def test_split_comment():

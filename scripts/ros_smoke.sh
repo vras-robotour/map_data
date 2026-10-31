@@ -4,7 +4,7 @@
 # Starts route_planner, osm_cloud and map_data_viewer on demo/buchlovice.mapdata in a private
 # ROS domain, then checks the node list, the latched /grid cloud, one PlanRoute goal, the
 # viewer's HTTP endpoints and that each process exits with code 0 on SIGINT.
-# Exits non-zero on the first failed check (all checks still run).
+# Exits non-zero if any check fails (all checks run).
 #
 # Usage (map_data and map_data_interfaces built and sourced):
 #   bash scripts/ros_smoke.sh

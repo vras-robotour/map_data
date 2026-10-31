@@ -15,20 +15,15 @@ def smooth_path(
     Gradient descent path smoothing.
 
     Each sweep is a vectorised Jacobi update: every interior point is relaxed from the
-    *previous* sweep's neighbours at once. The original scalar loop was Gauss-Seidel
-    (it read the already-updated ``i - 1`` point within the same sweep), which converges
-    in fewer sweeps but cannot be vectorised. Both schemes share the same fixed point, so
-    the returned path is unchanged up to the convergence tolerance; Jacobi just needs
-    roughly two to three times as many (far cheaper) sweeps to get there, which also means
-    ``collision_check_func`` is called correspondingly more often.
+    *previous* sweep's neighbours at once. ``collision_check_func`` is called once per sweep.
 
     Parameters
     ----------
     path : np.ndarray
         The path to smooth as an (N, 2) or (N, 3) array.
     collision_check_func : callable, optional
-        A function that takes a LineString and returns True if it collides with obstacles.
-        If provided, smoothing will revert to the original path if a collision is detected.
+        Returns True if the LineString collides. On a collision the last
+        collision-free sweep is returned.
     weight_data : float
         How much to weigh the original path points.
     weight_smooth : float
@@ -46,15 +41,12 @@ def smooth_path(
     best_path = path  # original is assumed collision-free
     change = tolerance
     while change >= tolerance:
-        # Slices of the interior points and of their two neighbours. For paths shorter
-        # than three points these are all empty, so the sweep is a no-op and the loop
-        # exits immediately -- matching the scalar `range(1, len(path) - 1)`.
+        # Paths shorter than three points have no interior: the sweep is a no-op.
         interior = new_path[1:-1]
         delta = weight_data * (path[1:-1] - interior) + weight_smooth * (
             new_path[:-2] + new_path[2:] - 2.0 * interior
         )
-        # Assign rather than `+=` so an integer input path keeps the scalar version's
-        # silent truncation instead of raising on the in-place float cast.
+        # Assign rather than `+=`: an integer path truncates instead of raising on the float cast.
         new_path[1:-1] = interior + delta
         change = float(np.abs(delta).sum())
 

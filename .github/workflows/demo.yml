@@ -26,8 +26,7 @@ permissions:
   contents: read
 
 concurrency:
-  # PR runs never touch gh-pages, so they get their own group instead of
-  # serialising behind (and blocking) the docs/demo deploys.
+  # PR runs never deploy, so they do not queue behind the gh-pages deploys.
   group: ${{ github.event_name == 'pull_request' && format('demo-smoke-{0}', github.ref) || 'gh-pages' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 

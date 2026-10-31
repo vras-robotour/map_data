@@ -33,8 +33,8 @@ route_planner:
     # Tag rules deciding which ways the robot may drive on at all (stairs, grass, bridges,
     # tunnels, ...) and what an awkward one costs extra: an absolute path, or "" for the
     # package's config/traversability.yaml, which is the file to edit. Edits are
-    # picked up by the next goal (osm_cloud needs a restart). osm_cloud must be given the same file, or
-    # it publishes intersection rings on ways the planner refuses.
+    # picked up by the next goal (osm_cloud needs a restart). osm_cloud must be given the
+    # same file, or it publishes intersection rings on ways the planner refuses.
     # The launch argument is traversability:=<file>.
     traversability_file: ""
     # Load the map and build its graph at startup (~0.3 s) instead of on the first goal.
@@ -57,7 +57,7 @@ route_planner:
     goal_max_snap_distance: 30.0
     # A start or goal farther than this (m) outside the map's area fails with
     # start_outside_map / goal_outside_map: usually the wrong map file (or a code for
-    # another map). The robot may start just past the edge (Stromovka 2026-09-08: 33 m).
+    # another map). The robot may start just past the edge.
     outside_map_tolerance: 100.0
     # End the route at the goal coordinate itself, appended after its projection, so a
     # goal off the mapped network is reached instead of missed by the snap distance.

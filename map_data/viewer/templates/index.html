@@ -110,7 +110,7 @@
            ] %}
         <details>
           <summary class="layer-row">
-            <input type="checkbox" class="st-check" data-layer="{{ layer }}" id="layer-cb-{{ layer }}" checked aria-label="{{ label }}" onclick="event.stopPropagation()">
+            <input type="checkbox" class="st-check" data-layer="{{ layer }}" checked aria-label="{{ label }}" onclick="event.stopPropagation()">
             <div class="layer-swatch" style="{{ swatch }}"></div>
             <span>{{ label }}</span>
             <span class="subtype-btn"></span>
@@ -121,21 +121,21 @@
 
         <!-- Crossroads -->
         <div class="layer-row" role="button" tabindex="0">
-          <input type="checkbox" class="st-check" data-layer="crossroad" id="layer-cb-crossroad" checked aria-label="Crossroads">
+          <input type="checkbox" class="st-check" data-layer="crossroad" checked aria-label="Crossroads">
           <div class="layer-swatch" style="background:#9333ea; border:1px solid #7e22ce; border-radius:50%;"></div>
           <span>Crossroads</span>
         </div>
 
         <!-- Annotation -->
         <div class="layer-row" role="button" tabindex="0">
-          <input type="checkbox" class="st-check" data-layer="annotation" id="layer-cb-annotation" checked aria-label="Annotations">
+          <input type="checkbox" class="st-check" data-layer="annotation" checked aria-label="Annotations">
           <div class="layer-swatch" style="background:#ff8c00; border:1px solid #cc5500;"></div>
           <span>Annotations</span>
         </div>
 
         <!-- Waypoints -->
         <div class="layer-row" role="button" tabindex="0">
-          <input type="checkbox" class="st-check" data-layer="waypoint" id="layer-cb-waypoint" aria-label="Waypoints">
+          <input type="checkbox" class="st-check" data-layer="waypoint" aria-label="Waypoints">
           <div class="layer-swatch" style="background:#50C2F6; border:1px solid #000;"></div>
           <span>Waypoints</span>
         </div>
@@ -143,7 +143,7 @@
         {% if ros_available %}
         <!-- Robot -->
         <div class="layer-row" role="button" tabindex="0">
-          <input type="checkbox" class="st-check" data-layer="robot" id="layer-cb-robot" checked aria-label="Robot">
+          <input type="checkbox" class="st-check" data-layer="robot" checked aria-label="Robot">
           <div class="layer-swatch" style="background:#00ff00; border:1px solid #000;"></div>
           <span>Robot</span>
         </div>
@@ -346,7 +346,7 @@
               <div id="tsi-teleop" class="text-warning fw-bold" hidden>TELEOP ACTIVE</div>
             </div>
           </div>
-          <div id="tsi-legend" class="mb-3">
+          <div class="mb-3">
             <div class="panel-title mb-1" style="font-size:0.6rem;">MAP LEGEND</div>
             <div class="small" style="line-height:1.5">
               <div id="tsi-leg-robot">Robot (heading arrow, greyed = stale fix)</div>
@@ -374,7 +374,7 @@
           <h6 class="bottom-panel-title">ANNOTATIONS <span id="ann-count"></span></h6>
           <span class="panel-toggle-icon"></span>
         </summary>
-        <div id="ann-body" class="bottom-panel-body">
+        <div class="bottom-panel-body">
           <div id="ann-list"></div>
         </div>
       </details>
@@ -384,7 +384,7 @@
           <h6 class="bottom-panel-title">CHANGES <span id="changes-count"></span></h6>
           <span class="panel-toggle-icon"></span>
         </summary>
-        <div id="changes-body" class="bottom-panel-body">
+        <div class="bottom-panel-body">
           <div id="changes-list"></div>
         </div>
       </details>
@@ -394,7 +394,7 @@
           <h6 class="bottom-panel-title">HIDDEN <span id="hidden-count"></span></h6>
           <span class="panel-toggle-icon"></span>
         </summary>
-        <div id="hidden-body" class="bottom-panel-body">
+        <div class="bottom-panel-body">
           <div id="hidden-list"></div>
         </div>
       </details>
@@ -484,9 +484,7 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
       </div>
-      <!-- The code is an SVG (sharp at any size); the caption is real text
-           underneath rather than pixels baked into the image, which went
-           blocky once the code was scaled up to fill the screen. -->
+      <!-- SVG code plus a real-text caption, both sharp at any size. -->
       <div class="modal-body d-flex flex-column align-items-center justify-content-center p-2 gap-3">
         <img id="qr-modal-img" alt="QR code" style="height:70vh; max-width:95vw;">
         <div id="qr-modal-caption" class="font-monospace text-nowrap" style="font-size:3.5vh;"></div>

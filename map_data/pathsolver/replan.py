@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import logging
 import random
 import threading
@@ -22,8 +20,6 @@ from map_data.pathsolver.way_cost import load_cost_tables
 from map_data.utils.config import load_config
 
 from .grid_constructor import PathGrid
-
-# Decoupled components
 from .smoothing import smooth_path
 
 if TYPE_CHECKING:
@@ -126,42 +122,34 @@ class ReplanPath:
             grid_cost_weight if grid_cost_weight is not None else grid["grid_cost_weight"]
         )
 
-        # The highway/surface cost tables and their cap are the one place that
-        # already knows how to fall back to config/planner_defaults.yaml
-        # (map_data.pathsolver.way_cost, shared with the graph planner) — don't
-        # re-derive them here.
-        self.HIGHWAY_COSTS, self.SURFACE_COSTS, self.PATH_COST_CAP = load_cost_tables(
+        # Shared with the graph planner, so both price a way alike.
+        self.highway_costs, self.surface_costs, self.path_cost_cap = load_cost_tables(
             highway_costs,
             surface_costs,
         )
-        self.DEFAULT_OFF_PATH_COST = float(defaults.get("default_off_path_cost", 0.9))
+        self.default_off_path_cost = float(defaults.get("default_off_path_cost", 0.9))
 
-        # RRT* settings: informed sampling and post-goal improvement are on by
-        # default in production (see RRTStar.find_path), capped by improve_iter.
+        # Informed sampling and post-goal improvement default on here (off in RRTStar).
         rrt_defaults = defaults.get("rrt", {})
         self.rrt_informed = bool(rrt_defaults.get("informed", True))
         self.rrt_improve_after_goal = bool(rrt_defaults.get("improve_after_goal", True))
         self.rrt_improve_iter = int(rrt_defaults.get("improve_iter", 200))
         self.rrt_adaptive_radius = bool(rrt_defaults.get("adaptive_radius", True))
-        # Random source handed to every RRTStar this replanner builds. Callers
-        # that need a reproducible run pass their own; otherwise an `rrt.seed`
-        # in planner_defaults.yaml makes runs repeatable without code changes
-        # (e.g. to reproduce a planning failure reported from the viewer), and
-        # with neither each planner keeps its own unseeded stream.
+        # Shared by every RRTStar built here: an explicit rng, else `rrt.seed` from
+        # planner_defaults.yaml, else None (each planner keeps an unseeded stream).
         rrt_seed = rrt_defaults.get("seed")
         if rng is None and rrt_seed is not None:
             rng = random.Random(rrt_seed)
         self.rrt_rng = rng
 
-        # Use the decoupled PathGrid component
         self.path_grid = PathGrid(
             low=low,
             high=high,
             cell_size=cell_size,
-            highway_costs=self.HIGHWAY_COSTS,
-            surface_costs=self.SURFACE_COSTS,
-            default_off_path_cost=self.DEFAULT_OFF_PATH_COST,
-            path_cost_cap=self.PATH_COST_CAP,
+            highway_costs=self.highway_costs,
+            surface_costs=self.surface_costs,
+            default_off_path_cost=self.default_off_path_cost,
+            path_cost_cap=self.path_cost_cap,
         )
 
         if inflate_obstacles:
@@ -186,7 +174,7 @@ class ReplanPath:
         # consumed on exit either way.
         self.failure_reason = None
         try:
-            # This is pure-Python, GIL-bound work, so it runs sequentially.
+            # Legs run sequentially: the work is GIL-bound, threads would not help.
             new_path: list[np.ndarray] = []
             for i in range(len(path) - 1):
                 if self._cancelled():
@@ -196,7 +184,7 @@ class ReplanPath:
                 goal = path[i + 1][:2]
                 segment_path = [start]
                 path_seg = LineString([start, goal])
-                if self._colides(path_seg):
+                if self._collides(path_seg):
                     ends = self._free_ends(start, goal)
                     if ends is None:
                         logger.warning("leg %d: %s", i, self.failure_reason)
@@ -220,9 +208,9 @@ class ReplanPath:
                     # first/last vertex where the hop from the requested point would
                     # otherwise cross an obstacle.
                     mid = list(way[1:-1])
-                    if self._colides(LineString([start, mid[0] if mid else way[-1]])):
+                    if self._collides(LineString([start, mid[0] if mid else way[-1]])):
                         mid.insert(0, way[0])
-                    if self._colides(LineString([mid[-1] if mid else start, goal])):
+                    if self._collides(LineString([mid[-1] if mid else start, goal])):
                         mid.append(way[-1])
                     segment_path.extend(mid)
 
@@ -287,20 +275,15 @@ class ReplanPath:
 
         # 2. Smooth path if requested
         if self.smooth_path:
-            path = smooth_path(path, collision_check_func=self._colides)
+            path = smooth_path(path, collision_check_func=self._collides)
 
-        # 3. Final Douglas-Peucker simplification on the whole path. This is
-        #    the *only* simplification pass (grid_astar and RRTStar hand back
-        #    their raw paths): running it once here, over the whole assembled
-        #    route, does what per-segment simplification did twice already.
-        #    Every shortcut the simplification introduces is collision-checked
-        #    against the obstacle polygons; colliding shortcuts keep their
-        #    original vertices so the path cannot chord into an obstacle.
+        # 3. The only simplification pass (grid_astar and RRTStar return raw paths).
+        #    A shortcut that hits an obstacle polygon keeps its original vertices.
         if self.simplify_path:
             path = simplify_path_checked(
                 path,
                 self.cell_size,
-                lambda p1, p2: self._colides(LineString([p1, p2])),
+                lambda p1, p2: self._collides(LineString([p1, p2])),
             )
 
         return path
@@ -341,13 +324,12 @@ class ReplanPath:
             goal,
             self.low,
             self.cell_size,
-            # The final pass in _post_process_path is the only simplification;
-            # doing it again per segment here would just redo that work.
+            # _post_process_path simplifies the whole route once.
             simplify_path=False,
             grid_cost_weight=self.grid_cost_weight,
         )
 
-    def _colides(self, path_seg: LineString) -> bool:
+    def _collides(self, path_seg: LineString) -> bool:
         if self.obstacles_tree is None:
             return False
         intersecting_indices = self.obstacles_tree.query(path_seg, predicate="intersects")

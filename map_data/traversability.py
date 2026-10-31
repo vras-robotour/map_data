@@ -1,15 +1,10 @@
 """
 Decide from OSM tags which ways the robot may drive on.
 
-A ``.mapdata`` map is a faithful copy of OSM: it contains stairways, muddy
-shortcuts, boardwalks and tunnels, all tagged but none of them judged. This
-module turns those tags into a verdict — *drive here* / *never drive here* /
-*drive here reluctantly* — from a YAML rule file the operator edits
-(``config/traversability.yaml``), so a change of mind about, say, bridges is a
-one-line edit rather than a code change.
+Turns a way's tags into *drive here* / *never drive here* / *drive here
+reluctantly*, from the operator-edited rule file ``config/traversability.yaml``.
 
-The rules are used in three places, all of them through
-:class:`TraversabilityRules`:
+The rules are used through :class:`TraversabilityRules` by:
 
 * :func:`~map_data.annotations.load_mapdata_with_annotations` drops the
   non-traversable ways from the map at load time, so the route planner, the
@@ -288,17 +283,10 @@ class TraversabilityRules:
 
     def extend(self, exclude_highway: Iterable[str]) -> TraversabilityRules:
         """
-        Copy of these rules with ``highway`` values that are never traversable.
+        Copy of these rules that never traverses the *exclude_highway* values.
 
-        This is how the older ``exclude_highway`` parameter of the nodes, the
-        loader and the planner keeps working: its values become one deny rule
-        in front of everything else, so they win over any allow rule in the
-        file.
-
-        Parameters
-        ----------
-        exclude_highway : iterable of str
-            ``highway`` tag values to remove. Empty returns ``self``.
+        They become one deny rule in front of the others, so no allow rule in the
+        file overrides them. Empty *exclude_highway* returns ``self``.
 
         """
         values = tuple(sorted({str(v) for v in exclude_highway}))

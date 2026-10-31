@@ -1,5 +1,5 @@
-// Mirrors MAX_FETCH_AREA_KM2 in routes.py — server is authoritative, this just
-// gives immediate feedback instead of waiting on a round trip to find out.
+// Mirrors MAX_FETCH_AREA_KM2 in routes/common.py; the server is authoritative,
+// this only gives immediate feedback.
 const MAX_FETCH_AREA_KM2 = 25.0;
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -21,14 +21,14 @@ let deletedWays = [];            // [{id, category, label}, ...] from annotation
 let deletedNodes = [];            // [{way_id, node_id}, ...]        from annotations store
 let tagOverrides = [];            // [{id, category, label, tags}, ...] from annotations store
 let hiddenWays = [];            // [{id, category, label}, ...] from annotations store
-let changeLog = [];            // [{type:'way'|'node'|'tag', ...data}] in insertion order
-let redoStack = [];            // [{label, wayId, run}] forward replays for undone changeLog entries
+let changeLog = [];            // [{type:'way'|'node'|'tag'|'move'|'split'|'add_node', ...data}], oldest first
+let redoStack = [];            // [{type, label, wayId, run}] forward replays for undone changeLog entries
 let hiddenWayIds = new Set();     // Set<number> for O(1) lookup
 let plannerBlockedIds = new Set(); // way IDs the Paths-only planner won't use, hidden in planner mode
 let editSelectedLayer = null;   // annotation layer selected in edit mode
 let annVertexLayer = null;      // LayerGroup for annotation vertex/midpoint markers in edit mode
-let annVertexMarkers_ann = [];   // vertex circle markers for the selected annotation
-let annMidpointMarkers_ann = []; // midpoint markers for the selected annotation
+let annVertexMarkers = [];   // vertex circle markers for the selected annotation
+let annMidpointMarkers = []; // midpoint markers for the selected annotation
 let osmEditLayer = null;    // OSM way layer currently set up for drag editing
 let osmDragGhost = null;    // invisible thick SVG layer for reliable way mousedown
 let pathLineDraw = null;       // L.Draw.Polyline handler for path mode
