@@ -22,6 +22,7 @@ class PlannerMode {
         this.dragPoint = null;     // waypoint being dragged, see _onWpDragMove
         this.hasPlannedPath = false;
         this._costGridToken = 0;
+        this._blockedToken = 0;
 
         this.init();
     }
@@ -280,13 +281,16 @@ class PlannerMode {
     }
 
     async refreshBlocked() {
+        const token = ++this._blockedToken;
         plannerBlockedIds = new Set();
         if (document.getElementById('planner-hide-blocked').checked && currentFile && !STATIC_BASE) {
             try {
                 const blocked = await this._fetchBlocked(this.rulesYaml);
+                if (token !== this._blockedToken) return;
                 plannerBlockedIds = new Set(blocked.map(([id]) => id));
                 setStatus(`Hiding ${blocked.length} ways the planner won't use`, 'text-info');
             } catch (err) {
+                if (token !== this._blockedToken) return;
                 setStatus(`Failed to evaluate rules: ${err.message}`, 'text-danger');
             }
         }
