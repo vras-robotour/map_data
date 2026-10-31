@@ -118,17 +118,23 @@ function _layerBaseStyle(layer) {
     return _annStyle(ann || {});
 }
 
+// One SVG renderer shared by every handle and the way-drag ghost: a renderer per marker meant two
+// extra <svg> elements per node. Layers keep their add order inside it, so the ghost (added first)
+// stays under the node handles.
+let _handleRenderer = null;
+function handleRenderer() { return _handleRenderer ??= L.svg(); }
+
 // Visible circle-marker handle plus a larger transparent hit target at the same
 // point, sharing the mousedown handler and cursor. Returns [visible, hit]; the
 // caller adds both to its layer group.
 function makeHandle(latlng, style, hitRadius, cursor, onDown) {
-    const visible = L.circleMarker(latlng, { bubblingMouseEvents: false, renderer: L.svg(), ...style });
+    const visible = L.circleMarker(latlng, { bubblingMouseEvents: false, renderer: handleRenderer(), ...style });
     visible.on('mousedown', onDown);
     visible.on('add', () => { const el = visible.getElement(); if (el) el.style.cursor = cursor; });
 
     const hit = L.circleMarker(latlng, {
         radius: hitRadius, fillOpacity: 0, opacity: 0,
-        bubblingMouseEvents: false, renderer: L.svg(), interactive: true,
+        bubblingMouseEvents: false, renderer: handleRenderer(), interactive: true,
     });
     hit.on('mousedown', onDown);
     hit.on('add', () => { const el = hit.getElement(); if (el) el.style.cursor = cursor; });

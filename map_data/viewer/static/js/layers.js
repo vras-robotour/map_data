@@ -318,8 +318,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
     redoStack = [];
 
     try {
-        const geojson = await fetchMapData(filename);
-        const annData = await fetchAnnotations(filename);
+        const [geojson, annData] = await Promise.all([fetchMapData(filename), fetchAnnotations(filename)]);
         if (token !== _mapDataToken) return;
 
         const oldGeoLayers = { ...geoLayers };
@@ -346,6 +345,15 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         Object.values(oldGeoLayers).forEach(l => l && map.removeLayer(l));
         drawnItems.clearLayers();
         document.getElementById('planner-show-grid').checked = false; // its overlay was just removed
+
+        // Fit before the layers go on the map, so each is projected once, not at the old zoom and again here.
+        if (!preserveView) {
+            const bounds = L.latLngBounds([]);
+            const walk = c => typeof c[0] === 'number' ? bounds.extend([c[1], c[0]]) : c.forEach(walk);
+            [...byCategory.road, ...byCategory.footway, ...byCategory.waypoint]
+                .forEach(f => walk(f.geometry.coordinates));
+            if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
+        }
 
         ['road', 'footway', 'barrier', 'crossroad'].forEach(cat => {
             const features = cat === 'barrier'
@@ -396,16 +404,6 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         );
         const wpCb = document.querySelector(`[data-layer="waypoint"]`);
         if (wpCb && wpCb.checked) geoLayers.waypoint.addTo(map);
-
-        if (!preserveView) {
-            const allFeatures = [...byCategory.road, ...byCategory.footway, ...byCategory.waypoint];
-            if (allFeatures.length > 0) {
-                map.fitBounds(
-                    L.geoJSON({ type: 'FeatureCollection', features: allFeatures }).getBounds(),
-                    { padding: [20, 20] }
-                );
-            }
-        }
 
         applyAnn(annData);
 
