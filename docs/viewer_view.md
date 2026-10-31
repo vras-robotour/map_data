@@ -5,86 +5,91 @@ and edit parsed map features, manage layer visibility, and draw manual annotatio
 
 ## Toolbar
 
-The toolbar at the top of the page provides the following tools:
-
 | Tool | Shortcut | Action |
 |------|:--------:|--------|
-| **VIEW** | `v` | Inspect map features. Click any object to see its OSM tags and properties in the sidebar. |
-| **EDIT** | `e` | Select and reshape existing objects and custom annotations. |
-| **+ OBS** | `a` | Draw rectangles, polygons, or circles to add manual obstacle annotations. |
-| **+ PATH** | `p` | Draw custom paths or footways as line annotations. Where an annotated path crosses or ends on another way, a crossroad is created (exported and published by `osm_cloud`). |
-| **DEL** | `d` | Remove objects and custom annotations by clicking on them. |
-| **FETCH** | `f` | Draw a bounding box to download and parse a new OSM area on the fly. |
-| **GPX** | `g` | Upload a `.gpx` file to create a new map from a GPS track. |
-| **CLEAR** |  | Clear currently loaded data. |
+| **VIEW** | `v` | Inspect map features. Click any object to view its OSM tags and properties in the sidebar |
+| **EDIT** | `e` | Select and edit existing ways, nodes, and custom annotations |
+| **+ OBS** | `a` | Draw rectangles, polygons, or circles to add manual obstacle annotations |
+| **+ PATH** | `p` | Draw custom paths or footways as line annotations. Intersections with other ways form crossroads |
+| **DEL** | `d` | Remove objects and custom annotations by clicking on them |
+| **FETCH** | `f` | Draw a bounding box to download and parse a new OSM area (up to 25 km²) |
+| **GPX** | `g` | Upload a `.gpx` file to create a new map from a GPS track |
+| **CLEAR** | | Clear currently loaded map data |
 
-## Layers Panel
+### Keyboard shortcuts
 
-The sidebar shows a **Layers** panel with toggles for each feature category:
+Keyboard shortcuts operate when not typing into input fields or modals (and mutating actions are disabled in the read-only demo):
 
-| Layer | Colour | Description |
-|-------|--------|-------------|
-| Roads | Dark grey | Vehicle-intended ways from OSM |
+| Key | Action |
+|-----|--------|
+| `v` | Switch to View mode |
+| `e` | Switch to Edit mode |
+| `a` | Add obstacle annotation mode |
+| `p` | Add path annotation mode |
+| `d` | Delete mode |
+| `f` | Fetch OSM area mode |
+| `g` | Open GPX file picker |
+| `n` | Toggle display of way vertices (in View mode) |
+| `h` | Hide or unhide currently selected way (in View mode) |
+| `Escape` | Deselect current selection, or return to View mode |
+| `Delete` / `Backspace` | Delete selected annotation (Edit mode), or selected node/way (View mode) |
+| `Ctrl+Z` / `Cmd+Z` | Undo last change |
+| `Ctrl+Shift+Z` / `Ctrl+Y` / `Cmd+Shift+Z` | Redo last undone change |
+
+## Layers panel
+
+The sidebar **Layers** panel toggles visibility for each feature category:
+
+| Layer | Color | Description |
+|-------|-------|-------------|
+| Roads | Dark grey | Vehicle roads from OSM |
 | Footways | Yellow | Pedestrian paths |
-| Barriers | Red | Untraversable features (walls, buildings, fences, water…) |
+| Barriers | Red | Untraversable features (walls, buildings, fences, water) |
 | Crossroads | Purple | Detected footway intersection points |
 | Annotations | Orange | Manually drawn obstacles and paths |
-| Waypoints | Blue | GPX waypoints from the loaded file |
-| Robot | Green | Live robot position (visible when ROS2 is available) |
+| Waypoints | Blue | GPX waypoints from the loaded track |
+| Robot | Green | Live robot position (visible when ROS 2 is available) |
 
-First three categories also have an expandable sub-filter to toggle individual types.
-Use the **Search** box at the top of the Layers panel to filter features by OSM ID or name.
+A base-layer switcher in the bottom-left corner of the map toggles between standard
+**OpenStreetMap** tiles and **Satellite** imagery (Esri World Imagery). The choice is
+preserved across sessions.
 
-A base-layer switcher in the bottom-left corner of the map toggles between the standard
-**OpenStreetMap** tiles and **Satellite** imagery (Esri World Imagery) — useful for
-verifying annotation placement against aerial photos. The choice is remembered across sessions.
+## Properties panel
 
-## Properties Panel
+Clicking any feature in **VIEW** mode opens its properties in the sidebar, displaying
+its OSM tags, category, and geometry. When inspecting individual nodes, copy buttons next
+to latitude and longitude copy coordinates to the clipboard.
 
-Clicking any map feature in **VIEW** mode opens its properties in the **Properties** panel.
-The panel shows the feature's OSM tags, category, and geometry type. When inspecting
-individual nodes, the ⎘ buttons next to the latitude and longitude copy the value to
-the clipboard.
-In **VIEW** mode you can also open a feature's properties for editing via the context menu.
+## Annotation panels
 
-## Annotation Panels
+Three collapsible panels track manual edits:
 
-Three collapsible panels at the bottom of the sidebar track the state of manual edits:
+- **Annotations** — list of drawn obstacles and paths. Revert buttons restore individual geometries.
+- **Changes** — features modified since load (tag edits, node moves, splits, additions, deletions). Each entry supports revert; `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo edits sequentially.
+- **Hidden** — features hidden from the map via the context menu or `h` key.
 
-- **Annotations** — list of all drawn obstacles and paths. The ↺ button reverts an
-  annotation's geometry to the state it had when the file was loaded (geometry drags
-  are saved immediately, so this is the way to recover from an accidental move).
-- **Changes** — features whose properties have been modified since the file was loaded.
-  Each entry has a ↩ revert button. `Ctrl+Z` (`Cmd+Z` on macOS) undoes the newest entry and
-  `Ctrl+Shift+Z` / `Ctrl+Y` redoes it, as do the ↶ ↷ buttons in the top bar (way/node
-  deletions, tag edits, node moves and additions, splits; not annotation shapes). Redo history
-  is dropped on any new edit or file load.
-- **Hidden** — features that have been hidden from the map via the context menu.
+### Exporting edited map data
 
-Use the **Export** button in the toolbar to save all annotations and changes back to the `.mapdata` file.
-Deleted features will be removed from the file, while edits and annotations are added to it, hidden
-features are preserved.
+- **Export button:** Downloads the fully merged map (with all annotations, node moves, splits, and deletions applied) as a downloadable `<stem>.exported.mapdata` file. It does not overwrite the source `.mapdata` file on disk.
+- **GeoJSON button:** Downloads the merged map as a `.geojson` file for inspection in GIS tools (such as QGIS).
 
-Use the **GeoJSON** button next to it to download the same annotation-resolved map as a `.geojson`
-file, for opening in QGIS, geojson.io, or other GIS tools.
+Incremental edits are automatically saved to `<stem>.annotations.json` in the data directory.
 
 ---
 
 ## Programmatic annotations
 
-Annotations can also be created or inspected without the viewer UI by editing the sidecar
-`.annotations.json` file directly. This is useful for scripting bulk edits or seeding
-annotations from an external data source.
-
-**Add an obstacle polygon programmatically:**
+Sidecar `.annotations.json` files can be inspected or generated programmatically:
 
 ```python
-import json, time, pathlib
+import json
+import pathlib
+import time
+import uuid
 
 mapdata_path = pathlib.Path("coords.mapdata")
 sidecar_path = mapdata_path.with_suffix(".annotations.json")
 
-# Load existing sidecar or start fresh
 if sidecar_path.exists():
     with open(sidecar_path) as f:
         sidecar = json.load(f)
@@ -96,16 +101,16 @@ else:
         "hidden_ways": [],
         "tag_overrides": {},
         "split_ways": {},
-        "deleted_nodes": {},
+        "deleted_nodes": [],
+        "added_nodes": [],
         "node_position_overrides": {},
         "change_log": [],
-        "change_log_migration": "1",
     }
 
-# Polygon coordinates are WGS-84 (lon, lat) pairs, closed ring
+# Annotation IDs are UUID4 strings; coordinates are WGS-84 [lon, lat] pairs
 sidecar["annotations"].append(
     {
-        "id": f"ann_{int(time.time() * 1000)}",
+        "id": str(uuid.uuid4()),
         "type": "obstacle",
         "geometry": {
             "type": "Polygon",
@@ -122,10 +127,17 @@ sidecar["annotations"].append(
     }
 )
 
+# Change-log entries record a floating-point timestamp
+sidecar["change_log"].append(
+    {
+        "action": "add_annotation",
+        "ann_id": sidecar["annotations"][-1]["id"],
+        "ts": time.time(),
+    }
+)
+
 with open(sidecar_path, "w") as f:
     json.dump(sidecar, f, indent=2)
 ```
 
-The viewer merges the sidecar at load time, so reloading the file in the browser will show the
-new annotation immediately. See [Data Formats — `.annotations.json`](dev/data_formats.md#annotationsjson-sidecar-format)
-for the full sidecar schema.
+The viewer merges sidecar edits on load, applying them to the displayed map.

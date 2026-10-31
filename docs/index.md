@@ -1,12 +1,10 @@
 # Overview
 
-ROS2 tools to work with OSM data and perform path planning.
+ROS 2 tools to work with OSM data and perform path planning.
 
 ## About
 
-This package parses a `.gpx` file with GPS waypoints into a Python class, queries
-[OpenStreetMap](https://www.openstreetmap.org) for map features within the area, and
-serializes the result as a `.mapdata` file.
+This package parses a `.gpx` file with GPS waypoints into a Python class, queries [OpenStreetMap](https://www.openstreetmap.org) for map features within the area, and serializes the result as a `.mapdata` file.
 
 Parsed features are classified into three categories:
 
@@ -14,47 +12,59 @@ Parsed features are classified into three categories:
 - **footways** — paths intended for pedestrians
 - **roads** — areas intended for vehicles
 
-Additional tools let you visualize the data, annotate it interactively, perform path planning, and publish a
-cost-aware footway point cloud for use in autonomous navigation.
+Additional tools let you visualize the data, annotate it interactively, perform path planning, and publish a cost-aware footway point cloud for autonomous navigation.
 
-The `MapData` class, the path planning modules, the `create_mapdata` CLI, and the interactive viewer work
-**standalone** — no ROS2 installation is required for data parsing, annotation, or planning. ROS2 is only
-needed for the `osm_cloud` publisher.
+The `MapData` class, the path planning modules, the `create_mapdata` CLI, and the interactive viewer work **standalone** without ROS 2 for data parsing, annotation, and planning. ROS 2 is required for `osm_cloud`, `route_planner`, and the viewer's live Tracker mode.
 
-The package targets **ROS2 Jazzy** or later on Ubuntu 24.04, and Python 3.12+ for standalone use.
+The package targets **ROS 2 Jazzy** or later on Ubuntu 24.04, and Python >= 3.12 for standalone use.
 
-Sample `.gpx` files are provided in `./data/`.
+Sample `.gpx` files are provided in `./demo/`.
 
 ## Installation
 
-### As a standalone Python package
+### Standalone Python package (uv)
 
 ```bash
 git clone https://github.com/vras-robotour/map_data.git
 cd map_data
+uv sync
+uv run python -m pytest
+```
+
+Alternatively, install as an editable package with pip:
+
+```bash
 pip install -e .
 ```
 
-### With ROS2 (colcon)
+### With ROS 2 (colcon)
+
+The `map_data_interfaces` package is nested inside this repository. Because `colcon` does not discover nested packages from a plain clone, run `scripts/setup_ws.sh` to create the workspace symlink before building:
 
 ```bash
-git clone https://github.com/vras-robotour/map_data.git
-cd map_data
-colcon build --packages-select map_data
+# From your colcon workspace root (with this repo in src/map_data):
+bash src/map_data/scripts/setup_ws.sh
+colcon build --packages-up-to map_data
 source install/setup.bash
 ```
 
 !!! note "`ros2_numpy` must be built from source"
     The `osm_cloud` node depends on [`ros2_numpy`](https://github.com/Box-Robotics/ros2_numpy),
     which is not released as a binary package in any ROS distribution — `rosdep install`
-    cannot resolve it. Clone its `jazzy` branch into your colcon workspace and build it
+    cannot resolve it. Clone its `jazzy` branch into your colcon workspace `src/` and build it
     alongside this package.
 
-## Python Library
+To check the ROS 2 runtime nodes, run the smoke test script:
 
-`MapData` and `Way` can be used directly in Python without a running ROS2 node.
-The only requirement is that the package is installed (e.g. via `pip install -e .`
-or a `colcon build`) so the `parameters/` CSV files are accessible.
+```bash
+bash scripts/ros_smoke.sh
+```
+
+## Python library
+
+`MapData` and `Way` can be used directly in Python without a running ROS 2 node.
+The only requirement is that the package is installed (e.g. via `pip install -e .`,
+`uv sync`, or `colcon build`) so the `parameters/` CSV files are accessible.
 
 ### Examples
 
@@ -63,8 +73,8 @@ or a `colcon build`) so the `parameters/` CSV files are accessible.
 ```python
 from map_data.map_data import MapData
 
-md = MapData("./data/coords.gpx")
-md.run_all(save=True)  # queries OSM, parses, saves coords.mapdata
+md = MapData("./demo/buchlovice.gpx")
+md.run_all(save=True)  # queries OSM, parses, saves demo/buchlovice.mapdata
 ```
 
 **Load an existing `.mapdata` file and access parsed features:**
@@ -72,39 +82,13 @@ md.run_all(save=True)  # queries OSM, parses, saves coords.mapdata
 ```python
 from map_data.map_data import MapData
 
-md = MapData.load("coords.mapdata")
+md = MapData.load("demo/buchlovice.mapdata")
 
 print(len(md.roads_list))  # list of Way objects
 print(len(md.footways_list))
 print(len(md.barriers_list))
 ```
 
-## Project Structure
-
-```text
-map_data/
-├── map_data.py              # MapData class — parses GPX + OSM into roads/footways/barriers
-├── info.py                  # CLI tool to print information about a .mapdata file
-├── create_mapdata.py        # CLI (standalone or ROS2): download and parse OSM data
-├── osm_cloud.py             # ROS2 node: publishes footway grid and intersections
-├── pathsolver/              # Path planning algorithms
-│   ├── graph_planner.py     # Global A* planning on OSM ways
-│   ├── replan.py            # Local/Grid-based replanning (Grid A*, RRT*)
-│   ├── grid_astar.py        # Grid-based A* implementation
-│   ├── rrt_star.py          # RRT* implementation
-│   └── astar.py             # Generic A* search logic
-├── utils/                   # Shared utility functions
-│   ├── way.py               # Way class — represents a single OSM feature with geometry
-│   ├── overpass.py          # OSM Overpass API client
-│   ├── parsing.py           # OSM XML/JSON parsing logic
-│   └── serialization.py     # .mapdata file I/O
-└── viewer/                  # Modular interactive viewer (Flask + Leaflet)
-    ├── app.py               # App factory and server entry point
-    ├── routes/              # REST API endpoints, one module per concern
-    ├── helpers.py           # Geometry and annotation utility functions
-    ├── cache.py             # MapData object caching
-    ├── templates/           # HTML templates
-    └── static/              # External CSS and Modular JS assets
-```
-
 ## License
+
+BSD 3-Clause License. See the repository `LICENSE` file for full terms.

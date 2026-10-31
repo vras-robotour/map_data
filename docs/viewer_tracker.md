@@ -1,174 +1,158 @@
 # Tracker
 
 The **Tracker** mode provides a real-time view of a robot's position and hardware status.
-It requires the viewer to be launched inside a sourced ROS2 workspace so that the
+It requires the viewer to be launched inside a sourced ROS 2 workspace so that the
 `TrackerNode` can subscribe to the robot's topics.
 
-!!! note "ROS2 required"
-    The Tracker tab is only shown when a ROS2 context is available. Launching the viewer
+!!! note "ROS 2 required"
+    The Tracker tab is only shown when a ROS 2 context is available. Launching the viewer
     with `map_data_viewer` inside a sourced workspace is sufficient — no additional nodes
     need to be started.
 
-## Robot Marker
+## Robot marker
 
 When telemetry is received, a green arrow marker appears on the map at the robot's current
 position. The marker rotates to reflect the robot's heading (derived from the IMU azimuth topic).
 The robot marker is visible in all three modes as long as the **Robot** layer is enabled in
 the Layers panel.
 
-## Sidebar Controls
+## Sidebar controls
 
 | Control | Description |
 |---------|-------------|
-| **Center Robot** | Pan and zoom the map to the robot's current position. |
-| **Clear Trail** | Forget the trail recorded so far (it is dropped on the tracker node, not just in the browser, so it does not come back with the next fix). Useful after the robot was carried or driven somewhere that is not part of the run. |
-| **Follow** | Continuously pan the map to keep the robot centered as it moves. |
+| **Center Robot** | Pan and zoom the map to the robot's current position |
+| **Clear Trail** | Clear the recorded trail (dropped on the tracker node, so it does not reappear with the next fix) |
+| **Follow** | Continuously pan the map to keep the robot centered as it moves |
 
-## Status Display
+## Status display
 
 The sidebar shows live telemetry grouped into three sections. Each row is hidden automatically
-if the corresponding ROS2 topic is not configured.
+if the corresponding ROS 2 topic is not configured.
 
 ### Hardware
 
 | Field | Description |
 |-------|-------------|
-| Battery | Voltage (V), current (A) and, with `battery_state_topic`, the pack percentage. Red below `battery_low_voltage`. |
-| E-Stop | `ACTIVE` (red) / `released` from `estop_topic`. |
-| Motors | Motor enable state (`ENABLED` / `DISABLED`). |
-| Temp | Hottest `sensor_msgs/Temperature` (name = its `frame_id`; hover for all), or the Teensy temperature. |
-| Motor Error | ODrive error code (displayed in hex when non-zero). |
+| Battery | Voltage (V), current (A) and, with `battery_state_topic`, pack percentage; turns red below `battery_low_voltage` |
+| E-Stop | `ACTIVE` (red) / `released` from `estop_topic` |
+| Motors | Motor enable state (`ENABLED` / `DISABLED`) |
+| Temp | Hottest `sensor_msgs/Temperature` (name = its `frame_id`), or controller temperature |
+| Motor Error | ODrive error code (displayed in hex when non-zero) |
 
 ### Localization
 
 | Field | Description |
 |-------|-------------|
-| Localization | GPS fix quality: **Fixed** (RTK fixed), **Float** (RTK float), or **No Fix**. |
-| Fix age | Seconds since the last fix; red `STALE` (and a greyed marker) after `stale_after`. |
-| Speed | Current robot speed in m/s (from odometry). |
-| Limit | Active speed limit value and unit (m/s or %). |
+| Localization | GPS fix quality: **Fixed** (RTK fixed), **Float** (RTK float), or **No Fix** |
+| Fix age | Seconds since the last fix; displays red `STALE` after `stale_after` |
+| Speed | Current robot speed in m/s (from odometry) |
+| Limit | Active speed limit value and unit (m/s or %) |
 
 ### Navigation
 
 | Field | Description |
 |-------|-------------|
-| State | `commander_state_topic` string (crl_commander mode, `STUCK` in red) or the active Nav2 behavior tree node, or `IDLE`. |
-| Follower | `road_follower` state: `ROAD` or `GPS:<reason>` (yellow). |
-| Diagnostics | `OK`, or the number of ERROR/WARN statuses and the worst one (hover for its message). |
-| Collision | Active collision monitor action (`STOP`, `SLOWDOWN`, `LIMIT`). Hidden when passthrough. |
-| Recovery Active | Shown in red when a recovery behavior is running. |
-| Teleop Active | Shown in yellow when a non-zero teleop twist or any joystick input arrived in the last 2 s. |
+| State | `commander_state_topic` string (crl_commander mode), active Nav2 behavior tree node, or `IDLE` |
+| Follower | `road_follower` state: `ROAD` or `GPS:<reason>` |
+| Diagnostics | `OK`, or the number of ERROR/WARN statuses and the worst status message |
+| Collision | Active collision monitor action (`STOP`, `SLOWDOWN`, `LIMIT`) |
+| Recovery Active | Displayed in red when a recovery behavior is running |
+| Teleop Active | Displayed in yellow when teleop velocity commands or joystick inputs were received within 2 s |
 
-The sidebar also shows the **last five speech messages** (info / warn / error level, newest
-first) when the speech topics are configured.
+The sidebar also displays the **last five speech messages** (info / warn / error level) when speech topics are configured.
 
-## Map Layers
+## Map layers
 
-All robot geometry is part of the **Robot** layer; the Tracker sidebar shows a **Map legend**
-listing only the layers that are configured:
+All robot geometry is part of the **Robot** layer; the Tracker sidebar includes a **Map legend**
+listing active layers:
 
 | Layer | Source | Style |
 |-------|--------|-------|
-| Planned path | `path_topic` or an active Nav2 action | green dashed polyline |
-| Route / waypoint sequence | `sequence_path_topic` (`Path`, e.g. `road_follower`'s `~/route_path` — the route being driven, or the commander's loaded sequence) | blue dotted polyline |
-| Waypoint window | `sequence_poses_topic` (`PoseArray`, e.g. `road_follower`'s `/goal_sequence`) | light-blue polyline |
+| Planned path | `path_topic` or active Nav2 action | green dashed polyline |
+| Route / waypoint sequence | `sequence_path_topic` (`Path`, e.g. `road_follower`'s `~/route_path`) | blue dotted polyline |
+| Waypoint window | `sequence_poses_topic` (`PoseArray`, e.g. `/goal_sequence`) | light-blue polyline |
 | Road path | `road_path_topic` (`path_centerline` prediction) | cyan polyline |
 | Goal | `goal_topic` | orange circle |
-| Trail | last `trail_length` fixes, one every `trail_min_step` m | thin green polyline |
-| Intersections | `intersections_topic` (`PoseArray`, `osm_cloud`) | magenta rings |
-| Active intersection | `active_intersection_topic` (`road_follower`) with the `intersection_enter_threshold` (red) and `intersection_exit_threshold` (yellow dashed) radii | circles in metres |
+| Trail | last `trail_length` fixes, spaced by `trail_min_step` m | thin green polyline |
+| Intersections | `intersections_topic` (`PoseArray`, from `osm_cloud`) | magenta rings |
+| Active intersection | `active_intersection_topic` with `intersection_enter_threshold` and `intersection_exit_threshold` | colored radius circles |
 
-Poses may be stamped in **any TF frame**. With `earth_frame` set (e.g. `FP_ECEF` on the
-Fixposition stack) they are transformed into that ECEF frame through TF and converted to
-lat/lon exactly. With `earth_frame` empty the legacy path is used: transform into `utm_frame`
-and convert with the UTM zone of the current fix.
+Poses may be stamped in **any TF frame**. With `earth_frame` set (such as `FP_ECEF`),
+coordinates are transformed via TF into ECEF and converted to exact lat/lon. If `earth_frame`
+is empty, coordinates are transformed into `utm_frame` and converted with the UTM zone of the current fix.
 
-## ROS2 Topic Configuration
+## ROS 2 topic configuration
 
-The `TrackerNode` subscribes to a set of configurable topics. Set a topic parameter to an empty
-string to disable the corresponding feature and hide its UI row.
+The `TrackerNode` subscribes to configurable topics. Set any topic parameter to an empty
+string (`""`) to disable the corresponding feature and hide its UI row.
 
 ### Config file
 
-The topics come from a ROS 2 parameter file with a `map_data_tracker` section. By default the
-viewer reads the package's `config/tracker.yaml` (generic nav2-style topics); `--config` picks
-another one. `config/helhest_jr.yaml` holds helhest-jr's topics (Fixposition, `helhest_llc`,
-crl_commander, road_follower, `path_centerline`, no Nav2), with every tracker parameter set
-explicitly:
+Topic configurations are defined in a ROS 2 parameter file under a `map_data_tracker` section.
+By default the viewer reads `config/tracker.yaml` (generic Nav2 topics); `--config` selects
+another file, such as `config/helhest_jr.yaml`:
 
 ```bash
 map_data_viewer --config config/helhest_jr.yaml
 ```
 
-The file is an ordinary parameter file, so `--ros-args --params-file` still works; values given
-with `--ros-args` take precedence over `--config`. A config file that cannot be read stops the
-viewer at startup. A `--config` file that does not exist yet means default topics (Save creates
-it).
-
-!!! note "New config files need a rebuild"
-    After adding a file to `config/` (such as `tracker.yaml`), run `colcon build` again so the
-    install space links to it.
+The config file is a standard ROS 2 parameter file, so `--ros-args --params-file` can also be used.
 
 ### Changing topics in the web app
 
-**Topics…** in the Tracker sidebar opens a dialog listing every topic setting (plus
-`heading_type`, `earth_frame` and `utm_frame`), grouped like the table below. Each topic field
-suggests the topics currently on the ROS graph with the matching message type, and a dot shows
-its state: green = published with the expected type, yellow = published with another type,
-grey = not published, hollow = disabled.
+The **Topics…** dialog in the Tracker sidebar lists all topic settings and frame parameters.
+Topic fields indicate live publisher status (green = expected type, yellow = different type,
+grey = not published, hollow = disabled).
 
-| Button | Effect |
-|--------|--------|
-| **Apply** | Resubscribes the running tracker to the new topics. Its telemetry (trail, path, status) starts over. Not saved. |
-| **Save to file** | Applies, then writes the settings into the config file the viewer was started with. Only changed values are rewritten; comments and layout stay. With a `--symlink-install` build the source file is updated. |
-| **Reload from file** | Fills the dialog with the file's values (defaults for keys the file does not set). |
+- **Apply** updates active subscriptions in the running tracker.
+- **Save to file** applies changes and updates the active configuration YAML file.
+- **Reload from file** restores settings from the configuration file on disk.
 
-The numeric parameters (`battery_low_voltage`, `stale_after`, `trail_*`,
-`intersection_*_threshold`) are only read from the config file at startup.
+### Tracker parameters
 
 | Parameter | Default topic | Description |
 |-----------|--------------|-------------|
-| `earth_frame` | `""` | ECEF TF frame for exact pose conversion (`FP_ECEF`); empty = UTM fallback |
+| `earth_frame` | `""` | ECEF TF frame for exact coordinate conversion (`FP_ECEF`); empty = UTM fallback |
 | `utm_frame` | `utm` | UTM TF frame used when `earth_frame` is empty |
-| `tf_static_only` | `true` | Read frames from `/tf_static` only; set to `false` when a frame above is published on `/tf` (costs a lot of CPU) |
-| `gps_fix_topic` | `/gps/fix` | Raw GPS fix (`NavSatFix`) |
-| `gps_filtered_topic` | `/gps/filtered` | EKF-fused GPS position (`NavSatFix`) |
-| `heading_topic` / `heading_type` | `""` / `imu` | Heading source: `imu` (`Imu`), `yaw_vector3` (`Vector3Stamped`, x = yaw rad, e.g. `/fixposition/ypr`), `odometry` (`Odometry`) |
+| `tf_static_only` | `true` | Read frames from `/tf_static` only; set `false` if frames are published on dynamic `/tf` |
+| `gps_fix_topic` | `/gps/fix` | Raw GPS fix (`sensor_msgs/NavSatFix`) |
+| `gps_filtered_topic` | `/gps/filtered` | EKF-fused GPS position (`sensor_msgs/NavSatFix`) |
+| `heading_topic` / `heading_type` | `""` / `imu` | Heading source: `imu` (`Imu`), `yaw_vector3` (`Vector3Stamped`), `odometry` (`Odometry`) |
 | `azimuth_topic` | `/gps/azimuth_imu` | Legacy IMU heading topic, used when `heading_topic` is empty |
-| `odom_topic` | `/odom_2d` | Odometry for speed display (`Odometry`) |
-| `battery_state_topic` | `""` | `BatteryState` (voltage, current, percentage); replaces the two Float32 topics |
-| `battery_low_voltage` | `22.0` | Voltage below which the battery row turns red |
-| `bus_voltage_topic` | `/bus_voltage` | Battery voltage (`Float32`) |
-| `bus_current_topic` | `/bus_current` | Battery current (`Float32`) |
-| `temperature_topic` | `""` | `Temperature` messages, one row per `frame_id`; replaces `teensy_temp_topic` |
-| `teensy_temp_topic` | `/teensy_temp` | Controller temperature (`Float32`) |
-| `odrv_error_topic` | `/odrv_error` | ODrive error code (`UInt64`) |
-| `motors_enabled_topic` | `/motors_enabled` | Motor enable state (`Bool`) |
-| `estop_topic` | `""` | Emergency stop state (`Bool`) |
-| `diagnostics_topic` | `""` | `DiagnosticArray` summary |
-| `commander_state_topic` | `""` | Navigation state string (`String`, crl_commander); replaces `bt_log_topic` |
-| `follower_state_topic` | `""` | `road_follower` state (`String`, latched) |
-| `bt_log_topic` | `/behavior_tree_log` | Nav2 behavior tree log (`BehaviorTreeLog`) |
-| `speed_limit_topic` | `/speed_limit` | Active speed limit (`SpeedLimit`) |
-| `collision_monitor_state_topic` | `/collision_monitor_state` | Collision monitor state (`CollisionMonitorState`) |
-| `recovery_heartbeat_topic` | `/recovery/heartbeat` | Recovery behavior heartbeat (`Header`) |
-| `teleop_topic` | `/cmd_vel_teleop` | Teleop velocity command (`TwistStamped`) |
-| `joy_topic` | `""` | Joystick (`Joy`); any input counts as teleop |
-| `speak_info_topic` | `/speak/info` | Info speech messages (`String`) |
-| `speak_warn_topic` | `/speak/warn` | Warning speech messages (`String`) |
-| `speak_error_topic` | `/speak/err` | Error speech messages (`String`) |
-| `path_topic` | `/path` | Planned path for map overlay (`Path`) |
-| `goal_topic` | `""` | Current navigation goal (`PoseStamped`, latched) |
-| `sequence_path_topic` | `""` | Route being followed or waypoint sequence (`Path`, latched); kept at full resolution up to 200 poses |
-| `sequence_poses_topic` | `""` | Waypoint window (`PoseArray`, latched) |
-| `road_path_topic` | `""` | Visual road-following path (`Path`) |
-| `intersections_topic` | `""` | Intersections (`PoseArray`, latched) |
-| `active_intersection_topic` | `""` | Intersection that triggered GPS mode (`PoseStamped`, latched; empty `frame_id` = none) |
-| `intersection_enter_threshold` / `intersection_exit_threshold` | `5.0` / `6.0` | Radii drawn around the active intersection (m) |
-| `trail_length` / `trail_min_step` | `500` / `0.5` | Robot trail size and spacing (m) |
-| `stale_after` | `3.0` | Fix age (s) after which the position is flagged stale |
-| `*_feedback_topic` | nav2 action feedback | Current waypoint index of Nav2 actions |
+| `odom_topic` | `/odom_2d` | Odometry for speed display (`nav_msgs/Odometry`) |
+| `battery_state_topic` | `""` | `sensor_msgs/BatteryState` (voltage, current, percentage) |
+| `battery_low_voltage` | `22.0` | Voltage below which the battery indicator turns red |
+| `bus_voltage_topic` | `/bus_voltage` | Battery voltage (`std_msgs/Float32`) |
+| `bus_current_topic` | `/bus_current` | Battery current (`std_msgs/Float32`) |
+| `temperature_topic` | `""` | `sensor_msgs/Temperature` messages, one row per `frame_id` |
+| `teensy_temp_topic` | `/teensy_temp` | Controller temperature (`std_msgs/Float32`) |
+| `odrv_error_topic` | `/odrv_error` | ODrive error code (`std_msgs/UInt64`) |
+| `motors_enabled_topic` | `/motors_enabled` | Motor enable state (`std_msgs/Bool`) |
+| `estop_topic` | `""` | Emergency stop state (`std_msgs/Bool`) |
+| `diagnostics_topic` | `""` | `diagnostic_msgs/DiagnosticArray` summary |
+| `commander_state_topic` | `""` | Navigation state string (`std_msgs/String`) |
+| `follower_state_topic` | `""` | Road follower state string (`std_msgs/String`, latched) |
+| `bt_log_topic` | `/behavior_tree_log` | Nav2 behavior tree log (`nav2_msgs/BehaviorTreeLog`) |
+| `speed_limit_topic` | `/speed_limit` | Active speed limit (`nav2_msgs/SpeedLimit`) |
+| `collision_monitor_state_topic` | `/collision_monitor_state` | Collision monitor state |
+| `recovery_heartbeat_topic` | `/recovery/heartbeat` | Recovery behavior heartbeat (`std_msgs/Header`) |
+| `teleop_topic` | `/cmd_vel_teleop` | Teleop velocity command (`geometry_msgs/TwistStamped`) |
+| `joy_topic` | `""` | Joystick (`sensor_msgs/Joy`); any input indicates active teleoperation |
+| `speak_info_topic` | `/speak/info` | Info speech messages (`std_msgs/String`) |
+| `speak_warn_topic` | `/speak/warn` | Warning speech messages (`std_msgs/String`) |
+| `speak_error_topic` | `/speak/err` | Error speech messages (`std_msgs/String`) |
+| `path_topic` | `/path` | Planned path for map overlay (`nav_msgs/Path`) |
+| `goal_topic` | `""` | Current navigation goal (`geometry_msgs/PoseStamped`, latched) |
+| `sequence_path_topic` | `""` | Route sequence being followed (`nav_msgs/Path`, latched) |
+| `sequence_poses_topic` | `""` | Waypoint window poses (`geometry_msgs/PoseArray`, latched) |
+| `road_path_topic` | `""` | Visual road path prediction (`nav_msgs/Path`) |
+| `intersections_topic` | `""` | Intersections (`geometry_msgs/PoseArray`, latched) |
+| `active_intersection_topic` | `""` | Active intersection (`geometry_msgs/PoseStamped`, latched) |
+| `intersection_enter_threshold` / `intersection_exit_threshold` | `5.0` / `6.0` | Radii drawn around active intersection (m) |
+| `trail_length` / `trail_min_step` | `500` / `0.5` | Robot trail size (points) and step distance (m) |
+| `stale_after` | `3.0` | Fix age threshold (s) after which position is marked stale |
+| `planner_node` | `/route_planner` | Node name whose ROS 2 parameters seed Planner toggles (`""` disables syncing) |
+| `*_feedback_topic` | Nav2 action feedback | Action feedback topics reporting current waypoint index |
 
-Telemetry is polled at **2 Hz** by default and pushed to the browser over a WebSocket.
-The rate is configurable via `map_data_viewer --telemetry-rate <Hz>` (e.g. `10` for
-smoother tracking of a fast-moving robot).
+Telemetry is broadcast to the browser over WebSocket at **2 Hz** by default, configurable
+via `map_data_viewer --telemetry-rate <Hz>`.
