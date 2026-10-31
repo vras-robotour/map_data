@@ -6,7 +6,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 import utm
-from shapely.geometry import LineString, MultiPolygon, Polygon
+from shapely.geometry import LineString, MultiPolygon, Point, Polygon
 
 from map_data.edits import (
     AnnotationStoreError,
@@ -232,6 +232,29 @@ def test_apply_node_position_overrides_linestring():
     new_coords = list(result.line.coords)
     assert abs(new_coords[0][0] - (_E0 + 50)) < 1.0
     assert abs(new_coords[0][1] - (_N0 + 50)) < 1.0
+
+
+def _closed_fence():
+    square = [(_E0, _N0), (_E0 + 50, _N0), (_E0 + 50, _N0 + 50), (_E0, _N0 + 50)]
+    nodes_cache = {
+        nid: dict(zip(("lat", "lon"), utm.to_latlon(e, n, _ZN, _ZL), strict=True), tags={})
+        for nid, (e, n) in enumerate(square, 1)
+    }
+    line = LineString([*square, square[0]]).buffer(1.0)
+    way = Way(id=5, nodes=[1, 2, 3, 4, 1], line=line, tags={"barrier": "fence"}, in_out="")
+    return way, nodes_cache
+
+
+def test_apply_node_position_overrides_keeps_a_closed_fence_a_ring():
+    way, nodes_cache = _closed_fence()
+    lat, lon = utm.to_latlon(_E0 + 55, _N0, _ZN, _ZL)
+
+    result = apply_node_position_overrides(
+        way, {2: {"lat": lat, "lon": lon}}, _ZN, _ZL, nodes_cache, category="barrier"
+    )
+
+    assert not result.line.covers(Point(_E0 + 25, _N0 + 25))
+    assert result.line.covers(Point(_E0 + 55, _N0))
 
 
 # ── mapdata_to_geojson ────────────────────────────────────────────────────────

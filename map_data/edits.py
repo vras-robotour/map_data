@@ -31,6 +31,7 @@ from shapely.geometry import (
     Polygon as _SPoly,
 )
 
+from map_data.utils.parsing import _is_linear_barrier
 from map_data.utils.serialization import atomic_write_json
 
 if TYPE_CHECKING:
@@ -246,10 +247,10 @@ def _rebuild_polygon(
     """
     Rebuild a ``Polygon`` way's geometry from new ring/centerline coords.
 
-    A closed barrier, or a closed ``area=yes`` way, is a flat area rebuilt
-    directly from *utm_coords*; anything else is a centerline re-buffered by
-    :func:`_buffer_radius`. For a closed non-barrier way, *utm_coords* is
-    closed in place.
+    A closed barrier (except a linear one such as a fence), or a closed
+    ``area=yes`` way, is a flat area rebuilt directly from *utm_coords*;
+    anything else is a centerline re-buffered by :func:`_buffer_radius`. For a
+    closed way that is not flat, *utm_coords* is closed in place.
 
     Raises
     ------
@@ -259,7 +260,10 @@ def _rebuild_polygon(
 
     """
     if is_closed:
-        if category == "barrier":
+        # Matches parse_osm_ways: a closed linear barrier is a ring unless area=yes.
+        if category == "barrier" and (
+            (tags or {}).get("area") == "yes" or not _is_linear_barrier(tags or {})
+        ):
             ring = utm_coords if utm_coords[0] == utm_coords[-1] else [*utm_coords, utm_coords[0]]
             if len(ring) < 4:
                 raise _PolygonTooSmall
@@ -435,7 +439,8 @@ def apply_node_position_overrides(
         ``{node_id: {"lat": float, "lon": float}}``.
     category : str, optional
         ``"barrier"`` makes a closed ``Polygon`` a flat area rather than a
-        buffered ring.
+        buffered ring, unless it is a linear barrier (fence, wall, ...)
+        without ``area=yes``.
 
     Returns
     -------
