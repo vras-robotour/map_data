@@ -8,7 +8,8 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 import numpy as np
-from shapely.geometry import LineString, Point, Polygon
+import shapely
+from shapely.geometry import Point, Polygon
 from shapely.strtree import STRtree
 
 from map_data.pathsolver.astar import astar_search
@@ -138,7 +139,7 @@ class GraphPlanner:
         new_internal_id = -2000000
 
         if has_annotations:
-            edge_segments = []
+            edge_ends = []
             edge_way_info = []  # (way_index, segment_index)
 
             for way_idx, nodes in enumerate(way_nodes):
@@ -146,9 +147,11 @@ class GraphPlanner:
                     n1, n2 = nodes[i], nodes[i + 1]
                     p1 = self.nodes[n1].ravel()[:2]
                     p2 = self.nodes[n2].ravel()[:2]
-                    edge_segments.append(LineString([p1, p2]))
+                    edge_ends.append((p1, p2))
                     edge_way_info.append((way_idx, i))
 
+            # One call for all edges: building them one by one dominates a cold build.
+            edge_segments = list(shapely.linestrings(edge_ends)) if edge_ends else []
             tree = STRtree(edge_segments) if edge_segments else None
             threshold = 5.0
             # An end that is a node of another way already has its junction (the
@@ -219,7 +222,7 @@ class GraphPlanner:
                     self._add_edge(ann_node_id, proj_node_id, dist_to_edge)
 
         # Second pass: build final graph and tree from (possibly modified) node lists
-        final_edge_segments = []
+        final_edge_ends = []
         final_edge_node_pairs = []
         final_edge_factors = []
 
@@ -234,10 +237,11 @@ class GraphPlanner:
                 # Weight, not length: the route's own length is measured on its
                 # geometry afterwards (map_data.pathsolver.route.path_length).
                 self._add_edge(n1, n2, dist * factor)
-                final_edge_segments.append(LineString([p1, p2]))
+                final_edge_ends.append((p1, p2))
                 final_edge_node_pairs.append((n1, n2))
                 final_edge_factors.append(factor)
 
+        final_edge_segments = list(shapely.linestrings(final_edge_ends)) if final_edge_ends else []
         self._edge_segments = final_edge_segments
         self._edge_node_pairs = final_edge_node_pairs
         self._edge_factors = final_edge_factors
