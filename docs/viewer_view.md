@@ -95,8 +95,9 @@ with annotation_store(str(annotation_path_for("coords.mapdata"))) as store:
             # WGS-84 [lon, lat]
             "geometry": {
                 "type": "Polygon",
-                "coordinates": [[[14.5678, 50.1234], [14.5680, 50.1234],
-                                 [14.5680, 50.1236], [14.5678, 50.1234]]],
+                "coordinates": [
+                    [[14.5678, 50.1234], [14.5680, 50.1234], [14.5680, 50.1236], [14.5678, 50.1234]]
+                ],
             },
             "properties": {},
         }

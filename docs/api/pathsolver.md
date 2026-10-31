@@ -10,7 +10,9 @@ from map_data.pathsolver.route import RoutePlanningError, plan_route
 
 md, _ = load_mapdata_with_annotations("my_area.mapdata")
 try:
-    result = plan_route(md, [(50.1050, 14.4220), (50.1072, 14.4280)], algorithm="graph", spacing=3.0)
+    result = plan_route(
+        md, [(50.1050, 14.4220), (50.1072, 14.4280)], algorithm="graph", spacing=3.0
+    )
 except RoutePlanningError as e:
     print(e.reason, e.message)
 else:
