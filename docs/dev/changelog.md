@@ -48,6 +48,11 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - The annotations of a map in a subfolder are stored next to the map, where the ROS nodes read them
 - Pre-commit runs ruff and mypy from the locked uv environment
 - `demo/buchlovice.mapdata` regenerated from current OSM data
+- Faster planning: grid A* 1.3–1.9× per goal, RRT* about 1.5×, first graph build 18–37% (same routes); see `PERF.md`
+- Viewer: the map reloads 2–4× faster after an edit (GeoJSON cached per geometry, crossroads recomputed once per edit pass)
+- Viewer: large maps open faster: the changes panel builds 100 rows at a time, edit handles share one SVG renderer, mapdata and annotations load in parallel
+- `osm_cloud` builds its point cloud about 35% faster with less peak memory; OSM parsing projects coordinates in one batch
+- `scripts/bench/` benchmarks (planner, map loading, viewer API, frontend) with `--quick` runs, and `PERF.md` logs every kept and reverted attempt
 
 ### Fixed
 
