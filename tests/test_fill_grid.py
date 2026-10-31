@@ -197,11 +197,16 @@ def _make_path_grid(cell_size=1.0, low=(0.0, 0.0), high=(10.0, 10.0)):
 
 
 def test_create_empty_grid_points_are_cell_centers():
-    pg = _make_path_grid()
+    grid = _make_path_grid().create_empty_grid()
     # First point is the center of cell (0, 0), not its lower-left corner
-    assert np.allclose(pg.grid[0, :2], [0.5, 0.5])
+    assert np.allclose(grid[0, :2], [0.5, 0.5])
     # x varies fastest: second point is the center of cell (1, 0)
-    assert np.allclose(pg.grid[1, :2], [1.5, 0.5])
+    assert np.allclose(grid[1, :2], [1.5, 0.5])
+
+
+def test_flat_grid_is_built_only_by_fill():
+    # At the 4M-cell cap the eager (N, 2) float64 grid alone was 64 MB.
+    assert _make_path_grid().grid is None
 
 
 def test_burn_obstacles_sub_cell_obstacle_centered_in_cell_burns_it():

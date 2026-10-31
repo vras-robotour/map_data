@@ -74,6 +74,7 @@ from map_data.annotations import (
     merge_annotations,
 )
 from map_data.map_data import MapData
+from map_data.pathsolver.route import MAX_GRID_CELLS as MAX_GRID_CELLS  # re-exported
 from map_data.utils.config import package_share
 from map_data.utils.way import FOOTWAY_VALUES
 
@@ -562,13 +563,6 @@ def _bbox_area_km2(min_lat: float, min_lon: float, max_lat: float, max_lon: floa
     km_per_deg_lon = 111.32 * math.cos(mean_lat_rad)
     return abs(max_lat - min_lat) * km_per_deg_lat * abs(max_lon - min_lon) * km_per_deg_lon
 
-
-# Upper bound on the number of grid cells a single cost-grid/replan request may
-# allocate. Each cell costs ~32 bytes in the planner's [N, 4] float64 grid plus
-# per-cell Python-loop time, so a few million is already generous: 4 million
-# cells is a 2 km x 2 km box at the 1 m visualization resolution, or
-# 500 m x 500 m at the 0.25 m default replan cell size.
-MAX_GRID_CELLS = 4_000_000
 
 # Sane grid-planner parameter ranges: cell sizes below 5 cm explode the cell
 # count (see MAX_GRID_CELLS) while sizes above 10 m are useless for a footpath

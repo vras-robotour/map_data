@@ -31,6 +31,7 @@ from pathlib import Path
 
 from map_data.annotations import NO_ANNOTATIONS, load_mapdata_with_annotations
 from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE
+from map_data.pathsolver.replan import grid_defaults
 from map_data.pathsolver.route import (
     GRAPH_ALGORITHM,
     GRID_ALGORITHMS,
@@ -68,6 +69,20 @@ def annotations_arg(value: str) -> str | None:
     if not p.is_file():
         raise SystemExit(f"annotation store {value!r} not found")
     return str(p)
+
+
+def positive_float(text: str) -> float:
+    value = float(text)
+    if not value > 0:
+        raise argparse.ArgumentTypeError(f"must be > 0, got {text!r}")
+    return value
+
+
+def non_negative_float(text: str) -> float:
+    value = float(text)
+    if not value >= 0:
+        raise argparse.ArgumentTypeError(f"must be >= 0, got {text!r}")
+    return value
 
 
 def resolve_mapdata(name: str) -> Path:
@@ -115,6 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--ways",
         nargs="+",
         default=["footway"],
+        choices=("footway", "road"),
         metavar="TYPE",
         help="allowed way types: footway and/or road (default: footway)",
     )
@@ -132,16 +148,36 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--spacing", type=float, default=0.0, help="max m between output waypoints")
     ap.add_argument(
         "--max-snap-distance",
-        type=float,
+        type=positive_float,
         default=DEFAULT_MAX_SNAP_DISTANCE,
         help="graph: reject waypoints farther than this (m) from every allowed way",
     )
-    ap.add_argument("--cell-size", type=float, default=0.25, help="grid: cell size (m)")
+    # Grid defaults come from config/planner_defaults.yaml, like the viewer's and the node's.
+    grid = grid_defaults()
     ap.add_argument(
-        "--inflate-obstacles", type=float, default=0.25, help="grid: barrier margin (m)"
+        "--cell-size",
+        type=positive_float,
+        default=grid["cell_size"],
+        help="grid: cell size (m, default %(default)s)",
     )
-    ap.add_argument("--no-simplify", action="store_true", help="grid: keep every grid vertex")
-    ap.add_argument("--smooth", action="store_true", help="grid: smooth the path")
+    ap.add_argument(
+        "--inflate-obstacles",
+        type=non_negative_float,
+        default=grid["inflate_obstacles"],
+        help="grid: barrier margin (m, default %(default)s)",
+    )
+    ap.add_argument(
+        "--simplify",
+        action=argparse.BooleanOptionalAction,
+        default=grid["simplify_path"],
+        help="grid: drop redundant vertices (--no-simplify keeps every grid vertex)",
+    )
+    ap.add_argument(
+        "--smooth",
+        action=argparse.BooleanOptionalAction,
+        default=grid["smooth_path"],
+        help="grid: smooth the path",
+    )
     ap.add_argument("--save", help="write the route as GPX (track by default)")
     ap.add_argument(
         "--wpt", action="store_true", help="write GPX <wpt> elements instead of a track"
@@ -184,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
             max_snap_distance=args.max_snap_distance,
             cell_size=args.cell_size,
             inflate_obstacles=args.inflate_obstacles,
-            simplify_path=not args.no_simplify,
+            simplify_path=args.simplify,
             smooth_path=args.smooth,
         )
     except RoutePlanningError as e:

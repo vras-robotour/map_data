@@ -7,12 +7,10 @@ from collections.abc import Callable, Iterator
 import numpy as np
 from shapely.geometry import LineString
 
-from map_data.utils.config import load_config
-
 logger = logging.getLogger(__name__)
 
-_DEFAULTS = load_config("planner_defaults.yaml")
-GRID_COST_WEIGHT = _DEFAULTS.get("grid_cost_weight", 5.0)
+#: Fallback for a direct call; ReplanPath passes planner_defaults.yaml's grid_cost_weight.
+GRID_COST_WEIGHT = 5.0
 
 
 def _bresenham_cells(
@@ -69,6 +67,37 @@ def grid_segment_blocked(
         if 0 <= px < nx and 0 <= py < ny and np.isinf(grid[py, px]):
             return True
     return False
+
+
+def nearest_free_cell(
+    grid: np.ndarray,
+    point: np.ndarray,
+    low: tuple[float, float],
+    cs: float,
+    radius: float,
+) -> np.ndarray | None:
+    """
+    *point* if its cell is free, else the centre of the nearest finite cell within
+    *radius* metres of it, or ``None`` when every cell in reach is blocked.
+    """
+    ny, nx = grid.shape
+    ix = int(np.floor((point[0] - low[0]) / cs))
+    iy = int(np.floor((point[1] - low[1]) / cs))
+    if 0 <= ix < nx and 0 <= iy < ny and np.isfinite(grid[iy, ix]):
+        return np.asarray(point, dtype=float)
+    r = int(np.ceil(radius / cs))
+    x0, x1 = max(ix - r, 0), min(ix + r + 1, nx)
+    y0, y1 = max(iy - r, 0), min(iy + r + 1, ny)
+    if x0 >= x1 or y0 >= y1:
+        return None
+    ys, xs = np.nonzero(np.isfinite(grid[y0:y1, x0:x1]))
+    cx = (xs + x0 + 0.5) * cs + low[0]
+    cy = (ys + y0 + 0.5) * cs + low[1]
+    d2 = (cx - point[0]) ** 2 + (cy - point[1]) ** 2
+    if not len(d2) or d2.min() > radius**2:
+        return None
+    k = int(np.argmin(d2))
+    return np.array([cx[k], cy[k]])
 
 
 def simplify_path_checked(

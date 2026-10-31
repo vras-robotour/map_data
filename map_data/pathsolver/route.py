@@ -19,19 +19,26 @@ readable ``reason`` instead of a bare ``None``:
     the waypoints lie on disconnected parts of the network (graph planner);
 ``no_path``
     the grid planner found no path;
+``start_blocked`` / ``goal_blocked``
+    a grid leg starts or ends inside an obstacle, with no free cell within
+    :data:`~map_data.pathsolver.replan.SNAP_RADIUS_M`;
+``cancelled``
+    the grid planner was cancelled through its ``transfer_id``;
 ``start_outside_map`` / ``goal_outside_map``
     the start or goal lies too far outside the map's area (wrong map file?);
 ``grid_too_large``
-    the requested grid would exceed ``max_grid_cells`` cells.
+    the requested grid would exceed ``max_grid_cells`` cells;
+``bad_parameter``
+    an unknown ``algorithm`` / ``sub_algorithm``, or ``cell_size`` not above zero.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import shapely as sh
@@ -39,7 +46,7 @@ import utm
 from shapely import geometry
 
 from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE, GraphPlanner
-from map_data.pathsolver.replan import ReplanPath
+from map_data.pathsolver.replan import SNAP_RADIUS_M, ReplanPath, grid_defaults
 from map_data.traversability import TraversabilityRules
 from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
@@ -49,12 +56,20 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Grid planners refuse requests needing more cells than this (same budget as the viewer).
+#: Grid planners and the viewer's cost grid refuse requests needing more cells than this:
+#: a 2 x 2 km box at the overlay's 1 m, or 500 x 500 m at the 0.25 m default cell size.
 MAX_GRID_CELLS = 4_000_000
 #: Margin (m) added around the waypoints' bounding box for the grid planners.
 GRID_MARGIN_M = 50.0
 #: Two paths are "the same" when no vertex moved more than this (m).
 SIGNIFICANT_CHANGE_TOLERANCE = 0.1
+
+_GRID_FAILURES = {
+    "no_path": "the grid planner found no path",
+    "start_blocked": f"a start lies in an obstacle, no free cell within {SNAP_RADIUS_M:g} m",
+    "goal_blocked": f"a goal lies in an obstacle, no free cell within {SNAP_RADIUS_M:g} m",
+    "cancelled": "the grid planner was cancelled",
+}
 
 GRAPH_ALGORITHM = "graph"
 GRID_ALGORITHMS = ("astar", "rrt")
@@ -181,6 +196,27 @@ def check_in_map(
     )
 
 
+def goal_plan_kwargs(goal: Any, defaults: Mapping[str, Any]) -> dict[str, Any]:
+    """
+    :func:`plan_route` keyword arguments for a ``PlanRoute`` action goal.
+
+    An empty or zero ``algorithm``, ``highway_types``, ``spacing``, ``max_snap_distance``,
+    ``cell_size`` or ``inflate_obstacles`` takes the value of that name in *defaults* (the
+    ``route_planner`` node's parameters); a negative ``spacing`` keeps the planner's own
+    vertices. ``simplify_path`` and ``smooth_path`` are used as sent: a bool has no unset.
+    """
+    return {
+        "algorithm": goal.algorithm or defaults["algorithm"],
+        "highway_types": list(goal.highway_types) or list(defaults["highway_types"]),
+        "spacing": defaults["spacing"] if goal.spacing == 0.0 else max(goal.spacing, 0.0),
+        "max_snap_distance": goal.max_snap_distance or defaults["max_snap_distance"],
+        "cell_size": goal.cell_size or defaults["cell_size"],
+        "inflate_obstacles": goal.inflate_obstacles or defaults["inflate_obstacles"],
+        "simplify_path": bool(goal.simplify_path),
+        "smooth_path": bool(goal.smooth_path),
+    }
+
+
 def plan_route(
     md: MapData,
     points_latlon: Sequence[Sequence[float]],
@@ -190,10 +226,10 @@ def plan_route(
     highway_types: Sequence[str] | None = None,
     max_snap_distance: float = DEFAULT_MAX_SNAP_DISTANCE,
     spacing: float = 0.0,
-    cell_size: float = 0.25,
-    inflate_obstacles: float = 0.25,
-    simplify_path: bool = True,
-    smooth_path: bool = False,
+    cell_size: float | None = None,
+    inflate_obstacles: float | None = None,
+    simplify_path: bool | None = None,
+    smooth_path: bool | None = None,
     grid_cost_weight: float | None = None,
     highway_costs: dict[str, float] | None = None,
     surface_costs: dict[str, float] | None = None,
@@ -214,8 +250,7 @@ def plan_route(
     grid built from the map (*All terrain*). ``sub_algorithm`` picks the grid
     search (``"astar"``/``"rrt"``); ``None`` derives it from ``algorithm``, so
     ``algorithm="rrt"`` alone runs RRT*, while the viewer sends ``"rrt"`` plus an
-    explicit ``sub_algorithm``. Any other ``algorithm`` value also selects the
-    grid planner, with ``sub_algorithm`` (default ``"astar"``).
+    explicit ``sub_algorithm``. Any other value fails with ``bad_parameter``.
 
     ``spacing`` > 0 resamples the result so waypoints are at most that far
     apart (a waypoint follower wants a few metres). ``changed`` and
@@ -244,7 +279,9 @@ def plan_route(
     ``highway_costs``/``surface_costs`` price the ``highway``/``surface`` tags
     for *both* planners: the grid planner's cells and the graph planner's edge
     weights (``length * (1 + cost)``). ``None`` takes
-    ``config/planner_defaults.yaml``.
+    ``config/planner_defaults.yaml``, as does ``None`` for ``cell_size``,
+    ``inflate_obstacles``, ``simplify_path``, ``smooth_path`` and ``grid_cost_weight``
+    (see :func:`~map_data.pathsolver.replan.grid_defaults`).
 
     A first or last point more than ``outside_map_tolerance`` metres outside the map's
     area fails with ``start_outside_map`` / ``goal_outside_map`` (see :func:`check_in_map`).
@@ -252,6 +289,14 @@ def plan_route(
     Raises :class:`RoutePlanningError` on failure.
     """
     highway_types = list(highway_types) if highway_types else ["footway"]
+    if cell_size is None:
+        cell_size = float(grid_defaults()["cell_size"])
+    if algorithm not in (GRAPH_ALGORITHM, *GRID_ALGORITHMS):
+        raise RoutePlanningError("bad_parameter", f"unknown algorithm {algorithm!r}")
+    if sub_algorithm is not None and sub_algorithm not in GRID_ALGORITHMS:
+        raise RoutePlanningError("bad_parameter", f"unknown sub_algorithm {sub_algorithm!r}")
+    if not cell_size > 0:  # also NaN
+        raise RoutePlanningError("bad_parameter", f"cell_size must be > 0, got {cell_size}")
     if len(points_latlon) < 2:
         raise RoutePlanningError("too_few_points", "plan_route() needs at least two waypoints")
 
@@ -288,7 +333,7 @@ def plan_route(
             )
     else:
         if sub_algorithm is None:
-            sub_algorithm = algorithm if algorithm in GRID_ALGORITHMS else "astar"
+            sub_algorithm = algorithm
         p_low, p_high = _grid_bbox(md, utm_path)
         area_m2 = max(0.0, p_high[0] - p_low[0]) * max(0.0, p_high[1] - p_low[1])
         cells = area_m2 / (cell_size * cell_size)
@@ -319,9 +364,8 @@ def plan_route(
         res = replanner.replan(utm_path, algorithm=sub_algorithm)
         snap = []
         if res is None:
-            # ReplanPath returns None both when no path exists and when the run was
-            # cancelled through its transfer_id; it does not tell the two apart.
-            raise RoutePlanningError("no_path", "the grid planner found no path (or was cancelled)")
+            reason = replanner.failure_reason or "no_path"
+            raise RoutePlanningError(reason, _GRID_FAILURES[reason])
 
     res = np.asarray(res, dtype=float)[:, :2]
     changed = len(res) != len(utm_path) or bool(

@@ -11,7 +11,8 @@
 # are applied on top of this file; every argument left unset keeps the value below.
 #
 # Not to be confused with planner_defaults.yaml, which holds the routing cost tables
-# (highway/surface costs, buffer widths) read by the pathsolver library itself.
+# (highway/surface costs, buffer widths) and the grid planner defaults read by the
+# pathsolver library itself.
 
 route_planner:
   ros__parameters:
@@ -40,7 +41,8 @@ route_planner:
     preload: true
 
     # --- planning defaults -----------------------------------------------------------
-    # A PlanRoute goal field left empty/zero falls back to these.
+    # A PlanRoute goal field left empty/zero falls back to these (its simplify_path and
+    # smooth_path are used as sent; the two below apply to ~/goal goals).
     # graph = follow the mapped ways (Robotour); astar / rrt = all-terrain grid planners.
     algorithm: "graph"
     # Way types the graph planner may route over: footway and/or road.
@@ -60,12 +62,13 @@ route_planner:
     # End the route at the goal coordinate itself, appended after its projection, so a
     # goal off the mapped network is reached instead of missed by the snap distance.
     keep_goal: true
-    # astar / rrt only: grid resolution and obstacle inflation, both in metres.
-    cell_size: 0.25
-    inflate_obstacles: 0.25
-    # Drop collinear vertices; smooth the grid path (grid planners).
-    simplify_path: true
-    smooth_path: false
+    # astar / rrt only: grid resolution and obstacle inflation (m), dropping collinear
+    # vertices and smoothing. Unset, they take config/planner_defaults.yaml, the defaults
+    # shared with map_data_plan and the viewer; set them here to override for this node.
+    # cell_size: 0.25
+    # inflate_obstacles: 0.25
+    # simplify_path: true
+    # smooth_path: false
 
     # --- interfaces ------------------------------------------------------------------
     # NavSatFix used by goals with start_from_robot and by the ~/goal shortcut.

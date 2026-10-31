@@ -267,3 +267,121 @@ def test_plan_route_reuses_a_prebuilt_planner(footway_network_mapdata):
     assert reused.length_m == pytest.approx(fresh.length_m)
     assert again.latlon == reused.latlon
     assert reused.snap_distances == pytest.approx(fresh.snap_distances)
+
+
+def test_plan_route_cell_size_defaults_to_planner_defaults(footway_network_mapdata, monkeypatch):
+    from map_data.pathsolver import replan
+
+    monkeypatch.setattr(replan, "load_config", lambda name: {"cell_size": 0.01})
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    with pytest.raises(RoutePlanningError) as e:
+        plan_route(
+            md,
+            [_latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 60.0, 0.0)],
+            algorithm="astar",
+        )
+    assert e.value.reason == "grid_too_large"
+    assert "cell_size=0.01" in e.value.message
+
+
+def test_viewer_uses_the_planner_grid_cell_budget():
+    from map_data.pathsolver import route
+    from map_data.viewer.routes import common
+
+    assert common.MAX_GRID_CELLS is route.MAX_GRID_CELLS
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"algorithm": "Graph"},
+        {"algorithm": "dijkstra"},
+        {"algorithm": "rrt", "sub_algorithm": "bfs"},
+        {"algorithm": "astar", "cell_size": 0.0},
+        {"algorithm": "astar", "cell_size": -0.5},
+    ],
+)
+def test_plan_route_rejects_bad_parameters(footway_network_mapdata, kwargs):
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    with pytest.raises(RoutePlanningError) as e:
+        plan_route(md, [_latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 60.0, 0.0)], **kwargs)
+    assert e.value.reason == "bad_parameter"
+
+
+def test_plan_route_reports_a_blocked_goal(footway_network_mapdata):
+    from shapely.geometry import box
+
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    e0, n0, _, _ = utm.from_latlon(lat0, lon0)
+    block = box(e0 + 40.0, n0 + 40.0, e0 + 80.0, n0 + 80.0)
+    md.barriers_list.append(Way(id=9, is_area=True, nodes=[], tags={}, line=block, in_out=""))
+    start, goal = _latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 60.0, 60.0)
+    with pytest.raises(RoutePlanningError) as e:
+        plan_route(md, [start, goal], algorithm="astar", cell_size=1.0)
+    assert e.value.reason == "goal_blocked"
+
+
+# ── PlanRoute goal -> plan_route kwargs ─────────────────────────────────────
+
+NODE_DEFAULTS = {
+    "algorithm": "graph",
+    "highway_types": ["footway"],
+    "spacing": 3.0,
+    "max_snap_distance": 100.0,
+    "cell_size": 0.25,
+    "inflate_obstacles": 0.25,
+    "simplify_path": True,
+    "smooth_path": True,
+}
+
+
+def _goal(**fields):
+    from types import SimpleNamespace
+
+    empty = {
+        "algorithm": "",
+        "highway_types": [],
+        "spacing": 0.0,
+        "max_snap_distance": 0.0,
+        "cell_size": 0.0,
+        "inflate_obstacles": 0.0,
+        "simplify_path": False,
+        "smooth_path": False,
+    }
+    return SimpleNamespace(**{**empty, **fields})
+
+
+def test_empty_goal_fields_take_the_node_defaults_but_bools_are_used_as_sent():
+    from map_data.pathsolver.route import goal_plan_kwargs
+
+    kwargs = goal_plan_kwargs(_goal(), NODE_DEFAULTS)
+    expected = {**NODE_DEFAULTS, "simplify_path": False, "smooth_path": False}
+    assert kwargs == expected
+
+
+def test_goal_fields_override_the_node_defaults():
+    from map_data.pathsolver.route import goal_plan_kwargs
+
+    goal = _goal(
+        algorithm="astar",
+        highway_types=["road"],
+        spacing=-1.0,
+        max_snap_distance=5.0,
+        cell_size=0.5,
+        inflate_obstacles=1.0,
+        simplify_path=True,
+        smooth_path=True,
+    )
+    assert goal_plan_kwargs(goal, NODE_DEFAULTS) == {
+        "algorithm": "astar",
+        "highway_types": ["road"],
+        "spacing": 0.0,  # negative = the planner's own vertices
+        "max_snap_distance": 5.0,
+        "cell_size": 0.5,
+        "inflate_obstacles": 1.0,
+        "simplify_path": True,
+        "smooth_path": True,
+    }
