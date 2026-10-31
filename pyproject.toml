@@ -26,7 +26,7 @@ dev = [
     "pytest",
     "pytest-cov",
     "pre-commit",
-    # Keep in sync with .pre-commit-config.yaml and RUFF_VERSION in ci.yml.
+    # Keep in sync with RUFF_VERSION in ci.yml.
     "ruff==0.16.6",
     "mypy==2.3.0",
     "mkdocs",

@@ -8,7 +8,7 @@ on:
   workflow_dispatch: {}
 
 env:
-  # Keep in sync with the ruff pin in pyproject.toml and .pre-commit-config.yaml.
+  # Keep in sync with the ruff pin in pyproject.toml.
   RUFF_VERSION: "0.16.6"
 
 permissions:
