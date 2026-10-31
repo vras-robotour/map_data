@@ -308,3 +308,17 @@ def test_plan_route_rejects_bad_parameters(footway_network_mapdata, kwargs):
     with pytest.raises(RoutePlanningError) as e:
         plan_route(md, [_latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 60.0, 0.0)], **kwargs)
     assert e.value.reason == "bad_parameter"
+
+
+def test_plan_route_reports_a_blocked_goal(footway_network_mapdata):
+    from shapely.geometry import box
+
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    e0, n0, _, _ = utm.from_latlon(lat0, lon0)
+    block = box(e0 + 40.0, n0 + 40.0, e0 + 80.0, n0 + 80.0)
+    md.barriers_list.append(Way(id=9, is_area=True, nodes=[], tags={}, line=block, in_out=""))
+    start, goal = _latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 60.0, 60.0)
+    with pytest.raises(RoutePlanningError) as e:
+        plan_route(md, [start, goal], algorithm="astar", cell_size=1.0)
+    assert e.value.reason == "goal_blocked"

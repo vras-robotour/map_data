@@ -1,8 +1,10 @@
+import itertools
 import random
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from shapely.geometry import LineString, box
 
 from map_data.pathsolver import replan as replan_mod
 from map_data.pathsolver.replan import ReplanPath, cancel_replan_backend
@@ -212,8 +214,6 @@ def _fence_across_footway(**kwargs):
     A fence spanning the whole 20 x 10 m grid at x = 10, crossed by a buffered
     footway along y = 5: the footway gap is the only way through.
     """
-    from shapely.geometry import LineString
-
     from map_data.utils.way import Way
 
     footway = Way(
@@ -304,3 +304,59 @@ def test_cli_defaults_come_from_planner_defaults(yaml_grid):
     )
     args = build_parser().parse_args(["-f", "x.mapdata", "--simplify", "--no-smooth"])
     assert (args.simplify, args.smooth) == (True, False)
+
+
+# ── blocked and enclosed ends ────────────────────────────────────────────────
+
+
+def _walled_replanner(obstacles):
+    """20 x 20 m grid at 0.5 m with *obstacles* burned in; A* calls are recorded."""
+    replanner = ReplanPath(obstacles, **{**ARGS, "high": (20, 20), "simplify_path": False})
+    grid = np.zeros((40, 40))
+    replanner.path_grid.grid_2d_cache = replanner.path_grid.burn_obstacles(grid, obstacles)
+    calls = []
+    astar = replanner._astar
+    replanner._astar = lambda s, g: calls.append((s, g)) or astar(s, g)
+    return replanner, calls
+
+
+def test_goal_inside_a_thin_wall_is_snapped_and_reached():
+    replanner, _ = _walled_replanner([box(9.0, 0.0, 10.0, 15.0)])
+    result = replanner.replan(np.array([[5.0, 5.0], [9.5, 5.0]]))
+    assert result is not None
+    np.testing.assert_allclose(result[-1], [9.5, 5.0])
+
+
+@pytest.mark.parametrize(
+    ("path", "reason"),
+    [([[2, 2], [10, 10]], "goal_blocked"), ([[10, 10], [2, 2]], "start_blocked")],
+)
+def test_end_deep_inside_an_obstacle_fails_fast(path, reason):
+    replanner, calls = _walled_replanner([box(5.0, 5.0, 15.0, 15.0)])
+    assert replanner.replan(np.array(path, dtype=float)) is None
+    assert replanner.failure_reason == reason
+    assert calls == []  # no search
+
+
+def test_enclosed_goal_fails_without_searching():
+    ring = box(6.0, 6.0, 14.0, 14.0).difference(box(7.0, 7.0, 13.0, 13.0))
+    replanner, calls = _walled_replanner([ring])
+    assert replanner.replan(np.array([[2.0, 2.0], [10.0, 10.0]])) is None
+    assert replanner.failure_reason == "no_path"
+    assert calls == []
+
+
+def test_endpoint_legs_keep_the_search_ends_when_the_shortcut_collides():
+    # A wall forces a search; two posts sit on the straight hops from the requested
+    # start/goal to the search's second/second-to-last vertex.
+    obstacles = [box(-1, 4.9, 2, 5.1), box(1.4, 0.3, 1.6, 0.7), box(1.4, 9.3, 1.6, 9.7)]
+    replanner = ReplanPath(obstacles, **{**ARGS, "low": (-2, -2), "high": (12, 12)})
+    replanner.path_grid.grid_2d_cache = np.zeros((28, 28))
+    replanner.simplify_path = False
+    way = np.array([[0.0, 1.0], [3.0, 1.0], [3.0, 9.0], [0.0, 9.0]])
+    replanner._astar = lambda s, g: way
+
+    result = replanner.replan(np.array([[0.0, 0.0], [0.0, 10.0]]))
+
+    np.testing.assert_allclose(result, [[0, 0], *way, [0, 10]])
+    assert not any(replanner._colides(LineString(leg)) for leg in itertools.pairwise(result))

@@ -19,6 +19,11 @@ readable ``reason`` instead of a bare ``None``:
     the waypoints lie on disconnected parts of the network (graph planner);
 ``no_path``
     the grid planner found no path;
+``start_blocked`` / ``goal_blocked``
+    a grid leg starts or ends inside an obstacle, with no free cell within
+    :data:`~map_data.pathsolver.replan.SNAP_RADIUS_M`;
+``cancelled``
+    the grid planner was cancelled through its ``transfer_id``;
 ``start_outside_map`` / ``goal_outside_map``
     the start or goal lies too far outside the map's area (wrong map file?);
 ``grid_too_large``
@@ -41,7 +46,7 @@ import utm
 from shapely import geometry
 
 from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE, GraphPlanner
-from map_data.pathsolver.replan import ReplanPath, grid_defaults
+from map_data.pathsolver.replan import SNAP_RADIUS_M, ReplanPath, grid_defaults
 from map_data.traversability import TraversabilityRules
 from map_data.utils.parsing import ways_to_shapely
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
@@ -58,6 +63,13 @@ MAX_GRID_CELLS = 4_000_000
 GRID_MARGIN_M = 50.0
 #: Two paths are "the same" when no vertex moved more than this (m).
 SIGNIFICANT_CHANGE_TOLERANCE = 0.1
+
+_GRID_FAILURES = {
+    "no_path": "the grid planner found no path",
+    "start_blocked": f"a start lies in an obstacle, no free cell within {SNAP_RADIUS_M:g} m",
+    "goal_blocked": f"a goal lies in an obstacle, no free cell within {SNAP_RADIUS_M:g} m",
+    "cancelled": "the grid planner was cancelled",
+}
 
 GRAPH_ALGORITHM = "graph"
 GRID_ALGORITHMS = ("astar", "rrt")
@@ -331,9 +343,8 @@ def plan_route(
         res = replanner.replan(utm_path, algorithm=sub_algorithm)
         snap = []
         if res is None:
-            # ReplanPath returns None both when no path exists and when the run was
-            # cancelled through its transfer_id; it does not tell the two apart.
-            raise RoutePlanningError("no_path", "the grid planner found no path (or was cancelled)")
+            reason = replanner.failure_reason or "no_path"
+            raise RoutePlanningError(reason, _GRID_FAILURES[reason])
 
     res = np.asarray(res, dtype=float)[:, :2]
     changed = len(res) != len(utm_path) or bool(
