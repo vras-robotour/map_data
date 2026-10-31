@@ -108,8 +108,12 @@ jobs:
         run: bash ws/src/map_data/scripts/setup_ws.sh
 
       - name: Install dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           apt-get update
+          # The image ships rosdep initialized but without its package index.
+          rosdep update --rosdistro jazzy
           rosdep install --from-paths ws/src --ignore-src -y --skip-keys ros2_numpy
           apt-get install -y --no-install-recommends curl python3-pytest
 
