@@ -304,6 +304,9 @@ def test_viewer_uses_the_planner_grid_cell_budget():
         {"algorithm": "astar", "inflate_obstacles": -1.0},
         {"algorithm": "astar", "inflate_obstacles": float("nan")},
         {"algorithm": "astar", "inflate_obstacles": float("inf")},
+        # Would densify a few hundred metres into millions of points.
+        {"spacing": 1e-5},
+        {"spacing": float("nan")},
     ],
 )
 def test_plan_route_rejects_bad_parameters(footway_network_mapdata, kwargs):
@@ -311,6 +314,15 @@ def test_plan_route_rejects_bad_parameters(footway_network_mapdata, kwargs):
     md, _ = load_mapdata_with_annotations(path)
     with pytest.raises(RoutePlanningError) as e:
         plan_route(md, [_latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 60.0, 0.0)], **kwargs)
+    assert e.value.reason == "bad_parameter"
+
+
+@pytest.mark.parametrize("bad", [(91.0, 14.0), (float("nan"), 14.0), (50.0, float("inf"))])
+def test_plan_route_rejects_unprojectable_waypoints(footway_network_mapdata, bad):
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    with pytest.raises(RoutePlanningError) as e:
+        plan_route(md, [(lat0, lon0), bad])
     assert e.value.reason == "bad_parameter"
 
 

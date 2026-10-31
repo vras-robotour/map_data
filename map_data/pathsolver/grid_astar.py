@@ -47,28 +47,6 @@ def _bresenham_cells(
     yield (x1, y1)
 
 
-def grid_segment_blocked(
-    grid: np.ndarray,
-    p1: np.ndarray,
-    p2: np.ndarray,
-    low: tuple[float, float],
-    cs: float,
-) -> bool:
-    """
-    Return ``True`` if the world-coordinate segment *p1*→*p2* crosses a blocked cell.
-
-    The segment is rasterized onto *grid* (cell size *cs*, origin *low*) with
-    Bresenham; any traversed cell with an ``inf`` cost blocks the segment.
-    """
-    ny, nx = grid.shape
-    c1 = (int(np.floor((p1[0] - low[0]) / cs)), int(np.floor((p1[1] - low[1]) / cs)))
-    c2 = (int(np.floor((p2[0] - low[0]) / cs)), int(np.floor((p2[1] - low[1]) / cs)))
-    for px, py in _bresenham_cells(c1, c2):
-        if 0 <= px < nx and 0 <= py < ny and np.isinf(grid[py, px]):
-            return True
-    return False
-
-
 def nearest_free_cell(
     grid: np.ndarray,
     point: np.ndarray,
@@ -167,7 +145,6 @@ def grid_astar(
     low: tuple[float, float],
     cs: float,
     *,
-    simplify_path: bool = True,
     grid_cost_weight: float = GRID_COST_WEIGHT,
 ) -> np.ndarray | None:
     """
@@ -181,8 +158,6 @@ def grid_astar(
         ``(min_x, min_y)`` of the grid.
     cs : float
         Cell size.
-    simplify_path : bool
-        Douglas-Peucker the result, collision-checked against *grid*.
 
     Returns
     -------
@@ -270,14 +245,6 @@ def grid_astar(
             path = np.array(
                 [[(ix + 0.5) * cs + low[0], (iy + 0.5) * cs + low[1]] for ix, iy in path_indices],
             )
-
-            # Simplify path, collision-checking every shortcut against the grid
-            if simplify_path and len(path) > 2:
-                path = simplify_path_checked(
-                    path,
-                    cs / 2.0,
-                    lambda p1, p2: grid_segment_blocked(grid, p1, p2, low, cs),
-                )
             return path
 
         current_g = g_scores[u_flat]

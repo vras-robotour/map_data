@@ -125,9 +125,8 @@ def test_fill_grid_produces_2d_cache():
 
 # ── no stray zero-cost cells off any way ────────────────────────────────────
 #
-# create_empty_grid (np.arange) and get_grid_2d (np.ceil dims + floor indexing)
-# must agree on the cell count, or some grid_2d cells are never written and a
-# planner reads them as free. Walks every cell, not just a few coordinates.
+# fill() must write every grid_2d cell, or a planner reads the unwritten ones as
+# free. Walks every cell, not just a few coordinates.
 
 
 def test_fill_grid_no_zero_cost_cells_off_path():
@@ -182,17 +181,18 @@ def _make_path_grid(cell_size=1.0, low=(0.0, 0.0), high=(10.0, 10.0)):
     )
 
 
-def test_create_empty_grid_points_are_cell_centers():
-    grid = _make_path_grid().create_empty_grid()
-    # First point is the center of cell (0, 0), not its lower-left corner
-    assert np.allclose(grid[0, :2], [0.5, 0.5])
-    # x varies fastest: second point is the center of cell (1, 0)
-    assert np.allclose(grid[1, :2], [1.5, 0.5])
+def test_fill_samples_cell_centers_and_keeps_no_flat_grid():
+    from types import SimpleNamespace
 
-
-def test_flat_grid_is_built_only_by_fill():
-    # At the 4M-cell cap an eager (N, 2) float64 grid alone would be 64 MB.
-    assert _make_path_grid().grid is None
+    pg = _make_path_grid()
+    assert pg.grid_2d_cache is None
+    md = SimpleNamespace(get_points=lambda: {}, footways_list=[], roads_list=[])
+    pg.fill(md, [geom.box(0.1, 0.1, 0.9, 0.9)])
+    # Obstacle in cell (x=0, y=0) only: the cell centre (0.5, 0.5) is inside it
+    assert pg.grid_2d_cache.shape == (10, 10)
+    assert np.isinf(pg.grid_2d_cache[0, 0])
+    assert np.isinf(pg.grid_2d_cache).sum() == 1
+    assert not hasattr(pg, "grid")
 
 
 def test_burn_obstacles_sub_cell_obstacle_centered_in_cell_burns_it():

@@ -115,6 +115,10 @@ def path_length(path_utm: np.ndarray) -> float:
     return float(geometry.LineString(pts[:, :2]).length)
 
 
+#: Smallest positive ``spacing`` (m): a finer one would densify a route into millions of points.
+MIN_SPACING_M = 0.1
+
+
 def densify(path_utm: np.ndarray, spacing: float) -> np.ndarray:
     """
     Resample a polyline so that consecutive vertices are at most ``spacing``
@@ -133,9 +137,19 @@ def latlon_to_utm_path(
     zone_number: int,
     zone_letter: str,
 ) -> np.ndarray:
-    """``[(lat, lon), ...]`` -> ``(N, 2)`` UTM array forced into the map's zone."""
+    """
+    ``[(lat, lon), ...]`` -> ``(N, 2)`` UTM array forced into the map's zone.
+
+    Raises ``bad_parameter`` for a non-finite coordinate or one UTM cannot express
+    (latitude outside -80..84, longitude outside -180..180).
+    """
     pts = np.asarray(points, dtype=np.float64).reshape(-1, 2)
-    e, n, _, _ = utm.from_latlon(pts[:, 0], pts[:, 1], zone_number, zone_letter)
+    if not np.isfinite(pts).all():
+        raise RoutePlanningError("bad_parameter", "waypoint latitude/longitude must be finite")
+    try:
+        e, n, _, _ = utm.from_latlon(pts[:, 0], pts[:, 1], zone_number, zone_letter)
+    except utm.error.OutOfRangeError as err:
+        raise RoutePlanningError("bad_parameter", f"waypoint out of range: {err}") from err
     return np.stack([e, n], axis=-1).reshape(-1, 2)
 
 
@@ -254,7 +268,8 @@ def plan_route(
     value fails with ``bad_parameter``.
 
     ``spacing`` > 0 resamples the result so waypoints are at most that far
-    apart (a waypoint follower wants a few metres). ``changed`` and
+    apart (a waypoint follower wants a few metres; below :data:`MIN_SPACING_M`
+    fails with ``bad_parameter``). ``changed`` and
     ``snap_distances`` are computed before resampling.
 
     ``planner`` lets a caller reuse a prebuilt :class:`GraphPlanner` for ``md``
@@ -303,6 +318,10 @@ def plan_route(
     ):
         raise RoutePlanningError(
             "bad_parameter", f"inflate_obstacles must be finite and >= 0, got {inflate_obstacles}"
+        )
+    if not (spacing <= 0.0 or spacing >= MIN_SPACING_M):  # also NaN
+        raise RoutePlanningError(
+            "bad_parameter", f"spacing must be 0, negative or >= {MIN_SPACING_M} m, got {spacing}"
         )
     if len(points_latlon) < 2:
         raise RoutePlanningError("too_few_points", "plan_route() needs at least two waypoints")

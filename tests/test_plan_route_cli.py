@@ -68,6 +68,13 @@ def test_cli_reports_failure(footway_network_mapdata, capsys):
     assert data == {"success": False, "reason": "unreachable", "message": data["message"]}
 
 
+def test_cli_reports_an_unprojectable_point(footway_network_mapdata, caplog):
+    path, lat0, lon0 = footway_network_mapdata
+    rc = main(["-f", str(path), "--start", f"{lat0},{lon0}", "-p", "91,14"])
+    assert rc == 1
+    assert "bad_parameter" in caplog.text
+
+
 def test_cli_needs_two_points(footway_network_mapdata):
     path, lat0, lon0 = footway_network_mapdata
     assert main(["-f", str(path), "--goal", f"{lat0},{lon0}"]) == 2
