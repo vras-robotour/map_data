@@ -71,6 +71,20 @@ def annotations_arg(value: str) -> str | None:
     return str(p)
 
 
+def positive_float(text: str) -> float:
+    value = float(text)
+    if not value > 0:
+        raise argparse.ArgumentTypeError(f"must be > 0, got {text!r}")
+    return value
+
+
+def non_negative_float(text: str) -> float:
+    value = float(text)
+    if not value >= 0:
+        raise argparse.ArgumentTypeError(f"must be >= 0, got {text!r}")
+    return value
+
+
 def resolve_mapdata(name: str) -> Path:
     """A path as given, else the file of that name in the package data directory."""
     p = Path(name).expanduser()
@@ -116,6 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--ways",
         nargs="+",
         default=["footway"],
+        choices=("footway", "road"),
         metavar="TYPE",
         help="allowed way types: footway and/or road (default: footway)",
     )
@@ -133,7 +148,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--spacing", type=float, default=0.0, help="max m between output waypoints")
     ap.add_argument(
         "--max-snap-distance",
-        type=float,
+        type=positive_float,
         default=DEFAULT_MAX_SNAP_DISTANCE,
         help="graph: reject waypoints farther than this (m) from every allowed way",
     )
@@ -141,13 +156,13 @@ def build_parser() -> argparse.ArgumentParser:
     grid = grid_defaults()
     ap.add_argument(
         "--cell-size",
-        type=float,
+        type=positive_float,
         default=grid["cell_size"],
         help="grid: cell size (m, default %(default)s)",
     )
     ap.add_argument(
         "--inflate-obstacles",
-        type=float,
+        type=non_negative_float,
         default=grid["inflate_obstacles"],
         help="grid: barrier margin (m, default %(default)s)",
     )

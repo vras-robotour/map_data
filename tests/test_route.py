@@ -290,3 +290,21 @@ def test_viewer_uses_the_planner_grid_cell_budget():
     from map_data.viewer.routes import common
 
     assert common.MAX_GRID_CELLS is route.MAX_GRID_CELLS
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"algorithm": "Graph"},
+        {"algorithm": "dijkstra"},
+        {"algorithm": "rrt", "sub_algorithm": "bfs"},
+        {"algorithm": "astar", "cell_size": 0.0},
+        {"algorithm": "astar", "cell_size": -0.5},
+    ],
+)
+def test_plan_route_rejects_bad_parameters(footway_network_mapdata, kwargs):
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    with pytest.raises(RoutePlanningError) as e:
+        plan_route(md, [_latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 60.0, 0.0)], **kwargs)
+    assert e.value.reason == "bad_parameter"

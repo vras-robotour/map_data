@@ -22,7 +22,9 @@ readable ``reason`` instead of a bare ``None``:
 ``start_outside_map`` / ``goal_outside_map``
     the start or goal lies too far outside the map's area (wrong map file?);
 ``grid_too_large``
-    the requested grid would exceed ``max_grid_cells`` cells.
+    the requested grid would exceed ``max_grid_cells`` cells;
+``bad_parameter``
+    an unknown ``algorithm`` / ``sub_algorithm``, or ``cell_size`` not above zero.
 """
 
 from __future__ import annotations
@@ -215,8 +217,7 @@ def plan_route(
     grid built from the map (*All terrain*). ``sub_algorithm`` picks the grid
     search (``"astar"``/``"rrt"``); ``None`` derives it from ``algorithm``, so
     ``algorithm="rrt"`` alone runs RRT*, while the viewer sends ``"rrt"`` plus an
-    explicit ``sub_algorithm``. Any other ``algorithm`` value also selects the
-    grid planner, with ``sub_algorithm`` (default ``"astar"``).
+    explicit ``sub_algorithm``. Any other value fails with ``bad_parameter``.
 
     ``spacing`` > 0 resamples the result so waypoints are at most that far
     apart (a waypoint follower wants a few metres). ``changed`` and
@@ -257,6 +258,12 @@ def plan_route(
     highway_types = list(highway_types) if highway_types else ["footway"]
     if cell_size is None:
         cell_size = float(grid_defaults()["cell_size"])
+    if algorithm not in (GRAPH_ALGORITHM, *GRID_ALGORITHMS):
+        raise RoutePlanningError("bad_parameter", f"unknown algorithm {algorithm!r}")
+    if sub_algorithm is not None and sub_algorithm not in GRID_ALGORITHMS:
+        raise RoutePlanningError("bad_parameter", f"unknown sub_algorithm {sub_algorithm!r}")
+    if not cell_size > 0:  # also NaN
+        raise RoutePlanningError("bad_parameter", f"cell_size must be > 0, got {cell_size}")
     if len(points_latlon) < 2:
         raise RoutePlanningError("too_few_points", "plan_route() needs at least two waypoints")
 
@@ -293,7 +300,7 @@ def plan_route(
             )
     else:
         if sub_algorithm is None:
-            sub_algorithm = algorithm if algorithm in GRID_ALGORITHMS else "astar"
+            sub_algorithm = algorithm
         p_low, p_high = _grid_bbox(md, utm_path)
         area_m2 = max(0.0, p_high[0] - p_low[0]) * max(0.0, p_high[1] - p_low[1])
         cells = area_m2 / (cell_size * cell_size)

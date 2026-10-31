@@ -161,3 +161,21 @@ def test_cli_plans_the_documented_demo_route(capsys):
     data = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert data["algorithm"] == "graph"
     assert data["length_m"] > 300
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        ["--cell-size", "0"],
+        ["--cell-size", "-1"],
+        ["--cell-size", "nan"],
+        ["--inflate-obstacles", "-0.1"],
+        ["--max-snap-distance", "0"],
+        ["--ways", "footpath"],
+    ],
+)
+def test_cli_rejects_bad_parameters(flags):
+    from map_data.plan_route_cli import build_parser
+
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["-f", "x.mapdata", *flags])

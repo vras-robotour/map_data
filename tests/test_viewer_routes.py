@@ -1019,7 +1019,7 @@ def _replan_body(filename, **overrides):
     body = {
         "points": [[50.0, 14.0], [50.0005, 14.0005]],
         "file": filename,
-        "algorithm": "grid",
+        "algorithm": "rrt",  # what the viewer sends for All terrain
         "sub_algorithm": "astar",
         "cell_size": 1.0,
     }
