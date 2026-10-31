@@ -11,7 +11,7 @@ import threading
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import cv2
 import numpy as np
@@ -24,7 +24,13 @@ from map_data.map_data import MapData
 from map_data.pathsolver.replan import grid_defaults
 from map_data.pathsolver.route import RoutePlanningError
 from map_data.utils.way import Way
-from map_data.viewer.app import ACCESS_TOKEN_COOKIE, MAX_CONTENT_LENGTH, create_app
+from map_data.viewer.app import (
+    ACCESS_TOKEN_COOKIE,
+    MAX_CONTENT_LENGTH,
+    SECURITY_HEADERS,
+    _redact_token,
+    create_app,
+)
 from map_data.viewer.cache import _file_signature, load_mapdata_cached
 from map_data.viewer.routes import files as viewer_files
 from map_data.viewer.routes import planning as viewer_planning
@@ -2076,3 +2082,174 @@ def test_deleting_an_added_node_keeps_the_one_added_after_it(app_client_with_fil
     assert client.delete(f"{url}&node_id={a['id']}").status_code == 204
     nodes = client.get(f"/api/way_nodes?file={filename}&way_id=1").get_json()["nodes"]
     assert [n["id"] for n in nodes] == [101, b["id"], 102]
+
+
+# ── hardening ────────────────────────────────────────────────────────────────
+
+_GPX = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">\n'
+    '  <wpt lat="50.0" lon="14.0"/>\n'
+    '  <wpt lat="50.001" lon="14.001"/>\n'
+    "</gpx>"
+)
+
+
+def test_upload_mapdata_rejects_a_non_integer_node_id(app_client):
+    client, tmp_path = app_client
+    data = json.loads(_mapdata_bytes(tmp_path))
+    data["footways"][0]["nodes"] = ["<img src=x onerror=alert(1)>", 102]
+    resp = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(json.dumps(data).encode()), "xss.mapdata")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 400
+    assert resp.get_json() == {"error": "Invalid .mapdata file"}
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["upload_src"]
+
+
+def test_upload_mapdata_validates_under_a_reserved_hidden_name(app_client):
+    client, tmp_path = app_client
+    real_load = MapData.load
+    seen = {}
+
+    def _load(path):
+        seen["listed"] = list(tmp_path.glob("*.mapdata"))  # what /api/files would list
+        seen["reserved"] = set(viewer_files._reserved_paths)
+        return real_load(path)
+
+    with patch.object(viewer_files.MapData, "load", side_effect=_load):
+        resp = client.post(
+            "/api/upload_mapdata",
+            data={"file": (io.BytesIO(_mapdata_bytes(tmp_path)), "new.mapdata")},
+            content_type="multipart/form-data",
+        )
+    assert resp.get_json()["filename"] == "new.mapdata"
+    assert seen["listed"] == []  # not visible while it is still being validated
+    assert seen["reserved"] == {tmp_path / "new.mapdata"}
+    assert viewer_files._reserved_paths == set()
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_create_wormhole_caps_the_running_transfers(app_client):
+    client, _ = app_client
+    manager = viewer_sharing.WormholeManager()
+    done = threading.Event()
+
+    def _blocking_stdout():
+        done.wait(5)
+        yield from ()
+
+    def _popen(*args, **kwargs):
+        process = MagicMock()
+        process.stdout = _blocking_stdout()
+        return process
+
+    with (
+        patch.object(viewer_sharing, "wormhole_manager", manager),
+        patch.object(viewer_sharing.subprocess, "Popen", side_effect=_popen),
+        patch.object(manager, "get_transfer_code", return_value="1-a-b"),
+    ):
+        statuses = [
+            client.post("/api/create_wormhole", json={"gpx": "<gpx/>"})
+            for _ in range(viewer_sharing.MAX_ACTIVE_TRANSFERS + 1)
+        ]
+        done.set()
+    assert [r.status_code for r in statuses] == [200] * viewer_sharing.MAX_ACTIVE_TRANSFERS + [429]
+    assert "error" in statuses[-1].get_json()
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "body"),
+    [
+        ("/api/create_wormhole", {"gpx": ["<gpx/>"]}),
+        ("/api/cancel_wormhole", {"transfer_id": ["x"]}),
+        ("/api/cancel_replan", {"transfer_id": {"a": 1}}),
+    ],
+)
+def test_json_endpoints_reject_non_string_ids(app_client, endpoint, body):
+    client, _ = app_client
+    resp = client.post(endpoint, json=body)
+    assert resp.status_code == 400
+    assert "must be a string" in resp.get_json()["error"]
+
+
+def test_overpass_fetches_answer_429_when_both_slots_are_taken(app_client, mock_overpass_client):
+    client, _ = app_client
+    assert viewer_files._overpass_slots.acquire(blocking=False)
+    assert viewer_files._overpass_slots.acquire(blocking=False)
+    try:
+        bbox = {"min_lat": 50.0, "max_lat": 50.001, "min_lon": 14.0, "max_lon": 14.001}
+        fetch = client.post("/api/fetch_area", json={**bbox, "name": "busy"})
+        gpx = client.post(
+            "/api/upload_gpx",
+            data={"file": (io.BytesIO(_GPX.encode()), "busy.gpx")},
+            content_type="multipart/form-data",
+        )
+    finally:
+        viewer_files._overpass_slots.release()
+        viewer_files._overpass_slots.release()
+    assert fetch.status_code == 429
+    assert gpx.status_code == 429
+    assert "error" in fetch.get_json()
+    assert viewer_files._reserved_paths == set()
+    mock_overpass_client.query_raw.assert_not_called()
+
+
+def test_overpass_slots_are_released_after_each_fetch(app_client, mock_overpass_client):
+    client, _ = app_client
+    bbox = {"min_lat": 50.0, "max_lat": 50.001, "min_lon": 14.0, "max_lon": 14.001}
+    for name in ("a", "b", "c"):
+        task_id = client.post("/api/fetch_area", json={**bbox, "name": name}).get_json()["task_id"]
+        assert _poll_fetch(client, task_id)["status"] == "done"
+    for name in ("d", "e", "f"):
+        data = {"file": (io.BytesIO(_GPX.encode()), f"{name}.gpx")}
+        resp = client.post("/api/upload_gpx", data=data, content_type="multipart/form-data")
+        assert resp.status_code == 200
+
+
+def test_a_json_body_over_10_mb_is_413(app_client):
+    client, _ = app_client
+    body = json.dumps({"transfer_id": "x" * (10 * 1024 * 1024)})
+    resp = client.post("/api/cancel_replan", data=body, content_type="application/json")
+    assert resp.status_code == 413
+    assert "error" in resp.get_json()
+
+
+def test_a_multipart_upload_over_10_mb_is_not_413(app_client):
+    client, _ = app_client
+    big = io.BytesIO(b"x" * (11 * 1024 * 1024))
+    resp = client.post(
+        "/api/upload_mapdata",
+        data={"file": (big, "big.mapdata")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 400  # rejected as invalid content, not for its size
+
+
+def test_the_werkzeug_log_filter_redacts_the_token():
+    args = ("127.0.0.1", "GET /?file=a&access_token=sekret HTTP/1.1", "302", "-")
+    record = logging.LogRecord("werkzeug", logging.INFO, "", 0, '%s - "%s" %s %s', args, None)
+    assert _redact_token(record) is True
+    assert "sekret" not in record.getMessage()
+    assert "file=a&access_token=*** HTTP/1.1" in record.getMessage()
+
+
+def test_responses_carry_the_security_headers(app_client):
+    client, _ = app_client
+    for resp in (client.get("/"), client.get("/api/does-not-exist")):
+        for name, value in SECURITY_HEADERS.items():
+            assert resp.headers[name] == value
+    assert SECURITY_HEADERS["Content-Security-Policy"] == "frame-ancestors 'none'"
+
+
+@pytest.mark.parametrize("path", ["/\\evil.example/x", "//evil.example/x", "/\\/evil.example"])
+def test_the_token_strip_redirect_stays_on_site(app_client, monkeypatch, path):
+    client, _ = app_client
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "sekret")
+    resp = client.get(path, query_string={"access_token": "sekret"})
+    assert resp.status_code == 302
+    location = unquote(resp.headers["Location"])  # werkzeug sends a backslash as %5C
+    assert location.startswith("/")
+    assert location[1] not in "/\\"

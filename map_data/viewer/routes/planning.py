@@ -401,11 +401,13 @@ def cancel_replan_route() -> ResponseReturnValue:
     Cancel the grid replan started by :func:`create_replan` with the body's ``transfer_id``.
 
     Returns ``{"success": true}`` even for an unknown or finished ID; 400 if
-    the body is not JSON or lacks ``transfer_id``.
+    the body is not JSON or ``transfer_id`` is missing or not a string.
     """
     transfer_id = _json_object().get("transfer_id")
     if not transfer_id:
         abort(400, "No transfer_id provided")
+    if not isinstance(transfer_id, str):
+        abort(400, "transfer_id must be a string")
     cancel_replan_backend(transfer_id)
     return jsonify({"success": True})
 

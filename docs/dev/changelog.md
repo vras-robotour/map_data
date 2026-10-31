@@ -88,6 +88,7 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - Viewer: a non-ASCII access token works; a wrong one gets 401 instead of 500
 - Viewer: search and Revert keep working after a split, node add, undo or redo; re-segmented ways respect hidden ways and filters
 - Viewer: no stray node markers or planner waypoints left on the map, no edit handles after a View-mode split, and the robot stays hidden when its layer is off
+- Viewer hardening: a node ID from a `.mapdata` file can no longer inject script (a non-integer one fails to load, 400 on upload); at most 4 wormhole transfers and 2 Overpass fetches run at once (429); JSON bodies over 10 MB get 413; an uploaded `.mapdata` is validated before it appears; responses carry `X-Frame-Options`, `nosniff`, `no-referrer` and `frame-ancestors 'none'`; the token-strip redirect stays on the site; the request log redacts `access_token`; a non-string `gpx` or `transfer_id` is 400. python-engineio 4.15.1, python-socketio 5.17.1, werkzeug 3.1.9 and mkdocs-material 9.8.0 for known advisories (mkdocstrings 1.0.8 for its pymdown-extensions 12)
 - The packaging test checks undeclared imports (it could never fail)
 - Docs pull-request builds no longer cancel a pending gh-pages deploy
 
