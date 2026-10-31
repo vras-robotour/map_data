@@ -58,24 +58,40 @@ class RRTStar:
 
         Parameters
         ----------
+        start : np.ndarray
+            Start position ``[x, y]``.
+        goal : np.ndarray
+            Goal position ``[x, y]``.
         obstacles_tree : STRtree or None
             Index over the obstacle polygons; ``None`` checks the grid only.
         grid : np.ndarray
             ``(Y, X)`` cell costs; cells at or above *traversability_threshold* block.
-        step_size : float
+        low : tuple of float
+            ``(min_x, min_y)`` world coordinates of the grid.
+        grid_scale : float, default 1.0
+            Grid cell size (m).
+        max_iter : int, default 2000
+            Maximum growth iterations.
+        step_size : float, default 2.0
             Longest extension per iteration, also the goal tolerance.
-        neighbor_radius : float
+        neighbor_radius : float, default 5.0
             Rewiring radius (the upper bound when *adaptive_radius*).
-        transfer_id : str or None
+        traversability_threshold : float, default 10.0
+            Grid cells with cost at or above this value block.
+        grid_cost_weight : float, default 5.0
+            Weight of cell costs in segment scoring.
+        transfer_id : str or None, optional
             Planning stops when this transfer is cancelled.
-        improve_after_goal : bool
+        improve_after_goal : bool, default False
             Keep rewiring for up to *improve_iter* iterations after the goal is
             first reached instead of returning; *max_iter* still caps the total.
-        informed : bool
+        improve_iter : int, default 200
+            Additional iterations after reaching the goal when *improve_after_goal*.
+        informed : bool, default True
             Once a solution exists, sample from its informed ellipse.
-        adaptive_radius : bool
+        adaptive_radius : bool, default True
             Shrink the rewiring radius as the tree grows (RRT* optimality formula).
-        rng : random.Random or None
+        rng : random.Random or None, optional
             Sampling source; pass ``random.Random(seed)`` for a reproducible run.
 
         """

@@ -343,7 +343,7 @@ def run_rep(browser, base, mapname, patches, args) -> Rep:
     m["page_load"] = [nav["loadEventEnd"]]
     p.wait_for_function("document.getElementById('file-select').options.length > 1")
 
-    # (a) load the big map: Load click -> all layers rendered, UI responsive
+    # Load the map: Load click -> all layers rendered, UI responsive
     p.select_option("#file-select", mapname)
     s = r.timed(
         "load",
@@ -361,7 +361,7 @@ def run_rep(browser, base, mapname, patches, args) -> Rep:
     )
     m["load:fetch_mapdata"] = [net[0]]
     m["payload_kb"] = [net[2] / 1024]
-    # (c) memory after load
+    # Memory after load
     r.cdp.send("HeapProfiler.collectGarbage")
     pm = {x["name"]: x["value"] for x in r.cdp.send("Performance.getMetrics")["metrics"]}
     m["heap_mb"] = [pm["JSHeapUsedSize"] / 1e6]

@@ -164,7 +164,6 @@ class GraphPlanner:
                     if not way.nodes:
                         continue
 
-                    # Check endpoints of annotation way
                     for node_id in [way.nodes[0], way.nodes[-1]]:
                         if on_ways[node_id] > 1:
                             continue
@@ -545,7 +544,6 @@ class GraphPlanner:
                     cost = math.hypot(p_s[0] - p_g[0], p_s[1] - p_g[1]) * f_s
                     _link(extra_adj, extra_via, id_s, id_g, cost, None)
 
-            # Route between temporary nodes
             segment = self._route_segment(id_s, id_g, positions, extra_adj, extra_via)
             if segment is None:
                 return None

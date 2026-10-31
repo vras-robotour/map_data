@@ -76,7 +76,7 @@ class OverpassClient:
                 # URLError, timeouts, connection resets and truncated reads.
                 problem = str(e)
             logger.warning("Overpass request failed on %s: %s", endpoint, problem)
-            self._endpoint_index += 1  # try the next endpoint
+            self._endpoint_index += 1
             if attempt < retries:
                 time.sleep(2 * attempt)
 

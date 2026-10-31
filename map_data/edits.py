@@ -260,7 +260,8 @@ def _rebuild_polygon(
 
     """
     if is_closed:
-        # Matches parse_osm_ways: a closed linear barrier is a ring unless area=yes.
+        # Matches parse_osm_ways: a closed linear barrier is a ring, not a flat area,
+        # unless area=yes.
         if category == "barrier" and (
             (tags or {}).get("area") == "yes" or not _is_linear_barrier(tags or {})
         ):
@@ -305,6 +306,14 @@ def split_way(
 
     Parameters
     ----------
+    way : Way
+        The way to split.
+    split_nids : list of int
+        Interior node IDs at which to split the way.
+    zone_number : int
+        UTM zone number.
+    zone_letter : str
+        UTM zone letter.
     nodes_cache : dict or None
         ``{node_id: {"lat": ..., "lon": ...}}``; needed for ``Polygon`` ways
         and detached split ends.
@@ -435,8 +444,16 @@ def apply_node_position_overrides(
 
     Parameters
     ----------
+    way : Way
+        The way whose node positions to override.
     overrides : dict of {int: dict}
         ``{node_id: {"lat": float, "lon": float}}``.
+    zone_number : int
+        UTM zone number.
+    zone_letter : str
+        UTM zone letter.
+    nodes_cache : dict or None, optional
+        ``{node_id: {"lat": ..., "lon": ...}}`` cache for node positions.
     category : str, optional
         ``"barrier"`` makes a closed ``Polygon`` a flat area rather than a
         buffered ring, unless it is a linear barrier (fence, wall, ...)
@@ -609,7 +626,7 @@ def apply_added_nodes(
         try:
             idx = node_ids.index(after_id)
         except ValueError:
-            continue  # after_node_id was deleted or not found; skip
+            continue  # anchor node not found or deleted; skip
 
         insert_pos = idx + 1
         node_ids.insert(insert_pos, synth_id)
@@ -658,6 +675,21 @@ def rebuild_way_without_nodes(
     if the way was closed). A ``Polygon`` is rebuilt from the remaining
     nodes' *nodes_cache* positions by :func:`_rebuild_polygon`, falling back
     to the bare centerline if re-buffering fails.
+
+    Parameters
+    ----------
+    way : Way
+        The way to rebuild.
+    del_nids : set of int or list of int
+        Node IDs to remove from the way.
+    zone_number : int
+        UTM zone number.
+    zone_letter : str
+        UTM zone letter.
+    nodes_cache : dict or None
+        ``{node_id: {"lat": ..., "lon": ...}}`` cache for node positions.
+    category : str, optional
+        Way category (e.g. ``"barrier"``).
 
     Returns
     -------

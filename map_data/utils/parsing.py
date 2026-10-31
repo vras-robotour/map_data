@@ -122,7 +122,7 @@ def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
 
         for member in rel.members:
             if member._type_value == "way" and int(member.ref) in ways:
-                # An empty multipolygon role is the legacy spelling of "outer".
+                # An empty multipolygon member role is treated as "outer".
                 if member.role == "outer" or (not member.role and rel_type == "multipolygon"):
                     outer_ids.append(int(member.ref))
                 elif member.role == "inner":

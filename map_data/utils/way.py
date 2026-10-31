@@ -37,6 +37,8 @@ class Way:
         ``True`` when ``line`` is a polygon, including buffered lines.
     nodes : list
         Ordered node ids (keys of ``MapData.nodes_cache``).
+    tags : dict
+        OSM tags (key -> string value).
     line : BaseGeometry or None
         Geometry in UTM.
     in_out : str

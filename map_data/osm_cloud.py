@@ -150,7 +150,7 @@ class OSMCloud(Node):
         self.initialized = False
         # True when the grid came out empty although the map has ways, i.e. the map is
         # misplaced. Nothing is published then: a latched empty cloud would hide the map
-        # from every late subscriber until the node was restarted.
+        # from every late subscriber until the node is restarted.
         self.cloud_degenerate = False
 
         self.utm_to_local: np.ndarray | None = None
@@ -234,7 +234,7 @@ class OSMCloud(Node):
         if self.republish_period > 0:
             self.create_timer(self.republish_period, self.publish_cb)
         # From here on a /tf_static message rebuilds the map, instead of only filling the
-        # buffer for the start-up lookup that drove the callback until now.
+        # buffer for the start-up lookup.
         self.initialized = True
         self.get_logger().info("Initialized OSM cloud")
 
@@ -338,8 +338,8 @@ class OSMCloud(Node):
             self.get_logger().error(f"Rejected parameter change: {reason}")
             return SetParametersResult(successful=False, reason=reason)
 
-        # Apply, rebuild, and put everything back if the rebuild fails: a rejected change
-        # must leave the node as it was.
+        # Apply, rebuild, and roll back if the rebuild fails: a rejected change
+        # must leave the node unchanged.
         old = {name: getattr(self, name) for name in _REBUILD_ATTRS}
         rebuild_cloud = False
         rebuild_intersections = False
@@ -433,9 +433,8 @@ class OSMCloud(Node):
     def _tf_static_cb(self, msg: TFMessage) -> None:
         for t in msg.transforms:
             self.tf.set_transform_static(t, "osm_cloud")
-        # Before the map is published, _poll_tf() is what drives this callback and it
-        # picks the new transform up on its next lookup; only one arriving afterwards
-        # has to rebuild what was already published.
+        # Before the map is published, _poll_tf() drives this callback and picks up
+        # the new transform on its next lookup; later arrivals trigger a rebuild.
         if self.initialized:
             self._replace_placement()
 
@@ -634,8 +633,8 @@ class OSMCloud(Node):
         pose_array = PoseArray()
         pose_array.header.frame_id = self.local_frame
 
-        # RViz keeps what it was sent until told otherwise, so a rebuild (new bounds,
-        # placement) would leave the old spheres behind.
+        # RViz retains markers until cleared, so a rebuild (new bounds, placement)
+        # would leave old spheres behind.
         clear = Marker()
         clear.header.frame_id = self.local_frame
         clear.action = Marker.DELETEALL
@@ -690,10 +689,18 @@ def create_grid(
 
     Parameters
     ----------
-    near : np.array, optional
+    low : tuple of float
+        Minimum (x, y) coordinates of the grid (m).
+    high : tuple of float
+        Maximum (x, y) coordinates of the grid (m).
+    cell_size : float, default 0.25
+        Grid cell size (m).
+    near : np.ndarray, optional
         (N, 2) reference points. If given, only the cells within *max_dist* of one of them
         (and a few more, from the square around each) are built, so a long thin network
         does not cost the whole bounding box in memory.
+    max_dist : float, default 1.0
+        Distance threshold (m) around *near* points.
 
     """
     low_arr = np.round(low)

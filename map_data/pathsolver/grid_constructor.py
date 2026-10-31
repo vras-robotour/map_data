@@ -45,6 +45,12 @@ class PathGrid:
 
         Parameters
         ----------
+        low : tuple of float
+            ``(min_x, min_y)`` world coordinates of the grid.
+        high : tuple of float
+            ``(max_x, max_y)`` world coordinates of the grid.
+        cell_size : float
+            Size of a square grid cell (m).
         highway_costs, surface_costs : dict of {str: float}
             Cost tables passed to :func:`~map_data.pathsolver.way_cost.way_cost`.
         default_off_path_cost : float
@@ -81,13 +87,15 @@ class PathGrid:
 
         Parameters
         ----------
+        map_data : MapData
+            Map containing footways and roads.
         obstacles : list of shapely geometry
             Only ``Polygon``/``MultiPolygon`` geometries block cells.
         highway_types : list of str, optional
             Way categories that lower the cost: ``"footway"`` and/or ``"road"``.
             Defaults to ``["footway"]``.
         max_path_dist : float
-            Radius of influence of a way centerline.
+            Radius of influence of a way centerline (m).
 
         Returns
         -------
