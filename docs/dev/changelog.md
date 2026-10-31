@@ -63,6 +63,7 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - `plan_route` (and so a PlanRoute goal) rejects a negative or non-finite `inflate_obstacles` with `bad_parameter` instead of shrinking the obstacles
 - `osm_cloud`: a rejected parameter change keeps the previously published grid and intersections
 - Viewer way edits (split, add node, move nodes) reject an unknown way with 404 and a node not on the way with 400 instead of storing them
+- Viewer: saving a dragged annotation no longer reports failure and rolls back after a successful save
 
 ### Removed
 

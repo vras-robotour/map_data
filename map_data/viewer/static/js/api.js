@@ -64,6 +64,7 @@ async function createAnnotationApi(filename, type, geometry, properties) {
     const res = await api('POST', '/api/annotations', {
         query: { file: filename }, body: { type, geometry, properties }, readOnlyMsg: 'Editing',
     });
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }
 
@@ -71,6 +72,7 @@ async function updateAnnotationApi(filename, annId, geometry, type, properties) 
     const res = await api('PUT', `/api/annotations/${annId}`, {
         query: { file: filename }, body: { geometry, type, properties }, readOnlyMsg: 'Editing',
     });
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }
 
