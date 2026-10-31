@@ -65,6 +65,7 @@ map_data_tracker:
     active_intersection_topic: ""                                     # enter/exit circles
     intersection_enter_threshold: 5.0                # keep equal to road_and_gps_follower.yaml
     intersection_exit_threshold: 6.0
+    planner_node: "/route_planner"                   # its parameters seed the Planner toggles ("" = off)
     nav_through_poses_feedback_topic: ""             # no Nav2 actions
     follow_gps_waypoints_feedback_topic: ""
     follow_waypoints_feedback_topic: ""

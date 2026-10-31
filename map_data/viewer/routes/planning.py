@@ -14,6 +14,7 @@ import yaml
 from flask import (
     Response,
     abort,
+    current_app,
     jsonify,
     request,
 )
@@ -21,7 +22,7 @@ from flask.typing import ResponseReturnValue
 
 from map_data.map_data import MapData
 from map_data.pathsolver.graph_planner import GraphPlanner
-from map_data.pathsolver.replan import ReplanPath, cancel_replan_backend
+from map_data.pathsolver.replan import ReplanPath, cancel_replan_backend, grid_defaults
 from map_data.pathsolver.route import (
     GRAPH_ALGORITHM,
     RoutePlanningError,
@@ -58,6 +59,9 @@ from .common import (
 
 logger = logging.getLogger(__name__)
 
+#: route_planner parameters (its PLANNER_PARAMETERS) that seed the planner toggles.
+NODE_PLANNER_PARAMETERS = ("cell_size", "inflate_obstacles", "simplify_path", "smooth_path")
+
 
 @lru_cache(maxsize=4)
 def _graph_planner(
@@ -89,13 +93,25 @@ def get_planner_defaults() -> Response:
     """
     Return the default path-planning parameters as JSON.
 
+    When the viewer runs under ROS and the tracker's ``planner_node`` answers, its
+    :data:`NODE_PLANNER_PARAMETERS` replace the file's values. The viewer only reads
+    them: the toggles a plan request sends are what it plans with.
+
     Returns
     -------
     Response
-        JSON dict of planner defaults from ``config/planner_defaults.yaml``.
+        JSON dict of planner defaults from ``config/planner_defaults.yaml``, plus
+        ``source`` (``"route_planner"`` or ``"yaml"``) and, for ``"route_planner"``,
+        ``node`` (the node's name).
 
     """
-    return jsonify(load_config("planner_defaults.yaml"))
+    from ..tracker_routes import TRACKER_EXTENSION  # tracker_routes imports this package
+
+    cfg = load_config("planner_defaults.yaml")
+    node = current_app.extensions.get(TRACKER_EXTENSION)
+    if node is not None and (params := node.planner_parameters(NODE_PLANNER_PARAMETERS)):
+        return jsonify({**cfg, **params, "source": "route_planner", "node": node.planner_node})
+    return jsonify({**cfg, "source": "yaml"})
 
 
 def _traversability_path() -> Path:
@@ -457,15 +473,16 @@ def create_replan() -> Response:
         planner only).
     highway_costs, surface_costs : dict, optional
         Custom per-tag traversal cost overrides (grid planner only).
-    cell_size : float, default 0.25
+    cell_size : float, optional
         Grid cell size in meters (grid planner only); must be within
         [:data:`~map_data.viewer.routes.common.MIN_CELL_SIZE_M`,
         :data:`~map_data.viewer.routes.common.MAX_CELL_SIZE_M`].
-    inflate_obstacles : float, default 0.25
+    inflate_obstacles : float, optional
         Obstacle inflation radius in meters (grid planner only); must be
         within [0, :data:`~map_data.viewer.routes.common.MAX_INFLATE_OBSTACLES_M`].
-    simplify_path, smooth_path : bool
-        Post-processing toggles (grid planner only).
+    simplify_path, smooth_path : bool, optional
+        Post-processing toggles (grid planner only). These and the two above
+        default to :func:`~map_data.pathsolver.replan.grid_defaults`.
     grid_cost_weight : float, optional
         Weight of grid traversal cost vs. path length (grid planner only).
 
@@ -519,20 +536,21 @@ def create_replan() -> Response:
     highway_costs = _validated_cost_dict(body.get("highway_costs"), "highway_costs")
     surface_costs = _validated_cost_dict(body.get("surface_costs"), "surface_costs")
 
+    defaults = grid_defaults()
     cell_size = _validated_number(
-        body.get("cell_size", 0.25),
+        body.get("cell_size", defaults["cell_size"]),
         "cell_size",
         MIN_CELL_SIZE_M,
         MAX_CELL_SIZE_M,
     )
     inflate_obstacles = _validated_number(
-        body.get("inflate_obstacles", 0.25),
+        body.get("inflate_obstacles", defaults["inflate_obstacles"]),
         "inflate_obstacles",
         0.0,
         MAX_INFLATE_OBSTACLES_M,
     )
-    simplify_path = body.get("simplify_path", True)
-    smooth_path = body.get("smooth_path", False)
+    simplify_path = body.get("simplify_path", defaults["simplify_path"])
+    smooth_path = body.get("smooth_path", defaults["smooth_path"])
     if not isinstance(simplify_path, bool) or not isinstance(smooth_path, bool):
         abort(400, "simplify_path and smooth_path must be booleans")
     grid_cost_weight = body.get("grid_cost_weight")

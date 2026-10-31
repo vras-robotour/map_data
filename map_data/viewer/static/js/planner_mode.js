@@ -48,11 +48,14 @@ class PlannerMode {
             this.surfaceCosts = { ...data.surface_costs };
             
             // Update UI fields if they exist
-            if (data.cell_size) document.getElementById('planner-cell-size').value = data.cell_size;
-            if (data.inflate_obstacles) document.getElementById('planner-inflate').value = data.inflate_obstacles;
+            if (data.cell_size != null) document.getElementById('planner-cell-size').value = data.cell_size;
+            if (data.inflate_obstacles != null) document.getElementById('planner-inflate').value = data.inflate_obstacles;
             if (data.grid_cost_weight) document.getElementById('planner-grid-cost-weight').value = data.grid_cost_weight;
             if (data.simplify_path !== undefined) document.getElementById('planner-simplify').checked = data.simplify_path;
             if (data.smooth_path !== undefined) document.getElementById('planner-smooth').checked = data.smooth_path;
+            // The toggles start from the route_planner node's parameters when the viewer reaches it
+            document.getElementById('planner-defaults-source').textContent =
+                data.source === 'route_planner' ? `defaults from ${data.node}` : '';
 
             // Populate advanced fields in all fetch/GPX modals with defaults
             // (a missing default keeps the field's value from the `advanced` macro)
