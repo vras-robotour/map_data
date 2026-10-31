@@ -85,7 +85,14 @@ SEQUENCE_MAX_POINTS = 200
 SPEECH_HISTORY = 5  # spoken messages kept for the sidebar
 
 # Ordered like nav2's SpeedLimit / CollisionMonitor enums
-_COLLISION_ACTIONS: dict[int, str] = {0: "STOP", 1: "SLOWDOWN", 2: "LIMIT", 3: "PASSTHROUGH"}
+# nav2_msgs/CollisionMonitorState action_type constants.
+_COLLISION_ACTIONS: dict[int, str] = {
+    0: "DO_NOTHING",
+    1: "STOP",
+    2: "SLOWDOWN",
+    3: "APPROACH",
+    4: "LIMIT",
+}
 
 
 def heading_from_yaw(yaw_rad: float) -> float:

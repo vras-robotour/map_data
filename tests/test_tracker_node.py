@@ -286,3 +286,10 @@ def test_planner_parameters_come_from_the_route_planner_node(make_node):
         spinner.join(5)
         planner.destroy_node()
     assert not spinner.is_alive()
+
+
+def test_collision_action_names_match_nav2():
+    from nav2_msgs.msg import CollisionMonitorState as State
+
+    for name in ("DO_NOTHING", "STOP", "SLOWDOWN", "APPROACH", "LIMIT"):
+        assert ros_node._COLLISION_ACTIONS[getattr(State, name)] == name

@@ -367,7 +367,7 @@ const trackerMode = (() => {
 
         const collision = $('tsi-collision');
         if (hasCollision) {
-            const showCollision = s.collision_action && s.collision_action !== 'PASSTHROUGH';
+            const showCollision = s.collision_action && s.collision_action !== 'DO_NOTHING';
             collision.hidden = !showCollision;
             if (showCollision) $('tsi-collision-val').textContent = s.collision_action;
         } else {
