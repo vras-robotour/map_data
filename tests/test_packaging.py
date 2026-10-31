@@ -1,5 +1,6 @@
 """The version is spelled out in four files; none of them may drift."""
 
+import ast
 import re
 import tomllib
 from pathlib import Path
@@ -38,3 +39,24 @@ def test_the_changelog_documents_the_released_version():
     assert re.search(section, changelog, re.M), (
         f"docs/dev/changelog.md has no dated section for {version}"
     )
+
+
+def test_top_level_ros_imports_are_declared():
+    """ROS package dependencies must not work only by accident of the system."""
+    ros_packages = {
+        node.findtext("name")
+        for node in ElementTree.parse(PKG / "package.xml").getroot().findall("exec_depend")
+        if node.findtext("name")
+    }
+    imported = set()
+    for path in [*PKG.glob("map_data/*.py"), *PKG.glob("launch/*.py")]:
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name.split(".")[0] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                imported.add(node.module.split(".")[0])
+
+    py_packages = {package.removeprefix("python3-").replace("-", "_") for package in ros_packages}
+    undeclared = imported & (ros_packages | py_packages)
+    assert not undeclared, f"ROS packages imported but not declared: {sorted(undeclared)}"
