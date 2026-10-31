@@ -3,6 +3,7 @@
 import logging
 import random
 import threading
+from collections import OrderedDict
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -58,14 +59,25 @@ def grid_defaults() -> dict[str, Any]:
 #: on a wall) is moved to the nearest free cell before the grid search.
 SNAP_RADIUS_M = 2.0
 
+#: Cancels kept for runs that never consume them (already finished, or never started).
+MAX_PENDING_CANCELS = 256
+
 _cancel_lock = threading.Lock()
-_cancelled_transfers: set = set()
+_cancelled_transfers: OrderedDict[str, None] = OrderedDict()
 
 
 def cancel_replan_backend(transfer_id: str | None) -> None:
+    """
+    Cancel the replan running, or about to run, under *transfer_id*.
+
+    Transfer ids must be unique per run: a cancel that lands before its run starts
+    (while the map loads) still aborts it, so a reused id would abort the next run.
+    """
     if transfer_id:
         with _cancel_lock:
-            _cancelled_transfers.add(transfer_id)
+            _cancelled_transfers[transfer_id] = None
+            while len(_cancelled_transfers) > MAX_PENDING_CANCELS:
+                _cancelled_transfers.popitem(last=False)
 
 
 def _is_cancelled(transfer_id: str | None) -> bool:
@@ -78,7 +90,7 @@ def _is_cancelled(transfer_id: str | None) -> bool:
 def _discard_cancelled(transfer_id: str | None) -> None:
     if transfer_id:
         with _cancel_lock:
-            _cancelled_transfers.discard(transfer_id)
+            _cancelled_transfers.pop(transfer_id, None)
 
 
 class ReplanPath:
@@ -170,12 +182,8 @@ class ReplanPath:
         self.failure_reason: str | None = None
 
     def replan(self, path: np.ndarray, algorithm: str = "astar") -> np.ndarray | None:
-        # A cancel targeting a *previous* replan with the same transfer_id may
-        # arrive after that run already returned; discard any such stale ID on
-        # entry so it cannot instantly abort this run, and again on exit (via
-        # finally) so a cancel arriving after we return cannot poison the next
-        # run. Cancels registered while this run is in progress still abort it.
-        _discard_cancelled(self.transfer_id)
+        # A cancel registered before this run started still aborts it; the id is
+        # consumed on exit either way.
         self.failure_reason = None
         try:
             # This is pure-Python, GIL-bound work, so it runs sequentially.

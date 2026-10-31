@@ -70,40 +70,23 @@ def test_replan_completes_without_cancel(transfer_id):
     assert np.allclose(result[-1], [9.0, 9.0])
 
 
-def test_replan_stale_cancel_before_start_is_cleared_and_run_completes(transfer_id):
-    """
-    A cancel left over from an earlier run must not abort a new replan.
-
-    Cancels only apply to the replan that is running when they arrive; an ID
-    already present when replan() starts is stale and is discarded on entry.
-    """
+def test_replan_cancel_before_start_aborts_the_run(transfer_id):
+    """A cancel that lands while the caller is still loading the map is honoured."""
     replanner = _make_replanner(transfer_id)
-    cancel_replan_backend(transfer_id)  # stale — no replan is running yet
-
-    result = replanner.replan(np.array([[1.0, 1.0], [9.0, 9.0]]))
-
-    assert result is not None
-    assert not replan_mod._is_cancelled(transfer_id)
-
-
-def test_replan_cancel_after_completion_does_not_poison_next_run(transfer_id):
-    """
-    Regression: a cancel arriving after replan() returned used to sit in
-    _cancelled_transfers forever, instantly "cancelling" the next replan
-    that reused the same transfer_id.
-    """
-    replanner = _make_replanner(transfer_id)
-    path = np.array([[1.0, 1.0], [9.0, 9.0]])
-
-    assert replanner.replan(path) is not None
-
-    # Cancel lands after the run already completed
     cancel_replan_backend(transfer_id)
 
-    # A new replan with the same transfer_id must run normally to completion
-    result = replanner.replan(path)
-    assert result is not None
-    assert not replan_mod._is_cancelled(transfer_id)
+    assert replanner.replan(np.array([[1.0, 1.0], [9.0, 9.0]])) is None
+    assert replanner.failure_reason == "cancelled"
+    assert not replan_mod._is_cancelled(transfer_id)  # consumed
+
+
+def test_cancels_for_runs_that_never_consume_them_are_bounded(monkeypatch):
+    monkeypatch.setattr(replan_mod, "_cancelled_transfers", replan_mod.OrderedDict())
+    for i in range(replan_mod.MAX_PENDING_CANCELS + 10):
+        cancel_replan_backend(f"finished-{i}")
+    assert len(replan_mod._cancelled_transfers) == replan_mod.MAX_PENDING_CANCELS
+    assert not replan_mod._is_cancelled("finished-0")  # oldest dropped first
+    assert replan_mod._is_cancelled(f"finished-{replan_mod.MAX_PENDING_CANCELS + 9}")
 
 
 def test_replan_discards_cancel_id_even_on_planner_failure(transfer_id):
