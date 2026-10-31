@@ -458,9 +458,8 @@ async function splitCurrentWay(wayId, nodeId) {
             newLayer._osmCat = newLayer._featureRef.properties.category;
             newLayer.setStyle(HIGHLIGHT_STYLES[newLayer._osmCat]);
             showProps(newLayer._featureRef.properties, newLayer._featureRef);
-            // Clear nodes but immediately reload them for the new segment
             clearNodes();
-            loadNodesForEditing(newLayer._featureRef, newLayer);
+            toggleNodes();
         } else {
             deselectCurrent();
         }
