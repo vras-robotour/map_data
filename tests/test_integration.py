@@ -211,6 +211,8 @@ def test_osm_cache_roundtrip(tmp_path):
     loaded = md._load_osm_cache()
 
     assert loaded == _WAYS_JSON
+    # The bbox is part of the hashed query, so it is not stored separately.
+    assert "bbox" not in json.loads((tmp_path / "test.osm_cache.json").read_text())
 
 
 def test_osm_cache_bbox_mismatch_returns_none(tmp_path):
@@ -219,7 +221,7 @@ def test_osm_cache_bbox_mismatch_returns_none(tmp_path):
 
     md._save_osm_cache(_EMPTY_JSON)
 
-    # Shift the stored bounding box by more than the 1e-6 tolerance
+    # A moved bounding box changes the query, hence its hash.
     md.min_lat += 1.0
     result = md._load_osm_cache()
     assert result is None

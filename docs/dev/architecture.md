@@ -354,7 +354,7 @@ The `map_data` package has four layers: **data ingestion**, **representation**, 
 | `waypoints` | `np.ndarray` | `(N, 2)` UTM input waypoints |
 | `min_x`, `max_x`, `min_y`, `max_y` | `float` | UTM bounding box including `grid_margin` |
 
-**OSM cache.** The raw Overpass response is saved as `<stem>.osm_cache.json` next to the source GPX. It is reused when the stored box matches within 1 × 10⁻⁶° (≈ 11 cm), the query hash matches and it is younger than 30 days (`OSM_CACHE_MAX_AGE`). `run_queries()` uses it by default (the viewer's fetch and GPX upload); `run_all()` bypasses it, and `create_mapdata` uses it only with `--cache`.
+**OSM cache.** The raw Overpass response is saved as `<stem>.osm_cache.json` next to the source GPX. It is reused when the hash of the query (which contains the bounding box) matches and it is younger than 30 days (`OSM_CACHE_MAX_AGE`). `run_queries()` uses it by default (the viewer's fetch and GPX upload); `run_all()` bypasses it, and `create_mapdata` uses it only with `--cache`.
 
 **Serialization.** `MapData.save()` writes JSON (`.mapdata`) atomically; `MapData.load()` reads it and recomputes the node-based crossroads. See [Data formats](data_formats.md).
 
