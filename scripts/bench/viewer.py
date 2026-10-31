@@ -205,7 +205,13 @@ class Bench:
         q = {"file": f}
         steps: dict[str, list[float]] = {
             k: []
-            for k in ("PUT way_nodes/move", "PUT tags", "DELETE way", "GET /api/mapdata after")
+            for k in (
+                "PUT way_nodes/move",
+                "PUT tags",
+                "DELETE way",
+                "GET /api/mapdata after",
+                "POST replan graph after",
+            )
         }
         for _ in range(self.cold_reps + 2):
             self.reset_edits()
@@ -237,6 +243,13 @@ class Bench:
             steps["DELETE way"].append(ms)
             ms, r = timed(lambda: c.get("/api/mapdata", query_string=q))
             steps["GET /api/mapdata after"].append(ms)
+            ms, r = timed(
+                lambda: c.post(
+                    "/api/create_replan",
+                    json={"file": f, "points": self.route, "algorithm": "graph"},
+                )
+            )
+            steps["POST replan graph after"].append(ms)
         self.reset_edits()
         for label, samples in steps.items():
             self.record(f"edit: {label}", samples, [])
