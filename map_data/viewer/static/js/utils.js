@@ -46,6 +46,7 @@ function kvRow(cls, k = '', v = '') {
       <input class="form-control form-control-sm bg-dark text-light border-secondary ${cls}-val"
              placeholder="value" value="${escHtml(v)}" style="flex:1;font-size:0.75rem;">
       <button type="button" class="btn btn-sm btn-outline-danger px-1"
+              aria-label="Remove property"
               onclick="this.closest('.d-flex').remove()">×</button>
     </div>`;
 }

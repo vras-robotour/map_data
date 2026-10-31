@@ -2,14 +2,14 @@
    utilities are pointed at it so inputs and modals match the sidebar. */
 :root {
   --bg-0: #0f1524; --bg-1: #141c2f; --bg-2: #1b253c; --bg-3: #233050;
-  --line: #26324d; --text: #d3d9e6; --muted: #7d8aa8; --accent: #5b8def;
+  --line: #26324d; --text: #d3d9e6; --muted: #8592b2; --accent: #5b8def;
   --accent-hover: #4a7bdc; --highlight: #f0b429;
   --shadow: 0 8px 28px rgb(4 8 20 / 0.55);
   --bs-body-font-family: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --bs-font-monospace: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --bs-body-bg: var(--bg-1); --bs-body-color: var(--text);
   --bs-dark-rgb: 27, 37, 60;
-  --bs-secondary-rgb: 125, 138, 168;
+  --bs-secondary-rgb: 133, 146, 178;
   --bs-primary-rgb: 91, 141, 239;
   --bs-focus-ring-color: rgb(91 141 239 / 0.35);
 }
@@ -106,7 +106,6 @@ summary::-webkit-details-marker { display: none; }
 .mode-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed !important;
-  pointer-events: none;
 }
 
 /* Static demo (GitHub Pages): dimmed server-only controls + badge */

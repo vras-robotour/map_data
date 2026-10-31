@@ -837,7 +837,7 @@ class PlannerMode {
             btn.innerHTML = `
                 <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
                 <span class="ms-1">Planning...</span>
-                <span class="ms-auto" style="font-weight:bold; font-size:1.1rem;">&times;</span>
+                <span class="ms-auto" style="font-weight:bold; font-size:1.1rem;" aria-hidden="true">&times;</span>
             `;
         } else {
             btn.textContent = 'Replan Path';

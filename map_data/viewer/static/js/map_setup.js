@@ -203,6 +203,27 @@ async function initApp() {
         });
     });
 
+    document.querySelectorAll('.layer-row:not(summary)').forEach(row => {
+        row.addEventListener('click', e => {
+            if (e.target.tagName === 'INPUT') return;
+            const cb = row.querySelector('input[type="checkbox"]');
+            if (cb) {
+                cb.checked = !cb.checked;
+                cb.dispatchEvent(new Event('change'));
+            }
+        });
+        row.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                const cb = row.querySelector('input[type="checkbox"]');
+                if (cb) {
+                    cb.checked = !cb.checked;
+                    cb.dispatchEvent(new Event('change'));
+                }
+            }
+        });
+    });
+
     map.on('click', () => {
         if (currentMode === 'view') {
             deselectCurrent();

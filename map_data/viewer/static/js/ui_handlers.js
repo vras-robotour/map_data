@@ -194,7 +194,7 @@ function showProps(props, feature = null) {
             ? Object.entries(tags).map(([k, v]) =>
                 `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`
             ).join('')
-            : '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No tags</td></tr>',
+            : '<tr><td colspan="2" style="color:var(--muted);font-style:italic;">No tags</td></tr>',
     ].join('');
     const el = document.getElementById('props-content');
     el.innerHTML = `<table><tbody>${rows}</tbody></table>`;
@@ -212,9 +212,9 @@ function showProps(props, feature = null) {
                     ? `<span class="node-tag-hint">${escHtml(firstTag[0])}: ${escHtml(String(firstTag[1]))}</span>`
                     : '';
                 const sel = i === selectedNodeIndex ? ' sel' : '';
-                return `<div class="node-list-item${sel}" onclick="clickNode(${i})">
+                return `<div class="node-list-item${sel}" role="button" tabindex="0" onclick="clickNode(${i})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();clickNode(${i});}">
           <span class="node-idx">${i + 1}</span>
-          <span>${n.id}</span>${hint}
+          <span>${escHtml(String(n.id))}</span>${hint}
         </div>`;
             }).join('');
             el.innerHTML += `<div class="node-list">${items}</div>`;
@@ -353,7 +353,7 @@ async function loadNodesForEditing(feature, layer) {
       ${label ? `<span class="badge bg-dark ms-1">${escHtml(label)}</span>` : ''}
       <span class="text-secondary ms-1">#${escHtml(String(props.id))}</span>
     </div>
-    <div style="font-size:0.75rem;color:#6c7a9c;">${currentNodes.length} nodes — drag node or way to move</div>`;
+    <div style="font-size:0.75rem;color:var(--muted);">${currentNodes.length} nodes — drag node or way to move</div>`;
     setStatus(`Editing way ${wayId}`, 'text-info');
 }
 
@@ -396,7 +396,7 @@ function showOsmNodeProps(node, index, total) {
 
     const tagRows = Object.entries(node.tags || {})
         .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
-        .join('') || '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No tags</td></tr>';
+        .join('') || '<tr><td colspan="2" style="color:var(--muted);font-style:italic;">No tags</td></tr>';
 
     let buttons = `
     <div class="d-flex gap-1 mt-2">
@@ -407,7 +407,7 @@ function showOsmNodeProps(node, index, total) {
 
     if (canSplit) {
         buttons += `
-      <button class="btn btn-sm btn-outline-warning" style="font-size:0.72rem;" title="Split Way"
+      <button class="btn btn-sm btn-outline-warning" style="font-size:0.72rem;" title="Split Way" aria-label="Split Way"
               onclick="splitCurrentWay(currentClickedFeature.properties.id, ${node.id})">
         ✂️
       </button>`;
@@ -701,7 +701,15 @@ function _buildPanelRow({ itemClass, idClass, labelHtml, idHtml, focusId, btnCla
     const row = document.createElement('div');
     row.className = itemClass;
     row.style.cursor = 'pointer';
+    row.setAttribute('role', 'button');
+    row.setAttribute('tabindex', '0');
     row.addEventListener('click', () => focusFeatureById(focusId));
+    row.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            focusFeatureById(focusId);
+        }
+    });
 
     const info = document.createElement('div');
     info.innerHTML = `<span>${labelHtml}</span><br><span class="${idClass}">${idHtml}</span>`;
@@ -711,6 +719,7 @@ function _buildPanelRow({ itemClass, idClass, labelHtml, idHtml, focusId, btnCla
     btn.className = btnClass;
     btn.style.fontSize = '0.7rem';
     btn.title = btnTitle;
+    btn.setAttribute('aria-label', btnTitle);
     btn.innerHTML = btnHtml;
     btn.addEventListener('click', e => { e.stopPropagation(); onBtnClick(); });
     row.appendChild(btn);
@@ -1004,7 +1013,7 @@ function showAnnProps(ann) {
     const props = ann.properties || {};
     const propRows = Object.entries(props)
         .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
-        .join('') || '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No properties</td></tr>';
+        .join('') || '<tr><td colspan="2" style="color:var(--muted);font-style:italic;">No properties</td></tr>';
     const el = document.getElementById('props-content');
     el.innerHTML =
         `<table><tbody>

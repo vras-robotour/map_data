@@ -22,7 +22,7 @@
   <header id="topbar" class="d-flex align-items-center gap-2 flex-nowrap overflow-hidden">
     <span class="brand me-2">Map Data Viewer</span>
 
-    <select id="file-select" class="form-select form-select-sm bg-dark text-light border-secondary">
+    <select id="file-select" class="form-select form-select-sm bg-dark text-light border-secondary" aria-label="Select .mapdata file">
       <option value="">Select .mapdata file…</option>
     </select>
     <button id="load-btn" class="btn btn-primary btn-sm">Load</button>
@@ -98,7 +98,7 @@
         <div class="panel-title">LAYERS</div>
 
         <div class="px-2 pb-2 border-bottom border-secondary mb-2">
-          <input type="text" id="feature-search" placeholder="Type to search…"
+          <input type="text" id="feature-search" placeholder="Type to search…" aria-label="Search features"
                  class="form-control form-control-sm bg-dark text-light border-secondary">
           <small class="text-secondary" style="font-size:0.7rem;">ID · name · tag values · annotation type &amp; properties</small>
         </div>
@@ -110,7 +110,7 @@
            ] %}
         <details>
           <summary class="layer-row">
-            <input type="checkbox" class="st-check" data-layer="{{ layer }}" checked onclick="event.stopPropagation()">
+            <input type="checkbox" class="st-check" data-layer="{{ layer }}" id="layer-cb-{{ layer }}" checked aria-label="{{ label }}" onclick="event.stopPropagation()">
             <div class="layer-swatch" style="{{ swatch }}"></div>
             <span>{{ label }}</span>
             <span class="subtype-btn"></span>
@@ -120,30 +120,30 @@
         {% endfor %}
 
         <!-- Crossroads -->
-        <div class="layer-row">
-          <input type="checkbox" class="st-check" data-layer="crossroad" checked>
+        <div class="layer-row" role="button" tabindex="0">
+          <input type="checkbox" class="st-check" data-layer="crossroad" id="layer-cb-crossroad" checked aria-label="Crossroads">
           <div class="layer-swatch" style="background:#9333ea; border:1px solid #7e22ce; border-radius:50%;"></div>
           <span>Crossroads</span>
         </div>
 
         <!-- Annotation -->
-        <div class="layer-row">
-          <input type="checkbox" class="st-check" data-layer="annotation" checked>
+        <div class="layer-row" role="button" tabindex="0">
+          <input type="checkbox" class="st-check" data-layer="annotation" id="layer-cb-annotation" checked aria-label="Annotations">
           <div class="layer-swatch" style="background:#ff8c00; border:1px solid #cc5500;"></div>
           <span>Annotations</span>
         </div>
 
         <!-- Waypoints -->
-        <div class="layer-row">
-          <input type="checkbox" class="st-check" data-layer="waypoint">
+        <div class="layer-row" role="button" tabindex="0">
+          <input type="checkbox" class="st-check" data-layer="waypoint" id="layer-cb-waypoint" aria-label="Waypoints">
           <div class="layer-swatch" style="background:#50C2F6; border:1px solid #000;"></div>
           <span>Waypoints</span>
         </div>
 
         {% if ros_available %}
         <!-- Robot -->
-        <div class="layer-row">
-          <input type="checkbox" class="st-check" data-layer="robot" checked>
+        <div class="layer-row" role="button" tabindex="0">
+          <input type="checkbox" class="st-check" data-layer="robot" id="layer-cb-robot" checked aria-label="Robot">
           <div class="layer-swatch" style="background:#00ff00; border:1px solid #000;"></div>
           <span>Robot</span>
         </div>
@@ -218,7 +218,7 @@
               <div class="form-check">
                 <input class="form-check-input bg-dark border-secondary" type="radio" name="plan-mode" id="mode-all-terrain" value="rrt" checked>
                 <label class="form-check-label text-secondary" for="mode-all-terrain" style="font-size: 0.75rem;">All terrain</label>
-                <select id="sub-algorithm-select" class="form-select form-select-sm bg-dark text-secondary border-secondary mt-1" style="font-size: 0.7rem; padding: 0.1rem 0.5rem;">
+                <select id="sub-algorithm-select" aria-label="Sub-algorithm" class="form-select form-select-sm bg-dark text-secondary border-secondary mt-1" style="font-size: 0.7rem; padding: 0.1rem 0.5rem;">
                   <option value="astar" selected>A* (Optimal)</option>
                   <option value="rrt">RRT* (Fast)</option>
                 </select>
@@ -243,19 +243,19 @@
           <div class="panel-title mb-2 mt-3" style="font-size:0.6rem;">PLANNER PARAMETERS</div>
 
           <div class="mb-2">
-            <label class="text-secondary d-block mb-1" style="font-size: 0.7rem;">Cell Size (m)</label>
+            <label class="text-secondary d-block mb-1" for="planner-cell-size" style="font-size: 0.7rem;">Cell Size (m)</label>
             <input type="number" id="planner-cell-size" class="form-control form-control-sm bg-dark text-light border-secondary" 
                    value="0.25" step="0.05" min="0.1">
           </div>
 
           <div class="mb-2">
-            <label class="text-secondary d-block mb-1" style="font-size: 0.7rem;">Obstacle Inflation (m)</label>
+            <label class="text-secondary d-block mb-1" for="planner-inflate" style="font-size: 0.7rem;">Obstacle Inflation (m)</label>
             <input type="number" id="planner-inflate" class="form-control form-control-sm bg-dark text-light border-secondary" 
                    value="0.25" step="0.05" min="0.0">
           </div>
 
           <div class="mb-2">
-            <label class="text-secondary d-block mb-1" style="font-size: 0.7rem;">Grid Cost Weight</label>
+            <label class="text-secondary d-block mb-1" for="planner-grid-cost-weight" style="font-size: 0.7rem;">Grid Cost Weight</label>
             <input type="number" id="planner-grid-cost-weight" class="form-control form-control-sm bg-dark text-light border-secondary"
                    value="5.0" step="0.5" min="0.1">
           </div>
@@ -423,29 +423,29 @@
   <div class="collapse" id="{{ prefix }}-advanced">
     <div class="mt-2 d-flex flex-column gap-2">
       <div>
-        <label class="form-label text-secondary mb-1" style="font-size:0.68rem;">Grid Margin (m)</label>
+        <label class="form-label text-secondary mb-1" for="{{ prefix }}-grid-margin" style="font-size:0.68rem;">Grid Margin (m)</label>
         <input id="{{ prefix }}-grid-margin" type="number" value="150" step="10" min="10"
                class="form-control form-control-sm bg-dark text-light border-secondary">
       </div>
       <div>
-        <label class="form-label text-secondary mb-1" style="font-size:0.68rem;">Obstacle Radius (m)</label>
+        <label class="form-label text-secondary mb-1" for="{{ prefix }}-obstacle-radius" style="font-size:0.68rem;">Obstacle Radius (m)</label>
         <input id="{{ prefix }}-obstacle-radius" type="number" value="2.0" step="0.5" min="0.1"
                class="form-control form-control-sm bg-dark text-light border-secondary">
       </div>
       <div class="form-text text-secondary" style="font-size:0.65rem; margin-top:-4px;">Buffer widths (m)</div>
       <div class="d-flex gap-2">
         <div class="flex-fill">
-          <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Road</label>
+          <label class="form-label text-secondary mb-0" for="{{ prefix }}-buf-road" style="font-size:0.65rem;">Road</label>
           <input id="{{ prefix }}-buf-road" type="number" value="7.0" step="0.5" min="0"
                  class="form-control form-control-sm bg-dark text-light border-secondary">
         </div>
         <div class="flex-fill">
-          <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Footway</label>
+          <label class="form-label text-secondary mb-0" for="{{ prefix }}-buf-footway" style="font-size:0.65rem;">Footway</label>
           <input id="{{ prefix }}-buf-footway" type="number" value="3.0" step="0.5" min="0"
                  class="form-control form-control-sm bg-dark text-light border-secondary">
         </div>
         <div class="flex-fill">
-          <label class="form-label text-secondary mb-0" style="font-size:0.65rem;">Barrier</label>
+          <label class="form-label text-secondary mb-0" for="{{ prefix }}-buf-barrier" style="font-size:0.65rem;">Barrier</label>
           <input id="{{ prefix }}-buf-barrier" type="number" value="2.0" step="0.5" min="0"
                  class="form-control form-control-sm bg-dark text-light border-secondary">
         </div>
@@ -497,7 +497,7 @@
 <!-- Fetch Area Modal -->
 {% call modal('fetch-area-modal', 'Fetch OSM Area', 'sm') %}
       <div class="modal-body py-2">
-        <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">NAME</label>
+        <label class="form-label text-secondary mb-1" for="area-name-input" style="font-size:0.72rem;">NAME</label>
         <input id="area-name-input" type="text" placeholder="e.g. prague_center"
                class="form-control form-control-sm bg-dark text-light border-secondary">
         <div class="form-text text-secondary mt-1" style="font-size:0.65rem;">
@@ -514,7 +514,7 @@
 <!-- GPX Upload Modal -->
 {% call modal('gpx-upload-modal', 'Create Map from GPX', 'sm') %}
       <div class="modal-body py-2">
-        <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">MAP NAME</label>
+        <label class="form-label text-secondary mb-1" for="gpx-name-input" style="font-size:0.72rem;">MAP NAME</label>
         <input id="gpx-name-input" type="text" placeholder="e.g. my_route"
                class="form-control form-control-sm bg-dark text-light border-secondary">
         <div class="form-text text-secondary mt-1" style="font-size:0.65rem;">
@@ -558,7 +558,7 @@
           (Paths only); <b>Save</b> also writes them to <code id="planner-rules-path"></code>
           (ROS nodes pick it up after a restart).
         </p>
-        <textarea id="planner-rules-text" rows="22" spellcheck="false"
+        <textarea id="planner-rules-text" rows="22" spellcheck="false" aria-label="Traversability Rules"
                   class="form-control bg-dark text-light border-secondary font-monospace" style="font-size:0.72rem;"></textarea>
         <div id="planner-rules-error" class="text-danger mt-2" style="font-size:0.72rem; white-space:pre-wrap;" hidden></div>
       </div>
@@ -610,7 +610,7 @@
 {% call modal('ann-detail-modal', 'New Annotation', 'sm', title_id='ann-detail-title') %}
       <div class="modal-body py-2" style="max-height:400px;overflow-y:auto;">
         <div class="mb-3">
-          <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">TYPE</label>
+          <label class="form-label text-secondary mb-1" for="ann-type-sel" style="font-size:0.72rem;">TYPE</label>
           <select id="ann-type-sel" class="form-select form-select-sm bg-dark text-light border-secondary"
                   onchange="updateAnnTypeFields()">
             <option value="obstacle">Obstacle (Area)</option>
@@ -619,7 +619,7 @@
         </div>
 
         <div id="ann-obstacle-fields">
-          <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">BARRIER TYPE</label>
+          <label class="form-label text-secondary mb-1" for="ann-barrier-sel" style="font-size:0.72rem;">BARRIER TYPE</label>
           <select id="ann-barrier-sel" class="form-select form-select-sm bg-dark text-light border-secondary">
             <option value="wall">Wall</option>
             <option value="fence">Fence</option>
@@ -631,7 +631,7 @@
         </div>
 
         <div id="ann-path-fields" style="display:none;">
-          <label class="form-label text-secondary mb-1" style="font-size:0.72rem;">HIGHWAY TYPE</label>
+          <label class="form-label text-secondary mb-1" for="ann-highway-sel" style="font-size:0.72rem;">HIGHWAY TYPE</label>
           <select id="ann-highway-sel" class="form-select form-select-sm bg-dark text-light border-secondary">
             <option value="footway">Footway</option>
             <option value="path">Path</option>
@@ -639,7 +639,7 @@
             <option value="cycleway">Cycleway</option>
             <option value="service">Service</option>
           </select>
-          <label class="form-label text-secondary mb-1 mt-2" style="font-size:0.72rem;">WIDTH (m)</label>
+          <label class="form-label text-secondary mb-1 mt-2" for="ann-width-inp" style="font-size:0.72rem;">WIDTH (m)</label>
           <input id="ann-width-inp" type="number" min="0.1" step="0.1" value="1.5"
                  class="form-control form-control-sm bg-dark text-light border-secondary">
         </div>
