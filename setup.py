@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from setuptools import find_packages, setup
+from setuptools import find_namespace_packages, setup
 
 package_name = "map_data"
 
@@ -9,7 +9,9 @@ package_name = "map_data"
 setup(
     name=package_name,
     python_requires=">=3.12",
-    packages=find_packages(exclude=["tests"]),
+    # Namespace discovery lists the static/template dirs as packages, so their
+    # package_data installs without setuptools' "importable package" warning.
+    packages=find_namespace_packages(include=["map_data", "map_data.*"], exclude=["*.__pycache__"]),
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
@@ -35,11 +37,9 @@ setup(
         ),
     ],
     package_data={
-        "map_data": [
-            "viewer/templates/*.html",
-            "viewer/static/css/*.css",
-            "viewer/static/js/*.js",
-        ]
+        "map_data.viewer.templates": ["*.html"],
+        "map_data.viewer.static.css": ["*.css"],
+        "map_data.viewer.static.js": ["*.js"],
     },
     zip_safe=False,
     maintainer="vlkjan6",
