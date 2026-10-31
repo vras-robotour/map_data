@@ -539,9 +539,6 @@ def upload_gpx() -> Response:
                 obstacle_radius=obstacle_radius,
                 buffer_widths=buffer_widths,
             )
-            # Restore the original filename for metadata purposes
-            md.coords_file = file.filename
-
             area_km2 = _bbox_area_km2(md.min_lat, md.min_long, md.max_lat, md.max_long)
             if area_km2 > MAX_FETCH_AREA_KM2:
                 abort(
@@ -551,6 +548,8 @@ def upload_gpx() -> Response:
                 )
 
             out_path = _free_mapdata_path(data_dir, name)
+            # MapData puts its OSM cache next to coords_file; keep it beside the map, not in the temp dir
+            md.coords_file = str(out_path.with_suffix(".gpx"))
             try:
                 result = _query_parse_save(md, out_path)
             except _FetchFailed as e:

@@ -5,6 +5,7 @@ import math
 import os
 import threading
 import time
+from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import quote
 
@@ -1228,11 +1229,8 @@ def test_fetch_area_does_not_overwrite_an_existing_map(app_client, mock_overpass
     assert (tmp_path / "small.mapdata").read_text() == "old"
 
 
-def test_upload_gpx_does_not_overwrite_an_existing_map(
-    app_client, mock_overpass_client, monkeypatch
-):
+def test_upload_gpx_does_not_overwrite_an_existing_map(app_client, mock_overpass_client):
     client, tmp_path = app_client
-    monkeypatch.chdir(tmp_path)  # MapData writes its OSM cache next to the relative GPX name
     (tmp_path / "trk.mapdata").write_text("old")
     gpx = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -1246,6 +1244,9 @@ def test_upload_gpx_does_not_overwrite_an_existing_map(
     assert resp.status_code == 200
     assert resp.get_json()["filename"] == "trk_1.mapdata"
     assert (tmp_path / "trk.mapdata").read_text() == "old"
+    # the OSM response cache lands beside the map, not in the server's working directory
+    assert (tmp_path / "trk_1.osm_cache.json").is_file()
+    assert not Path("trk.osm_cache.json").exists()
 
 
 # ── native export ────────────────────────────────────────────────────────────
