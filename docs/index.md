@@ -18,7 +18,7 @@ The `MapData` class, the path planning modules, the `create_mapdata` CLI, and th
 
 The package targets **ROS 2 Jazzy** or later on Ubuntu 24.04, and Python >= 3.12 for standalone use.
 
-Sample `.gpx` files are provided in `./demo/`.
+A sample GPX file and its `.mapdata` are in `demo/` (`buchlovice.gpx`, `buchlovice.mapdata`).
 
 ## Installation
 
