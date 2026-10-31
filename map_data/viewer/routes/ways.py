@@ -95,8 +95,7 @@ def get_way_nodes() -> Response:
 
     nodes = []
     geom_latlon = None
-    for i, nid_obj in enumerate(way.nodes):
-        nid = getattr(nid_obj, "id", nid_obj)
+    for i, nid in enumerate(way.nodes):
         if nid in effective_nc:
             nd = effective_nc[nid]
             nodes.append(

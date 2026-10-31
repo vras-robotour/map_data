@@ -4,7 +4,6 @@ import copy
 import io
 import json
 import logging
-import os
 import re
 import tempfile
 import threading
@@ -54,14 +53,8 @@ logger = logging.getLogger(__name__)
 
 @bp.route("/")
 def index() -> str:
-    """Render the viewer's single-page HTML shell, injecting tile-provider API keys."""
-    api_key_thunderforest = os.getenv("THUNDERFOREST_API_KEY")
-    api_key_seznam = os.getenv("SEZNAM_API_KEY")
-    return render_template(
-        "index.html",
-        apikey_thunderforest=api_key_thunderforest,
-        apikey_seznam=api_key_seznam,
-    )
+    """Render the viewer's single-page HTML shell."""
+    return render_template("index.html")
 
 
 @bp.route("/api/files")

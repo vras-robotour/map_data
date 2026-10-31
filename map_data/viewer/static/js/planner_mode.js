@@ -458,10 +458,7 @@ class PlannerMode {
 
         if (this.points.length === 0) return;
 
-        const latlngs = [];
         this.points.forEach((p, i) => {
-            latlngs.push([p.lat, p.lon]);
-
             // Create marker
             const isStart = i === 0;
             const isEnd = i === this.points.length - 1;

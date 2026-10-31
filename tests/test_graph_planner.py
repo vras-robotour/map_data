@@ -602,7 +602,7 @@ def _route_length(route):
     return float(np.linalg.norm(np.diff(route, axis=0), axis=1).sum())
 
 
-def _area_map(ring, feeders, holes=(), extra_coords=None):
+def _area_map(ring, feeders, holes=()):
     """
     A walkable area on *ring* (coordinates, first != last) plus footways
     *feeders* given as coordinate lists; coordinates equal to a ring vertex

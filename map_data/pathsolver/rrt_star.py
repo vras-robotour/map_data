@@ -358,7 +358,7 @@ class RRTStar:
             transfer was cancelled.
 
         """
-        from .replan import _is_cancelled
+        from .replan import _is_cancelled  # replan imports this module
 
         goal_idx = None
         goal_found_iter = None

@@ -417,7 +417,6 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
 
 function clearMapData() {
     deselectCurrent();
-    clearNodes();
     if (plannerMode) plannerMode.clearAll();
 
     if (geoLayers.costGrid) {

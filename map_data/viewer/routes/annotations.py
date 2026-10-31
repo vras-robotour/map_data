@@ -97,7 +97,7 @@ def add_annotation() -> ResponseReturnValue:
         "properties": body.get("properties", {}),
     }
     with annotation_store(ann_path) as store:
-        store["annotations"].append(ann)
+        store.setdefault("annotations", []).append(ann)
     return jsonify(ann), 201
 
 
@@ -113,7 +113,7 @@ def update_annotation(ann_id: str) -> Response:
     body = _validated_annotation_body(filename)
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
-        ann = next((a for a in store["annotations"] if a["id"] == ann_id), None)
+        ann = next((a for a in store.get("annotations", []) if a["id"] == ann_id), None)
         if ann is None:
             abort(404, "Annotation not found")
         ann["geometry"] = body["geometry"]
@@ -125,7 +125,7 @@ def update_annotation(ann_id: str) -> Response:
 
 
 @bp.route("/api/annotations/<ann_id>", methods=["DELETE"])
-def delete_annotation(ann_id: str) -> ResponseReturnValue:
+def delete_annotation(ann_id: str) -> Response:
     """
     Delete a freehand annotation.
 
@@ -134,8 +134,8 @@ def delete_annotation(ann_id: str) -> ResponseReturnValue:
     filename = _require_args("file")
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
-        before = len(store["annotations"])
-        store["annotations"] = [a for a in store["annotations"] if a["id"] != ann_id]
-        if len(store["annotations"]) == before:
+        anns = store.get("annotations", [])
+        store["annotations"] = [a for a in anns if a["id"] != ann_id]
+        if len(store["annotations"]) == len(anns):
             abort(404, "Annotation not found")
-    return "", 204
+    return Response("", 204)
