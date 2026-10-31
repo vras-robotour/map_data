@@ -546,7 +546,7 @@ document.getElementById('way-edit-save')?.addEventListener('click', async () => 
     const res = await api('PUT', `/api/ways/${editingWayId}/tags`, {
         query: { file: currentFile }, body: { tags, category: cat, label: lbl }, readOnlyMsg: 'Editing',
     });
-    if (!res.ok) { setStatus('Save failed', 'text-danger'); return; }
+    if (!res.ok) { setStatus(`Save failed: ${await errorText(res)}`, 'text-danger'); return; }
     redoStack = [];
     bootstrap.Modal.getOrCreateInstance(document.getElementById('way-edit-modal')).hide();
     const existingIdx = changeLog.findIndex(c => c.type === 'tag' && String(c.id) === String(editingWayId));
