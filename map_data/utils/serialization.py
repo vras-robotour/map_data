@@ -1,6 +1,7 @@
 import contextlib
 import json
 import os
+import stat
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -75,21 +76,40 @@ def map_data_to_dict(md: "MapData") -> dict[str, Any]:
     }
 
 
-def atomic_write_json(path: str | Path, data: Any, **dump_kwargs: Any) -> None:
-    """Dump JSON to a temp file next to ``path``, then replace it, so a crash or
-    full disk mid-dump cannot truncate a previously good file. A symlinked ``path``
+# os.umask can only be read by setting it; do that once here, at import, rather
+# than racing other threads' file creation on every write.
+_UMASK = os.umask(0)
+os.umask(_UMASK)
+
+
+def atomic_write_text(path: str | Path, text: str) -> None:
+    """Write text to a temp file next to ``path``, fsync it, then replace ``path``, so a
+    crash or full disk mid-write cannot truncate a previously good file. The file keeps
+    its mode (a new one gets the umask default, not mkstemp's 0600). A symlinked ``path``
     is written through to its target (colcon symlink-install data files)."""
     p = Path(path).resolve()
+    try:
+        mode = stat.S_IMODE(p.stat().st_mode)
+    except FileNotFoundError:
+        mode = 0o666 & ~_UMASK
     fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=p.name + ".", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            # dumps, not dump: json.dump streams via the pure-Python encoder, ~3x slower.
-            f.write(json.dumps(data, **dump_kwargs))
+            f.write(text)
+            f.flush()
+            os.fchmod(f.fileno(), mode)
+            os.fsync(f.fileno())
         os.replace(tmp, p)
     except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(tmp)
         raise
+
+
+def atomic_write_json(path: str | Path, data: Any, **dump_kwargs: Any) -> None:
+    """Dump JSON to ``path`` via :func:`atomic_write_text`."""
+    # dumps, not dump: json.dump streams via the pure-Python encoder, ~3x slower.
+    atomic_write_text(path, json.dumps(data, **dump_kwargs))
 
 
 def load_mapdata(md_class: type["MapData"], path: str | Path) -> "MapData":

@@ -39,6 +39,17 @@ def test_load_without_store_is_plain_map(footway_network_mapdata):
     assert len(md.footways_list) == 3
 
 
+def test_unreadable_store_is_logged_and_ignored(footway_network_mapdata, caplog):
+    path, _, _ = footway_network_mapdata
+    ann = annotation_path_for(path)
+    ann.write_text("{not json")
+    md, store = load_mapdata_with_annotations(path)
+    assert store == {"version": 1, "annotations": []}
+    assert len(md.footways_list) == 3
+    assert "unreadable annotation store" in caplog.text
+    assert ann.read_text() == "{not json"
+
+
 def test_annotated_path_bridges_a_gap(footway_network_mapdata):
     """
     A drawn path from node 103 (200,0) to node 201 (400,0) connects the two

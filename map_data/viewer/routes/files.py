@@ -27,7 +27,7 @@ from flask import (
 from flask.typing import ResponseReturnValue
 from werkzeug.exceptions import HTTPException
 
-from map_data.annotations import apply_way_edits
+from map_data.annotations import apply_tag_overrides, apply_way_edits
 from map_data.map_data import MapData
 from map_data.utils.serialization import map_data_to_dict
 
@@ -39,9 +39,9 @@ from ..helpers import (
 from .common import (
     MAX_FETCH_AREA_KM2,
     _annotation_path,
-    _apply_tag_override,
     _bbox_area_km2,
     _get_data_dir,
+    _json_object,
     _mapdata_path,
     _require_args,
     _validated_bbox,
@@ -97,9 +97,10 @@ def _merged_mapdata_geojson(path: Path, store: dict[str, Any]) -> dict[str, Any]
     :mod:`~map_data.viewer.routes.common` docstring's "MapData copy semantics" section -- this is
     safe because :func:`apply_way_edits` never mutates a ``Way`` object shared
     with the cache), applies deletions/splits/moves via
-    :func:`apply_way_edits`, converts to GeoJSON, and finally merges in
-    any tag overrides (re-deriving each affected feature's ``road``/
-    ``footway`` category from the merged ``highway`` tag).
+    :func:`apply_way_edits`, merges in tag overrides via
+    :func:`~map_data.annotations.apply_tag_overrides` (which looks split
+    segments up by their original way ID and re-sorts roads/footways), and
+    converts to GeoJSON.
 
     Split out of :func:`get_mapdata` so that all of it -- the copy, the
     re-applied edits and the rebuild -- sits behind the one call to
@@ -108,19 +109,8 @@ def _merged_mapdata_geojson(path: Path, store: dict[str, Any]) -> dict[str, Any]
     map_data = copy.copy(load_mapdata_cached(str(path)))
 
     apply_way_edits(map_data, store)
-
-    geojson = mapdata_to_geojson(map_data)
-    tag_overrides = store.get("tag_overrides", {})
-    if tag_overrides:
-        for f in geojson["features"]:
-            ov = tag_overrides.get(str(f["properties"].get("id", "")))
-            if ov:
-                f["properties"]["tags"], f["properties"]["category"] = _apply_tag_override(
-                    f["properties"].get("tags") or {},
-                    ov,
-                    f["properties"].get("category"),
-                )
-    return geojson
+    apply_tag_overrides(map_data, store)
+    return mapdata_to_geojson(map_data)
 
 
 @bp.route("/api/mapdata")
@@ -163,6 +153,20 @@ def get_mapdata() -> ResponseReturnValue:
     # every time; the ETag is what keeps that ask cheap.
     resp.headers["Cache-Control"] = "no-cache"
     return resp.make_conditional(request)
+
+
+def _free_mapdata_path(data_dir: Path, stem: str) -> Path:
+    """
+    Return ``<stem>.mapdata`` in *data_dir*, or ``<stem>_1.mapdata``, ``_2``, ... if taken.
+
+    A name is taken by an existing map or by a leftover annotation store, which
+    would otherwise be applied to the new map.
+    """
+    dest, counter = data_dir / f"{stem}.mapdata", 1
+    while dest.exists() or (data_dir / f"{dest.stem}.annotations.json").exists():
+        dest = data_dir / f"{stem}_{counter}.mapdata"
+        counter += 1
+    return dest
 
 
 _fetch_tasks: dict[str, dict[str, Any]] = {}
@@ -344,7 +348,8 @@ def fetch_area() -> Response:
     name : str
         Output filename stem; sanitized to ``[A-Za-z0-9_-]`` (aborts if
         that leaves nothing). The mapdata is saved to
-        ``<data_dir>/<name>.mapdata``.
+        ``<data_dir>/<name>.mapdata``, or ``<name>_1.mapdata``, ... if that
+        name is taken (see :func:`_free_mapdata_path`).
     grid_margin, obstacle_radius, buffer_widths : optional
         Passed through to :class:`~map_data.map_data.MapData`.
 
@@ -360,7 +365,7 @@ def fetch_area() -> Response:
         the box is degenerate/inverted, or ``name`` sanitizes to empty.
 
     """
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     for field in ("min_lat", "min_lon", "max_lat", "max_lon", "name"):
         if field not in body:
             abort(400, f"Missing field: {field}")
@@ -387,7 +392,8 @@ def fetch_area() -> Response:
 
     data_dir = _get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
-    out_path = data_dir / f"{name}.mapdata"
+    # shortcut: two fetches started at once with one name still pick the same path.
+    out_path = _free_mapdata_path(data_dir, name)
 
     corners = np.array(
         [
@@ -464,7 +470,8 @@ def upload_gpx() -> Response:
     the GPX is saved to a temp directory (never persisted in the data
     directory), a :class:`~map_data.map_data.MapData` is built from it,
     Overpass is queried and parsed, and the result is saved as
-    ``<name>.mapdata``. The temp directory is always removed afterward.
+    ``<name>.mapdata`` (suffixed like :func:`fetch_area` if taken). The temp
+    directory is always removed afterward.
 
     Parameters (multipart form)
     -----------------------------
@@ -506,7 +513,12 @@ def upload_gpx() -> Response:
     if not name:
         abort(400, "name is empty after sanitizing")
 
-    parse_opts = json.loads(request.form.get("options", "{}"))
+    try:
+        parse_opts = json.loads(request.form.get("options", "{}"))
+    except ValueError:
+        abort(400, "options must be JSON")
+    if not isinstance(parse_opts, dict):
+        abort(400, "options must be a JSON object")
     grid_margin = parse_opts.get("grid_margin")
     obstacle_radius = parse_opts.get("obstacle_radius")
     buffer_widths = parse_opts.get("buffer_widths")
@@ -538,7 +550,7 @@ def upload_gpx() -> Response:
                     f"{MAX_FETCH_AREA_KM2:.0f} km² limit for a single fetch.",
                 )
 
-            out_path = data_dir / f"{name}.mapdata"
+            out_path = _free_mapdata_path(data_dir, name)
             try:
                 result = _query_parse_save(md, out_path)
             except _FetchFailed as e:
@@ -558,8 +570,10 @@ def upload_mapdata() -> Response:
     """
     Upload a pre-built ``.mapdata`` file to the data directory.
 
-    Saves the upload under its original basename, disambiguating with a
-    ``_1``, ``_2``, ... suffix if a file of that name already exists, then
+    Saves the upload under its original basename with a lower-case
+    ``.mapdata`` extension (the file list matches it case-sensitively),
+    disambiguating with a ``_1``, ``_2``, ... suffix if that name is taken
+    (see :func:`_free_mapdata_path`), then
     validates it by attempting to load it; an unloadable file is deleted
     again rather than left behind.
 
@@ -585,14 +599,7 @@ def upload_mapdata() -> Response:
     data_dir = _get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    safe_name = Path(file.filename).name
-    dest = data_dir / safe_name
-    stem, suffix = dest.stem, dest.suffix
-    counter = 1
-    while dest.exists():
-        dest = data_dir / f"{stem}_{counter}{suffix}"
-        counter += 1
-
+    dest = _free_mapdata_path(data_dir, Path(file.filename).stem)
     file.save(dest)
 
     try:

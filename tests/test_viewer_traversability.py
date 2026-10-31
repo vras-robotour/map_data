@@ -82,6 +82,16 @@ def test_save_validates_before_writing(client):
     assert 2 in _blocked(c)
 
 
+def test_save_replaces_the_file_atomically(client):
+    c, rules_file = client
+    rules_file.chmod(0o644)
+    inode = rules_file.stat().st_ino
+    assert c.put("/api/traversability", json={"traversability": GRASS_RULES}).status_code == 200
+    # A new inode means a temp file was renamed over it, never truncated in place.
+    assert rules_file.stat().st_ino != inode
+    assert rules_file.stat().st_mode & 0o777 == 0o644
+
+
 def test_replan_uses_rules_from_the_body(client):
     c, _ = client
     e, n, zn, zl = utm.from_latlon(50.0, 14.0)

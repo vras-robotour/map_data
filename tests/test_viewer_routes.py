@@ -1187,6 +1187,67 @@ def test_upload_mapdata_duplicate_name_disambiguated(app_client):
     assert (tmp_path / "dup_1.mapdata").is_file()
 
 
+def test_upload_mapdata_normalises_extension_case(app_client):
+    client, tmp_path = app_client
+    resp = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(_mapdata_bytes(tmp_path)), "UP.MAPDATA")},
+        content_type="multipart/form-data",
+    )
+    assert resp.get_json()["filename"] == "UP.mapdata"
+    assert "UP.mapdata" in client.get("/api/files").get_json()["mapdata"]
+
+
+def test_upload_mapdata_skips_a_name_with_a_leftover_store(app_client):
+    client, tmp_path = app_client
+    (tmp_path / "dup.annotations.json").write_text('{"deleted_ways": [{"id": 1}]}')
+    resp = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(_mapdata_bytes(tmp_path)), "dup.mapdata")},
+        content_type="multipart/form-data",
+    )
+    assert resp.get_json()["filename"] == "dup_1.mapdata"
+
+
+def _poll_fetch(client, task_id):
+    for _ in range(100):
+        task = client.get(f"/api/fetch_area/{task_id}").get_json()
+        if task["status"] in ("done", "failed"):
+            return task
+        time.sleep(0.05)
+    raise AssertionError("fetch task did not finish")
+
+
+def test_fetch_area_does_not_overwrite_an_existing_map(app_client, mock_overpass_client):
+    client, tmp_path = app_client
+    (tmp_path / "small.mapdata").write_text("old")
+    bbox = {"min_lat": 50.0, "max_lat": 50.001, "min_lon": 14.0, "max_lon": 14.001}
+    resp = client.post("/api/fetch_area", json={**bbox, "name": "small"})
+    task = _poll_fetch(client, resp.get_json()["task_id"])
+    assert task["result"]["filename"] == "small_1.mapdata"
+    assert (tmp_path / "small.mapdata").read_text() == "old"
+
+
+def test_upload_gpx_does_not_overwrite_an_existing_map(
+    app_client, mock_overpass_client, monkeypatch
+):
+    client, tmp_path = app_client
+    monkeypatch.chdir(tmp_path)  # MapData writes its OSM cache next to the relative GPX name
+    (tmp_path / "trk.mapdata").write_text("old")
+    gpx = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">\n'
+        '  <wpt lat="50.0" lon="14.0"/>\n'
+        '  <wpt lat="50.001" lon="14.001"/>\n'
+        "</gpx>"
+    )
+    data = {"file": (io.BytesIO(gpx.encode()), "trk.gpx")}
+    resp = client.post("/api/upload_gpx", data=data, content_type="multipart/form-data")
+    assert resp.status_code == 200
+    assert resp.get_json()["filename"] == "trk_1.mapdata"
+    assert (tmp_path / "trk.mapdata").read_text() == "old"
+
+
 # ── native export ────────────────────────────────────────────────────────────
 
 
@@ -1247,7 +1308,7 @@ def test_create_wormhole_missing_gpx_rejected(app_client):
     with patch.object(viewer_sharing.wormhole_manager, "create_transfer") as mock_create:
         resp = client.post("/api/create_wormhole", json={})
     assert resp.status_code == 400
-    assert resp.get_json()["success"] is False
+    assert resp.get_json() == {"error": "No GPX data provided"}
     mock_create.assert_not_called()
 
 
@@ -1264,15 +1325,15 @@ def test_create_wormhole_code_timeout_cancels_transfer(app_client):
     ):
         resp = client.post("/api/create_wormhole", json={"gpx": "<gpx></gpx>"})
     assert resp.status_code == 500
-    assert resp.get_json()["success"] is False
+    assert resp.get_json() == {"error": "Failed to capture wormhole code in time"}
     mock_cancel.assert_called_once_with("tid-2")
 
 
 def test_cancel_wormhole_unknown_transfer(app_client):
     client, _ = app_client
     resp = client.post("/api/cancel_wormhole", json={"transfer_id": "does-not-exist"})
-    assert resp.status_code == 200
-    assert resp.get_json() == {"success": False, "message": "Invalid or unknown transfer ID"}
+    assert resp.status_code == 404
+    assert resp.get_json() == {"error": "Invalid or unknown transfer ID"}
 
 
 def test_get_transfer_code_wakes_up_on_event_instead_of_polling():
@@ -1306,7 +1367,7 @@ def test_json_endpoints_reject_missing_content_type(app_client, endpoint):
     # No Content-Type header at all.
     resp = client.post(endpoint, data="transfer_id=x")
     assert resp.status_code == 400
-    assert resp.get_json()["success"] is False
+    assert "error" in resp.get_json()
 
 
 @pytest.mark.parametrize(
@@ -1318,7 +1379,7 @@ def test_json_endpoints_reject_empty_json_body(app_client, endpoint):
     # Correct content type but an empty body.
     resp = client.post(endpoint, data="", content_type="application/json")
     assert resp.status_code == 400
-    assert resp.get_json()["success"] is False
+    assert "error" in resp.get_json()
 
 
 def test_cancel_replan_with_transfer_id_succeeds(app_client):
@@ -1335,7 +1396,7 @@ def test_cancel_replan_missing_transfer_id_rejected(app_client):
     with patch.object(viewer_planning, "cancel_replan_backend") as mock_cancel:
         resp = client.post("/api/cancel_replan", json={})
     assert resp.status_code == 400
-    assert resp.get_json()["success"] is False
+    assert "error" in resp.get_json()
     mock_cancel.assert_not_called()
 
 
@@ -1488,3 +1549,218 @@ def test_mapdata_etag_serves_304_until_an_edit(app_client_3node):
     assert edited.status_code == 200
     assert edited.headers["ETag"] != etag
     assert 2 not in [f["properties"].get("id") for f in edited.get_json()["features"]]
+
+
+# ── unreadable annotation store ──────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("content", [b"{not json", b"[1, 2]", b"\xff\xfe", b"null"])
+def test_unreadable_store_is_moved_aside_not_overwritten(app_client_with_file, content):
+    client, tmp_path, filename = app_client_with_file
+    ann_path = tmp_path / "test.annotations.json"
+    ann_path.write_bytes(content)
+
+    resp = client.delete(f"/api/ways/1?file={filename}", json={})
+    assert resp.status_code == 409
+    assert "error" in resp.get_json()
+    backups = list(tmp_path.glob("test.annotations.json.corrupt-*"))
+    assert [b.read_bytes() for b in backups] == [content]
+    assert not ann_path.exists()
+
+    # The next edit starts a fresh store and leaves the backup alone.
+    assert client.delete(f"/api/ways/1?file={filename}", json={}).status_code == 204
+    assert json.loads(ann_path.read_text())["deleted_ways"][0]["id"] == 1
+    assert backups[0].read_bytes() == content
+
+
+def test_unreadable_store_on_read_is_409(app_client_with_file):
+    client, tmp_path, filename = app_client_with_file
+    for url in (f"/api/annotations?file={filename}", f"/api/mapdata?file={filename}"):
+        (tmp_path / "test.annotations.json").write_text("{not json")
+        assert client.get(url).status_code == 409
+    assert len(list(tmp_path.glob("test.annotations.json.corrupt-*"))) == 2
+
+
+# ── bad input never reaches the annotation store ─────────────────────────────
+
+_SEED_STORE = '{"version": 1, "annotations": [], "deleted_ways": [{"id": 99}]}'
+
+
+@pytest.fixture
+def seeded_store(app_client_with_file):
+    """A client plus a store file whose bytes every rejected request must leave alone."""
+    client, tmp_path, filename = app_client_with_file
+    ann_path = tmp_path / "test.annotations.json"
+    ann_path.write_text(_SEED_STORE)
+    yield client, filename
+    assert ann_path.read_text() == _SEED_STORE
+    assert client.get(f"/api/mapdata?file={filename}").status_code == 200
+
+
+@pytest.mark.parametrize(
+    "nodes",
+    [
+        [{"id": "abc", "lat": 50.0, "lon": 14.0}],
+        [{"id": 101, "lat": "x", "lon": 14.0}],
+        [{"id": 101, "lat": 95.0, "lon": 14.0}],
+        [{"id": 101, "lat": 50.0}],
+        [{"id": 1.5, "lat": 50.0, "lon": 14.0}],
+        [{"id": 101, "lat": 50.0, "lon": 14.0}, {"id": 102, "lat": None, "lon": 14.0}],
+        [5],
+    ],
+)
+def test_move_rejects_bad_nodes(seeded_store, nodes):
+    client, filename = seeded_store
+    resp = client.put(f"/api/way_nodes/move?file={filename}&way_id=1", json={"nodes": nodes})
+    assert resp.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"after_node_id": 101, "lat": "x", "lon": 14.0},
+        {"after_node_id": 101, "lat": 50.0, "lon": 200.0},
+        {"after_node_id": 101, "lat": True, "lon": 14.0},
+        {"after_node_id": "abc", "lat": 50.0, "lon": 14.0},
+    ],
+)
+def test_add_node_rejects_bad_body(seeded_store, body):
+    client, filename = seeded_store
+    assert client.post(f"/api/way_node?file={filename}&way_id=1", json=body).status_code == 400
+
+
+_LINE = {"type": "LineString", "coordinates": [[14.0, 50.0], [14.001, 50.001]]}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"geometry": "x"},
+        {"geometry": {"type": "LineString", "coordinates": [[14.0, 50.0]]}},
+        {"geometry": {"type": "Polygon", "coordinates": "x"}},
+        {"geometry": {"type": "LineString", "coordinates": [[14.0, 95.0], [14.0, 96.0]]}},
+        {"geometry": _LINE, "properties": []},
+        {"geometry": _LINE, "properties": {"width": "abc"}},
+        {"geometry": _LINE, "properties": {"width": -1}},
+        {"geometry": _LINE, "type": ["path"]},
+    ],
+)
+def test_annotation_rejects_bad_body(seeded_store, body):
+    client, filename = seeded_store
+    assert client.post(f"/api/annotations?file={filename}", json=body).status_code == 400
+
+
+def test_annotation_update_rejects_bad_geometry(app_client_with_file):
+    client, tmp_path, filename = app_client_with_file
+    ann = client.post(f"/api/annotations?file={filename}", json={"geometry": _LINE}).get_json()
+    before = (tmp_path / "test.annotations.json").read_text()
+    resp = client.put(
+        f"/api/annotations/{ann['id']}?file={filename}",
+        json={"geometry": {"type": "LineString", "coordinates": [[14.0, 50.0]]}},
+    )
+    assert resp.status_code == 400
+    assert (tmp_path / "test.annotations.json").read_text() == before
+
+
+@pytest.mark.parametrize(
+    ("method", "url", "body"),
+    [
+        ("post", "/api/ways/split", {"way_id": 4242, "node_id": 101}),
+        ("post", "/api/ways/split", {"way_id": 1.0, "node_id": 101}),
+        ("delete", "/api/ways/1", [1]),
+        ("put", "/api/ways/1/tags", ["highway"]),
+        ("put", "/api/ways/1/tags", {"tags": {"highway": ["footway"]}}),
+        ("put", "/api/ways/abc/hide", {}),
+        ("delete", "/api/ways/1:-1", {}),
+        ("put", "/api/ways/1:x/restore", {}),
+    ],
+)
+def test_way_edits_reject_bad_ids_and_bodies(seeded_store, method, url, body):
+    client, filename = seeded_store
+    resp = getattr(client, method)(f"{url}?file={filename}", json=body)
+    assert resp.status_code in (400, 404)
+
+
+def test_get_way_rejects_negative_segment(app_client_with_file):
+    client, _, filename = app_client_with_file
+    assert client.get(f"/api/ways/1:-1?file={filename}").status_code == 400
+    assert client.get(f"/api/way_nodes?file={filename}&way_id=1:-1").status_code == 400
+
+
+def test_upload_gpx_rejects_bad_options(app_client):
+    client, _ = app_client
+    for options in ("{not json", "[1]"):
+        data = {"file": (io.BytesIO(b"<gpx/>"), "t.gpx"), "options": options}
+        resp = client.post("/api/upload_gpx", data=data, content_type="multipart/form-data")
+        assert resp.status_code == 400
+
+
+# ── error contract ───────────────────────────────────────────────────────────
+
+
+def test_errors_are_json(app_client_with_file):
+    client, _, filename = app_client_with_file
+    for resp in (
+        client.get("/api/ways/9999?file=" + filename),  # abort() in a route
+        client.get("/api/mapdata"),  # missing parameter
+        client.get("/api/no_such_endpoint"),  # routing 404
+        client.get(f"/api/qr?lat=x&lon=14&file={filename}"),
+    ):
+        assert resp.status_code in (400, 404)
+        assert resp.is_json
+        assert set(resp.get_json()) == {"error"}
+
+    resp = client.delete("/api/files")
+    assert resp.status_code == 405
+    assert resp.get_json() == {"error": resp.get_json()["error"]}
+    assert "GET" in resp.headers["Allow"]
+
+
+def test_unhandled_exception_is_a_json_500(app_client_with_file):
+    client, _, filename = app_client_with_file
+    client.application.config["PROPAGATE_EXCEPTIONS"] = False  # TESTING re-raises otherwise
+    with patch.object(viewer_files, "mapdata_to_geojson", side_effect=RuntimeError("secret")):
+        resp = client.get(f"/api/mapdata?file={filename}")
+    assert resp.status_code == 500
+    assert "secret" not in resp.get_json()["error"]
+
+
+# ── split ids ────────────────────────────────────────────────────────────────
+
+
+def _way_features(client, filename, way_id):
+    features = client.get(f"/api/mapdata?file={filename}").get_json()["features"]
+    return [f for f in features if str(f["properties"].get("id")).split(":")[0] == str(way_id)]
+
+
+def test_tag_override_applies_to_split_segments(app_client_3node):
+    client, _, filename = app_client_3node
+    client.post(f"/api/ways/split?file={filename}", json={"way_id": 2, "node_id": 202})
+    resp = client.put(f"/api/ways/2:0/tags?file={filename}", json={"tags": {"highway": "service"}})
+    assert resp.status_code == 204
+    segments = _way_features(client, filename, 2)
+    assert len(segments) == 2
+    for f in segments:
+        assert f["properties"]["tags"]["highway"] == "service"
+        assert f["properties"]["category"] == "road"
+
+
+def test_tag_delete_by_segment_id_removes_the_override(app_client_3node):
+    client, tmp_path, filename = app_client_3node
+    client.post(f"/api/ways/split?file={filename}", json={"way_id": 2, "node_id": 202})
+    client.put(f"/api/ways/2:1/tags?file={filename}", json={"tags": {"highway": "service"}})
+    assert client.delete(f"/api/ways/2:1/tags?file={filename}").status_code == 204
+    store = json.loads((tmp_path / "three.annotations.json").read_text())
+    assert store["tag_overrides"] == {}
+    assert not [e for e in store["change_log"] if e["type"] == "tag"]
+
+
+def test_deleting_an_added_node_keeps_the_one_added_after_it(app_client_with_file):
+    client, _, filename = app_client_with_file
+    url = f"/api/way_node?file={filename}&way_id=1"
+    a = client.post(url, json={"after_node_id": 101, "lat": 50.0001, "lon": 14.0001}).get_json()
+    b = client.post(url, json={"after_node_id": a["id"], "lat": 50.0002, "lon": 14.0002})
+    b = b.get_json()
+    assert client.delete(f"{url}&node_id={a['id']}").status_code == 204
+    nodes = client.get(f"/api/way_nodes?file={filename}&way_id=1").get_json()["nodes"]
+    assert [n["id"] for n in nodes] == [101, b["id"], 102]

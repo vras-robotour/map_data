@@ -148,6 +148,14 @@ def test_split_comment():
 
 
 class TestSave:
+    def test_does_not_clobber_another_saves_temp_file(self, tmp_path):
+        path = _write(tmp_path, HELHEST_LIKE)
+        other = tmp_path / f".{path.name}.tmp"
+        other.write_text("in flight")
+        save_tracker_config(path, {"joy_topic": "/joy2"})
+        assert other.read_text() == "in flight"
+        assert "/joy2" in path.read_text()
+
     def test_changes_only_the_value_and_keeps_the_comment_column(self, tmp_path):
         path = _write(tmp_path, HELHEST_LIKE)
         settings = {

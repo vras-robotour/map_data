@@ -15,9 +15,11 @@ import contextlib
 import copy
 import json
 import logging
+import os
 import threading
 from collections import defaultdict
 from collections.abc import Iterator
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -245,14 +247,20 @@ def mapdata_to_geojson(map_data: "MapData") -> dict[str, Any]:
 _annotation_locks: defaultdict[str, threading.RLock] = defaultdict(threading.RLock)
 
 
+class AnnotationStoreError(Exception):
+    """The annotation store exists but is not a readable JSON object."""
+
+    def __init__(self, path: str, reason: str) -> None:
+        super().__init__(f"{Path(path).name}: {reason}")
+        self.path = path
+
+
 def load_annotations(path: str) -> dict[str, Any]:
     """
     Load the annotation store from *path*, or return a fresh empty store.
 
     An empty/default store (``{"version": 1, "annotations": []}``) is
-    returned both when *path* does not exist and when it exists but
-    contains invalid JSON (in the latter case a warning is logged; the
-    corrupt file itself is left untouched on disk).
+    returned when *path* does not exist.
 
     Parameters
     ----------
@@ -264,15 +272,49 @@ def load_annotations(path: str) -> dict[str, Any]:
     dict
         The parsed annotation store, or a fresh default store.
 
+    Raises
+    ------
+    AnnotationStoreError
+        If *path* exists but cannot be read, is not valid JSON, or is not a
+        JSON object. Treating it as empty would let the next edit overwrite
+        every edit it holds.
+
     """
     p = Path(path)
-    if p.is_file():
+    if not p.is_file():
+        return {"version": 1, "annotations": []}
+    try:
+        with p.open(encoding="utf-8") as f:
+            store = json.load(f)
+    except (OSError, ValueError) as e:
+        raise AnnotationStoreError(path, str(e)) from e
+    if not isinstance(store, dict):
+        raise AnnotationStoreError(path, "not a JSON object")
+    return store
+
+
+def quarantine_annotation_store(path: str) -> Path | None:
+    """
+    Move an unreadable store at *path* aside to ``<path>.corrupt-<timestamp>``.
+
+    Runs under the store's lock and re-checks the file first, so a store
+    another request already replaced with a good one is left alone.
+
+    Returns
+    -------
+    Path or None
+        The backup path, or ``None`` if the store is readable (or gone).
+
+    """
+    with _annotation_locks[path]:
         try:
-            with p.open() as f:
-                return json.load(f)
-        except json.JSONDecodeError:
-            logger.warning("Corrupt annotation file %s, returning empty store", path)
-    return {"version": 1, "annotations": []}
+            load_annotations(path)
+            return None
+        except AnnotationStoreError as e:
+            backup = Path(f"{path}.corrupt-{datetime.now():%Y%m%dT%H%M%S%f}")
+            os.replace(path, backup)
+            logger.error("Unreadable annotation store (%s), moved it to %s", e, backup)
+            return backup
 
 
 @contextlib.contextmanager
@@ -290,7 +332,9 @@ def annotation_store(path: str) -> Iterator[dict[str, Any]]:
     :func:`~map_data.utils.serialization.atomic_write_json`) only when the
     ``with`` body exits normally; if the body raises -- including a Flask
     ``abort()`` from a request handler -- nothing is saved and the on-disk
-    store is left untouched.
+    store is left untouched. An unreadable store raises
+    :class:`AnnotationStoreError` before the body runs, so it is never
+    overwritten.
 
     Parameters
     ----------

@@ -7,7 +7,6 @@ from flask import (
     Response,
     abort,
     jsonify,
-    request,
 )
 
 from ..cache import load_mapdata_cached
@@ -26,17 +25,24 @@ from ..helpers import (
     way_feature,
 )
 from .common import (
+    _MAX_LAT,
+    _MAX_LON,
+    _MIN_LAT,
+    _MIN_LON,
     _annotation_path,
     _apply_segment_deletions,
     _apply_tag_override,
+    _int_param,
+    _json_object,
     _log_add,
     _log_remove,
     _mapdata_path,
-    _original_way_id,
     _parse_way_id,
     _require_args,
     _resolve_way,
     _select_segment,
+    _split_way_id,
+    _validated_number,
     bp,
 )
 
@@ -77,7 +83,7 @@ def get_way_nodes() -> Response:
     md = load_mapdata_cached(str(path))
     store = load_annotations(str(_annotation_path(filename)))
 
-    search_id = _original_way_id(way_id)
+    search_id, _ = _split_way_id(way_id)
 
     resolved = _resolve_way(md, store, search_id)
     if resolved.category is None:
@@ -169,7 +175,7 @@ def get_way(way_id: str) -> Response:
     md = load_mapdata_cached(str(path))
     store = load_annotations(str(_annotation_path(filename)))
 
-    search_id = _original_way_id(way_id)
+    search_id, _ = _split_way_id(way_id)
 
     resolved = _resolve_way(md, store, search_id, added_nodes_before_overrides=True)
     if resolved.category is None:
@@ -232,7 +238,7 @@ def delete_way(way_id: str) -> Response:
     # specific segment is suppressed on reload, not the whole original way.
     stored_id = _parse_way_id(way_id)
 
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         if stored_id not in get_deleted_way_ids(store):
@@ -271,12 +277,13 @@ def update_way_tags(way_id: str) -> Response:
     """
     filename = _require_args("file")
 
-    original_way_id_str = str(way_id).split(":")[0]
+    original_way_id_str = str(_split_way_id(way_id)[0])
 
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     tags = body.get("tags")
-    if not isinstance(tags, dict):
-        abort(400, "Request body must include 'tags' dict")
+    # OSM tags are str -> str; anything else breaks the category lookup on every load.
+    if not isinstance(tags, dict) or not all(isinstance(v, str) for v in tags.values()):
+        abort(400, "Request body must include a 'tags' dict of strings")
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         store.setdefault("tag_overrides", {})[original_way_id_str] = tags
@@ -293,11 +300,9 @@ def delete_way_tags(way_id: str) -> Response:
     """
     Remove the tag override recorded for a way.
 
-    Unlike :func:`update_way_tags`, this looks the override up by
-    ``way_id`` verbatim rather than stripping a ``":<index>"`` segment
-    suffix first -- passing a virtual segment ID here will not remove an
-    override that was recorded under the original way ID. A missing
-    override is not an error (no-op removal).
+    Like :func:`update_way_tags`, a virtual segment ID's ``":<index>"``
+    suffix is stripped, so the override recorded for the original way is
+    removed. A missing override is not an error (no-op removal).
 
     Returns
     -------
@@ -307,15 +312,16 @@ def delete_way_tags(way_id: str) -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing.
+        400 if ``file`` is missing or ``way_id`` isn't a valid way ID.
 
     """
     filename = _require_args("file")
+    original_way_id_str = str(_split_way_id(way_id)[0])
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
-        store.get("tag_overrides", {}).pop(str(way_id), None)
-        store.get("tag_override_meta", {}).pop(str(way_id), None)
-        _log_remove(store, "tag", id=way_id)
+        store.get("tag_overrides", {}).pop(original_way_id_str, None)
+        store.get("tag_override_meta", {}).pop(original_way_id_str, None)
+        _log_remove(store, "tag", id=original_way_id_str)
     return Response("", 204)
 
 
@@ -343,7 +349,7 @@ def get_way_segments(way_id: str) -> Response:
 
     """
     filename = _require_args("file")
-    original_way_id = str(way_id).split(":")[0]
+    original_way_id = str(_split_way_id(way_id)[0])
     segments = _get_way_segments_geojson(filename, original_way_id)
     return jsonify({"segments": segments})
 
@@ -451,27 +457,20 @@ def split_way_endpoint() -> Response:
     ------
     werkzeug.exceptions.HTTPException
         400 if ``file`` is missing or ``way_id``/``node_id`` aren't
-        valid.
+        valid. 404 if the way doesn't exist.
 
     """
     filename = _require_args("file")
-    body = request.get_json(force=True) or {}
-    way_id = body.get("way_id")
-    node_id = body.get("node_id")
+    body = _json_object()
+    # A virtual way_id (e.g. 123:0) splits the original way.
+    original_way_id = str(_split_way_id(body.get("way_id"))[0])
+    node_id_int = _int_param(body.get("node_id"), "node_id")
 
-    try:
-        way_id_val = str(way_id)
-        # node_id may be None (missing from body); int(None) raises TypeError,
-        # which is caught below -- not a genuine unguarded None deref.
-        node_id_int = int(node_id)  # type: ignore[arg-type]
-    except (ValueError, TypeError):
-        abort(400, "Invalid way_id or node_id")
-
-    # If way_id is virtual (e.g. 123:0), get original ID
-    original_way_id = way_id_val.split(":", maxsplit=1)[0]
-
+    md = load_mapdata_cached(str(_mapdata_path(filename)))
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
+        if _resolve_way(md, store, int(original_way_id)).category is None:
+            abort(404, f"Way {original_way_id} not found")
         splits = store.setdefault("split_ways", {})
         way_splits = splits.setdefault(original_way_id, [])
 
@@ -489,8 +488,6 @@ def split_way_endpoint() -> Response:
                 way_ov[str(detached_id)] = dict(way_ov[str(node_id_int)])
 
             # Re-map segment references
-            path = _mapdata_path(filename)
-            md = load_mapdata_cached(str(path))
             resolved = _resolve_way(md, store, int(original_way_id))
             if resolved.way is not None:
                 update_segment_annotations_for_split_change(
@@ -532,11 +529,8 @@ def undo_way_split() -> Response:
 
     """
     filename, way_id, node_id = _require_args("file", "way_id", "node_id")
-    try:
-        way_id_int = int(way_id)
-        node_id_int = int(node_id)
-    except (ValueError, TypeError):
-        abort(400, "way_id and node_id must be integers")
+    way_id_int = _int_param(way_id, "way_id")
+    node_id_int = _int_param(node_id, "node_id")
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         splits = store.get("split_ways", {})
@@ -603,9 +597,9 @@ def hide_way(way_id: str) -> Response:
     """
     filename = _require_args("file")
 
-    way_id_int = _original_way_id(way_id)
+    way_id_int, _ = _split_way_id(way_id)
 
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         hw = store.setdefault("hidden_ways", [])
@@ -642,7 +636,7 @@ def show_way(way_id: str) -> Response:
     """
     filename = _require_args("file")
 
-    way_id_int = _original_way_id(way_id)
+    way_id_int, _ = _split_way_id(way_id)
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
@@ -711,24 +705,20 @@ def add_way_node() -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``file``/``way_id`` is missing, ``way_id``'s non-segment
-        part isn't a valid integer, or the body is missing
-        ``after_node_id``/``lat``/``lon`` or ``after_node_id`` isn't an integer.
+        400 if ``file``/``way_id`` is missing, ``way_id`` isn't a valid way
+        ID, or the body is missing ``after_node_id``/``lat``/``lon``,
+        ``after_node_id`` isn't an integer or ``lat``/``lon`` is out of range.
 
     """
     filename, way_id = _require_args("file", "way_id")
-    way_id_int = _original_way_id(way_id)
+    way_id_int, _ = _split_way_id(way_id)
 
-    body = request.get_json(force=True) or {}
-    after_node_id = body.get("after_node_id")
-    lat = body.get("lat")
-    lon = body.get("lon")
-    if after_node_id is None or lat is None or lon is None:
+    body = _json_object()
+    if any(body.get(k) is None for k in ("after_node_id", "lat", "lon")):
         abort(400, "Request body must include after_node_id, lat, lon")
-    try:
-        after_node_id = int(after_node_id)
-    except (ValueError, TypeError):
-        abort(400, "after_node_id must be an integer")
+    after_node_id = _int_param(body["after_node_id"], "after_node_id")
+    lat = _validated_number(body["lat"], "lat", _MIN_LAT, _MAX_LAT)
+    lon = _validated_number(body["lon"], "lon", _MIN_LON, _MAX_LON)
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
@@ -739,12 +729,12 @@ def add_way_node() -> Response:
                 "id": synth_id,
                 "way_id": way_id_int,
                 "after_node_id": after_node_id,
-                "lat": float(lat),
-                "lon": float(lon),
+                "lat": lat,
+                "lon": lon,
             }
         )
         _log_add(store, "add_node", {"way_id": way_id_int, "node_id": synth_id})
-    return jsonify({"id": synth_id, "lat": float(lat), "lon": float(lon)})
+    return jsonify({"id": synth_id, "lat": lat, "lon": lon})
 
 
 @bp.route("/api/way_node", methods=["DELETE"])
@@ -779,22 +769,24 @@ def delete_way_node() -> Response:
     # deletion; _parse_way_id validates the segment suffix so raw strings never
     # reach the store.
     target_id = _parse_way_id(way_id)
-    way_id_int = _original_way_id(target_id)
-    try:
-        node_id = int(node_id_arg)
-    except (ValueError, TypeError):
-        abort(400, "node_id must be an integer")
+    way_id_int, _ = _split_way_id(way_id)
+    node_id = _int_param(node_id_arg, "node_id")
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         # Added nodes (negative IDs) live in added_nodes, not in the OSM node list;
         # a detached split end is deleted per segment like a real node.
         if node_id < 0 and node_id not in get_detached_node_ids(store, way_id_int).values():
-            store["added_nodes"] = [
-                a
-                for a in store.get("added_nodes", [])
-                if not (a.get("way_id") == way_id_int and a.get("id") == node_id)
-            ]
+            added = store.get("added_nodes", [])
+            removed = next(
+                (a for a in added if a.get("way_id") == way_id_int and a.get("id") == node_id), None
+            )
+            if removed is not None:
+                added.remove(removed)
+                # Nodes added after this one would lose their anchor and vanish.
+                for a in added:
+                    if a.get("way_id") == way_id_int and a.get("after_node_id") == node_id:
+                        a["after_node_id"] = removed["after_node_id"]
             pos_ov = store.get("node_position_overrides", {}).get(str(way_id_int), {})
             pos_ov.pop(str(node_id), None)
             _log_remove(store, "add_node", way_id=way_id_int, node_id=node_id)
@@ -835,10 +827,7 @@ def restore_way_node() -> Response:
     # Use the full way_id to match the deletion record; validated the same way
     # as in delete_way_node.
     target_id = _parse_way_id(way_id)
-    try:
-        node_id = int(node_id_arg)
-    except (ValueError, TypeError):
-        abort(400, "node_id must be an integer")
+    node_id = _int_param(node_id_arg, "node_id")
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
@@ -877,28 +866,33 @@ def move_way_nodes() -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``file``/``way_id`` is missing, ``way_id``'s non-segment
-        part isn't a valid integer, or the body has no ``nodes`` list.
+        400 if ``file``/``way_id`` is missing, ``way_id`` isn't a valid
+        way ID, or the body has no ``nodes`` list or an entry with a
+        non-integer ``id`` or an out-of-range ``lat``/``lon``.
 
     """
     filename, way_id = _require_args("file", "way_id")
-    way_id_int = _original_way_id(way_id)
+    way_id_int, _ = _split_way_id(way_id)
 
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     nodes = body.get("nodes")
-    if not isinstance(nodes, list):
-        abort(400, "Request body must include 'nodes' list")
+    if not isinstance(nodes, list) or not all(isinstance(n, dict) for n in nodes):
+        abort(400, "Request body must include a 'nodes' list of objects")
+    # Validate every node before touching the store: one bad entry would break the file.
+    moves = {
+        str(_int_param(n.get("id"), "node id")): {
+            "lat": _validated_number(n.get("lat"), "lat", _MIN_LAT, _MAX_LAT),
+            "lon": _validated_number(n.get("lon"), "lon", _MIN_LON, _MAX_LON),
+        }
+        for n in nodes
+    }
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         overrides = store.setdefault("node_position_overrides", {})
         way_key = str(way_id_int)
         if way_key not in overrides:
             overrides[way_key] = {}
-        for n in nodes:
-            overrides[way_key][str(n["id"])] = {
-                "lat": float(n["lat"]),
-                "lon": float(n["lon"]),
-            }
+        overrides[way_key].update(moves)
         _log_add(
             store,
             "move",
@@ -931,7 +925,7 @@ def undo_move_way_nodes() -> Response:
 
     """
     filename, way_id = _require_args("file", "way_id")
-    way_id_int = _original_way_id(way_id)
+    way_id_int, _ = _split_way_id(way_id)
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:

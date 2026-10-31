@@ -59,10 +59,13 @@ from typing import Any
 
 from flask import (
     Blueprint,
+    Response,
     abort,
     current_app,
+    jsonify,
     request,
 )
+from werkzeug.exceptions import HTTPException
 
 from map_data.annotations import (
     _CAT_FOR_LIST,
@@ -76,6 +79,7 @@ from map_data.utils.way import FOOTWAY_VALUES
 
 from ..cache import load_mapdata_cached, merged_mapdata_cached
 from ..helpers import (
+    AnnotationStoreError,
     apply_added_nodes,
     apply_node_position_overrides,
     edited_nodes_cache,
@@ -84,11 +88,30 @@ from ..helpers import (
     get_node_position_overrides,
     get_split_node_ids,
     load_annotations,
+    quarantine_annotation_store,
     rebuild_way_without_nodes,
     split_way,
 )
 
 bp = Blueprint("viewer", __name__)
+
+
+@bp.app_errorhandler(HTTPException)
+def _http_error(e: HTTPException) -> Response:
+    """Answer every HTTP error as JSON ``{"error": description}``, the API's one error shape."""
+    resp = e.get_response()  # keeps the status and headers such as Allow
+    resp.set_data(current_app.json.dumps({"error": e.description}))
+    resp.content_type = "application/json"
+    return resp
+
+
+@bp.app_errorhandler(AnnotationStoreError)
+def _unreadable_store(e: AnnotationStoreError) -> tuple[Response, int]:
+    """Move an unreadable annotation store aside and answer 409, keeping the bad file for repair."""
+    backup = quarantine_annotation_store(e.path)
+    kept = f"moved it to {backup.name}" if backup else "it was already moved aside"
+    msg = f"Annotation store unreadable ({e}); {kept}. Reload to continue."
+    return jsonify({"error": msg}), 409
 
 
 @dataclass
@@ -272,12 +295,9 @@ def _select_segment(
         index.
 
     """
-    if ":" not in str(way_id):
+    _, segment_idx = _split_way_id(way_id)
+    if segment_idx is None:
         return way
-    try:
-        segment_idx = int(str(way_id).split(":")[1])
-    except ValueError:
-        abort(400, "Invalid virtual ID")
 
     split_nids = get_split_node_ids(store, search_id)
     if not split_nids:
@@ -397,67 +417,85 @@ def _annotation_path(filename: str) -> Path:
     return _get_data_dir().resolve() / f"{_mapdata_path(filename).stem}.annotations.json"
 
 
-def _parse_way_id(way_id: str) -> int | str:
+def _split_way_id(way_id: Any) -> tuple[int, int | None]:
     """
-    Validate a possibly-virtual way ID and return its canonical stored form.
+    Parse a plain (``"<id>"``) or virtual (``"<id>:<segment_index>"``) way ID.
 
-    A plain integer ID is returned as an ``int``. A virtual segment ID
-    (``"<original_id>:<segment_index>"``, produced by
-    :func:`~map_data.viewer.helpers.split_way`) is returned as a
-    canonicalized ``str`` only if *both* parts parse as integers. Anything
-    else -- a non-numeric base, a non-numeric segment suffix, or extra
-    colons -- is rejected, so raw attacker-controlled strings never reach
-    the annotation store or the change log (where the frontend would later
-    render them).
-
-    Parameters
-    ----------
-    way_id : str
-        Way ID as supplied by the client.
+    The one way-ID parser of the routes: raw client strings that fail it
+    never reach the annotation store or the change log (where the frontend
+    would later render them).
 
     Returns
     -------
-    int or str
-        ``int`` for a plain way ID, ``"<int>:<int>"`` for a virtual one.
+    tuple of (int, int or None)
+        The original OSM way ID and the segment index (``None`` for a plain ID).
 
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if *way_id* is not a valid plain or virtual way ID.
+        400 if the ID part is not an integer, or the segment suffix is not a
+        non-negative integer.
 
     """
-    way_id_str = str(way_id)
-    base_str, sep, suffix_str = way_id_str.partition(":")
+    # str() first so a JSON float or bool is rejected rather than truncated by int().
+    base_str, sep, suffix_str = str(way_id).partition(":")
     try:
         base_int = int(base_str)
     except ValueError:
         abort(400, "Invalid way ID")
     if not sep:
-        return base_int
+        return base_int, None
     try:
         suffix_int = int(suffix_str)
     except ValueError:
         abort(400, "Invalid virtual way ID")
-    return f"{base_int}:{suffix_int}"
+    if suffix_int < 0:
+        abort(400, "Invalid virtual way ID")
+    return base_int, suffix_int
 
 
-def _original_way_id(way_id: str | int) -> int:
+def _parse_way_id(way_id: Any) -> int | str:
     """
-    Return the original (non-virtual) integer way ID for *way_id*.
+    Return the canonical stored form of a way ID parsed by :func:`_split_way_id`.
 
-    Strips any ``":<segment_index>"`` virtual-segment suffix first, so a
-    plain or virtual way ID both resolve to the same underlying OSM way ID.
+    ``int`` for a plain way ID, ``"<int>:<int>"`` for a virtual segment ID.
+    """
+    original, segment = _split_way_id(way_id)
+    return original if segment is None else f"{original}:{segment}"
+
+
+def _int_param(value: Any, name: str) -> int:
+    """
+    Parse an integer from a query-string or JSON value.
 
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if the non-segment part isn't a valid integer.
+        400 if *value* is not an integer (a float or bool is rejected, not truncated).
 
     """
     try:
-        return int(str(way_id).split(":")[0])
-    except (ValueError, TypeError):
-        abort(400, "Invalid way ID")
+        return int(str(value))
+    except ValueError:
+        abort(400, f"{name} must be an integer")
+
+
+def _json_object() -> dict[str, Any]:
+    """
+    Return the request's JSON body as a dict (``{}`` for a JSON ``null``).
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if the body is not valid JSON or not a JSON object.
+
+    """
+    body = request.get_json(force=True)
+    if body is None:
+        return {}
+    if not isinstance(body, dict):
+        abort(400, "Request body must be a JSON object")
+    return body
 
 
 def _require_args(*names: str) -> Any:

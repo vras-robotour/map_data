@@ -1,15 +1,18 @@
 import json
 import threading
 import types
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 import utm
 from shapely.geometry import LineString, MultiPolygon, Polygon
 
+from map_data.utils import serialization
 from map_data.utils.serialization import atomic_write_json
 from map_data.utils.way import Way
 from map_data.viewer.helpers import (
+    AnnotationStoreError,
     annotation_store,
     apply_node_position_overrides,
     geojson_geom_to_utm,
@@ -17,6 +20,7 @@ from map_data.viewer.helpers import (
     get_deleted_way_ids,
     load_annotations,
     mapdata_to_geojson,
+    quarantine_annotation_store,
     rebuild_way_without_nodes,
     split_way,
 )
@@ -97,6 +101,21 @@ def test_save_and_load_annotations_roundtrip(tmp_path):
     assert loaded == store
 
 
+def test_quarantine_leaves_a_readable_store_alone(tmp_path):
+    path = tmp_path / "ann.json"
+    path.write_text('{"version": 1, "annotations": []}')
+    assert quarantine_annotation_store(str(path)) is None
+    assert path.is_file()
+
+
+@pytest.mark.parametrize("content", ["{", "[]", "3"])
+def test_load_annotations_rejects_an_unreadable_store(tmp_path, content):
+    path = tmp_path / "ann.json"
+    path.write_text(content)
+    with pytest.raises(AnnotationStoreError):
+        load_annotations(str(path))
+
+
 def test_atomic_write_json_writes_through_symlink(tmp_path):
     # colcon symlink-install: install/.../data/x.annotations.json -> src/.../data/x.annotations.json
     target = tmp_path / "src" / "ann.json"
@@ -108,6 +127,30 @@ def test_atomic_write_json_writes_through_symlink(tmp_path):
     atomic_write_json(str(link), store, indent=2)
     assert link.is_symlink()
     assert json.loads(target.read_text()) == store
+
+
+def test_atomic_write_json_keeps_the_file_mode(tmp_path):
+    path = tmp_path / "ann.json"
+    path.write_text("{}")
+    path.chmod(0o644)
+    atomic_write_json(path, {"a": 1})
+    assert path.stat().st_mode & 0o777 == 0o644
+
+
+def test_atomic_write_json_new_file_gets_the_umask_default(tmp_path):
+    # mkstemp alone would leave 0600.
+    atomic_write_json(tmp_path / "new.json", {})
+    assert (tmp_path / "new.json").stat().st_mode & 0o777 == 0o666 & ~serialization._UMASK
+
+
+def test_atomic_write_json_fsyncs_before_replacing(tmp_path):
+    calls = []
+    with (
+        patch.object(serialization.os, "fsync", side_effect=lambda fd: calls.append("fsync")),
+        patch.object(serialization.os, "replace", side_effect=lambda *a: calls.append("replace")),
+    ):
+        atomic_write_json(tmp_path / "x.json", {})
+    assert calls == ["fsync", "replace"]
 
 
 # ── get_deleted_way_ids ───────────────────────────────────────────────────────

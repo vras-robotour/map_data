@@ -35,6 +35,7 @@ from map_data.traversability import (
 )
 from map_data.utils.config import config_path, load_config
 from map_data.utils.parsing import ways_to_shapely
+from map_data.utils.serialization import atomic_write_text
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 
 from .common import (
@@ -47,6 +48,7 @@ from .common import (
     MAX_INFLATE_OBSTACLES_M,
     MIN_CELL_SIZE_M,
     _bbox_area_km2,
+    _json_object,
     _validated_bbox,
     _validated_cost_dict,
     _validated_number,
@@ -137,12 +139,12 @@ def save_traversability() -> Response:
     The text is written verbatim, so comments survive. route_planner picks it
     up on its next goal; osm_cloud reads it only at startup and needs a restart.
     """
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     if body.get("traversability") is None:
         abort(400, "Missing traversability")
     _request_rules(body)
     path = _traversability_path()
-    path.write_text(body["traversability"])
+    atomic_write_text(path, body["traversability"])
     return jsonify({"path": str(path)})
 
 
@@ -156,7 +158,7 @@ def get_traversability_blocked() -> Response:
     blocked when its category is not allowed or the rules (plus the always
     excluded stairs) refuse it. Returns ``{"blocked": [[way_id, reason], ...]}``.
     """
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     filename = body.get("file")
     if not isinstance(filename, str) or not filename:
         abort(400, "Missing file")
@@ -405,14 +407,17 @@ def cancel_replan_route() -> ResponseReturnValue:
     ResponseReturnValue
         JSON ``{"success": true}`` for any provided ``transfer_id`` (an
         unknown or already finished one is not reported as an error by
-        :func:`~map_data.pathsolver.replan.cancel_replan_backend`);
-        ``{"success": false, "message": ...}`` with status 400 if the
-        request body is not JSON or lacks ``transfer_id``.
+        :func:`~map_data.pathsolver.replan.cancel_replan_backend`).
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if the request body is not JSON or lacks ``transfer_id``.
 
     """
-    transfer_id = (request.get_json(silent=True) or {}).get("transfer_id")
+    transfer_id = _json_object().get("transfer_id")
     if not transfer_id:
-        return jsonify({"success": False, "message": "No transfer_id provided"}), 400
+        abort(400, "No transfer_id provided")
     cancel_replan_backend(transfer_id)
     return jsonify({"success": True})
 
@@ -488,7 +493,7 @@ def create_replan() -> Response:
         exist.
 
     """
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     path_data = body.get("points")  # [[lat, lon], ...]
     filename = body.get("file")
     highway_types = body.get("allowed_ways", ["footway"])
