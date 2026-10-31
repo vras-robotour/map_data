@@ -72,7 +72,8 @@ map_data_tracker:
 
 osm_cloud:
   ros__parameters:
-    grid_topic: "grid"
+    # osm_cloud.launch.py always forwards grid_topic:= (default osm_grid), which wins over this.
+    grid_topic: "osm_grid"
     # Same map as route_planner: the annotation store is merged and stairs are dropped,
     # so the rings on /intersections sit on ways the planner actually routes over.
     # osm_cloud.launch.py forwards its annotations:= argument (default "auto") on top of
