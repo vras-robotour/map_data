@@ -1805,6 +1805,54 @@ def test_add_node_rejects_bad_body(seeded_store, body):
     assert client.post(f"/api/way_node?file={filename}&way_id=1", json=body).status_code == 400
 
 
+_NODE_BODY = {"after_node_id": 101, "lat": 50.0, "lon": 14.0}
+_MOVE_BODY = {"nodes": [{"id": 101, "lat": 50.0, "lon": 14.0}]}
+
+
+@pytest.mark.parametrize(
+    ("method", "url", "body", "status"),
+    [
+        # Way 1 is the two-node footway [101, 102]; the map has no way 99 or node 999.
+        ("post", "/api/ways/split", {"way_id": 99, "node_id": 101}, 404),
+        ("post", "/api/ways/split", {"way_id": 1, "node_id": 999}, 400),
+        ("post", "/api/ways/split", {"way_id": 1, "node_id": 101}, 400),  # an end, not interior
+        ("post", "/api/way_node?way_id=99", _NODE_BODY, 404),
+        ("post", "/api/way_node?way_id=1", {**_NODE_BODY, "after_node_id": 999}, 400),
+        ("put", "/api/way_nodes/move?way_id=99", _MOVE_BODY, 404),
+        (
+            "put",
+            "/api/way_nodes/move?way_id=1",
+            {"nodes": [{"id": 999, "lat": 50.0, "lon": 14.0}]},
+            400,
+        ),
+    ],
+)
+def test_way_edits_reject_unknown_ways_and_nodes(seeded_store, method, url, body, status):
+    client, filename = seeded_store
+    sep = "&" if "?" in url else "?"
+    resp = getattr(client, method)(f"{url}{sep}file={filename}", json=body)
+    assert resp.status_code == status
+
+
+def test_move_point_barrier_by_its_own_id(tmp_path):
+    # A way without nodes is listed (and so moved) under its own ID, see get_way_nodes.
+    e, n, zn, zl = utm.from_latlon(50.0, 14.0)
+    md = MapData([np.array([[e, n], [e + 100, n + 100]]), int(zn), zl], coords_type="array")
+    md.barriers_list.append(
+        Way(id=2, nodes=[], tags={"barrier": "block"}, line=box(e, n, e + 1, n + 1))
+    )
+    md.save(str(tmp_path / "block.mapdata"))
+    client = create_app(data_dir=str(tmp_path)).test_client()
+
+    nodes = client.get("/api/way_nodes?file=block.mapdata&way_id=2").get_json()["nodes"]
+    assert [nd["id"] for nd in nodes] == [2]
+    resp = client.put(
+        "/api/way_nodes/move?file=block.mapdata&way_id=2",
+        json={"nodes": [{"id": 2, "lat": 50.0001, "lon": 14.0001}]},
+    )
+    assert resp.status_code == 204
+
+
 @pytest.mark.parametrize(
     "body",
     [

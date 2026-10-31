@@ -62,6 +62,7 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - Viewer annotations with a geometry other than `LineString`, `Polygon` or `MultiPolygon` (e.g. `Point`) are rejected with 400
 - `plan_route` (and so a PlanRoute goal) rejects a negative or non-finite `inflate_obstacles` with `bad_parameter` instead of shrinking the obstacles
 - `osm_cloud`: a rejected parameter change keeps the previously published grid and intersections
+- Viewer way edits (split, add node, move nodes) reject an unknown way with 404 and a node not on the way with 400 instead of storing them
 
 ### Removed
 
