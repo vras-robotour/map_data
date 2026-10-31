@@ -12,6 +12,9 @@ from map_data.annotations import (
     NO_ANNOTATIONS,
     annotation_path_for,
     apply_store,
+    apply_tag_overrides,
+    apply_way_and_tag_edits,
+    apply_way_edits,
     load_mapdata_with_annotations,
 )
 from map_data.edits import load_annotations
@@ -728,3 +731,31 @@ def test_apply_store_leaves_the_original_map_untouched():
 
     # No state leaks into the original, so a second merge gives the same map.
     assert _snapshot(apply_store(md, store)) == _snapshot(merged)
+
+
+def test_way_and_tag_edits_recompute_the_crossroads_once(monkeypatch):
+    md = MapData.load(str(STROMOVKA_FIXTURE))
+    store = load_annotations(str(annotation_path_for(STROMOVKA_FIXTURE)))
+    deleted = {str(d["id"]) for d in store["deleted_ways"]}
+    victim = next(w for w in md.footways_list if str(w.id) not in deleted)
+    store["tag_overrides"] = {str(victim.id): {"highway": "residential"}}
+
+    separate = copy.copy(md)
+    apply_way_edits(separate, store)
+    apply_tag_overrides(separate, store)
+
+    calls = []
+    original = MapData.recompute_crossroads
+    monkeypatch.setattr(
+        MapData, "recompute_crossroads", lambda self: (calls.append(1), original(self))[1]
+    )
+    together = copy.copy(md)
+    apply_way_and_tag_edits(together, store)
+
+    assert len(calls) == 1
+    assert [str(w.id) for w in together.crossroads_list] == [
+        str(w.id) for w in separate.crossroads_list
+    ]
+    assert [w.line.wkb for w in together.crossroads_list] == [
+        w.line.wkb for w in separate.crossroads_list
+    ]

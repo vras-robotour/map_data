@@ -26,7 +26,7 @@ from flask import (
 from flask.typing import ResponseReturnValue
 from werkzeug.exceptions import HTTPException
 
-from map_data.annotations import apply_tag_overrides, apply_way_edits
+from map_data.annotations import apply_way_and_tag_edits
 from map_data.edits import load_annotations
 from map_data.map_data import MapData
 from map_data.utils.serialization import map_data_to_dict
@@ -90,8 +90,7 @@ def _merged_mapdata_geojson(path: Path, store: dict[str, Any]) -> dict[str, Any]
     """
     map_data = copy.copy(load_mapdata_cached(str(path)))
 
-    apply_way_edits(map_data, store)
-    apply_tag_overrides(map_data, store)
+    apply_way_and_tag_edits(map_data, store)
     return mapdata_to_geojson(map_data)
 
 

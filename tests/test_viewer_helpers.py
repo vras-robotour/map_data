@@ -71,6 +71,18 @@ def test_geom_to_geojson_linestring():
     assert len(result["coordinates"]) == 2
 
 
+def test_geom_to_geojson_is_cached_on_geometry_value():
+    geom_to_geojson.cache_clear()
+    first = geom_to_geojson(LineString([(_E0, _N0), (_E0 + 10, _N0)]), _ZN, _ZL)
+    again = geom_to_geojson(
+        LineString([(_E0, _N0), (_E0 + 10, _N0)]), _ZN, _ZL
+    )  # equal, new object
+    moved = geom_to_geojson(LineString([(_E0, _N0), (_E0 + 11, _N0)]), _ZN, _ZL)
+    assert again is first
+    assert moved != first
+    assert geom_to_geojson.cache_info().hits == 1
+
+
 def test_geojson_geom_to_utm_roundtrip():
     poly = Polygon([(_E0, _N0), (_E0 + 10, _N0), (_E0 + 10, _N0 + 10), (_E0, _N0 + 10), (_E0, _N0)])
     geojson = geom_to_geojson(poly, _ZN, _ZL)

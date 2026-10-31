@@ -17,9 +17,11 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+import shapely
 import utm
 from shapely import STRtree
-from shapely.geometry import LineString, Point
+from shapely.geometry import Point
 
 from map_data.edits import (
     AnnotationStoreError,
@@ -107,9 +109,13 @@ def load_summary(
     )
 
 
-def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
+def apply_way_edits(md: MapData, store: dict[str, Any], *, recompute: bool = True) -> bool:
     """
     Apply way/node deletions, splits and node position overrides to *md*.
+
+    Returns whether the crossroads are stale; with ``recompute=False`` the caller
+    must :meth:`~map_data.map_data.MapData.recompute_crossroads` then (once, after
+    all its passes).
 
     Reassigns ``roads_list``/``footways_list``/``barriers_list`` (and
     ``crossroads_list`` when a way list changed); individual ``Way`` objects
@@ -126,6 +132,7 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
         {**store, "node_position_overrides": {}}, md.nodes_cache
     )
 
+    stale = False
     deleted_way_ids = get_deleted_way_ids(store)
     has_node_dels = bool(store.get("deleted_nodes"))
     has_splits = bool(store.get("split_ways"))
@@ -174,7 +181,7 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                 else:
                     new_lst.append(w)
             setattr(md, lst_name, new_lst)
-        md.recompute_crossroads()
+        stale = True
 
     node_pos_store = store.get("node_position_overrides", {})
     if node_pos_store:
@@ -241,21 +248,25 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
                         w.nodes = [remap.get(n, n) for n in w.nodes]
                 new_lst.append(w)
             setattr(md, lst_name, new_lst)
-        if moves:
-            md.recompute_crossroads()
+        stale = stale or bool(moves)
+
+    if stale and recompute:
+        md.recompute_crossroads()
+    return stale
 
 
-def apply_tag_overrides(md: MapData, store: dict[str, Any]) -> None:
+def apply_tag_overrides(md: MapData, store: dict[str, Any], *, recompute: bool = True) -> bool:
     """
     Merge ``store["tag_overrides"]`` into the ways, re-sort roads/footways and
-    recompute the crossroads.
+    recompute the crossroads (unless ``recompute=False``, see :func:`apply_way_edits`).
+    Returns whether the crossroads are stale.
 
     Overridden ways are replaced by shallow copies and the way lists are
     reassigned, so this is safe on a shallow copy of the map.
     """
     tag_overrides = store.get("tag_overrides", {})
     if not tag_overrides:
-        return
+        return False
     for lst_name in ("roads_list", "footways_list", "barriers_list"):
         new_lst = []
         for w in getattr(md, lst_name):
@@ -273,7 +284,17 @@ def apply_tag_overrides(md: MapData, store: dict[str, Any]) -> None:
     for w in md.footways_list:
         (new_roads if w.is_road() else new_footways).append(w)
     md.roads_list, md.footways_list = new_roads, new_footways
-    md.recompute_crossroads()
+    if recompute:
+        md.recompute_crossroads()
+    return True
+
+
+def apply_way_and_tag_edits(md: MapData, store: dict[str, Any]) -> None:
+    """:func:`apply_way_edits` then :func:`apply_tag_overrides`, recomputing the crossroads once."""
+    stale = apply_way_edits(md, store, recompute=False)
+    stale = apply_tag_overrides(md, store, recompute=False) or stale
+    if stale:
+        md.recompute_crossroads()
 
 
 def merge_annotations(md: MapData, store: dict[str, Any]) -> None:
@@ -387,14 +408,19 @@ def join_ways(md: MapData, store: dict[str, Any]) -> None:
         return
 
     xy = {n: p.ravel()[:2] for n, p in md.get_points().items()}
-    segments, owner = [], []  # every edge of every way, and its (way index, edge index)
+    owner = []  # every edge of every way as its (way index, edge index)
     for wi, w in enumerate(ways):
         for i in range(len(w.nodes) - 1):
             if w.nodes[i] in xy and w.nodes[i + 1] in xy:
-                segments.append(LineString([xy[w.nodes[i]], xy[w.nodes[i + 1]]]))
                 owner.append((wi, i))
-    if not segments:
+    if not owner:
         return
+    # One vectorised call: a LineString per edge is ~10x slower on a map's ~6000 edges.
+    segments = list(
+        shapely.linestrings(
+            np.array([[xy[ways[wi].nodes[i]], xy[ways[wi].nodes[i + 1]]] for wi, i in owner])
+        )
+    )
     tree = STRtree(segments)
     inserts: dict[tuple[int, int], list[tuple[float, int]]] = {}  # (way, edge) -> [(along, id)]
     next_id = min([0, *md.nodes_cache]) - 1
@@ -480,8 +506,7 @@ def apply_store(md: MapData, store: dict[str, Any]) -> MapData:
     md.footways_list = list(md.footways_list)
     md.barriers_list = list(md.barriers_list)
     md.crossroads_list = list(md.crossroads_list)
-    apply_way_edits(md, store)
-    apply_tag_overrides(md, store)
+    apply_way_and_tag_edits(md, store)
     merge_annotations(md, store)
     return md
 

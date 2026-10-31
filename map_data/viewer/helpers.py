@@ -1,6 +1,7 @@
 """UTM -> lon/lat GeoJSON conversion for the viewer."""
 
 import logging
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -20,6 +21,9 @@ if TYPE_CHECKING:
     from map_data.utils.way import Way
 
 logger = logging.getLogger(__name__)
+
+#: Geometries kept by :func:`geom_to_geojson` (a ~4 MB map holds ~3000).
+_GEOM_CACHE_SIZE = 16384
 
 
 def ring_to_latlon(
@@ -81,6 +85,7 @@ def way_feature(
     return feature
 
 
+@lru_cache(maxsize=_GEOM_CACHE_SIZE)
 def geom_to_geojson(
     geom: "_LineString | _SPoly | _SMPoly",
     zone_number: int,
@@ -91,6 +96,11 @@ def geom_to_geojson(
 
     Returns ``None`` for any other type, or when ``geom_type`` does not
     match the object's class (the coordinate extraction is type-specific).
+
+    Cached on the geometry's *value* (shapely hashes and compares by coordinates) and
+    the zone, so there is nothing to invalidate: an edited way is a different key and
+    an unchanged one, or a recomputed crossroad equal to the old one, hits. The dict is
+    shared between callers: never mutate it.
     """
     gtype = geom.geom_type
     if gtype == "Polygon":
