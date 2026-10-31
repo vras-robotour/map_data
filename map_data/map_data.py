@@ -7,7 +7,9 @@ caching, and parsing OpenStreetMap data for use in path planning.
 
 import json
 import logging
+import time
 from collections.abc import Callable
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +41,7 @@ BBOX_LEN = 4
 # touching, and buffer radius (m) of the resulting crossroad polygons.
 TOUCH_TOLERANCE = 1.0
 CROSSROAD_RADIUS = 1.5
+OSM_CACHE_MAX_AGE = 30 * 24 * 60 * 60
 
 
 class MapData:
@@ -81,6 +84,7 @@ class MapData:
     ANTI_BARRIER_TAGS: dict[str, list[str]]
     OBSTACLE_TAGS: dict[str, list[str]]
     NOT_OBSTACLE_TAGS: dict[str, list[str]]
+    ANTI_OBSTACLE_TAGS: dict[str, list[str]]
 
     def __init__(
         self,
@@ -152,18 +156,14 @@ class MapData:
         self._obstacle_radius = obstacle_radius
         self._buffer_widths = buffer_widths
 
-        self.max_lat, self.max_long = utm.to_latlon(
-            self.max_x,
-            self.max_y,
+        corners = utm.to_latlon(
+            np.array([self.min_x, self.max_x, self.min_x, self.max_x]),
+            np.array([self.min_y, self.min_y, self.max_y, self.max_y]),
             self.zone_number,
             self.zone_letter,
         )
-        self.min_lat, self.min_long = utm.to_latlon(
-            self.min_x,
-            self.min_y,
-            self.zone_number,
-            self.zone_letter,
-        )
+        self.min_lat, self.max_lat = float(np.min(corners[0])), float(np.max(corners[0]))
+        self.min_long, self.max_long = float(np.min(corners[1])), float(np.max(corners[1]))
 
         self._check_utm_zone_boundary()
 
@@ -190,7 +190,7 @@ class MapData:
         zones = set()
         for lat, lon in corners:
             _, _, zn, zl = utm.from_latlon(lat, lon)
-            zones.add((zn, zl))
+            zones.add((zn, zl[-1]))
         if len(zones) > 1:
             zone_strs = ", ".join(f"{zn}{zl}" for zn, zl in sorted(zones))
             logger.warning(
@@ -207,6 +207,7 @@ class MapData:
             "ANTI_BARRIER_TAGS",
             "OBSTACLE_TAGS",
             "NOT_OBSTACLE_TAGS",
+            "ANTI_OBSTACLE_TAGS",
         ):
             setattr(self, attr, self._csv_to_dict(params_path / f"{attr.lower()}.csv"))
 
@@ -231,6 +232,8 @@ class MapData:
             return
         cache_data = {
             "bbox": [self.min_lat, self.min_long, self.max_lat, self.max_long],
+            "created": time.time(),
+            "query_hash": self._osm_query_hash(),
             "raw": raw,
         }
         try:
@@ -258,12 +261,28 @@ class MapData:
             if not np.allclose(stored_bbox, current_bbox, atol=1e-6):
                 logger.info("OSM cache found but bounding box has changed. Re-querying.")
                 return None
+            if cache_data.get("query_hash") != self._osm_query_hash():
+                logger.info("OSM cache found but the query has changed. Re-querying.")
+                return None
+            if time.time() - cache_data.get("created", 0) > OSM_CACHE_MAX_AGE:
+                logger.info("OSM cache is stale. Re-querying.")
+                return None
 
             logger.info("Using cached OSM responses from %s", path)
             return cache_data["raw"]
         except (OSError, json.JSONDecodeError, KeyError) as e:
             logger.debug("Could not load OSM cache: %s", e)
             return None
+
+    def _osm_query_hash(self) -> str:
+        return sha256(self._osm_query().encode()).hexdigest()
+
+    def _osm_query(self) -> str:
+        bbox = f"{self.min_lat},{self.min_long},{self.max_lat},{self.max_long}"
+        ql_timeout = REQUEST_TIMEOUT - 10
+        return (
+            f"[out:json][timeout:{ql_timeout}];way({bbox})->.w;(.w; .w >; .w <; node({bbox}););out;"
+        )
 
     def run_queries(
         self,
@@ -368,9 +387,10 @@ class MapData:
             way_node_ids,
             self.OBSTACLE_TAGS,
             self.NOT_OBSTACLE_TAGS,
-            obstacle_radius=self._obstacle_radius,
-            force_zone_number=self.zone_number,
-            force_zone_letter=self.zone_letter,
+            self.ANTI_OBSTACLE_TAGS,
+            self._obstacle_radius,
+            self.zone_number,
+            self.zone_letter,
         )
 
         self.roads_list, self.footways_list, parsed_barriers = separate_ways(
@@ -432,9 +452,7 @@ class MapData:
             setattr(self, lst_name, kept)
         self.traversability_removed = counts
         if removed:
-            self.crossroads_list = self.parse_intersections(
-                {w.id: w for w in self.footways_list + self.roads_list},
-            )
+            self.recompute_crossroads()
             for reason, count in counts.items():
                 logger.info("Removed %d way(s): %s", count, reason)
             logger.info(
@@ -641,7 +659,7 @@ class MapData:
             parsing.
 
         """
-        self.run_queries()
+        self.run_queries(use_cache=False)
         if self.run_parse() == 0 and save:
             self.save()
 

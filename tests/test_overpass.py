@@ -1,3 +1,4 @@
+import http.client
 import json
 from unittest.mock import patch
 
@@ -130,6 +131,21 @@ def test_query_raw_request_exception():
     assert result is None
 
 
+def test_query_raw_http_exception_retries():
+    client = OverpassClient()
+    side_effects = [
+        http.client.IncompleteRead(b"partial"),
+        _resp(200, MINIMAL_OVERPASS_JSON),
+    ]
+    with (
+        patch.object(client, "_wait_for_slot"),
+        patch.object(client, "_http", side_effect=side_effects),
+        patch("map_data.utils.overpass.time.sleep"),
+    ):
+        result = client.query_raw("test query", retries=2)
+    assert result == MINIMAL_OVERPASS_JSON
+
+
 def test_query_raw_default_retries_covers_every_endpoint_twice():
     client = OverpassClient()
     with (
@@ -163,6 +179,16 @@ def test_wait_for_slot_skips_non_overpass_endpoint():
         client._wait_for_slot("https://overpass.private.coffee/api/interpreter")
     mock_get.assert_not_called()
     mock_sleep.assert_not_called()
+
+
+def test_wait_for_slot_treats_no_slots_as_busy():
+    client = OverpassClient()
+    with (
+        patch.object(client, "_http", return_value=_resp(200, "no slots available now")),
+        patch("map_data.utils.overpass.time.sleep") as mock_sleep,
+    ):
+        client._wait_for_slot("https://overpass-api.de/api/interpreter")
+    mock_sleep.assert_called_once_with(60)
 
 
 def test_wait_for_slot_returns_immediately_if_slots_available():

@@ -528,10 +528,7 @@ def load_mapdata_with_annotations(
     on (stairs, grass, tunnels, ...): a
     :class:`~map_data.traversability.TraversabilityRules`, a path to a rule
     file, or ``None`` for the package's ``config/traversability.yaml``. The
-    non-traversable ways are removed through
-    :meth:`~map_data.map_data.MapData.apply_traversability` before the store is
-    applied: drawn annotations may append geometric crossroads, which the
-    crossroad recompute inside it would otherwise drop.
+    store is applied first, so tag overrides also affect the rules.
 
     ``exclude_highway`` is the older, tag-free shortcut for the same thing
     (stairs by default, see
@@ -578,8 +575,9 @@ def edit_mapdata(
         except AnnotationStoreError as e:
             logger.error("Ignoring unreadable annotation store %s", e)
             store = {"version": 1, "annotations": []}
-    md.apply_traversability(load_traversability(traversability).extend(exclude_highway))
     n_ann = len(store.get("annotations", []))
     if n_ann or store.get("deleted_ways") or store.get("split_ways") or store.get("tag_overrides"):
         logger.info("Applying annotation store to %s (%d annotations)", source_path.name, n_ann)
-    return apply_store(md, store), store
+    md = apply_store(md, store)
+    md.apply_traversability(load_traversability(traversability).extend(exclude_highway))
+    return md, store

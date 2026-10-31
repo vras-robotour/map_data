@@ -75,7 +75,8 @@ class OverpassClient:
                         return text
                 else:
                     problem = f"HTTP {status}: {text[:200]}"
-            except OSError as e:  # URLError, timeouts, connection resets
+            except (OSError, http.client.HTTPException) as e:
+                # URLError, timeouts, connection resets and truncated reads.
                 problem = str(e)
             logger.warning("Overpass request failed on %s: %s", endpoint, problem)
             self._endpoint_index += 1  # try the next endpoint
@@ -110,7 +111,7 @@ class OverpassClient:
             status, text = self._http(status_url, timeout=10)
             if status == http.HTTPStatus.OK and "slots available now" in text:
                 m = re.search(r"(\d+) slots available now", text)
-                if m and int(m.group(1)) > 0:
+                if m is not None and int(m.group(1)) > 0:
                     return
                 m_wait = re.search(r"in (\d+) seconds", text)
                 wait_secs = min(int(m_wait.group(1)) + 2 if m_wait else 60, max_wait)

@@ -186,6 +186,16 @@ def test_a_crossing_is_reported_where_it_happens():
     assert centre.distance(LineString([(50, 0), (50, 0.001)])) < 1e-6
 
 
+def test_geometric_crossroad_ids_do_not_collide():
+    foot, foot_line = _buffered(1, [(0, 0), (100, 0)], "footway", 3.0)
+    ann, ann_line = _buffered(-1, [(50, -20), (50, 20)], "path", 2.0)
+
+    found = MapData.geometric_intersections([(ann, ann_line)], [(foot, foot_line)])
+
+    assert len(found) == 1
+    assert found[0].id <= -1_000_000
+
+
 def test_a_crossing_is_not_displaced_by_the_width_of_a_road():
     """A 7 m road used to push its crossings 3.5 m off, half the enter radius."""
     road, road_line = _buffered(1, [(0, 0), (100, 0)], "residential", 7.0)
