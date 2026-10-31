@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import math
 from pathlib import Path
@@ -160,11 +161,13 @@ def get_stats(path: str) -> None:
     # Check for annotations sidecar
     ann_path = annotation_path_for(path)
     if ann_path.is_file():
-        import json
-
-        with ann_path.open() as f:
-            ann_data = json.load(f)
-            anns = ann_data.get("annotations", [])
+        try:
+            with ann_path.open() as f:
+                ann_data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning("Could not read annotations sidecar %s: %s", ann_path, e)
+        else:
+            anns = ann_data.get("annotations", []) if isinstance(ann_data, dict) else []
             print(f"Annotations: {len(anns)} (manual edits)")
 
     print("=" * 40)

@@ -49,9 +49,7 @@ def parse_osm_ways(
 
         # A closed linear barrier is a ring, not the area it encloses.
         is_ring = coords[0] == coords[-1]
-        is_area = is_ring and (
-            way.tags.get("area") == "yes" or not _is_linear_barrier(way.tags)
-        )
+        is_area = is_ring and (way.tags.get("area") == "yes" or not _is_linear_barrier(way.tags))
         if is_ring and not is_area:
             coords = coords[:-1]
         # Degenerate ways must not abort the whole parse: a LineString needs
