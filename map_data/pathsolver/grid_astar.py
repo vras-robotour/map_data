@@ -185,58 +185,50 @@ def grid_astar(
     if start_ix == goal_ix and start_iy == goal_iy:
         return np.array([start_utm, goal_utm])
 
-    # Pad with inf so neighbour lookups need no bounds checks.
-    costs = 1.0 + grid * grid_cost_weight
-    padded_costs = np.full((ny + 2, nx + 2), np.inf, dtype=np.float32)
-    padded_costs[1:-1, 1:-1] = costs
-
-    # Flattened grid size with padding
+    # Pad with inf so neighbour lookups need no bounds checks. Cells are numbered
+    # column-major, (ix + 1) * p_ny + (iy + 1), so ordering by the flat index breaks
+    # heap ties by (ix, iy).
     p_nx = nx + 2
     p_ny = ny + 2
+    padded_costs = np.full((p_nx, p_ny), np.inf, dtype=np.float32)
+    padded_costs[1:-1, 1:-1] = (1.0 + grid * grid_cost_weight).T
+    flat_costs = padded_costs.ravel().tolist()
+    # A diagonal step's cost, sqrt(2) * cost, as float32 like every g score below.
+    diag_costs = array.array("f", (np.float32(math.sqrt(2)) * padded_costs).tobytes())
+    # Straight-line heuristic of every cell, in cells.
+    hx = (np.arange(p_nx) - 1 - goal_ix) ** 2
+    hy = (np.arange(p_ny) - 1 - goal_iy) ** 2
+    heuristic = array.array("d", np.sqrt((hx[:, None] + hy[None, :]).astype(float)).tobytes())
 
     # Plain Python floats: numpy scalar arithmetic would dominate this inner loop.
     # Every g score is still rounded to float32 through _f32, so the expansion
     # order matches float32 arithmetic on the float32 costs.
     _f32 = array.array("f", [0.0])
     g_scores = array.array("f", [math.inf]) * (p_ny * p_nx)
-    parents = np.full(p_ny * p_nx, -1, dtype=np.int32)
+    parents = array.array("i", [-1]) * (p_ny * p_nx)
 
-    start_flat = (start_iy + 1) * p_nx + (start_ix + 1)
-    goal_flat = (goal_iy + 1) * p_nx + (goal_ix + 1)
+    start_flat = (start_ix + 1) * p_ny + (start_iy + 1)
+    goal_flat = (goal_ix + 1) * p_ny + (goal_iy + 1)
     g_scores[start_flat] = 0.0
 
-    # Priority queue: (f_score, g_score, ix, iy)
-    h0 = math.sqrt((start_ix - goal_ix) ** 2 + (start_iy - goal_iy) ** 2)
-    pq = [(h0, 0.0, start_ix, start_iy)]
-
-    # Neighbor offsets in flattened padded grid (dy * p_nx + dx, dist, ortho_offsets).
-    # For diagonal moves, ortho_offsets are the two edge-adjacent cells the move
-    # passes between; both must be traversable so the path cannot cut through
-    # the corner where two blocked cells touch diagonally.
-    neighbors_data = []
-    for dy in [-1, 0, 1]:
-        for dx in [-1, 0, 1]:
-            if dx == 0 and dy == 0:
-                continue
-            ortho_offsets = (dy * p_nx, dx) if dx != 0 and dy != 0 else ()
-            dist = float(np.float32(math.sqrt(dx**2 + dy**2)))
-            neighbors_data.append((dy * p_nx + dx, dist, ortho_offsets))
-
-    flat_costs = padded_costs.ravel().tolist()
+    # Priority queue: (f_score, g_score, flat index)
+    pq = [(heuristic[start_flat], 0.0, start_flat)]
+    inf = math.inf
+    heappush, heappop = heapq.heappush, heapq.heappop
 
     while pq:
-        _f, g_pushed, ix, iy = heapq.heappop(pq)
+        _f, g_pushed, u = heappop(pq)
 
-        u_flat = (iy + 1) * p_nx + (ix + 1)
-        if g_scores[u_flat] < g_pushed - 1e-4:
+        g = g_scores[u]
+        if g < g_pushed - 1e-4:
             continue
 
-        if u_flat == goal_flat:
+        if u == goal_flat:
             # Path found, reconstruct
             path_indices = []
-            curr = u_flat
+            curr = u
             while curr != -1:
-                c_iy, c_ix = divmod(curr, p_nx)
+                c_ix, c_iy = divmod(curr, p_ny)
                 path_indices.append((c_ix - 1, c_iy - 1))
                 curr = parents[curr]
             path_indices.reverse()
@@ -247,30 +239,36 @@ def grid_astar(
             )
             return path
 
-        current_g = g_scores[u_flat]
-
-        for offset, dist, ortho_offsets in neighbors_data:
-            v_flat = u_flat + offset
-            cost_val = flat_costs[v_flat]
-
-            if cost_val == math.inf:
-                continue
-
-            # Diagonal moves must not slip between two corner-touching
-            # blocked cells: both edge-adjacent cells have to be free.
-            if ortho_offsets:
-                o1, o2 = ortho_offsets
-                if flat_costs[u_flat + o1] == math.inf or flat_costs[u_flat + o2] == math.inf:
-                    continue
-
-            _f32[0] = dist * cost_val
-            _f32[0] = current_g + _f32[0]
-            new_g = _f32[0]
-            if new_g < g_scores[v_flat]:
-                g_scores[v_flat] = new_g
-                parents[v_flat] = u_flat
-                v_iy, v_ix = divmod(v_flat, p_nx)
-                h = math.sqrt((v_ix - 1 - goal_ix) ** 2 + (v_iy - 1 - goal_iy) ** 2)
-                heapq.heappush(pq, (new_g + h, new_g, v_ix - 1, v_iy - 1))
+        down, up, left, right = u - 1, u + 1, u - p_ny, u + p_ny
+        c_down, c_up = flat_costs[down], flat_costs[up]
+        c_left, c_right = flat_costs[left], flat_costs[right]
+        # Rounding to float32 is monotonic: a step that is no shorter in float64 cannot
+        # be shorter rounded, which skips the rounding for most (already reached) cells.
+        # An inf cost fails the first test on its own.
+        for v, cost in ((down, c_down), (up, c_up), (left, c_left), (right, c_right)):
+            if g + cost < g_scores[v]:
+                _f32[0] = g + cost
+                new_g = _f32[0]
+                if new_g < g_scores[v]:
+                    g_scores[v] = new_g
+                    parents[v] = u
+                    heappush(pq, (new_g + heuristic[v], new_g, v))
+        # Diagonal moves must not slip between two corner-touching blocked
+        # cells: both edge-adjacent cells have to be free.
+        for v, side_a, side_b in (
+            (left - 1, c_left, c_down),
+            (left + 1, c_left, c_up),
+            (right - 1, c_right, c_down),
+            (right + 1, c_right, c_up),
+        ):
+            if side_a != inf and side_b != inf:
+                cost = diag_costs[v]
+                if g + cost < g_scores[v]:
+                    _f32[0] = g + cost
+                    new_g = _f32[0]
+                    if new_g < g_scores[v]:
+                        g_scores[v] = new_g
+                        parents[v] = u
+                        heappush(pq, (new_g + heuristic[v], new_g, v))
 
     return None
