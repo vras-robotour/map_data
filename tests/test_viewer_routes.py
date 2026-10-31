@@ -2,13 +2,15 @@ import ast
 import base64
 import io
 import json
+import logging
 import math
 import os
 import shutil
+import subprocess
 import threading
 import time
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from urllib.parse import quote
 
 import cv2
@@ -258,6 +260,16 @@ def test_delete_way(app_client_with_file):
         store = json.load(f)
     deleted_ids = {(d["id"] if isinstance(d, dict) else d) for d in store.get("deleted_ways", [])}
     assert 1 in deleted_ids
+
+
+def test_annotations_of_a_map_in_a_subfolder_sit_beside_it(app_client):
+    # Where the ROS nodes (annotation_path_for) read them.
+    client, tmp_path = app_client
+    (tmp_path / "sub").mkdir()
+    _make_mapdata(tmp_path / "sub" / "test.mapdata")
+    assert client.delete("/api/ways/1?file=sub/test.mapdata", json={}).status_code == 204
+    assert (tmp_path / "sub" / "test.annotations.json").is_file()
+    assert not (tmp_path / "test.annotations.json").exists()
 
 
 def test_get_way_not_found(app_client_with_file):
@@ -550,6 +562,20 @@ def test_split_undo_moves_segment_deletion_to_plain_id(app_client_3node, tmp_pat
     store = json.loads((tmp_path / "three.annotations.json").read_text())
     assert [d["id"] for d in store["deleted_ways"]] == [2]
     assert 2 not in _mapdata_way_ids(client, filename)
+
+
+def test_way_segments_skip_deleted_ways(app_client_3node):
+    client, _, filename = app_client_3node
+    client.post(f"/api/ways/split?file={filename}", json={"way_id": 2, "node_id": 202})
+
+    def seg_ids():
+        resp = client.get(f"/api/ways/2/segments?file={filename}")
+        return [f["properties"]["id"] for f in resp.get_json()["segments"]]
+
+    client.delete(f"/api/ways/2:1?file={filename}", json={})
+    assert seg_ids() == ["2:0"]
+    client.delete(f"/api/ways/2?file={filename}", json={})
+    assert seg_ids() == []
 
 
 def _way_nodes(client, filename, way_id):
@@ -1032,6 +1058,20 @@ def test_cost_grid_image_resamples_utm_cells_onto_latlon_pixels():
     assert seen_outside
 
 
+def test_cost_grid_draws_only_the_allowed_ways(app_client_with_file):
+    client, _, filename = app_client_with_file
+    bbox = "min_lat=50.0&min_lon=14.0&max_lat=50.0005&max_lon=14.0005"
+    url = f"/api/cost_grid?file={filename}&{bbox}"
+
+    def alphas(allowed):
+        data = client.get(f"{url}&allowed_ways={allowed}").get_json()
+        return set(np.unique(_decode_png_rgba(data["image"])[..., 3]).tolist())
+
+    assert 153 in alphas("footway,road")  # the footway's path cells
+    assert 153 not in alphas("road")
+    assert client.get(f"{url}&allowed_ways=footway,stairs").status_code == 400
+
+
 def test_cost_grid_oversized_bbox_rejected(app_client_with_file):
     client, _, filename = app_client_with_file
     # 0.1 x 0.1 deg near Prague is ~80 km^2 -> ~80M cells at 1 m, over the cap
@@ -1381,6 +1421,32 @@ def test_fetch_area_does_not_overwrite_an_existing_map(app_client, mock_overpass
     assert (tmp_path / "small.mapdata").read_text() == "old"
 
 
+def test_fetch_area_reserves_its_path_until_it_saves(app_client, mock_overpass_client):
+    client, tmp_path = app_client
+    release = threading.Event()
+    canned = mock_overpass_client.query_raw.return_value
+
+    def _blocked_query(*args, **kwargs):
+        release.wait(5)
+        return canned
+
+    mock_overpass_client.query_raw.side_effect = _blocked_query
+    bbox = {"min_lat": 50.0, "max_lat": 50.001, "min_lon": 14.0, "max_lon": 14.001}
+    task_id = client.post("/api/fetch_area", json={**bbox, "name": "same"}).get_json()["task_id"]
+
+    payload = _mapdata_bytes(tmp_path)
+    upload = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(payload), "same.mapdata")},
+        content_type="multipart/form-data",
+    )
+    assert upload.get_json()["filename"] == "same_1.mapdata"
+    release.set()
+    assert _poll_fetch(client, task_id)["result"]["filename"] == "same.mapdata"
+    assert (tmp_path / "same_1.mapdata").read_bytes() == payload
+    assert viewer_files._reserved_paths == set()
+
+
 def test_upload_gpx_does_not_overwrite_an_existing_map(app_client, mock_overpass_client):
     client, tmp_path = app_client
     (tmp_path / "trk.mapdata").write_text("old")
@@ -1529,6 +1595,31 @@ def test_get_transfer_code_wakes_up_on_event_instead_of_polling():
 
     assert code == "1-abc-def"
     assert elapsed < 1.0  # woken by the event, not stuck waiting out the timeout
+
+
+def test_wormhole_waits_long_for_the_receiver_then_kills_quietly(caplog):
+    manager = viewer_sharing.WormholeManager()
+    process = MagicMock()
+    process.stdout = iter(["Wormhole code is: 7-crossover-clockwork\n"])
+    process.wait.side_effect = subprocess.TimeoutExpired("wormhole", 600)
+    process.poll.return_value = None
+    temp_dir = MagicMock()
+    manager.active_transfers["tid"] = {
+        "process": process,
+        "temp_dir": temp_dir,
+        "code": None,
+        "code_ready": threading.Event(),
+    }
+
+    caplog.clear()  # the constructor warns when wormhole isn't installed
+    with caplog.at_level("INFO", logger=viewer_sharing.logger.name):
+        manager._capture_wormhole_code_thread("tid")
+
+    process.wait.assert_called_once_with(timeout=600)
+    process.kill.assert_called_once()
+    temp_dir.cleanup.assert_called_once()
+    assert "tid" not in manager.active_transfers
+    assert not [r for r in caplog.records if r.levelno > logging.INFO]
 
 
 # ── non-JSON / empty bodies on JSON endpoints ────────────────────────────────

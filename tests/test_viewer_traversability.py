@@ -64,6 +64,9 @@ def test_blocked_follows_file_rules_stairs_and_allowed_ways(client):
     c, _ = client
     assert set(_blocked(c)) == {3, 4}
     assert set(_blocked(c, allowed_ways=["footway", "road"])) == {3}
+    # Empty or null means the planner's default, footways only.
+    assert set(_blocked(c, allowed_ways=[])) == {3, 4}
+    assert set(_blocked(c, allowed_ways=None)) == {3, 4}
 
 
 def test_blocked_uses_unsaved_rules_from_the_body(client):

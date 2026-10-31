@@ -487,8 +487,9 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
     store = load_annotations(str(_annotation_path(filename)))
 
     search_id = int(original_way_id)
+    deleted = get_deleted_way_ids(store)
     resolved = _resolve_way(md, store, search_id)
-    if resolved.category is None or resolved.way is None:
+    if resolved.category is None or resolved.way is None or search_id in deleted:
         return []
 
     way = resolved.way
@@ -507,15 +508,16 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
 
     for i, seg in enumerate(segments):
         virtual_id = f"{original_way_id}:{i}"
+        # An unsplit way keeps its plain id, the one /api/mapdata and its deletions use.
+        seg_id = virtual_id if len(segments) > 1 else int(original_way_id)
+        if seg_id in deleted:
+            continue
 
         seg = _apply_segment_deletions(seg, virtual_id, store, zn, zl, effective_nc, category)
         if seg is None:
             continue
 
         tags, feat_cat = _apply_tag_override(seg.tags or {}, ov, category)
-
-        # An unsplit way keeps its plain id, the one /api/mapdata and its deletions use.
-        seg_id = virtual_id if len(segments) > 1 else int(original_way_id)
         features.append(way_feature(seg, seg_id, feat_cat, tags, geom_to_geojson(seg.line, zn, zl)))
     return features
 

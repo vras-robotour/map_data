@@ -274,9 +274,9 @@ Body `{"transfer_id": "..."}`. Returns `{"success": true}`, also for an unknown 
 
 ### `GET /api/cost_grid`
 
-Query: `file`, `min_lat`, `min_lon`, `max_lat`, `max_lon`, optional JSON-encoded `highway_costs` / `surface_costs`.
+Query: `file`, `min_lat`, `min_lon`, `max_lat`, `max_lon`, optional JSON-encoded `highway_costs` / `surface_costs`, optional `allowed_ways` (comma-separated `footway`/`road`, default `footway`).
 
-Renders the edited map's 1 m cost grid over the box: `{"image": "data:image/png;base64,...", "bounds": [[south, west], [north, east]]}` for `L.imageOverlay`, both `null` for an empty grid. Black = obstacle, translucent grey = off-path (≥ `default_off_path_cost`), green → red = way cost / `path_cost_cap`. **400**: the box needs more than 4 million cells.
+Renders the edited map's 1 m cost grid over the box: `{"image": "data:image/png;base64,...", "bounds": [[south, west], [north, east]]}` for `L.imageOverlay`, both `null` for an empty grid. Black = obstacle, translucent grey = off-path (≥ `default_off_path_cost`), green → red = way cost / `path_cost_cap`. **400**: the box needs more than 4 million cells, or `allowed_ways` names another category.
 
 ### `GET /api/traversability`
 
