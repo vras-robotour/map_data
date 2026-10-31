@@ -1395,6 +1395,32 @@ def test_fetch_area_does_not_overwrite_an_existing_map(app_client, mock_overpass
     assert (tmp_path / "small.mapdata").read_text() == "old"
 
 
+def test_fetch_area_reserves_its_path_until_it_saves(app_client, mock_overpass_client):
+    client, tmp_path = app_client
+    release = threading.Event()
+    canned = mock_overpass_client.query_raw.return_value
+
+    def _blocked_query(*args, **kwargs):
+        release.wait(5)
+        return canned
+
+    mock_overpass_client.query_raw.side_effect = _blocked_query
+    bbox = {"min_lat": 50.0, "max_lat": 50.001, "min_lon": 14.0, "max_lon": 14.001}
+    task_id = client.post("/api/fetch_area", json={**bbox, "name": "same"}).get_json()["task_id"]
+
+    payload = _mapdata_bytes(tmp_path)
+    upload = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(payload), "same.mapdata")},
+        content_type="multipart/form-data",
+    )
+    assert upload.get_json()["filename"] == "same_1.mapdata"
+    release.set()
+    assert _poll_fetch(client, task_id)["result"]["filename"] == "same.mapdata"
+    assert (tmp_path / "same_1.mapdata").read_bytes() == payload
+    assert viewer_files._reserved_paths == set()
+
+
 def test_upload_gpx_does_not_overwrite_an_existing_map(app_client, mock_overpass_client):
     client, tmp_path = app_client
     (tmp_path / "trk.mapdata").write_text("old")

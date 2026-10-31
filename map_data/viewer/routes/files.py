@@ -122,18 +122,38 @@ def get_mapdata() -> ResponseReturnValue:
     return resp.make_conditional(request)
 
 
-def _free_mapdata_path(data_dir: Path, stem: str) -> Path:
+# Paths picked by a running fetch or GPX upload that has not written its map yet.
+_reserved_paths: set[Path] = set()
+_reserved_paths_lock = threading.Lock()
+
+
+def _free_mapdata_path(data_dir: Path, stem: str, *, reserve: bool = False) -> Path:
     """
     Return ``<stem>.mapdata`` in *data_dir*, or ``<stem>_1.mapdata``, ``_2``, ... if taken.
 
-    A name is taken by an existing map or by a leftover annotation store, which
-    would otherwise be applied to the new map.
+    A name is taken by an existing map, a leftover annotation store (which
+    would otherwise be applied to the new map) or a path in
+    :data:`_reserved_paths`. With *reserve*, the returned path is added there;
+    the caller must discard it once the map is written or abandoned.
     """
     dest, counter = data_dir / f"{stem}.mapdata", 1
-    while dest.exists() or (data_dir / f"{dest.stem}.annotations.json").exists():
-        dest = data_dir / f"{stem}_{counter}.mapdata"
-        counter += 1
+    with _reserved_paths_lock:
+        while (
+            dest.exists()
+            or (data_dir / f"{dest.stem}.annotations.json").exists()
+            or dest in _reserved_paths
+        ):
+            dest = data_dir / f"{stem}_{counter}.mapdata"
+            counter += 1
+        if reserve:
+            _reserved_paths.add(dest)
     return dest
+
+
+def _release_mapdata_path(path: Path) -> None:
+    """Drop *path* from :data:`_reserved_paths` (no-op if absent)."""
+    with _reserved_paths_lock:
+        _reserved_paths.discard(path)
 
 
 _fetch_tasks: dict[str, dict[str, Any]] = {}
@@ -236,6 +256,8 @@ def _run_fetch_task(task_id: str, md: MapData, out_path: Path) -> None:
     except Exception:
         logger.exception("fetch task %s failed", task_id)
         _fetch_tasks[task_id] = {"status": "failed", "error": "Internal server error"}
+    finally:
+        _release_mapdata_path(out_path)
 
 
 @bp.route("/api/fetch_area", methods=["POST"])
@@ -285,8 +307,6 @@ def fetch_area() -> Response:
 
     data_dir = _get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
-    # shortcut: two fetches started at once with one name still pick the same path.
-    out_path = _free_mapdata_path(data_dir, name)
 
     corners = np.array(
         [
@@ -322,6 +342,8 @@ def fetch_area() -> Response:
         _stamp_or_evict_if_stale(stale_id, task, now)
     task_id = str(uuid.uuid4())
     _fetch_tasks[task_id] = {"status": "pending"}
+    # Reserved, as the map is only written when the background task finishes.
+    out_path = _free_mapdata_path(data_dir, name, reserve=True)
     threading.Thread(
         target=_run_fetch_task,
         args=(task_id, md, out_path),
@@ -423,7 +445,7 @@ def upload_gpx() -> Response:
                     f"{MAX_FETCH_AREA_KM2:.0f} km² limit for a single fetch.",
                 )
 
-            out_path = _free_mapdata_path(data_dir, name)
+            out_path = _free_mapdata_path(data_dir, name, reserve=True)
             # MapData caches the OSM response next to coords_file: keep it beside the map
             md.coords_file = str(out_path.with_suffix(".gpx"))
             try:
@@ -431,6 +453,8 @@ def upload_gpx() -> Response:
             except _FetchFailed as e:
                 logger.warning("GPX upload fetch failed at %s: %s", e.stage, e)
                 abort(503 if e.stage == "query" else 500, str(e))
+            finally:
+                _release_mapdata_path(out_path)
 
             return jsonify(result)
         except Exception as e:
