@@ -1,9 +1,4 @@
-"""
-RRT* (Rapidly-exploring Random Tree Star) path planning.
-
-This module provides the RRTStar class for finding optimal paths in continuous
-space with obstacle avoidance and cost-aware steering.
-"""
+"""RRT* path planning in continuous space over obstacle polygons and a cost grid."""
 
 import logging
 import math
@@ -30,22 +25,11 @@ UNIFORM_SAMPLE_RATE = 0.1
 
 class RRTStar:
     """
-    Rapidly-exploring Random Tree Star (RRT*) path planner.
+    RRT* planner; asymptotically converges to the lowest-cost path.
 
-    Builds a collision-free tree by randomly sampling the free space and
-    rewiring edges to minimise path cost. The planner is asymptotically
-    optimal: given enough iterations it converges to the shortest feasible
-    path.
-
-    Collision checking uses two sources simultaneously:
-
-    - A Shapely STRtree of barrier polygons (hard obstacles).
-    - A 2-D cost grid where cells at or above *traversability_threshold*
-      are treated as blocked.
-
-    Traversable cells contribute a weighted cost to the edge cost, so the
-    planner naturally prefers low-cost corridors (e.g. footways) over open
-    terrain.
+    A segment is blocked by an obstacle polygon or by a grid cell at or above
+    *traversability_threshold*; otherwise the grid cost weighs its length, so the
+    planner prefers low-cost corridors (e.g. footways) over open terrain.
     """
 
     def __init__(
@@ -70,63 +54,29 @@ class RRTStar:
         rng: random.Random | None = None,
     ) -> None:
         """
-        Initialize the RRT* planner.
+        Set up the tree at *start*; :meth:`find_path` grows it.
 
         Parameters
         ----------
-        start : np.ndarray
-            Starting position as a 2-element array ``[x, y]`` in world
-            (UTM) coordinates.
-        goal : np.ndarray
-            Goal position as a 2-element array ``[x, y]`` in world
-            coordinates.
         obstacles_tree : STRtree or None
-            Pre-built Shapely STRtree index over the barrier polygons. Pass ``None``
-            to skip polygon-based collision checking (grid only).
+            Index over the obstacle polygons; ``None`` checks the grid only.
         grid : np.ndarray
-            2-D cost array with shape ``(Y, X)``. A value of ``0.0`` means
-            fully free; values at or above *traversability_threshold* are
-            blocked. Intermediate values increase edge cost.
-        low : tuple of float
-            ``(min_x, min_y)`` corner of the grid in world coordinates.
-        grid_scale : float
-            Metres per grid cell (default ``1.0``).
-        max_iter : int
-            Maximum number of RRT* iterations (default ``2000``).
+            ``(Y, X)`` cell costs; cells at or above *traversability_threshold* block.
         step_size : float
-            Maximum distance the tree extends toward a sampled point per
-            iteration in metres (default ``2.0``).
+            Longest extension per iteration, also the goal tolerance.
         neighbor_radius : float
-            Radius in metres within which nearby nodes are considered for
-            rewiring (default ``5.0``).
-        traversability_threshold : float
-            Grid cost at which a cell is considered an obstacle
-            (default ``10.0``). ``np.inf`` marks cells as hard obstacles.
+            Rewiring radius (the upper bound when *adaptive_radius*).
         transfer_id : str or None
-            Optional identifier used to check for external cancellation
-            signals during planning. Pass ``None`` to disable.
+            Planning stops when this transfer is cancelled.
         improve_after_goal : bool
-            If ``True``, continue iterating after the goal is first reached
-            to find a lower-cost path via informed sampling and rewiring. If
-            ``False`` (default), return as soon as the goal is reached.
-        improve_iter : int
-            With *improve_after_goal*, the most extra iterations spent
-            improving once the goal is first reached (default ``200``);
-            *max_iter* still caps the total.
+            Keep rewiring for up to *improve_iter* iterations after the goal is
+            first reached instead of returning; *max_iter* still caps the total.
         informed : bool
-            If ``True`` (default), sample from the informed ellipse once a
-            solution exists (see :meth:`_sample_informed`), shrinking as
-            *improve_after_goal* lowers the best cost found.
+            Once a solution exists, sample from its informed ellipse.
         adaptive_radius : bool
-            If ``True`` (default), shrink the rewiring radius as the tree
-            grows per the RRT* asymptotic-optimality formula, instead of
-            using a fixed *neighbor_radius*.
+            Shrink the rewiring radius as the tree grows (RRT* optimality formula).
         rng : random.Random or None
-            Random source for every sampling draw. Defaults to a fresh
-            :class:`random.Random` per planner, so instances never share the
-            module-global stream and concurrent planners cannot interleave
-            each other's draws. Pass ``random.Random(seed)`` to make a run
-            reproducible.
+            Sampling source; pass ``random.Random(seed)`` for a reproducible run.
 
         """
         self.start = start
@@ -156,9 +106,7 @@ class RRTStar:
         self.improve_iter = improve_iter
         self.informed = informed
         self.adaptive_radius = adaptive_radius
-        # Own random stream: a fresh Random() keeps each planner independent of
-        # the module-global one (and of other planners running in parallel
-        # request threads), while an injected one makes the run reproducible.
+        # Own stream: planners in parallel request threads never interleave draws.
         self._rng = rng if rng is not None else random.Random()
         self._best_cost: float = float("inf")
         self._kdtree: cKDTree | None = None
@@ -362,10 +310,8 @@ class RRTStar:
         Returns
         -------
         tuple of (bool, float)
-            ``(collision, cost)`` where *collision* is ``True`` if the
-            segment intersects an obstacle or blocked grid cell, and *cost*
-            is the weighted traversal cost ``dist * (1 + avg_grid_cost * 5)``.
-            Returns ``(True, inf)`` on collision.
+            ``(False, dist * (1 + avg_grid_cost * grid_cost_weight))``, or
+            ``(True, inf)`` if the segment hits an obstacle or a blocked cell.
 
         """
         if (
@@ -398,25 +344,18 @@ class RRTStar:
                 count += 1
 
         avg_c = total_grid_cost / count if count > 0 else 0.0
-        # Cost = dist * (1 + avg_grid_cost * penalty)
-        # We use grid_cost_weight to match A* logic
+        # Same per-metre weighting as grid_astar.
         return False, float(np.linalg.norm(end - start) * (1.0 + avg_c * self.grid_cost_weight))
 
     def find_path(self) -> np.ndarray | None:
         """
-        Run the RRT* algorithm and return the planned path.
-
-        Iterates up to *max_iter* times, growing the tree from ``start``
-        toward randomly sampled points and rewiring edges to reduce cost.
-        The goal is sampled directly 10 % of the time to encourage
-        convergence.
+        Grow the tree for up to *max_iter* iterations and return the path.
 
         Returns
         -------
         np.ndarray or None
-            Path as an ``(N, 2)`` array of ``[x, y]`` world coordinates,
-            or ``None`` if no collision-free path was found within the
-            iteration budget or if planning was cancelled via *transfer_id*.
+            ``(N, 2)`` path, or ``None`` if none was found within the budget or the
+            transfer was cancelled.
 
         """
         from .replan import _is_cancelled
@@ -424,7 +363,7 @@ class RRTStar:
         goal_idx = None
         goal_found_iter = None
 
-        # ponytail: improvement is capped in iterations, not seconds; add a
+        # shortcut: improvement is capped in iterations, not seconds; add a
         # wall-clock budget if per-iteration cost varies too much across maps.
         for i in range(self.max_iter):
             if _is_cancelled(self.transfer_id):
@@ -515,10 +454,8 @@ class RRTStar:
         """
         Walk the parent chain from *goal_idx* back to the root and return the path.
 
-        Not simplified here: :meth:`~map_data.pathsolver.replan.ReplanPath._post_process_path`
-        already runs a collision-checked Douglas-Peucker pass over the whole
-        assembled route, so simplifying each RRT* segment first would just
-        redo the same work at a smaller (and less effective) scale.
+        Not simplified: :meth:`~map_data.pathsolver.replan.ReplanPath._post_process_path`
+        runs a collision-checked Douglas-Peucker pass over the whole route.
         """
         path = []
         curr: int | None = goal_idx

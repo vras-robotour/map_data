@@ -8,9 +8,7 @@ on:
   workflow_dispatch: {}
 
 env:
-  # Single ruff version for the whole repo. Keep in sync with the `ruff` pin in
-  # pyproject.toml's dev dependency group and the ruff-pre-commit rev in
-  # .pre-commit-config.yaml — drift between them causes reformat churn.
+  # Keep in sync with the ruff pin in pyproject.toml and .pre-commit-config.yaml.
   RUFF_VERSION: "0.16.6"
 
 permissions:
@@ -53,8 +51,7 @@ jobs:
           cache-dependency-path: uv.lock
 
       - name: Install dependencies
-        # mypy needs the actual runtime deps installed (not just --ignore-missing-imports)
-        # so it can narrow e.g. Flask's abort() as NoReturn instead of falling back to Any.
+        # mypy needs the runtime deps to type Flask's abort() as NoReturn.
         run: uv sync --frozen
 
       - name: Type check
@@ -88,7 +85,6 @@ jobs:
 
       - name: Publish coverage summary
         # Runs even when the coverage gate fails, so the summary shows why.
-        # coverage ships with pytest-cov; no third-party action or token needed.
         if: always()
         run: |
           {

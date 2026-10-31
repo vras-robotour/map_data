@@ -18,11 +18,9 @@ map.on('baselayerchange', e => localStorage.setItem('baseLayer', e.name));
 
 drawnItems.addTo(map);
 
-// Restore the canonical draw order after any layer is toggled back on.
-// bringToFront() on a GeoJSON/FeatureGroup re-queues all its sub-layers at
-// the end of the canvas renderer's draw list (later = drawn on top).
-// Iterating in the desired bottom→top order leaves each successive layer
-// on top of the previous one, reproducing the initial load order.
+// Restore the canonical draw order after a layer is toggled back on.
+// bringToFront() re-queues a group's sub-layers at the end of the canvas draw
+// list, so calling it bottom→top reproduces the initial load order.
 function _enforceLayerOrder() {
     ['road', 'footway', 'barrier', 'crossroad', 'waypoint'].forEach(cat => {
         const layer = geoLayers[cat];

@@ -85,7 +85,7 @@ class MockMapData:
         self.roads_list = []
 
     def get_points(self):
-        # ReplanPath._split_ways uses points[node_id]
+        # PathGrid.fill looks up points[node_id]
         points = {}
         for way in self.footways_list:
             for node_id, coord in zip(
@@ -103,14 +103,11 @@ def test_astar_grid_with_obstacle_and_path():
     wall = sh.Polygon([(0, 4), (10, 4), (10, 6), (0, 6)])
     obstacles = [wall]
 
-    # Create a path that goes through the wall
-    # Way expects a LineString or Polygon in its 'line' attribute
-    # We'll use a simple LineString for the nodes part and buffer it for the 'line' part
+    # A footway through the wall: two nodes, with the buffered corridor as its line
     path_coords = [(5.0, 0.0), (5.0, 10.0)]
     path_line = sh.LineString(path_coords).buffer(1.5)
     from map_data.utils.way import Way
 
-    # Give it some nodes so _split_ways doesn't fail
     footway = Way(id=1, nodes=[100, 101], tags={"highway": "footway"}, line=path_line)
 
     replanner = ReplanPath(obstacles, **args)
@@ -293,11 +290,7 @@ def test_grid_astar_negligible_weight_takes_short_corridor():
     assert all(pt[1] == 2.5 for pt in path), "uniform costs should keep the path in the direct row"
 
 
-# ── regression: simplification must not chord through obstacles ──────────────
-#
-# Path simplification used to run *after* collision checking without being
-# collision-checked itself, so a Douglas-Peucker shortcut could cut straight
-# through an obstacle the planner had carefully routed around.
+# ── simplification must not chord through obstacles ──────────────────────────
 
 
 def _staircase_scenario():
@@ -329,7 +322,7 @@ def test_simplify_path_checked_keeps_vertices_when_chord_is_blocked():
         lambda p1, p2: grid_segment_blocked(grid, p1, p2, (0.0, 0.0), 1.0),
     )
 
-    # The colliding shortcut was rejected: the original vertices survive and
+    # The colliding shortcut is rejected: the original vertices survive and
     # no resulting segment crosses a blocked cell.
     assert np.allclose(result, path)
     for i in range(len(result) - 1):

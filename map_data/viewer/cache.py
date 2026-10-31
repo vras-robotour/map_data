@@ -1,13 +1,10 @@
 """
-The viewer's process-wide read caches.
+The viewer's process-wide read caches, keyed on what each answer was computed from
+(file signature, annotation-store digest), never on a clock.
 
-All keyed on what the cached answer was computed from rather than on a clock:
-:func:`load_mapdata_cached` keeps parsed :class:`~map_data.map_data.MapData`
-objects, :func:`mapdata_geojson_cached` keeps the serialized GeoJSON
-``/api/mapdata`` hands out, so a repeat request skips the shallow copy, the
-re-applied edits (``parse_intersections`` above all) and the FeatureCollection
-rebuild altogether, and :func:`merged_mapdata_cached` keeps the fully edited
-``MapData`` that export and planning work on.
+:func:`load_mapdata_cached` keeps parsed ``MapData``, :func:`mapdata_geojson_cached` the
+GeoJSON ``/api/mapdata`` serves, :func:`merged_mapdata_cached` the edited ``MapData``
+that export and planning use.
 """
 
 import hashlib
@@ -21,23 +18,17 @@ from typing import Any
 
 from map_data.map_data import MapData
 
-# IMPORTANT -- shared-object cache: `load_mapdata_cached` returns the *same*
-# MapData instance to every caller for a given file signature, including
-# concurrent Flask requests. Callers MUST NOT mutate the returned object (or
-# any Way inside its lists) in place.
+# Shared objects: every cache here hands the *same* instance to all callers, concurrent
+# requests included. Never mutate a returned object (or any Way inside it) in place.
 
 
 def _file_signature(path: str) -> tuple[int, int, int]:
     """
-    ``(mtime_ns, size, inode)`` -- the identity of the bytes a cached answer came from.
+    ``(mtime_ns, size, inode)``: the identity of the bytes a cached answer came from.
 
-    The modification time alone would not do: a filesystem with a coarse
-    timestamp clock can hand a quick rewrite the mtime the file already had, so
-    the size and the inode ride along. An atomic rewrite (tempfile plus
-    ``os.replace``, which is how a mapdata file and an annotation store are
-    saved) always lands on a fresh inode, and an in-place rewrite that keeps
-    both the inode and the timestamp still has to keep the byte count to slip
-    through unnoticed.
+    mtime alone is not enough on a coarse-clock filesystem. Atomic saves (tempfile plus
+    ``os.replace``) get a fresh inode; an in-place rewrite would also have to keep the
+    size to go unnoticed.
     """
     st = os.stat(path)
     return st.st_mtime_ns, st.st_size, st.st_ino
@@ -65,12 +56,10 @@ _lock = threading.Lock()
 
 def _store_digest(store: dict[str, Any]) -> str:
     """
-    Digest of an annotation store's contents.
+    Digest of an annotation store's loaded contents.
 
-    Taken from the store as it was loaded, not from the file it came from: the
-    caller has it in hand anyway, so no second read is needed, a store rewritten
-    to the same edits keeps its cache entry, and an edit added, changed or
-    removed by any route changes the digest the moment it is saved.
+    Taken from the store, not its file: no second read, and a rewrite with the same
+    edits keeps the cache entry.
     """
     payload = json.dumps(store, sort_keys=True, default=repr).encode()
     return hashlib.blake2b(payload, digest_size=16).hexdigest()
@@ -84,17 +73,10 @@ def mapdata_geojson_cached(
     """
     Return ``(serialized GeoJSON, ETag)`` for the mapdata at *path* edited by *store*.
 
-    *build* is called only on a miss; the key is the mapdata file's
-    :func:`_file_signature` plus the store's :func:`_store_digest`, which is
-    exactly what the built document depends on, so it survives nothing else
-    than an unchanged map and an unchanged set of edits.
-
-    The returned text is shared between requests -- like
-    :func:`load_mapdata_cached`'s ``MapData``, treat it as immutable.
+    *build* runs only on a miss. Keyed on the file signature and the store digest.
     """
     key = _edited_key(path, store)
-    # The ETag comes from the key, not the (potentially megabytes of) body --
-    # equal keys are what "the same document" means here.
+    # ETag from the key, not the (megabytes of) body: equal keys mean the same document.
     return _lru(
         _geojson_cache,
         key,
@@ -105,12 +87,7 @@ def mapdata_geojson_cached(
 def merged_mapdata_cached(
     path: str, store: dict[str, Any], build: Callable[[], MapData]
 ) -> MapData:
-    """
-    Return the fully edited ``MapData`` for *path* under *store*, built by *build* on a miss.
-
-    Keyed exactly like :func:`mapdata_geojson_cached`. The object is shared
-    between requests -- like :func:`load_mapdata_cached`'s, never mutate it.
-    """
+    """Return the fully edited ``MapData`` for *path* under *store*, built by *build* on a miss."""
     return _lru(_merged_cache, _edited_key(path, store), build)
 
 
@@ -128,8 +105,8 @@ def _lru[V](
         if hit is not None:
             cache.move_to_end(key)
             return hit
-    # Built outside the lock: two requests racing on a cold cache do the work
-    # twice instead of queueing up behind each other, for the same result.
+    # Built outside the lock: racing requests on a cold cache may both build (same
+    # result) rather than queue behind each other.
     value = build()
     with _lock:
         cache[key] = value

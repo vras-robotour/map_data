@@ -171,32 +171,27 @@ def grid_astar(
     grid_cost_weight: float = GRID_COST_WEIGHT,
 ) -> np.ndarray | None:
     """
-    Optimized A* search on a 2D grid.
+    8-connected A* over a cost grid; a step costs ``length * (1 + cost * grid_cost_weight)``.
 
     Parameters
     ----------
     grid : np.ndarray
-        2D grid of costs (Y, X). ``inf`` means blocked.
-    start_utm : tuple or np.ndarray
-        Starting point in UTM coordinates.
-    goal_utm : tuple or np.ndarray
-        Goal point in UTM coordinates.
+        ``(Y, X)`` cell costs, ``inf`` is blocked.
     low : tuple
-        ``(min_x, min_y)`` of the grid in UTM metres.
+        ``(min_x, min_y)`` of the grid.
     cs : float
-        Cell size of the grid in metres.
+        Cell size.
     simplify_path : bool
-        Whether to simplify the resulting path with Douglas-Peucker.
+        Douglas-Peucker the result, collision-checked against *grid*.
 
     Returns
     -------
     np.ndarray or None
-        Found path as UTM coordinate array, or ``None`` if no path exists.
+        Path of cell centers in world coordinates, or ``None`` if there is none.
 
     """
     ny, nx = grid.shape
 
-    # Convert UTM to grid indices
     def to_idx(p: tuple[float, float] | np.ndarray) -> tuple[int, int]:
         ix = int(np.floor((p[0] - low[0]) / cs))
         iy = int(np.floor((p[1] - low[1]) / cs))
@@ -215,9 +210,7 @@ def grid_astar(
     if start_ix == goal_ix and start_iy == goal_iy:
         return np.array([start_utm, goal_utm])
 
-    # Pre-calculate costs and pad with infinity to avoid boundary checks
-    # grid is assumed to be 0.0 near paths, 1.0 away from paths.
-    # Base traversal cost is 1.0 + grid_value * grid_cost_weight
+    # Pad with inf so neighbour lookups need no bounds checks.
     costs = 1.0 + grid * grid_cost_weight
     padded_costs = np.full((ny + 2, nx + 2), np.inf, dtype=np.float32)
     padded_costs[1:-1, 1:-1] = costs
@@ -226,10 +219,9 @@ def grid_astar(
     p_nx = nx + 2
     p_ny = ny + 2
 
-    # Plain Python floats: numpy scalar arithmetic dominates this inner loop.
-    # The costs are float32, and every g score is rounded back to float32 through
-    # _f32 so the expansion order (and the path) stays bit-identical to the
-    # previous all-numpy version.
+    # Plain Python floats: numpy scalar arithmetic would dominate this inner loop.
+    # Every g score is still rounded to float32 through _f32, so the expansion
+    # order matches float32 arithmetic on the float32 costs.
     _f32 = array.array("f", [0.0])
     g_scores = array.array("f", [math.inf]) * (p_ny * p_nx)
     parents = np.full(p_ny * p_nx, -1, dtype=np.int32)
@@ -274,8 +266,7 @@ def grid_astar(
                 curr = parents[curr]
             path_indices.reverse()
 
-            # Convert back to UTM (cell centers, matching the grid's
-            # cell-center sampling convention)
+            # Cell centers, matching the grid's sampling convention.
             path = np.array(
                 [[(ix + 0.5) * cs + low[0], (iy + 0.5) * cs + low[1]] for ix, iy in path_indices],
             )

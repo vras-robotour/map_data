@@ -1,6 +1,5 @@
 /**
  * PlannerMode handles the path drawing and replanning logic.
- * Ported and adapted from mission_planner.
  */
 
 class PlannerMode {
@@ -47,7 +46,7 @@ class PlannerMode {
             this.highwayCosts = { ...data.highway_costs };
             this.surfaceCosts = { ...data.surface_costs };
             
-            // Update UI fields if they exist
+            // Seed the planner fields with the defaults the server provides
             if (data.cell_size != null) document.getElementById('planner-cell-size').value = data.cell_size;
             if (data.inflate_obstacles != null) document.getElementById('planner-inflate').value = data.inflate_obstacles;
             if (data.grid_cost_weight) document.getElementById('planner-grid-cost-weight').value = data.grid_cost_weight;
@@ -157,10 +156,8 @@ class PlannerMode {
     }
 
     // ── Start at the robot ──────────────────────────────────────────────────────
-    // The toggle pins waypoint 0 to the robot: it follows the live position while the path
-    // is being drawn, and Replan Path refreshes it once more, so the route is planned from
-    // where the robot is at that moment. It stops following a planned path, whose first
-    // pose is a result, not a waypoint; replanning re-pins it.
+    // The toggle pins waypoint 0 to the robot. It follows the live position until a path is
+    // planned (whose first pose is a result, not a waypoint); Replan Path re-pins it first.
     onRobotPosition(pos) {
         this.robotPos = pos;
         const toggle = document.getElementById('planner-start-at-robot');
@@ -366,9 +363,7 @@ class PlannerMode {
     }
 
     resetCosts() {
-        // /api/planner_defaults is the source of truth; this.defaults is populated
-        // from it in fetchDefaults(). If that fetch failed, there's nothing to
-        // reset to but an empty set of costs.
+        // this.defaults comes from /api/planner_defaults; empty if that fetch failed.
         this.highwayCosts = { ...(this.defaults.highway_costs || {}) };
         this.surfaceCosts = { ...(this.defaults.surface_costs || {}) };
         this.renderCostRows();
@@ -501,7 +496,7 @@ class PlannerMode {
 
             marker.on('mouseup', this._onWpDragEnd, this);
 
-            // Right click to delete
+            // Right click opens the waypoint menu (delete, QR code)
             const onWpContext = (e) => {
                 L.DomEvent.preventDefault(e);
                 L.DomEvent.stopPropagation(e);
@@ -541,8 +536,7 @@ class PlannerMode {
 
         this.pathPolyline.on('click', (e) => {
             L.DomEvent.stopPropagation(e);
-            // Find where to insert
-            // Simple heuristic: find closest segment
+            // Insert into the closest segment
             let bestIdx = 0;
             let minDist = Infinity;
             for (let i = 0; i < this.points.length - 1; i++) {
@@ -605,7 +599,7 @@ class PlannerMode {
                 : `${totalDist.toFixed(1)} m`;
 
             // Before replanning the sum is crow-flies distance between waypoints;
-            // after replanning the points are densified, so it is the actual path length.
+            // after replanning the points are the planned path, so it is its length.
             const distLabel = this.hasPlannedPath ? 'planned path' : 'straight-line';
             countEl.textContent = `${this.points.length} points | ${distStr} (${distLabel})`;
         }

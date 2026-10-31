@@ -14,13 +14,10 @@ from map_data.utils.way import Way
 if TYPE_CHECKING:
     from map_data.map_data import MapData
 
-#: Version of the ``.mapdata`` JSON schema written by :func:`map_data_to_dict`.
-#: Bump it whenever the schema changes; a reader that only knows an older
-#: version then says so instead of failing on a key it does not understand.
+#: Version of the ``.mapdata`` JSON schema; bump it on every schema change.
 FORMAT_VERSION = 1
 
-#: Version assumed for a file written before the marker existed. Such files are
-#: read as they are: every key added since is optional on load.
+#: Version assumed for a file without a ``format_version`` key.
 LEGACY_FORMAT_VERSION = 0
 
 
@@ -30,16 +27,14 @@ def way_to_dict(way: Way) -> dict[str, Any]:
         "is_area": way.is_area,
         "nodes": way.nodes,
         "tags": way.tags,
-        # UTM metres: 6 decimals is a micrometre. shapely's default (16 zero-padded
-        # decimals) made this the bulk of save time and bloated the file.
+        # UTM metres: 6 decimals is a micrometre; shapely's default 16 is slow and bloated.
         "line": wkt.dumps(way.line, rounding_precision=6, trim=True) if way.line else None,
         "in_out": way.in_out,
     }
 
 
 def way_from_dict(data: dict[str, Any]) -> Way:
-    # Every key is optional: a file written by an older version lacks the ones
-    # added since, and the Way defaults are what that version meant by them.
+    # Every key is optional; a missing one means the Way default.
     line = wkt.loads(data["line"]) if data.get("line") else None
     return Way(
         id=data.get("id", -1),
@@ -83,10 +78,12 @@ os.umask(_UMASK)
 
 
 def atomic_write_text(path: str | Path, text: str) -> None:
-    """Write text to a temp file next to ``path``, fsync it, then replace ``path``, so a
-    crash or full disk mid-write cannot truncate a previously good file. The file keeps
-    its mode (a new one gets the umask default, not mkstemp's 0600). A symlinked ``path``
-    is written through to its target (colcon symlink-install data files)."""
+    """
+    Replace ``path`` via an fsynced temp file, so a failed write cannot truncate it.
+
+    The file keeps its mode (a new one gets the umask default, not mkstemp's 0600);
+    a symlinked ``path`` is written through to its target.
+    """
     p = Path(path).resolve()
     try:
         mode = stat.S_IMODE(p.stat().st_mode)
@@ -114,14 +111,11 @@ def atomic_write_json(path: str | Path, data: Any, **dump_kwargs: Any) -> None:
 
 def load_mapdata(md_class: type["MapData"], path: str | Path) -> "MapData":
     p = Path(path)
-    # A legacy pickle file (starts with 0x80) is invalid UTF-8, so json.load
-    # already raises a clear (ValueError-subclass) error on it; pickle
-    # support has been removed for security reasons regardless.
+    # A pickle file (starts with 0x80) is invalid UTF-8, so this raises ValueError.
     with p.open(encoding="utf-8") as f:
         data = json.load(f)
 
-    # No marker means a file written before the schema was versioned; anything
-    # newer than this build knows may hold keys whose meaning it would guess wrong.
+    # A newer file may hold keys whose meaning this build would guess wrong.
     version = data.get("format_version", LEGACY_FORMAT_VERSION)
     if not isinstance(version, int) or version > FORMAT_VERSION:
         raise ValueError(
@@ -143,7 +137,7 @@ def load_mapdata(md_class: type["MapData"], path: str | Path) -> "MapData":
     md.barriers_list = [way_from_dict(w) for w in data["barriers"]]
     md.crossroads_list = [way_from_dict(w) for w in data.get("crossroads", [])]
 
-    # Restore tag configs and private fields needed for run_queries()/run_parse()
+    # Private attributes run_parse() needs that the file does not carry.
     md._obstacle_radius = None
     md._buffer_widths = None
     md._load_tag_configs()

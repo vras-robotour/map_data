@@ -494,9 +494,7 @@ function _updateOsmWayVisualNode(ni, newLat, newLng) {
 
 function _updateOsmWayVisualDelta(dlat, dlng) {
     if (!currentClickedLayer || !osmDrag.origLayerLatLngs) return;
-    // Apply total delta to ORIGINAL latlngs captured at drag start, not to the
-    // already-moved current latlngs — otherwise each mousemove frame compounds
-    // the shift and the object moves too far.
+    // Offset the drag-start latlngs by the total delta, so frames don't compound.
     const orig = osmDrag.origLayerLatLngs;
     const move = ll => L.latLng(ll.lat + dlat, ll.lng + dlng);
     currentClickedLayer.setLatLngs(

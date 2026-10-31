@@ -9,8 +9,8 @@ and the topics and frames can be switched at runtime with ``apply_settings``.
 
 Geometry (paths, goals) may arrive in any TF frame. With ``earth_frame`` set (e.g.
 ``FP_ECEF`` on a Fixposition stack) poses are transformed into that ECEF frame through TF
-and converted to lat/lon exactly; with ``earth_frame`` empty the legacy behaviour
-(transform into ``utm_frame`` and ``utm.to_latlon``) is used.
+and converted to lat/lon exactly; with it empty they go through ``utm_frame`` and
+``utm.to_latlon``.
 """
 
 from __future__ import annotations
@@ -73,10 +73,9 @@ except ImportError:
 
 RECOVERY_TIMEOUT = 5.0
 TELEOP_TIMEOUT = 2.0
-# crl_commander republishes its plan and goal every tick (20 Hz) while it has them, and
-# publishes an *empty* plan while it has no goal; a planner that publishes once (nav2)
-# never sends empties. So: empties for this long drop the plan, and the goal with it when
-# it went quiet too. Silence alone never clears anything.
+# crl_commander republishes plan and goal at 20 Hz while it has them and an *empty* plan
+# while it has none; nav2 publishes once and never sends empties. Empties for this long
+# drop the plan, and the goal if it went quiet too; silence alone clears nothing.
 PLAN_STALE_TIMEOUT = 3.0
 PATH_SUBSAMPLE = 10  # keep every n-th pose of long paths (plus the last one)
 ROAD_PATH_SUBSAMPLE = 5
@@ -139,13 +138,10 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         """
         super().__init__(NODE_NAME)
 
-        # See tracker_config.SETTINGS for the topics. heading_type: "imu" (sensor_msgs/Imu
-        # orientation), "yaw_vector3" (Vector3Stamped, x = yaw rad, e.g. Fixposition
-        # /fixposition/ypr) or "odometry" (nav_msgs/Odometry orientation). earth_frame: ECEF
-        # frame for exact pose -> lat/lon conversion; empty = legacy utm_frame path.
-        # Robot trail: last trail_length fixes, appended when the robot moved trail_min_step.
-        # A fix older than stale_after (s) is flagged stale in the UI. The intersection
-        # thresholds are drawn around the active intersection (match road_follower's).
+        # Topics, frames, heading_type: tracker_config.SETTINGS. The trail keeps the last
+        # trail_length fixes, trail_min_step m apart; a fix older than stale_after s is
+        # flagged stale; the intersection thresholds (road_follower's) are drawn around the
+        # active intersection.
         for name, default in node_parameters(config or {}).items():
             self.declare_parameter(name, default)
 
@@ -167,10 +163,9 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
 
         self.tf_buffer = Buffer()
         if self.get_parameter("tf_static_only").value:
-            # A TransformListener digests the whole /tf firehose (250 Hz on helhest_jr); when
-            # every frame we look up is static, one /tf_static subscription is enough.
-            # (TransformListener(static_only=True) would do it but is kilted-only.) Kept out
-            # of _tracker_subscriptions so apply_settings does not destroy it.
+            # Every frame looked up is static, so /tf_static suffices; a TransformListener
+            # would also digest /tf (TransformListener(static_only=True) is kilted-only).
+            # Kept out of _tracker_subscriptions so apply_settings does not destroy it.
             self._tf_static_sub = self.create_subscription(
                 TFMessage,
                 "/tf_static",
@@ -184,7 +179,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         else:
             self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        # Use Best Effort QoS for telemetry to match bags and typical sensor publishers
+        # Best effort matches both reliable and best-effort publishers (sensors, bags)
         self._qos_best_effort = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
@@ -554,9 +549,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
 
     # ------------------------------------------------------------------ telemetry snapshot
     def _build_status_locked(self) -> dict[str, Any]:
-        """
-        Build status snapshot. Caller must hold self._lock.
-        """
+        """Build the status part of the telemetry; hold self._lock."""
         now = time.time()
         temp_max = None
         if self.temperatures:
@@ -652,7 +645,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             m = self._lookup_matrix(self.earth_frame, frame_id)
             return None if m is None else xyz_to_latlon(xyz, m)
 
-        # Legacy: UTM frame in TF, zone inferred from the current fix
+        # No earth_frame: UTM frame in TF, zone inferred from the current fix
         if frame_id != self.utm_frame:
             m = self._lookup_matrix(self.utm_frame, frame_id)
             if m is None:
@@ -876,7 +869,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         with self._lock:
             self.bus_voltage = round(float(msg.voltage), 2) if math.isfinite(msg.voltage) else None
             self.bus_current = round(float(msg.current), 2) if math.isfinite(msg.current) else None
-            # sensor_msgs says 0..1; some drivers publish 0..100 (Helhest does) - normalise
+            # sensor_msgs says 0..1; some drivers publish 0..100
             pct = float(msg.percentage)
             if math.isfinite(pct):
                 self.battery_percentage = round(pct * 100.0 if pct <= 1.0 else pct, 1)

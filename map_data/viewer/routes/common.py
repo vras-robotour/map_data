@@ -71,28 +71,20 @@ def _unreadable_store(e: AnnotationStoreError) -> tuple[Response, int]:
 @dataclass
 class _ResolvedWay:
     """
-    Result of running a single way ID through :func:`_resolve_way`.
+    Result of :func:`_resolve_way`.
 
     Attributes
     ----------
     way : Way or None
-        The resolved, edited way, or ``None`` if either no way with the
-        requested ID exists (see ``category``) or it was reduced to
-        nothing by node deletions.
+        The edited way; ``None`` if not found or deleted down to nothing.
     category : str or None
-        ``"road"``, ``"footway"``, or ``"barrier"`` -- whichever list the
-        way was found in. ``None`` means no way with the requested ID
-        exists in *any* list; this is the only reliable way to distinguish
-        "not found" from "found but deleted down to nothing" once ``way``
-        is ``None``.
+        ``"road"``, ``"footway"`` or ``"barrier"``; ``None`` only when no way
+        has the ID, which tells "not found" from "deleted down to nothing".
     effective_nodes_cache : dict
-        ``md``'s raw ``{node_id: {"lat", "lon", "tags"}}`` cache, merged
-        with synthetic entries for any user-added nodes on this way (keyed
-        by their negative synthetic IDs, with any recorded position
-        override already applied) -- the cache to pass to
-        :func:`~map_data.viewer.helpers.split_way` when splitting must
-        also work at a synthetic node. Equal to ``md``'s raw cache when
-        the way was not found or has no added nodes.
+        ``md``'s nodes cache plus this way's added nodes and detached split
+        ends, with its node moves applied (see
+        :func:`~map_data.viewer.helpers.edited_nodes_cache`); the raw cache
+        when ``way`` is ``None``.
 
     """
 
@@ -109,52 +101,19 @@ def _resolve_way(
     added_nodes_before_overrides: bool = False,
 ) -> _ResolvedWay:
     """
-    Look up a way by its original OSM ID and apply its recorded edits.
+    Find a way by its original OSM ID and apply its node deletions, added nodes and moves.
 
-    This is the shared core of the way-resolution pipeline used by
-    :func:`~map_data.viewer.routes.ways.get_way`,
-    :func:`~map_data.viewer.routes.ways.get_way_nodes`, and
-    :func:`~map_data.viewer.routes.ways._get_way_segments_geojson`: find the way in ``md``'s
-    ``roads_list``/``footways_list``/``barriers_list`` (making a ``copy.copy`` so the cached
-    ``MapData`` is never mutated), then apply node deletions, added
-    nodes, and node position overrides recorded in *store* for ``search_id``, in that
-    order except for added-nodes vs. overrides, whose relative order is
-    controlled by *added_nodes_before_overrides* because callers
-    genuinely disagree on it (see below). Splitting into segments is
-    *not* handled here, since callers consume split segments differently
-    (picking a single segment vs. building GeoJSON for every segment);
-    callers call :func:`~map_data.viewer.helpers.split_way` themselves
-    with the ``effective_nodes_cache`` returned here (or, like
-    :func:`~map_data.viewer.routes.ways.get_way`, with ``md.nodes_cache`` directly).
-
-    If node deletions reduce the way to nothing, ``rebuild_way_without_nodes``
-    returns ``None`` and the added-nodes/overrides steps are skipped
-    entirely, matching the original per-caller behaviour where each
-    function bailed out immediately in that case.
+    The way is a ``copy.copy`` of the cached one, which is never mutated.
+    Splitting is left to the callers, which pass the returned
+    ``effective_nodes_cache`` to :func:`~map_data.viewer.helpers.split_way`.
+    A way deleted down to nothing skips the added-node and move steps.
 
     Parameters
     ----------
-    md : MapData
-        Loaded map data (as returned by
-        :func:`~map_data.viewer.cache.load_mapdata_cached`) to search.
-    store : dict
-        Annotation store, as returned by
-        :func:`~map_data.viewer.helpers.load_annotations`.
-    search_id : int
-        Original (non-virtual) OSM way ID to resolve.
     added_nodes_before_overrides : bool, default False
-        If ``True``, apply user-added nodes before node position
-        overrides (as :func:`~map_data.viewer.routes.ways.get_way` requires, so that a position
-        override recorded for a synthetic node is picked up by
-        :func:`~map_data.viewer.helpers.apply_node_position_overrides`);
-        if ``False`` (the default), apply overrides first and added
-        nodes last (as :func:`~map_data.viewer.routes.ways.get_way_nodes` and
-        :func:`~map_data.viewer.routes.ways._get_way_segments_geojson` require).
-
-    Returns
-    -------
-    _ResolvedWay
-        See :class:`_ResolvedWay`.
+        Apply added nodes before node moves, so that a move of an added node
+        is applied to the geometry (:func:`~map_data.viewer.routes.ways.get_way`);
+        otherwise moves come first.
 
     """
     nodes_cache = getattr(md, "nodes_cache", {})
@@ -292,20 +251,10 @@ def _apply_tag_override(
 
 def _get_data_dir() -> Path:
     """
-    Return the directory holding ``.mapdata``/``.gpx``/annotation files.
+    Return the directory of ``.mapdata``/``.gpx``/annotation files (may not exist).
 
-    Resolution order: the Flask app's ``DATA_DIR`` config value if set
-    (used by tests and non-ROS2 deployments); else
-    :func:`~map_data.utils.config.package_share`'s installed
-    ``share/map_data/data`` directory, falling back to a ``data``
-    directory next to the source tree when no ROS2 environment is
-    available.
-
-    Returns
-    -------
-    Path
-        Directory path (not guaranteed to exist).
-
+    The app's ``DATA_DIR`` config if set, else
+    :func:`~map_data.utils.config.package_share`'s ``data``.
     """
     if current_app.config.get("DATA_DIR"):
         return Path(current_app.config["DATA_DIR"])
@@ -475,14 +424,10 @@ def _require_args(*names: str) -> Any:
 
 def _log_add(store: dict[str, Any], entry_type: str, key: dict[str, Any], **extra: Any) -> None:
     """
-    Append a ``change_log`` entry unless one matching *entry_type* and *key* already exists.
+    Append a timestamped ``change_log`` entry unless one with *entry_type* and *key* exists.
 
-    *key* fields identify the edit (e.g. ``{"id": way_id}`` or
-    ``{"way_id": ..., "node_id": ...}``) and are compared via ``str()`` so
-    an int/str type mismatch between calls doesn't spuriously fail to
-    match; they're included in the appended entry along with **extra**
-    fields (e.g. ``category``/``label``), which are not compared for the
-    dedup check. The entry is stamped with the current time.
+    *key* fields are compared via ``str()`` (so ``123`` matches ``"123"``);
+    **extra** fields are stored but not compared.
     """
     cl = store.setdefault("change_log", [])
     if not any(
@@ -504,9 +449,8 @@ def _log_remove(store: dict[str, Any], entry_type: str, **key: Any) -> None:
     ]
 
 
-# A robotour course is a few km at most; this comfortably covers that with
-# room to spare while still rejecting the "whole city" rectangles that make
-# Overpass queries time out no matter how many mirrors are available.
+# A robotour course is a few km at most; larger "whole city" boxes make
+# Overpass queries time out on every mirror.
 MAX_FETCH_AREA_KM2 = 25.0
 
 
@@ -627,39 +571,23 @@ def _validated_cost_dict(value: Any, name: str) -> dict[str, float] | None:
 
 def get_merged_mapdata(filename: str) -> tuple[MapData | None, dict[str, Any] | None]:
     """
-    Build a fully-edited, planning/export-ready ``MapData`` for a file.
+    Return the file's ``MapData`` with every edit in its store applied, plus the store.
 
-    Used by :func:`~map_data.viewer.routes.files.export_mapdata`,
-    :func:`~map_data.viewer.routes.planning.get_cost_grid`, and
-    :func:`~map_data.viewer.routes.planning.create_replan`, all of which need a genuinely
-    self-consistent ``MapData`` (not just a GeoJSON view of one) to feed to
-    :mod:`map_data.utils.serialization` or the path planner. Applies the store to the cached
-    ``MapData`` with :func:`~map_data.annotations.apply_store`, which copies the containers
-    and leaves the cached map untouched:
-
-    1. Way/node deletions, splits, and node moves.
-    2. Tag overrides, re-sorting every way between ``roads_list``/``footways_list`` in case an
-       overridden ``highway`` tag changed its category, and recomputing ``crossroads_list``.
-    3. A new ``Way`` for each freehand annotation (``store["annotations"]``, from
-       :func:`~map_data.viewer.routes.annotations.add_annotation`): a ``"path"`` annotation
-       becomes a road/footway (buffered by its ``width`` tag if the geometry is a
-       ``LineString``, with synthetic negative node IDs registered in ``md.nodes_cache``),
-       anything else becomes a barrier.
-
-    The result is cached by :func:`~map_data.viewer.cache.merged_mapdata_cached`
-    (map file signature plus annotation store digest) and shared between
-    requests: callers must treat it as read-only.
-
-    Parameters
-    ----------
-    filename : str
-        Mapdata filename to resolve, load, and edit.
+    Built by :func:`~map_data.annotations.apply_store` (way edits, tag
+    overrides, freehand annotations) for export and planning. The result is
+    cached by :func:`~map_data.viewer.cache.merged_mapdata_cached` and shared
+    between requests: treat it as read-only.
 
     Returns
     -------
     tuple of (MapData or None, dict or None)
-        ``(md, store)``, or ``(None, None)`` if *filename* does not
-        resolve to an existing file.
+        ``(md, store)``, or ``(None, None)`` if the file does not exist.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if *filename* escapes the data directory or names an existing
+        non-``.mapdata`` file.
 
     """
     path = _safe_data_path(filename)

@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """
-ROS2 node for publishing OSM map data as a point cloud.
-
-This module provides the OSMCloud class which converts parsed MapData
-into ROS2 PointCloud2 and MarkerArray messages for visualization.
+ROS 2 node publishing a MapData's way network as a cost-grid PointCloud2, plus the
+intersections as a PoseArray and RViz markers.
 """
 
 from collections.abc import Callable, Sequence
@@ -37,14 +35,11 @@ from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 
 CLOUD_COLS = 4
 TRANSFORM_MODES = ("tf", "auto", "geodetic")
-# Smallest plausible norm of an ECEF position [m]. Every point on Earth is ~6.37e6 m from
-# the ECEF origin, so a much smaller one means the earth_frame -> local_frame TF carries no
-# real origin yet: the Fixposition unit publishes FP_ECEF -> FP_ENU0 as all zeros until it
-# has a fusion fix, which puts FP_ENU0 at the centre of the Earth. Placing the map with
-# that transform shrinks the whole map to a metre-wide box and the grid comes out empty.
+# Smallest plausible norm of an ECEF position [m] (the Earth's surface is ~6.37e6 m out);
+# see OSMCloud._placement_error.
 MIN_ECEF_NORM = 1.0e6
-# How far the placement transform has to move before the map is rebuilt. /tf_static is
-# re-broadcast periodically on Helhest, so the common case is the very same numbers again.
+# How far the placement transform has to move before the map is rebuilt; a periodically
+# re-broadcast /tf_static usually repeats the same numbers.
 PLACEMENT_EPS = 1e-6
 # highway_types value -> MapData.get_ways() key, as in route_planner's graph planner.
 HIGHWAY_TYPE_KEYS = {"footway": "footways", "road": "roads"}
@@ -75,7 +70,7 @@ class OSMCloud(Node):
         self.local_frame: str = self.declare_parameter("local_frame", "map").value
         self.earth_frame: str = self.declare_parameter("earth_frame", "FP_ECEF").value
         # How UTM map data is placed in ``local_frame``:
-        #   "tf"       - look up utm_frame -> local_frame in TF (legacy default)
+        #   "tf"       - look up utm_frame -> local_frame in TF (default)
         #   "auto"     - local frame at the map centre; publishes utm_frame -> local_frame
         #   "geodetic" - UTM -> lat/lon -> ECEF, then the earth_frame -> local_frame TF
         #                (exact for GNSS/INS stacks such as Fixposition: FP_ECEF -> FP_ENU0)
@@ -137,7 +132,6 @@ class OSMCloud(Node):
             "intersection_markers",
         ).value
 
-        # Register parameter callback
         self.add_on_set_parameters_callback(self.parameter_callback)
 
         qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
@@ -149,8 +143,8 @@ class OSMCloud(Node):
         self.tf = Buffer()
         self.tf_sub = None
         self.tf_static_pub = StaticTransformBroadcaster(self)
-        # True once the map has been built and published once, so that _tf_static_cb()
-        # rebuilds it rather than racing the start-up lookup that drives the callback.
+        # True once the map has been built, so that _tf_static_cb() rebuilds it rather
+        # than racing the start-up lookup that drives the callback.
         self.initialized = False
         # True when the grid came out empty although the map has ways, i.e. the map is
         # misplaced. Nothing is published then: a latched empty cloud would hide the map
@@ -178,12 +172,9 @@ class OSMCloud(Node):
             )
             self.transform_mode = "tf"
 
-        # Only the static placement transform is looked up here, so one /tf_static
-        # subscription is enough: a full TransformListener would also digest the /tf
-        # firehose (hundreds of Hz on Helhest). It is kept for the node's life, so that a
-        # placement transform published or corrected later rebuilds and re-publishes the
-        # map instead of needing the node restarted -- the ENU0 origin only exists once
-        # the GNSS/INS unit has a fusion fix, and moves whenever its driver restarts.
+        # The placement transform is static, so /tf_static suffices (a TransformListener
+        # would also digest /tf). Kept for the node's life: a placement published or
+        # corrected later rebuilds the map (see _replace_placement).
         if self.transform_mode != "auto":
             static_qos = QoSProfile(depth=100, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
             self.tf_sub = self.create_subscription(
@@ -209,7 +200,7 @@ class OSMCloud(Node):
             self.utm_to_local[0, 3] = -center_x
             self.utm_to_local[1, 3] = -center_y
 
-            # Publish the static transform (utm -> local_utm)
+            # Publish the static transform utm_frame -> local_frame
             t = TransformStamped()
             t.header.stamp = self.get_clock().now().to_msg()
             t.header.frame_id = self.utm_frame
@@ -409,9 +400,7 @@ class OSMCloud(Node):
         return ""
 
     def publish_cb(self) -> None:
-        """
-        Timer callback to publish the grid cloud and intersections.
-        """
+        """Publish the grid cloud and intersections."""
         # The crossroads come from the same placement as the grid, so a degenerate grid
         # means their rings would be just as misplaced: hold everything back rather than
         # latch it onto every late subscriber.
@@ -449,10 +438,10 @@ class OSMCloud(Node):
         """
         Rebuild and re-publish the map if the placement transform has changed.
 
-        ``/tf_static`` is re-broadcast periodically on Helhest, so nearly every call sees
-        the same transform again and returns immediately. A genuinely different one means
-        the published map is now in the wrong place: the ENU0 origin appears only with the
-        GNSS/INS unit's first fusion fix, and moves whenever its driver restarts.
+        A re-broadcast ``/tf_static`` usually repeats the same transform, which returns
+        immediately. A different one means the published map is misplaced: the ENU0
+        origin appears only with the GNSS/INS unit's first fusion fix and moves whenever
+        its driver restarts.
         """
         source = self.earth_frame if self.transform_mode == "geodetic" else self.utm_frame
         try:
@@ -496,11 +485,10 @@ class OSMCloud(Node):
         """
         Return why *matrix* cannot place the map yet, or ``""`` when it can.
 
-        Only the geodetic mode can tell: ``earth_frame`` is ECEF, so ``local_frame``'s
-        origin has to sit on the Earth's surface. A Fixposition unit without a fusion fix
-        publishes ``FP_ECEF -> FP_ENU0`` as all zeros, which puts that origin at the centre
-        of the Earth; ``utm_to_local_via_ecef`` then works at an altitude of -6378 km and
-        collapses the whole map into a metre-wide box, so the grid comes out empty.
+        Only the geodetic mode can tell: ``local_frame``'s origin must sit near the Earth's
+        surface in ECEF. A Fixposition unit without a fusion fix publishes
+        ``FP_ECEF -> FP_ENU0`` as all zeros, which would collapse the map into a
+        metre-wide box and leave the grid empty.
         """
         if self.transform_mode != "geodetic":
             return ""
@@ -534,14 +522,13 @@ class OSMCloud(Node):
         """
         Block until a usable ``source -> target`` TF transform is available.
 
-        While rclpy is not shutdown, retry every second until successful. *validate*
-        returns why a transform cannot be used yet (``""`` when it can), so a placeholder
-        one is waited out rather than latched for the node's life.
-        Returns ``None`` only if rclpy is shut down while waiting.
+        Retries every second. *validate* returns why a transform cannot be used yet
+        (``""`` when it can), so a placeholder is waited out rather than latched.
+        Returns ``None`` only if rclpy shuts down while waiting.
         """
         while rclpy.ok():
             try:
-                # Zero timeout: the spin_once() below is what delivers /tf_static,
+                # No timeout (the default is zero): spin_once() below delivers /tf_static,
                 # so a blocking wait here would only sleep.
                 tf_msg = self.tf.lookup_transform(target, source, rclpy.time.Time())
                 matrix = numpify(tf_msg.transform)
@@ -563,9 +550,7 @@ class OSMCloud(Node):
         return self.utm_to_local is not None
 
     def _to_local(self, points: dict[int, np.ndarray]) -> dict[int, np.ndarray]:
-        """
-        Place UTM points (id -> (3, 1) array) in ``local_frame`` with z set to 0.
-        """
+        """Place UTM points (id -> (3, 1) array) in ``local_frame`` with z set to 0."""
         if not self._transform_ready():
             raise RuntimeError(
                 "Map placement transform unavailable; the node was shutting down "
@@ -588,15 +573,7 @@ class OSMCloud(Node):
         return {pid: local[k].reshape(3, 1) for k, pid in enumerate(ids)}
 
     def get_cloud(self) -> PointCloud2:
-        """
-        Return a point cloud from the map data.
-
-        Returns
-        -------
-        cloud : sensor_msgs.PointCloud2
-            Created point cloud.
-
-        """
+        """Build the cost-grid cloud (x, y, z, cost) around the ways in ``local_frame``."""
         points = self._to_local(self.map_data.get_points())
         waypoints = split_ways_to_points(
             points, self.map_data.get_ways(), self.grid_res, self.highway_types
@@ -636,9 +613,7 @@ class OSMCloud(Node):
         return cloud
 
     def get_intersections(self) -> tuple[PoseArray, MarkerArray]:
-        """
-        Create PoseArray and MarkerArray from intersections.
-        """
+        """Build the intersection poses and markers (with a DELETEALL first)."""
         ways = self.map_data.get_ways()
         crossroads = ways.get("crossroads", [])
 
@@ -665,10 +640,8 @@ class OSMCloud(Node):
         for point in transformed_points.values():
             p = point.ravel()
 
-            # Spatial filtering based on local frame coordinates. Skipped for
-            # auto-calculated bounds: they come from the map's query bbox, while the
-            # footway network the route is planned on extends past it, so clipping
-            # here silently hides the crossroads the road follower switches at.
+            # Only explicit bounds clip: auto bounds come from the query bbox, and the
+            # network (with its crossroads) extends past it.
             if not self.grid_bounds_auto and not (
                 self.grid_min[0] <= p[0] <= self.grid_max[0]
                 and self.grid_min[1] <= p[1] <= self.grid_max[1]
@@ -708,27 +681,14 @@ def create_grid(
     max_dist: float = 1.0,
 ) -> np.ndarray:
     """
-    Create a grid of points.
+    Return the (M, 2) cell points between *low* and *high* (rounded to metres), y major.
 
     Parameters
     ----------
-    low : tuple
-        Lower bounds of the grid.
-    high : tuple
-        Upper bounds of the grid.
-    cell_size : float
-        Size of the cell.
     near : np.array, optional
         (N, 2) reference points. If given, only the cells within *max_dist* of one of them
         (and a few more, from the square around each) are built, so a long thin network
         does not cost the whole bounding box in memory.
-    max_dist : float
-        Reach of *near*.
-
-    Returns
-    -------
-    grid : np.array
-        Grid of points, row by row (y major).
 
     """
     low_arr = np.round(low)
@@ -758,15 +718,7 @@ def create_grid(
 
 
 def create_cloud(points: np.ndarray) -> PointCloud2:
-    """
-    Create a point cloud from points.
-
-    Parameters
-    ----------
-    points : np.array
-        Points in a grid to create the cloud from.
-
-    """
+    """Build a PointCloud2 from (N, 4) ``x, y, z, cost`` rows (float32 fields)."""
     points = np.asarray(points)
     if points.ndim != 2:
         msg = f"points must be a 2-D array, got {points.ndim}-D"
@@ -785,22 +737,9 @@ def create_cloud(points: np.ndarray) -> PointCloud2:
 
 def points_near_ref(points: np.ndarray, reference: np.ndarray, max_dist: float = 1.0) -> np.ndarray:
     """
-    Get points near reference points and set linear distance as cost.
+    Return the *points* within *max_dist* of *reference*, with a cost column appended.
 
-    Parameters
-    ----------
-    points : np.array
-        Points to check.
-    reference : np.array
-        Reference points.
-    max_dist : float
-        Maximum distance to check.
-
-    Returns
-    -------
-    points : np.array
-        All points with a cost based on distance to reference points.
-
+    The cost is the distance to the nearest reference point divided by *max_dist*.
     """
     points = np.asarray(points)
     reference = np.asarray(reference)
@@ -820,22 +759,9 @@ def transform_points(
     z: float | None = None,
 ) -> dict[int, np.ndarray]:
     """
-    Apply a 4x4 transform to every point in *points* (each a (3, 1) column vector).
+    Apply a 4x4 transform to every point in *points* (id -> (3, 1) column vector).
 
-    Parameters
-    ----------
-    points : dict
-        Points to transform.
-    transform : np.array
-        Transformation matrix.
-    z : float
-        Z value to set on every transformed point, overriding the transform's.
-
-    Returns
-    -------
-    transformed : dict
-        Dictionary id: transformed (3, 1) point.
-
+    *z*, if given, overrides the z of every transformed point.
     """
     if not points:
         return {}
@@ -854,27 +780,10 @@ def split_ways_to_points(
     highway_types: Sequence[str] = ("footway",),
 ) -> np.ndarray:
     """
-    Split OSM ways into equidistant points.
+    Densify the ways of *highway_types* into points at most *max_dist* apart.
 
-    Equidistantly split ways into points with a maximal step size. Only the way types in
-    *highway_types* are used, as the robot is not allowed to leave them.
-
-    Parameters
-    ----------
-    points : dict
-        Points to split ways on.
-    ways : dict
-        Ways to split.
-    max_dist : float
-        Maximal step size.
-    highway_types : sequence of str
-        Way types to split: any of ``"footway"``, ``"road"``.
-
-    Returns
-    -------
-    waypoints : np.array
-        Waypoints created from the ways.
-
+    Only the way types in *highway_types* (``"footway"``, ``"road"``) are used, as the
+    robot is not allowed to leave them. *points* maps node ids to positions.
     """
     selected = [
         way

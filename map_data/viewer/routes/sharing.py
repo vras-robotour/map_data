@@ -90,21 +90,15 @@ class WormholeManager:
         """Initialize with no active transfers, warning once if the ``wormhole`` CLI is missing."""
         self.active_transfers: dict[str, dict[str, Any]] = {}
         if shutil.which("wormhole") is None:
-            # We don't want to crash the whole app if wormhole is missing,
-            # just log it and the endpoints will fail gracefully.
+            # Not fatal: only the sharing endpoints fail.
             logger.warning("'wormhole' command not found. magic-wormhole is required for sharing.")
 
     def create_transfer(self, gpx_data: str) -> str:
         """
         Start a ``wormhole send`` subprocess for *gpx_data* and return its transfer ID.
 
-        Writes *gpx_data* to a fresh temp directory, spawns ``wormhole
-        send`` on it, and starts :meth:`_capture_wormhole_code_thread` in
-        the background to scrape the resulting wormhole code from the
-        process's output. The temp directory lives until
-        :meth:`_cleanup_transfer` runs, once the background thread observes
-        the process finish; it is removed immediately if the subprocess
-        fails to even start.
+        *gpx_data* is written to a temp directory that lives until the
+        process exits (:meth:`_capture_wormhole_code_thread`).
 
         Raises
         ------
@@ -223,30 +217,11 @@ wormhole_manager = WormholeManager()
 @bp.route("/api/create_wormhole", methods=["POST"])
 def create_wormhole() -> ResponseReturnValue:
     """
-    Start sending a GPX path to a companion app via ``magic-wormhole``.
+    Start sending the body's ``gpx`` text to a companion app via ``magic-wormhole``.
 
-    Blocks up to 15s waiting for the wormhole code to be captured (see
-    :meth:`WormholeManager.get_transfer_code`); if it isn't ready in
-    time, the transfer is cancelled and an error is returned rather than
-    leaving an orphaned transfer running.
-
-    Parameters (JSON body)
-    -----------------------
-    gpx : str
-        Raw GPX file contents to send.
-
-    Returns
-    -------
-    Response
-        JSON ``{"success": true, "code": ..., "transfer_id": ...}`` on
-        success (status 200).
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``gpx`` is missing. 500 if the wormhole code is not captured
-        in time, or on an internal error.
-
+    Waits up to 15 s for the wormhole code, cancelling the transfer if it
+    does not come. Returns ``{"success": true, "code": ..., "transfer_id": ...}``;
+    400 if ``gpx`` is missing, 500 if no code came in time or on an error.
     """
     gpx_data = _json_object().get("gpx")
     if not gpx_data:
@@ -267,19 +242,10 @@ def create_wormhole() -> ResponseReturnValue:
 @bp.route("/api/cancel_wormhole", methods=["POST"])
 def cancel_wormhole() -> ResponseReturnValue:
     """
-    Cancel an in-progress ``magic-wormhole`` GPX transfer.
+    Cancel the wormhole transfer with the body's ``transfer_id``.
 
-    Returns
-    -------
-    ResponseReturnValue
-        JSON ``{"success": true, "message": ...}``.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if the request body is not JSON or lacks ``transfer_id``. 404 if
-        the transfer is unknown.
-
+    Returns ``{"success": true, "message": ...}``; 400 if the body is not
+    JSON or lacks ``transfer_id``, 404 if the transfer is unknown.
     """
     transfer_id = _json_object().get("transfer_id")
     if not transfer_id:

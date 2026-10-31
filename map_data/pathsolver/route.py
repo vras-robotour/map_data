@@ -167,7 +167,7 @@ def _grid_bbox(
 
 
 #: How far (m) past the map's area a start or goal may lie: the robot can start just outside
-#: the downloaded box (Stromovka 2026-09-08: 33 m), a wrong map file puts it kilometres off.
+#: the downloaded box, a wrong map file puts it kilometres off.
 OUTSIDE_MAP_TOLERANCE_M = 100.0
 
 
@@ -248,9 +248,8 @@ def plan_route(
     ``algorithm="graph"`` routes along the allowed ways only (the viewer's
     *Paths only*); ``"astar"``/``"rrt"`` run the grid planner over the cost
     grid built from the map (*All terrain*). ``sub_algorithm`` picks the grid
-    search (``"astar"``/``"rrt"``); ``None`` derives it from ``algorithm``, so
-    ``algorithm="rrt"`` alone runs RRT*, while the viewer sends ``"rrt"`` plus an
-    explicit ``sub_algorithm``. Any other value fails with ``bad_parameter``.
+    search (``"astar"``/``"rrt"``); ``None`` derives it from ``algorithm``. Any other
+    value fails with ``bad_parameter``.
 
     ``spacing`` > 0 resamples the result so waypoints are at most that far
     apart (a waypoint follower wants a few metres). ``changed`` and

@@ -380,7 +380,7 @@ def test_added_node_is_routable(footway_network_mapdata):
 
 
 def test_detached_split_disconnects_the_segments(footway_network_mapdata):
-    """Way 1 split at 102 with the far end detached: 103 is no longer reachable from 101."""
+    """Way 1 split at 102 with the far end detached: 103 is unreachable from 101."""
     path, lat0, lon0 = footway_network_mapdata
     split = {"split_ways": {"1": [102]}}
     detached = {**split, "detached_nodes": [{"way_id": 1, "node_id": 102, "id": -1}]}
@@ -588,9 +588,9 @@ def test_drawn_path_baked_into_an_export_survives_a_split_and_a_new_path(footway
 
 def test_shipped_rules_on_the_stromovka_map():
     """
-    The counts the comments in ``config/traversability.yaml`` quote. They are
-    what the operator sees in the node log, so a rule that silently stops
-    matching (an OSM retag, a typo) shows up here.
+    Ways the shipped rules remove from Stromovka, counted by reason as the node
+    logs them, so a rule that silently stops matching (an OSM retag, a typo)
+    shows up here.
     """
     md = MapData.load(str(STROMOVKA_FIXTURE))
     rules = load_traversability()
@@ -604,9 +604,8 @@ def test_shipped_rules_on_the_stromovka_map():
     assert counts == {"stairs": 7, "soft surface": 2, "bridge": 2, "rough surface": 1}
 
 
-#: Start/goal of the first route the robot drove in Stromovka on 2026-09-08, and the start of
-#: the second with a goal inside the fixture (first and last point of
-#: field_sync/2026-09-08/missions/route_*.gpx).
+#: Start/goal of a route the robot drove in Stromovka, and the start of a second one with a
+#: goal inside the fixture (first and last points of the recorded mission GPX files).
 FIELD_ROUTES = {
     "route_20260908-103357": (
         (50.104521772138874, 14.428430322399514),
@@ -640,9 +639,9 @@ def _plan_field_routes(rules, **kwargs):
 
 def test_shipped_rules_keep_the_driven_routes_plannable():
     """
-    The defaults must not cut Stromovka in two. Both field routes have to
-    plan, and neither may grow by more than a third against the plain shortest
-    path — the reason the ``tunnel`` rule is shipped commented out.
+    The shipped rules do not cut Stromovka in two: both field routes plan, and
+    neither grows past MAX_DETOUR_FACTOR times the plain shortest path (why the
+    ``tunnel`` rule is shipped commented out).
     """
     plain = _plan_field_routes(TraversabilityRules(), highway_costs={}, surface_costs={})
     shipped = _plan_field_routes(load_traversability())
@@ -672,9 +671,8 @@ def _snapshot(md):
 
 def test_apply_store_leaves_the_original_map_untouched():
     """
-    ``apply_store`` shallow-copies (deep-copying a whole map cost ~370 ms of
-    every load), so the caller's ``MapData`` and its ``Way`` objects must come
-    out of a merge exactly as they went in.
+    ``apply_store`` shallow-copies, yet the caller's ``MapData`` and its ``Way``
+    objects come out of a merge exactly as they went in.
     """
     md = MapData.load(str(STROMOVKA_FIXTURE))
     store = load_annotations(str(annotation_path_for(STROMOVKA_FIXTURE)))

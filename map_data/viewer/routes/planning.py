@@ -213,9 +213,9 @@ def _cost_grid_image(
     The grid is axis-aligned in UTM, which is rotated against lat/lon by the
     meridian convergence, so each pixel centre is projected to UTM and takes
     the colour of the grid cell it falls in; pixels outside the grid stay
-    transparent. Colours match the old per-cell markers: black for obstacles
-    (cost >= 1), translucent grey for off-path cells (cost >=
-    ``off_path_cost``), green-to-red for paths (``cost / path_cost_cap``).
+    transparent. Black for obstacles (cost >= 1), translucent grey for
+    off-path cells (cost >= ``off_path_cost``), green-to-red for paths
+    (``cost / path_cost_cap``).
 
     Parameters
     ----------
@@ -224,13 +224,8 @@ def _cost_grid_image(
         (``PathGrid.grid_2d_cache``).
     low : tuple of float
         UTM ``(x, y)`` corner the grid was built from.
-    cell_size : float
-        Cell edge in metres.
     off_path_cost, path_cost_cap : float
-        Colour thresholds (the planner's ``default_off_path_cost`` and
-        ``path_cost_cap``).
-    zone_number, zone_letter : int, str
-        The map's UTM zone.
+        The planner's ``default_off_path_cost`` and ``path_cost_cap``.
 
     Returns
     -------
@@ -247,9 +242,8 @@ def _cost_grid_image(
     lats, lons = utm.to_latlon(xs, ys, zone_number, zone_letter)
     south, north, west, east = lats.min(), lats.max(), lons.min(), lons.max()
 
-    # ~cell_size pixels. ponytail: rows are spaced linearly in latitude while
-    # Leaflet stretches the image linearly in Web Mercator; the mismatch is
-    # < 0.2 m at the MAX_GRID_CELLS cap, under one 1 m cell.
+    # ~cell_size pixels. shortcut: rows are linear in latitude but Leaflet stretches
+    # linearly in Web Mercator (< 0.2 m off at MAX_GRID_CELLS), reproject if the cap grows.
     m_per_deg = 111_320.0
     height = max(1, int(np.ceil((north - south) * m_per_deg / cell_size)))
     width = max(1, int(np.ceil((east - west) * m_per_deg * np.cos(np.radians(north)) / cell_size)))
@@ -280,26 +274,20 @@ def _cost_grid_image(
 @bp.route("/api/cost_grid")
 def get_cost_grid() -> Response:
     """
-    Compute a coarse traversal-cost grid for a bounding box, for visualization.
+    Render the edited map's 1 m traversal-cost grid over a bounding box as one PNG.
 
-    Builds a fully-edited ``MapData`` via :func:`~map_data.viewer.routes.common.get_merged_mapdata`,
-    fills a 1m-resolution :class:`~map_data.pathsolver.replan.ReplanPath`
-    grid over the requested lat/lon box (obstacles are *not* filtered out
-    of the result, unlike planning, so the client can render them), and
-    renders it as one PNG (see :func:`_cost_grid_image`).
+    Obstacles stay in the grid (as ``inf``) so they are drawn too (see
+    :func:`_cost_grid_image`).
 
     Parameters (query string)
     -----------------------------
     file : str
         Mapdata filename.
     min_lat, min_lon, max_lat, max_lon : float
-        Bounding box (WGS84 degrees); min must be strictly less than max
-        on each axis, and the box must fit within the
-        :data:`~map_data.viewer.routes.common.MAX_GRID_CELLS` cell budget at the fixed 1 m
-        resolution.
+        WGS84 box; min < max on each axis, within
+        :data:`~map_data.viewer.routes.common.MAX_GRID_CELLS` 1 m cells.
     highway_costs, surface_costs : str, optional
-        JSON-encoded cost-override dicts (str -> finite non-negative
-        number); a malformed value aborts the request with 400.
+        JSON-encoded cost-override dicts (str -> finite non-negative number).
 
     Returns
     -------
@@ -310,10 +298,8 @@ def get_cost_grid() -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if any required parameter is missing, the bounding box is
-        malformed (non-finite, out of lat/lon range, or min >= max),
-        the box exceeds the grid-cell budget, or a cost-override dict is
-        malformed. 404 if the file doesn't exist.
+        400 if a parameter is missing or invalid or the box is too large.
+        404 if the file doesn't exist.
 
     """
     filename = request.args.get("file")
@@ -334,7 +320,7 @@ def get_cost_grid() -> Response:
         max_lon_arg,
     )
 
-    cell_size = 1.0  # Use a coarser grid for visualization performance
+    cell_size = 1.0  # coarser than planning, for rendering speed
     cells = _bbox_area_km2(min_lat, min_lon, max_lat, max_lon) * 1e6 / (cell_size * cell_size)
     if cells > MAX_GRID_CELLS:
         abort(
@@ -344,7 +330,6 @@ def get_cost_grid() -> Response:
             "cell limit. Request a smaller area or a larger cell size.",
         )
 
-    # Get custom highway/surface costs from the request, if provided
     cost_dicts: dict[str, dict[str, float] | None] = {}
     for name in ("highway_costs", "surface_costs"):
         raw = request.args.get(name)
@@ -407,26 +392,10 @@ def get_cost_grid() -> Response:
 @bp.route("/api/cancel_replan", methods=["POST"])
 def cancel_replan_route() -> ResponseReturnValue:
     """
-    Cancel an in-progress replan started by :func:`create_replan`.
+    Cancel the grid replan started by :func:`create_replan` with the body's ``transfer_id``.
 
-    Parameters (JSON body)
-    -----------------------
-    transfer_id : str
-        ID of the replan to cancel, as passed to
-        :func:`~map_data.pathsolver.replan.ReplanPath`.
-
-    Returns
-    -------
-    ResponseReturnValue
-        JSON ``{"success": true}`` for any provided ``transfer_id`` (an
-        unknown or already finished one is not reported as an error by
-        :func:`~map_data.pathsolver.replan.cancel_replan_backend`).
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if the request body is not JSON or lacks ``transfer_id``.
-
+    Returns ``{"success": true}`` even for an unknown or finished ID; 400 if
+    the body is not JSON or lacks ``transfer_id``.
     """
     transfer_id = _json_object().get("transfer_id")
     if not transfer_id:
@@ -438,17 +407,9 @@ def cancel_replan_route() -> ResponseReturnValue:
 @bp.route("/api/create_replan", methods=["POST"])
 def create_replan() -> Response:
     """
-    Replan a path against the (edited) map data, using a grid or graph planner.
+    Replan a path on the edited map with :func:`~map_data.pathsolver.route.plan_route`.
 
-    Builds a fully-edited ``MapData`` via :func:`~map_data.viewer.routes.common.get_merged_mapdata`,
-    projects the input path to UTM, computes a planning bounding box
-    (a 50m margin around the path, clipped to the map's extent), and
-    dispatches to either :class:`~map_data.pathsolver.graph_planner.GraphPlanner`
-    (``algorithm="graph"``) or a grid-based
-    :class:`~map_data.pathsolver.replan.ReplanPath` (any other
-    *algorithm* value, itself further parameterized by *sub_algorithm*,
-    e.g. ``"astar"``). For the grid path, barriers are pre-filtered to
-    the bounding box for speed.
+    The graph planner is cached per map and parameters (:func:`_graph_planner`).
 
     Parameters (JSON body)
     -----------------------
@@ -459,52 +420,36 @@ def create_replan() -> Response:
     allowed_ways : list of str, default ``["footway"]``
         Highway types the planner may route over.
     transfer_id : str, optional
-        ID used to make this replan cancellable via
-        :func:`cancel_replan_route` (grid planner only).
+        Makes a grid replan cancellable via :func:`cancel_replan_route`.
     algorithm : str, default ``"rrt"``
-        ``"graph"`` for :class:`~map_data.pathsolver.graph_planner.GraphPlanner`;
-        anything else selects the grid-based planner.
+        ``"graph"`` routes along the ways; ``"astar"``/``"rrt"`` run the grid planner.
     sub_algorithm : str, default ``"astar"``
-        Search algorithm passed to
-        :meth:`~map_data.pathsolver.replan.ReplanPath.replan` (grid
-        planner only).
+        Grid search algorithm.
     highway_costs, surface_costs : dict, optional
-        Custom per-tag traversal cost overrides (grid planner only).
-    cell_size : float, optional
-        Grid cell size in meters (grid planner only); must be within
-        [:data:`~map_data.viewer.routes.common.MIN_CELL_SIZE_M`,
-        :data:`~map_data.viewer.routes.common.MAX_CELL_SIZE_M`].
-    inflate_obstacles : float, optional
-        Obstacle inflation radius in meters (grid planner only); must be
-        within [0, :data:`~map_data.viewer.routes.common.MAX_INFLATE_OBSTACLES_M`].
-    simplify_path, smooth_path : bool, optional
-        Post-processing toggles (grid planner only). These and the two above
-        default to :func:`~map_data.pathsolver.replan.grid_defaults`.
+        Per-tag cost overrides, for both planners.
+    cell_size, inflate_obstacles, simplify_path, smooth_path : optional
+        Grid planner settings, defaulting to
+        :func:`~map_data.pathsolver.replan.grid_defaults`; the two sizes are
+        bounded by the ``common`` ``*_M`` limits.
     grid_cost_weight : float, optional
         Weight of grid traversal cost vs. path length (grid planner only).
+    traversability : str, optional
+        Rule YAML text (default: the rule file).
 
     Returns
     -------
     Response
-        JSON ``{"retrieveNum": ..., "newPath": [[lat, lon], ...] | None,
-        "status": ...}``. ``retrieveNum`` is ``1`` (with ``newPath: None``
-        and a ``"status"`` of ``"cancelled"`` or ``"failed"``) if planning
-        produced no result, ``0`` if the result differs significantly
-        from the input path (by point count or by more than a small
-        per-point tolerance, per :attr:`~map_data.pathsolver.route.RouteResult.changed`),
-        or ``-1`` if it's effectively unchanged.
+        JSON ``{"retrieveNum": 0 | -1, "newPath": [[lat, lon], ...]}``: ``0``
+        if the path changed (:attr:`~map_data.pathsolver.route.RouteResult.changed`),
+        ``-1`` if not. On a planning failure ``{"retrieveNum": 1, "newPath": null,
+        "status": "cancelled" | "failed", "reason": ...}``.
 
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``points`` or ``file`` is missing, or any parameter fails
-        validation: non-numeric/out-of-range points, ``cell_size``
-        outside [:data:`~map_data.viewer.routes.common.MIN_CELL_SIZE_M`,
-        :data:`~map_data.viewer.routes.common.MAX_CELL_SIZE_M`], ``inflate_obstacles`` outside [0,
-        :data:`~map_data.viewer.routes.common.MAX_INFLATE_OBSTACLES_M`], malformed cost dicts,
-        wrongly-typed flags/strings, or a planning area exceeding the
-        :data:`~map_data.viewer.routes.common.MAX_GRID_CELLS` cell budget. 404 if the file doesn't
-        exist.
+        400 if ``points`` or ``file`` is missing, a parameter is invalid, the
+        planning area exceeds :data:`~map_data.viewer.routes.common.MAX_GRID_CELLS`,
+        or there are too few points. 404 if the file doesn't exist.
 
     """
     body = _json_object()
@@ -599,8 +544,8 @@ def create_replan() -> Response:
     except RoutePlanningError as e:
         if e.reason in ("grid_too_large", "too_few_points"):
             abort(400, e.message)
-        # The grid planner cannot tell "no path" from "cancelled"; keep the
-        # historical status strings the frontend expects.
+        # The grid planner cannot tell "no path" from "cancelled"; the frontend
+        # expects these status strings.
         status = "cancelled" if algorithm != GRAPH_ALGORITHM else "failed"
         logger.warning("Replan failed (%s): %s", e.reason, e.message)
         return jsonify({"retrieveNum": 1, "newPath": None, "status": status, "reason": e.reason})

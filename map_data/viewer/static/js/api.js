@@ -1,8 +1,7 @@
 // ── API ──────────────────────────────────────────────────────────────────────
 
-// Static-demo escape hatch: when window.__mapdataStaticBase is set the page is
-// a flat-file scrape of the viewer (GitHub Pages demo) — read-only GETs map to
-// pre-baked JSON files and every mutating call is refused with a status note.
+// When window.__mapdataStaticBase is set the page is the read-only static demo
+// (GitHub Pages): a few GETs map to pre-baked JSON files, other calls are refused.
 const STATIC_BASE = window.__mapdataStaticBase || null;
 
 async function _staticJson(relPath) {
@@ -16,10 +15,8 @@ function _staticReadOnly(action) {
     throw new Error('Read-only static demo');
 }
 
-// Shared fetch wrapper for every non-static-demo API call: builds the query
-// string, sets JSON headers/body (or leaves FormData bodies alone), and
-// refuses up-front (via _staticReadOnly) when `readOnlyMsg` is given and the
-// page is running as the read-only static demo.
+// Fetch wrapper for API calls; FormData bodies are sent as-is, others as JSON.
+// A `readOnlyMsg` marks the call as refused in the static demo.
 async function api(method, path, { query, body, readOnlyMsg, signal } = {}) {
     if (STATIC_BASE && readOnlyMsg) _staticReadOnly(readOnlyMsg);
     const qs = query ? '?' + new URLSearchParams(query) : '';

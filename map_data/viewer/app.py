@@ -28,14 +28,8 @@ from .tracker_routes import bp as tracker_bp
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# CORS: default to same-origin only. Set MAP_DATA_CORS_ORIGINS to a
-# comma-separated list of allowed origins, or to "*" to explicitly allow any
-# origin (e.g. when serving a separately-hosted frontend). Same-origin is
-# safe for the normal case of opening the viewer at http://<host>:<port>/,
-# regardless of what host/port is chosen, since it is computed per-request
-# from the request's own Host header rather than hardcoded.
-# ---------------------------------------------------------------------------
+# CORS: same-origin only by default (checked per request against its own Host header).
+# MAP_DATA_CORS_ORIGINS takes a comma-separated list of origins, or "*" for any.
 
 
 def _resolve_cors_origins() -> str | list[str] | None:
@@ -48,8 +42,8 @@ def _resolve_cors_origins() -> str | list[str] | None:
 
 
 # manage_session=False: the Socket.IO handlers never use the Flask session, and a managed
-# one breaks connecting on Flask >= 3.0.2 with Flask-SocketIO 5.3 (it assigns
-# RequestContext.session, which became a read-only property).
+# one breaks connecting on Flask >= 3.0.2 with Flask-SocketIO 5.3 (it assigns the
+# read-only RequestContext.session).
 socketio = SocketIO(manage_session=False)
 tracker_node = None
 _ros_thread: threading.Thread | None = None
@@ -57,27 +51,19 @@ _ros_thread: threading.Thread | None = None
 # threads are process-wide, so later create_app calls reuse them.
 _ros_init_lock = threading.Lock()
 
-# Upper bound on any request body (uploads included). Keeps a single oversized
-# POST from exhausting disk/memory; comfortably above any realistic .mapdata
-# or .gpx file. Flask rejects larger requests with 413 before the view runs.
+# Request body limit (uploads included), well above any realistic .mapdata or .gpx;
+# Flask answers larger requests with 413 before the view runs.
 MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100 MB
 
-# ---------------------------------------------------------------------------
-# Optional access token, off by default. Set MAP_DATA_ACCESS_TOKEN to require
-# it on every request (HTTP and SocketIO). Read fresh on every check (rather
-# than cached at startup) so it behaves consistently under test monkeypatching
-# and so toggling it doesn't require restarting a long-lived process object.
-# ---------------------------------------------------------------------------
+# Optional access token: when MAP_DATA_ACCESS_TOKEN is set, every HTTP and SocketIO
+# request must carry it. Read on every check, not cached, so tests can monkeypatch it.
 ACCESS_TOKEN_HEADER = "X-Access-Token"
 ACCESS_TOKEN_QUERY_PARAM = "access_token"
 ACCESS_TOKEN_COOKIE = "map_data_access_token"
 
-# CSRF protection for cookie-based auth: state-changing requests that
-# authenticate via the cookie alone must also carry this custom header (any
-# value). Browsers refuse to attach custom headers to cross-site requests
-# without a successful CORS preflight -- which this server never grants for
-# its HTTP API -- so a cross-site page can't forge such a request, while the
-# viewer's own JS (see static/js/utils.js) sets the header on every fetch.
+# CSRF guard for cookie auth: a state-changing request authenticated by the cookie alone
+# must also carry this header (any value). Browsers send custom headers cross-site only
+# after a CORS preflight, which the HTTP API never grants; static/js/utils.js sets it.
 CSRF_CUSTOM_HEADER = "X-Requested-With"
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
@@ -99,12 +85,9 @@ def _access_token_valid(req: Any) -> bool:
     cookie = req.cookies.get(ACCESS_TOKEN_COOKIE)
     if not cookie or not hmac.compare_digest(cookie, expected):
         return False
-    # Cookie-only auth: sufficient for safe methods (page loads, static
-    # assets, API reads), but state-changing requests additionally need the
-    # custom CSRF header -- the browser attaches the cookie automatically, so
-    # the cookie alone doesn't prove the request came from the viewer's own
-    # page. SocketIO traffic is exempt: engineio already enforces its own
-    # same-origin Origin check on polling requests (MAP_DATA_CORS_ORIGINS).
+    # Cookie alone suffices for safe methods; anything else also needs the CSRF header,
+    # since the browser attaches the cookie to cross-site requests too. SocketIO is
+    # exempt: engineio checks the Origin itself (MAP_DATA_CORS_ORIGINS).
     if getattr(req, "method", "GET") in _SAFE_METHODS:
         return True
     if req.path.startswith("/socket.io"):
@@ -114,12 +97,7 @@ def _access_token_valid(req: Any) -> bool:
 
 @socketio.on("connect")
 def _authenticate_socketio_connection() -> bool | None:
-    """
-    Reject SocketIO connections when MAP_DATA_ACCESS_TOKEN is set and the
-    connecting client didn't supply a matching token (header, query param, or
-    the cookie set by a prior authenticated HTTP request). No-op when the
-    token is unset.
-    """
+    """Reject a SocketIO connection without a valid access token (when one is set)."""
     if not _access_token_valid(request):
         logger.warning("Rejected SocketIO connection: missing or invalid access token")
         return False
@@ -127,9 +105,7 @@ def _authenticate_socketio_connection() -> bool | None:
 
 
 def telemetry_broadcaster(interval: float) -> None:
-    """
-    Background thread to broadcast ROS2 telemetry via WebSockets.
-    """
+    """Thread body: emit the tracker's telemetry over SocketIO every *interval* seconds."""
     global tracker_node
     while True:
         if tracker_node:
@@ -161,7 +137,6 @@ def create_app(
     telemetry_hz: float = 2.0,
     tracker_config: str | Path | None = None,
 ) -> Flask:
-    # Explicitly set paths relative to this file
     base_dir = Path(__file__).parent
     template_dir = base_dir / "templates"
     static_dir = base_dir / "static"
@@ -180,8 +155,7 @@ def create_app(
     app.register_blueprint(tracker_bp)
     socketio.init_app(app, cors_allowed_origins=_resolve_cors_origins())
 
-    # Optional access-token gate (opt-in via MAP_DATA_ACCESS_TOKEN, see above).
-    # Checked fresh on every request so it's a no-op when the env var is unset.
+    # Access-token gate; a no-op while MAP_DATA_ACCESS_TOKEN is unset.
     @app.before_request
     def _enforce_access_token() -> ResponseReturnValue | None:
         if not _access_token_valid(request):
@@ -206,10 +180,8 @@ def create_app(
     def _persist_access_token_cookie(response: Response) -> Response:
         expected = _configured_access_token()
         if expected and request.args.get(ACCESS_TOKEN_QUERY_PARAM) == expected:
-            # Lets the browser UI authenticate once via a URL query param
-            # (e.g. http://host:5000/?access_token=...) and have the cookie
-            # carry that authentication for subsequent same-origin static
-            # asset / API / SocketIO requests made by the page's own JS.
+            # Authenticate once via ?access_token=...; the cookie carries it for the
+            # page's later asset, API and SocketIO requests.
             response.set_cookie(
                 ACCESS_TOKEN_COOKIE,
                 expected,
@@ -218,7 +190,6 @@ def create_app(
             )
         return response
 
-    # Context processor to expose ROS status to templates
     @app.context_processor
     def inject_vars() -> dict[str, bool]:
         return {"ros_available": ROS_AVAILABLE}
@@ -241,12 +212,11 @@ def create_app(
                         rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
                     tracker_node = TrackerNode(tracker_params)
 
-                    # Start ROS2 spin in a separate thread
                     def ros_spin() -> None:
                         from rclpy.executors import ExternalShutdownException
 
-                        # The C++ events executor costs a fraction of rclpy.spin's Python wait set
-                        # (measured 6 % vs 60 % CPU on a 250 Hz robot); not in every distro yet.
+                        # The C++ events executor needs a fraction of rclpy.spin's CPU (6 % vs
+                        # 60 % at 250 Hz); not every distro ships it.
                         try:
                             try:
                                 from rclpy.experimental.events_executor import EventsExecutor
@@ -262,7 +232,6 @@ def create_app(
                     _ros_thread = threading.Thread(target=ros_spin, daemon=True)
                     _ros_thread.start()
 
-                    # Start telemetry broadcaster
                     threading.Thread(
                         target=telemetry_broadcaster, args=(1.0 / telemetry_hz,), daemon=True
                     ).start()
@@ -328,8 +297,7 @@ def main() -> None:
     # non-interactive shell) would otherwise stay ignored, as rclpy's own handler is off.
     signal.signal(signal.SIGINT, signal.default_int_handler)
     signal.signal(signal.SIGTERM, signal.default_int_handler)
-    # Using socketio.run instead of app.run
-    # Disable debug mode to prevent the Flask reloader from initializing the ROS node twice
+    # debug=False: the Flask reloader would initialize the ROS node twice.
     try:
         socketio.run(app, host=args.host, port=args.port, debug=False, allow_unsafe_werkzeug=True)
     except KeyboardInterrupt:

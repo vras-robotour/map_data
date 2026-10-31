@@ -25,14 +25,9 @@ sys.modules.update({name: MagicMock() for name in _ROS_STUBS})
 
 # ── Fake rclpy.node.Node ────────────────────────────────────────────────────
 #
-# A bare MagicMock cannot be used as a base class (subclassing it silently
-# turns OSMCloud itself into a MagicMock instead of a real class), so
-# OSMCloud's __init__ never actually runs. To exercise __init__ for real we
-# install a tiny, real Python class in place of rclpy.node.Node *before*
-# map_data.osm_cloud is imported, implementing just enough of the Node API
-# (declare_parameter, add_on_set_parameters_callback, create_publisher,
-# create_timer, get_logger, get_clock) for construction to succeed without a
-# running ROS graph.
+# Subclassing a bare MagicMock turns OSMCloud itself into a MagicMock, so its
+# __init__ never runs. A real class with just enough of the Node API stands in
+# for rclpy.node.Node before map_data.osm_cloud is imported.
 
 _PENDING_PARAM_OVERRIDES: dict = {}
 
@@ -626,8 +621,7 @@ class TestOSMCloudPlacementTransform:
     The map is placed once at start-up, so a bad or late transform must not stick.
 
     A Fixposition unit without a fusion fix publishes ``FP_ECEF -> FP_ENU0`` as all
-    zeros; accepting it put the whole map in a metre-wide box and latched an empty
-    cloud until the node was restarted by hand.
+    zeros, which would put the whole map in a metre-wide box and latch an empty cloud.
     """
 
     def _geodetic_node(self, **overrides) -> OSMCloud:

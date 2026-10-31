@@ -2,15 +2,11 @@
 Apply a viewer annotation store to a :class:`~map_data.map_data.MapData`.
 
 The viewer keeps every user edit of a map (deleted ways/nodes, splits, moved
-nodes, tag overrides, freehand paths and obstacles) in ``<stem>.annotations.json``
-next to the ``.mapdata`` file, and only merges them into the map when it plans
-or exports. This module is that merge without the web app, so a script, the
-``map_data_plan`` CLI or the ``route_planner`` node plan on the same map the
-viewer shows.
-
-:func:`load_mapdata_with_annotations` is the one-call entry point; the viewer's
-``get_merged_mapdata`` uses :func:`apply_way_edits` and
-:func:`merge_annotations` on its cached copy.
+nodes, tag overrides, drawn paths and obstacles) in ``<stem>.annotations.json``
+next to the ``.mapdata`` file. Merging it here, outside the web app, lets
+scripts, ``map_data_plan`` and the ROS nodes use the map the viewer shows.
+:func:`load_mapdata_with_annotations` is the one-call entry point and
+:func:`apply_store` the merge itself.
 """
 
 from __future__ import annotations
@@ -57,8 +53,7 @@ DEFAULT_ANNOTATION_WIDTH_M = 1.5
 #: Ways that moved a shared node to within this many degrees (~0.5 m) of each other keep sharing it.
 SAME_SPOT_DEG = 5e-6
 #: An end of a drawn path, or a moved end of any way, this close (m) to another way is
-#: joined to it (:func:`join_ways`). The viewer does not snap a dragged node, so this is
-#: how exactly the user has to aim; the same 5 m the graph planner's own stitching uses.
+#: joined to it (:func:`join_ways`); the viewer does not snap, so this is the aim needed.
 JOIN_DISTANCE_M = 5.0
 #: The junction is an existing node of that way when one is this close (m) to the nearest
 #: point, else a new node on the edge.
@@ -88,12 +83,10 @@ def load_summary(
     crossroads: bool = False,
 ) -> str:
     """
-    The one-line "loaded <map>: ..." log of a node that loaded *path* with
-    :func:`load_mapdata_with_annotations`.
+    One-line "loaded <map>: ..." summary of a map from :func:`edit_mapdata`.
 
     *annotations* is the store argument it was loaded with (``None`` for the
-    default sidecar), *trav_path* the resolved traversability rule file;
-    *crossroads* adds the crossroad count.
+    default sidecar), *trav_path* the resolved traversability rule file.
     """
     if annotations == NO_ANNOTATIONS:
         store_name = "none"
@@ -204,7 +197,7 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
         moves: dict[int, dict[str, tuple[float, float]]] = {}  # node id -> {way id: (lat, lon)}
         for wid, way_ov in node_pos_store.items():
             for nid_str, pos in way_ov.items():
-                # An override of a way that no longer uses the node (deleted way/node) is stale.
+                # An override for a node its way does not use (deleted way/node) is stale.
                 if wid in users.get(int(nid_str), ()) and int(nid_str) in nodes_cache:
                     moves.setdefault(int(nid_str), {})[wid] = (float(pos["lat"]), float(pos["lon"]))
         for nid, by_way in moves.items():
@@ -259,12 +252,11 @@ def apply_way_edits(md: MapData, store: dict[str, Any]) -> None:
 
 def apply_tag_overrides(md: MapData, store: dict[str, Any]) -> None:
     """
-    Merge ``store["tag_overrides"]`` into the ways, re-sort roads/footways in
-    case a ``highway`` tag changed category, and recompute the crossroads.
+    Merge ``store["tag_overrides"]`` into the ways, re-sort roads/footways and
+    recompute the crossroads.
 
-    An overridden way is replaced by a shallow copy carrying the merged tags,
-    so the input ``Way`` objects are never mutated and the three way lists are
-    reassigned; this is safe on a shallow copy of the map.
+    Overridden ways are replaced by shallow copies and the way lists are
+    reassigned, so this is safe on a shallow copy of the map.
     """
     tag_overrides = store.get("tag_overrides", {})
     if not tag_overrides:
@@ -293,14 +285,12 @@ def apply_tag_overrides(md: MapData, store: dict[str, Any]) -> None:
 
 def merge_annotations(md: MapData, store: dict[str, Any]) -> None:
     """
-    Synthesize a ``Way`` for every freehand annotation in ``store["annotations"]``.
+    Synthesize a ``Way`` for every drawn annotation in ``store["annotations"]``.
 
-    A ``"path"`` annotation becomes a road or footway (its centre line buffered
-    by half its ``width``), with synthetic negative node ids registered in
-    ``md.nodes_cache`` so the graph planner can route over it; anything else
-    becomes a barrier. Crossroads where annotated paths meet other ways are
-    appended to ``md.crossroads_list``. Ends with :func:`join_ways`, which gives the
-    drawn paths (and moved end nodes) real nodes to meet the network at. Mutates *md* in place.
+    A ``"path"`` becomes a road or footway (centre line buffered by half its
+    ``width``) with synthetic negative node ids in ``md.nodes_cache``; anything
+    else becomes a barrier. Adds crossroads where drawn paths meet other ways,
+    then runs :func:`join_ways`. Mutates *md* in place.
     """
     zn, zl = md.zone_number, md.zone_letter
     # Below the drawn paths an exported map already carries: an id names one way.
@@ -345,10 +335,8 @@ def merge_annotations(md: MapData, store: dict[str, Any]) -> None:
             }
             md.barriers_list.append(w)
 
-    # Annotated paths share no OSM node ids with the map, so node-based crossroad
-    # detection cannot see them; add crossroads where they cross or touch other ways.
-    # Both sides have to be centre lines - the ways carry their buffered geometry,
-    # against which a path running alongside one reports a junction it never reaches.
+    # Drawn paths share no node ids with the map, so their crossroads are found
+    # geometrically, against centre lines rather than the buffered geometry.
     if ann_lines:
         others = [
             (o, md.centre_line(o) or o.line) for o in list(md.footways_list) + list(md.roads_list)
@@ -363,22 +351,18 @@ def join_ways(md: MapData, store: dict[str, Any]) -> None:
     """
     Give ways that meet on the map, but share no node id, a node to meet at.
 
-    The graph planner connects ways by node id only, which an edit never produces by
-    itself: a drawn path has synthetic nodes of its own, and a dragged node keeps (or, if
-    it was shared, loses) the junctions it had. Joined here are
+    The graph planner connects ways by node id only, and drawn paths have synthetic
+    nodes of their own. Joined here are
 
-    - an end of a drawn path (negative way id: drawn in *store*, baked into an exported
-      map, or a split segment of one) and an end node of any way that *store* moved, when
-      it is within :data:`JOIN_DISTANCE_M` of another way — preferably one of its own kind,
-      as a footway-only plan never sees the roads — and not already shared with one;
+    - an unshared end node of a drawn path (negative way id), or one *store* moved,
+      to the nearest way within :data:`JOIN_DISTANCE_M`, preferring one of its own
+      kind (a footway-only plan never sees the roads);
     - a drawn path and every way its centre line crosses or that ends on it.
 
-    The junction is a node of the other way (:data:`JOIN_NODE_M`), or a new one inserted on
-    its edge. It is added to the node lists only — put before/after the end, inserted at a
-    crossing — so no geometry changes and nothing the user placed is moved. Segments of one
-    original way are never joined: a detached split stays detached. Being real shared
-    nodes, the junctions survive an export. Way lists are reassigned with copies of the
-    changed ways; ``md.nodes_cache`` gains the new nodes in place.
+    The junction is an existing node of the other way (:data:`JOIN_NODE_M`) or a new
+    one on its edge, added to the node lists only, so no geometry moves. Segments of
+    one original way are never joined to each other. Changed ways are replaced by
+    copies; ``md.nodes_cache`` gains the new nodes in place.
     """
     ways = md.footways_list + md.roads_list
     n_foot = len(md.footways_list)
@@ -490,14 +474,12 @@ def join_ways(md: MapData, store: dict[str, Any]) -> None:
 
 def apply_store(md: MapData, store: dict[str, Any]) -> MapData:
     """
-    Apply every kind of edit in *store* to *md* (copied first) and return it.
+    Apply every kind of edit in *store* to a copy of *md* and return it.
 
-    The copy is shallow: no pass mutates a ``Way``, a node entry or the
-    waypoints, they only rebind the map's attributes — except
-    :func:`merge_annotations`, which appends to the way lists and writes the
-    annotated paths' synthetic nodes into ``nodes_cache``. Giving the copy its
-    own containers is therefore enough to leave *md* untouched, and costs ~1 ms
-    against the ~280 ms of deep-copying every geometry (Stromovka).
+    No pass mutates a ``Way``, a node entry or the waypoints; they rebind the
+    map's attributes, except :func:`merge_annotations`, which appends to the way
+    lists and adds nodes to ``nodes_cache``. A shallow copy with its own
+    containers therefore leaves *md* untouched, far cheaper than a deepcopy.
     """
     md = copy.copy(md)
     md.nodes_cache = dict(md.nodes_cache)
@@ -521,22 +503,14 @@ def load_mapdata_with_annotations(
     Load a ``.mapdata`` file and merge its annotation store.
 
     ``annotations_path`` defaults to :func:`annotation_path_for`; a missing
-    store simply yields the unedited map, and :data:`NO_ANNOTATIONS` (``"none"``)
-    skips the store on purpose.
+    store yields the unedited map, :data:`NO_ANNOTATIONS` skips it.
 
-    ``traversability`` decides from the OSM tags which ways the robot may drive
-    on (stairs, grass, tunnels, ...): a
-    :class:`~map_data.traversability.TraversabilityRules`, a path to a rule
-    file, or ``None`` for the package's ``config/traversability.yaml``. The
-    store is applied first, so tag overrides also affect the rules.
-
-    ``exclude_highway`` is the older, tag-free shortcut for the same thing
-    (stairs by default, see
-    :data:`~map_data.utils.way.NON_ROUTABLE_HIGHWAY_VALUES`); its values are
-    added to the rules as one leading deny rule. Pass an empty iterable *and*
-    empty rules (``TraversabilityRules()``) to keep every way, as
-    :meth:`MapData.load` itself does — the viewer must still show what the
-    planner refuses.
+    ``traversability`` is a
+    :class:`~map_data.traversability.TraversabilityRules`, a rule file, or
+    ``None`` for the package's ``config/traversability.yaml``. It is applied
+    after the store, so tag overrides affect it. ``exclude_highway`` values
+    become one leading deny rule. Pass an empty iterable *and*
+    ``TraversabilityRules()`` to keep every way.
 
     Returns ``(map_data, store)``.
     """
@@ -560,9 +534,8 @@ def edit_mapdata(
     """
     Apply the traversability rules and the annotation store to a freshly built *md*.
 
-    The second half of :func:`load_mapdata_with_annotations` (see there for the
-    arguments), for a map that did not come from a ``.mapdata`` file. *source_path*
-    is the file the map was built from: it names the default annotation store.
+    :func:`load_mapdata_with_annotations` for a map not read from a ``.mapdata``
+    file (see there for the arguments). *source_path* names the default store.
     """
     source_path = Path(source_path)
     store: dict[str, Any]

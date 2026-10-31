@@ -291,9 +291,8 @@ def test_graph_planner_l_shaped():
 
 def test_graph_planner_via_waypoint_makes_no_spur():
     """
-    A via waypoint clicked beside the path used to be re-inserted between its
-    own two projections, producing a "projection, click, projection" spur of
-    stacked points. The route must pass the waypoint once, on the network.
+    A via waypoint clicked beside the path is passed once, on the network,
+    with no "projection, click, projection" spur of stacked points.
     """
     nodes_coords = {100 + i: (10.0 * i, 0.0) for i in range(6)}
     way = _make_footway(1, list(nodes_coords), nodes_coords)
@@ -311,9 +310,8 @@ def test_graph_planner_via_waypoint_makes_no_spur():
 
 def test_graph_planner_via_waypoint_at_junction_makes_no_spur():
     """
-    A via waypoint snapping just onto a side branch made the route step off the
-    junction onto the branch and immediately back, leaving five points within
-    0.3 m of each other.
+    A via waypoint snapping just onto a side branch does not make the route step
+    off the junction onto the branch and straight back.
     """
     nodes_coords = {
         100: (0.0, 0.0),
@@ -514,8 +512,8 @@ def test_graph_planner_keep_goal_does_not_stack_an_on_network_goal():
 def _surface_choice_map():
     """
     Two ways from (0, 0) to (100, 0): a straight 100 m gravel one and a
-    120 m paved detour over (50, 20) — 1.2x as long, so the planner takes it
-    only once gravel costs more than 0.2 per metre.
+    123 m paved detour over (50, 36), so the planner takes the detour only once
+    gravel costs more than 0.23 per metre.
     """
     nodes_coords = {
         100: (0.0, 0.0),

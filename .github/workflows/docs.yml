@@ -63,8 +63,7 @@ jobs:
           name: docs-site
           path: site
 
-      # keep_files preserves demo/ (deployed separately by demo.yml) instead
-      # of wiping the whole branch like `mkdocs gh-deploy --force` did.
+      # keep_files preserves demo/, which demo.yml deploys.
       - name: Deploy documentation to gh-pages
         uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453
         with:

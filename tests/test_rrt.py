@@ -73,9 +73,7 @@ def test_rrt_star_with_obstacle():
 
 
 def test_rrt_star_near_equal_start_goal():
-    """
-    Start and goal closer than step_size: path should be found in very few iterations.
-    """
+    """Start and goal closer than step_size still give a start-to-goal path."""
     start = np.array([5.0, 5.0])
     goal = np.array([5.5, 5.5])  # distance ~0.7 < step_size=1.0
     grid = np.zeros((100, 100), dtype=float)
@@ -99,9 +97,7 @@ def test_rrt_star_near_equal_start_goal():
 
 
 def test_rrt_star_start_in_collision():
-    # If the start is in collision, it should currently fail if we don't have the "escape" logic
-    # but with my changes, if we increase max_path_dist it should be fine.
-    # Here we test that if grid says collision, it fails.
+    # A fully blocked grid has no collision-free path.
     start = (5.0, 5.0)
     goal = (10.0, 10.0)
     grid = np.ones((100, 100), dtype=float)  # Everything is blocked
@@ -155,8 +151,7 @@ def test_informed_best_cost_geq_c_min():
 
 
 def test_informed_ellipse_tighter_than_full_space():
-    """With improve_after_goal=True and informed=True, the planner should produce
-    a path no worse than with informed=False (same seed, more iterations)."""
+    """With improve_after_goal, both the informed and the plain planner find a path."""
     seed = 42
     rrt_informed = _make_rrt(
         informed=True,
@@ -200,11 +195,7 @@ def test_adaptive_radius_shrinks_with_more_nodes():
     assert r <= rrt.neighbor_radius
 
 
-# ── regression: rewiring must not leave stale costs / a stale ellipse ────────
-#
-# After a rewire, all descendants of the rewired node used to keep their old
-# cached costs, and a goal rewired through the generic loop bypassed
-# _best_cost, leaving informed sampling with an oversized ellipse.
+# ── rewiring keeps descendant costs and the informed ellipse current ────────
 
 
 def _append_node(rrt, point):
@@ -247,7 +238,7 @@ def test_tree_costs_consistent_after_seeded_run_with_rewiring():
     Every node's cached cost equals its parent's cost plus the edge cost.
 
     With improve_after_goal the tree keeps rewiring after the first solution,
-    so stale descendant costs (the old bug) would break this invariant.
+    so any stale descendant cost would break this invariant.
     """
     rrt = _make_rrt(informed=True, improve_after_goal=True, max_iter=400, rng=random.Random(7))
     path = rrt.find_path()
@@ -290,12 +281,10 @@ def test_combined_informed_and_adaptive():
 
 def test_production_config_improves_on_or_matches_first_found_path():
     """
-    informed=True, adaptive_radius=True, improve_after_goal=True (the
-    defaults ReplanPath now reads from config/planner_defaults.yaml and
-    passes to RRTStar) must never return a path *worse* than the first one
-    found: it keeps refining with the same iteration budget instead of
-    stopping early. Same seed for both runs, so the two trees are identical
-    up to the point the first solution is found.
+    The production settings (informed, adaptive radius, improve_after_goal) never
+    return a path worse than the first one found.
+
+    Same seed for both runs, so the two trees are identical up to the first solution.
     """
     rrt_first_found = _make_rrt(
         informed=True,
@@ -323,9 +312,8 @@ def test_production_config_improves_on_or_matches_first_found_path():
 
 def test_production_config_exercises_the_informed_sampler():
     """
-    The ellipse sampler (_sample_informed) must actually run once a solution
-    exists and improve_after_goal keeps the loop going — otherwise "informed"
-    is configured but dead, exactly the bug this finding fixes.
+    The ellipse sampler (_sample_informed) runs once a solution exists and
+    improve_after_goal keeps the loop going.
     """
     calls = 0
     original = RRTStar._sample_informed

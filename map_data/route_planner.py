@@ -364,8 +364,7 @@ class RoutePlanner(Node):
         mtime = path.stat().st_mtime
         if ann_path is not None and ann_path.is_file():
             mtime += ann_path.stat().st_mtime
-        # An edited rule file must invalidate the cached map (a restart is enough
-        # for the parameter itself, but not for a file edited under the same name).
+        # An edited rule file invalidates the cached map, like an edited map or store.
         trav_path = resolve_traversability_path(self.traversability_file)
         if trav_path is not None:
             mtime += trav_path.stat().st_mtime

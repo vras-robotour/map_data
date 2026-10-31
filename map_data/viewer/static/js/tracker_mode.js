@@ -31,11 +31,9 @@ const trackerMode = (() => {
         socket = io();
 
         socket.on('telemetry', (data) => {
-            // Update map (robot icon) regardless of whether 'Tracker' mode is active
-            // This allows seeing the robot in Viewer and Planner modes
+            // The robot is drawn in every app mode; the status panel only in tracker mode
             updateMap(data);
 
-            // UI status only updates if Tracker mode is actually enabled
             if (enabled) {
                 updateUI(data);
             }
@@ -53,7 +51,7 @@ const trackerMode = (() => {
             document.dispatchEvent(new CustomEvent('robot-position', { detail: { lat: pos.lat, lon: pos.lon } }));
         }
 
-        // Check robot layer visibility: in tracker mode (enabled === true), the robot stays visible
+        // Tracker mode keeps the robot visible even with the Robot layer switched off
         const robotCb = document.querySelector('[data-layer="robot"]');
         if (robotCb && !robotCb.checked && !enabled) {
             hideRobot();
@@ -95,7 +93,7 @@ const trackerMode = (() => {
             }
         }
 
-        // Planned path; a key of length and end points missed replans that keep them
+        // Planned path
         robotPathLayer = updatePolyline(robotPathLayer, data.mission && data.mission.waypoints,
             { color: '#00ff00', weight: 3, opacity: 0.6, dashArray: '5, 10' });
 
@@ -201,13 +199,10 @@ const trackerMode = (() => {
         return `<svg width="28" height="14" viewBox="0 0 28 14" style="vertical-align:middle;margin-right:4px">${body}</svg>`;
     }
 
-    // The tracker status panel's markup lives in index.html (#tracker-status-content);
-    // this is just a tiny lookup, not a cache — the panel updates only once per
-    // telemetry frame, so there's no need to precompute/store the ~25 element refs.
+    // Status panel markup lives in index.html (#tracker-status-content)
     const $ = id => document.getElementById(id);
 
-    // The legend's swatch icons are static (never change), so render them once
-    // up front instead of on every telemetry update.
+    // Legend swatches are static, so they are rendered once
     function _renderLegend() {
         [
             ['tsi-leg-robot', swatch('marker', '#00ff00')],
@@ -619,7 +614,7 @@ const trackerMode = (() => {
         },
         disable: () => {
             enabled = false;
-            // Note: We don't remove the layer here because it's now globally visible
+            // Robot layers stay: they are visible in every app mode
         },
         showRobot: showRobot,
         hideRobot: hideRobot,

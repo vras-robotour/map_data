@@ -17,10 +17,8 @@ FOOTWAY_VALUES = frozenset(
     ],
 )
 
-#: ``highway`` values that are classified as footways but must not be routed
-#: over by a wheeled robot. Stairways are mapped as ``highway=steps`` and are
-#: part of :data:`FOOTWAY_VALUES` (the viewer and the cost grid still show
-#: them), so the planner and ``osm_cloud`` exclude them at use time through
+#: Footway ``highway`` values a wheeled robot must not use. They stay footways
+#: (the viewer shows them) and are excluded at use time through
 #: :meth:`map_data.map_data.MapData.apply_traversability`.
 NON_ROUTABLE_HIGHWAY_VALUES = frozenset({"steps"})
 
@@ -28,28 +26,21 @@ NON_ROUTABLE_HIGHWAY_VALUES = frozenset({"steps"})
 @dataclass
 class Way:
     """
-    Represents a single OSM feature with geometry and tags.
-
-    A ``Way`` is the fundamental unit of map data. It wraps an OSM way or
-    relation with its parsed geometry and tag dictionary, and provides
-    helpers to classify the feature.
+    One map feature (OSM way, merged relation, node obstacle or drawn path).
 
     Attributes
     ----------
     id : any
-        OSM way ID (positive integer) or a negative integer / string for
-        manually annotated ways.
+        OSM id; negative for synthetic ways (merged relation chains, drawn
+        paths), ``"<id>:<i>"`` for segments of a split way.
     is_area : bool
-        ``True`` if the geometry is a closed polygon (area), ``False`` for
-        a linestring.
+        ``True`` when ``line`` is a polygon, including buffered lines.
     nodes : list
-        Ordered list of node IDs that make up this way.
-    tags : dict
-        OSM key-value tags (e.g. ``{"highway": "footway", "surface": "asphalt"}``).
+        Ordered node ids (keys of ``MapData.nodes_cache``).
     line : BaseGeometry or None
-        Shapely geometry representing the way in UTM coordinates.
+        Geometry in UTM.
     in_out : str
-        Direction hint used by some planners (``"in"``, ``"out"``, or ``""``).
+        Multipolygon member role, ``"outer"``, ``"inner"`` or ``""``.
 
     """
 
@@ -61,16 +52,12 @@ class Way:
     in_out: str = ""
 
     def is_road(self) -> bool:
-        """
-        Return ``True`` if this way is a vehicle road (any ``highway`` value not in footway types).
-        """
+        """Any ``highway`` value not in :data:`FOOTWAY_VALUES`."""
         hw = self.tags.get("highway")
         return bool(hw and hw not in FOOTWAY_VALUES)
 
     def is_footway(self) -> bool:
-        """
-        Return ``True`` if this way is a pedestrian footway (``highway`` in the footway value set).
-        """
+        """``highway`` in :data:`FOOTWAY_VALUES`."""
         hw = self.tags.get("highway")
         return bool(hw and hw in FOOTWAY_VALUES)
 
@@ -81,19 +68,10 @@ class Way:
         anti_tags: dict[str, list[str]],
     ) -> bool:
         """
-        Return ``True`` if this way should be classified as an untraversable barrier.
+        Whether a tag matches *yes_tags* and none matches *anti_tags*.
 
-        Parameters
-        ----------
-        yes_tags : dict
-            Mapping of OSM tag key → list of values that indicate a barrier.
-            A ``"*"`` value matches any tag value not in *not_tags*.
-        not_tags : dict
-            Exceptions to ``"*"`` wildcard matches in *yes_tags*.
-        anti_tags : dict
-            Tags that, if present, override a barrier match and return
-            ``False`` (e.g. a gate that makes a fence passable).
-
+        Each table maps a tag key to values; ``"*"`` in *yes_tags* matches any
+        value not listed in *not_tags*.
         """
         has_barrier_tag = any(
             key in yes_tags

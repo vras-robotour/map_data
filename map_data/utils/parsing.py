@@ -52,9 +52,8 @@ def parse_osm_ways(
         is_area = is_ring and (way.tags.get("area") == "yes" or not _is_linear_barrier(way.tags))
         if is_ring and not is_area:
             coords = coords[:-1]
-        # Degenerate ways must not abort the whole parse: a LineString needs
-        # at least 2 coordinates and a closed ring (Polygon) at least 4
-        # (3 distinct + the closing one), else shapely raises.
+        # Skip, not raise: shapely needs 2 coordinates for a LineString and 4
+        # (3 distinct + the closing one) for a Polygon.
         min_coords = 4 if is_area else 2
         if len(coords) < min_coords:
             logger.warning(
@@ -91,10 +90,8 @@ def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
     kept_ids: set[int] = set()
 
     for rel in osm_rels_data.relations:
-        # Only area relations have rings to merge. Route relations (hiking, bike,
-        # bus) list their ways with an empty role: chaining those merged a whole
-        # route into one way carrying every member's tags, so a single bridge
-        # member made the entire route non-traversable.
+        # Only area relations have rings to merge; chaining a route relation would
+        # make one way carrying every member's tags (one bridge blocks the route).
         if (rel.tags or {}).get("type") not in AREA_RELATION_TYPES:
             continue
         outer_ids: list[int] = []
@@ -113,9 +110,7 @@ def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
         kept_ids.update(inner_ids)
         rel_tags = dict(rel.tags) if rel.tags else {}
 
-        # Inner rings are holes in the relation geometry (e.g. a courtyard in
-        # a building): subtract them from the outer polygons so the merged
-        # geometry does not cover them.
+        # Inner rings are holes (e.g. a courtyard): subtract them from the outers.
         inner_rings = [
             ways[wid].line
             for wid in inner_ids
@@ -135,10 +130,8 @@ def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
         for wid in inner_ids:
             ways[wid].in_out = "inner"
 
-    # Member ways merged into a relation geometry would otherwise be
-    # classified a second time by separate_ways (duplicate barriers). Drop
-    # them once ALL relations are processed — a way can be a member of
-    # several relations, and one of them may have kept it unmerged.
+    # Drop merged members so separate_ways does not classify them twice; only
+    # after all relations, as another relation may have kept a way unmerged.
     for wid in consumed_ids - kept_ids:
         ways.pop(wid, None)
 
@@ -191,10 +184,10 @@ def combine_ways(
     consumed: set[int] | None = None,
 ) -> list[int]:
     """
-    Merge chains of member ways into single ways (added to *ways* under new
-    negative ids). When *consumed* is given, the ids of member ways that were
-    merged into a new way are added to it so the caller can drop them from
-    *ways* — the merged way fully replaces them.
+    Merge chains of member ways into new ways added to *ways* under negative ids.
+
+    Returns the ids standing for *ids* afterwards. *consumed* collects the ids of
+    member ways a merged way replaces.
     """
     if not ids:
         return ids
@@ -214,7 +207,6 @@ def combine_ways(
 
     endpoint_map: dict[int, list[Way]] = {}
     for way in ways_to_merge:
-        # way.nodes is a list of IDs now
         endpoint_map.setdefault(way.nodes[0], []).append(way)
         endpoint_map.setdefault(way.nodes[-1], []).append(way)
 
@@ -327,9 +319,8 @@ def buffer_line(way: Way, width: float) -> Way:
     line = way.line
     if line is None:
         raise ValueError(f"buffer_line: way {way.id} has no geometry to buffer")
-    # Closed roads/footways (e.g. roundabouts) are parsed as Polygon because first==last
-    # node. Buffering a Polygon fills its interior; convert to LineString first so the
-    # buffer produces an annular ring around the path instead.
+    # A closed road/footway (roundabout) is parsed as a Polygon; buffer its ring,
+    # not its interior.
     if isinstance(line, geometry.Polygon) and way.tags.get("area") != "yes":
         line = geometry.LineString(line.exterior.coords)
     way.line = line.buffer(width / 2)
@@ -338,7 +329,5 @@ def buffer_line(way: Way, width: float) -> Way:
 
 
 def ways_to_shapely(ways: list[Way]) -> list[geometry.base.BaseGeometry]:
-    """
-    Convert a list of Way objects to their underlying Shapely geometries.
-    """
+    """Geometries of the *ways* that have one."""
     return [w.line for w in ways if w.line]

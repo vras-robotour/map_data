@@ -279,12 +279,9 @@ def test_parse_osm_nodes_anti_obstacle_wins():
 
 def test_combine_ways_disconnected_members_kept_unmerged():
     """
-    Ways that share an endpoint *node id* but whose geometries don't
-    actually touch (e.g. bad/duplicated OSM node coordinates) make
-    shapely.ops.linemerge return a MultiLineString instead of a single
-    LineString. combine_ways must not crash on that — it should fall back
-    to leaving the member ways unmerged rather than building a Way whose
-    `.line` is a MultiLineString.
+    Ways sharing an endpoint node id whose geometries do not touch (bad OSM
+    coordinates) make linemerge return a MultiLineString; combine_ways then
+    leaves the members unmerged instead of building a MultiLineString way.
     """
     # Node id 11 is shared, but the line geometries have a gap between them
     # so linemerge cannot join them into one continuous LineString.
@@ -307,9 +304,7 @@ def test_combine_ways_disconnected_members_kept_unmerged():
 
 # A multipolygon relation (id 200, natural=water) whose single outer member way
 # (id 104) is a closed area carrying NO tags of its own — the classifying tag
-# lives only on the relation. This is the common OSM pattern for lakes/forests
-# and is exactly what the tag-filtered Overpass ways query must still deliver
-# via relation recursion.
+# lives only on the relation, the common OSM pattern for lakes and forests.
 _MULTIPOLYGON_JSON = json.dumps(
     {
         "version": 0.6,
@@ -468,9 +463,8 @@ def test_parse_osm_rels_hole_failure_only_skips_holes(monkeypatch, caplog):
 # ── parse_osm_rels: merged members not classified twice ─────────────────────
 
 
-# Two barrier-tagged member ways that merge into one relation way. Before the
-# fix the consumed members stayed in the ways dict and separate_ways emitted
-# the barrier geometry twice (members + merged way).
+# Two barrier-tagged outer members of one multipolygon relation. Tagged members
+# are not merged, so each must come out of separate_ways exactly once.
 _TAGGED_MEMBER_REL_JSON = json.dumps(
     {
         "version": 0.6,
@@ -537,7 +531,7 @@ def test_parse_osm_rels_merged_members_not_classified_twice():
 
     _, _, barriers = separate_ways(ways, {"barrier": ["*"]}, {}, {})
 
-    # Only the merged relation way remains — no duplicated member geometry.
+    # Each member is one barrier, with no duplicated geometry.
     assert sorted(w.id for w in barriers) == [107, 108]
 
 
@@ -568,8 +562,8 @@ def test_parse_osm_rels_empty_role_members_are_ignored():
 # ── parse_osm_rels: route relations are not merged ──────────────────────────
 
 
-# A hiking route over two footways, one of them a bridge. Merging it as if it
-# were a multipolygon produced one way with both ways' tags, bridge=yes included.
+# A hiking route over two footways, one of them a bridge. Merged like a
+# multipolygon, it would become one way carrying bridge=yes along its whole length.
 _ROUTE_REL_JSON = json.dumps(
     {
         "version": 0.6,
