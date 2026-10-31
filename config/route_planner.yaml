@@ -23,7 +23,8 @@ route_planner:
     # Default: the package's share/map_data/data, which is where installed maps live.
     # data_dir: "~/maps"
     # Annotation store merged into the map: "auto" = <map>.annotations.json next to it,
-    # "none" = the unedited map, or a path to a store file.
+    # "none" = the unedited map, or a path to a store file. Note stromovka.annotations.json
+    # deletes 838 ways, so use "none" with that map unless you want the edited version.
     annotations: "auto"
     # highway= values never routed over, removed from the map and from the graph.
     # Stairs are footways in OSM and in the saved .mapdata; a wheeled robot cannot
@@ -41,7 +42,7 @@ route_planner:
 
     # --- planning defaults -----------------------------------------------------------
     # A PlanRoute goal field left empty/zero falls back to these (its simplify_path and
-    # smooth_path are used as sent; node parameters apply to ~/goal goals).
+    # smooth_path are used as sent; the two below apply to ~/goal goals).
     # graph = follow the mapped ways (Robotour); astar / rrt = all-terrain grid planners.
     algorithm: "graph"
     # Way types the graph planner may route over: footway and/or road.
