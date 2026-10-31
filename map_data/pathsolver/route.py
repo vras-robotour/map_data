@@ -35,10 +35,10 @@ readable ``reason`` instead of a bare ``None``:
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import shapely as sh
@@ -194,6 +194,27 @@ def check_in_map(
         f"the {what} is {distance:.0f} m outside the map area "
         f"(limit {tolerance:.0f} m; wrong map file?)",
     )
+
+
+def goal_plan_kwargs(goal: Any, defaults: Mapping[str, Any]) -> dict[str, Any]:
+    """
+    :func:`plan_route` keyword arguments for a ``PlanRoute`` action goal.
+
+    An empty or zero ``algorithm``, ``highway_types``, ``spacing``, ``max_snap_distance``,
+    ``cell_size`` or ``inflate_obstacles`` takes the value of that name in *defaults* (the
+    ``route_planner`` node's parameters); a negative ``spacing`` keeps the planner's own
+    vertices. ``simplify_path`` and ``smooth_path`` are used as sent: a bool has no unset.
+    """
+    return {
+        "algorithm": goal.algorithm or defaults["algorithm"],
+        "highway_types": list(goal.highway_types) or list(defaults["highway_types"]),
+        "spacing": defaults["spacing"] if goal.spacing == 0.0 else max(goal.spacing, 0.0),
+        "max_snap_distance": goal.max_snap_distance or defaults["max_snap_distance"],
+        "cell_size": goal.cell_size or defaults["cell_size"],
+        "inflate_obstacles": goal.inflate_obstacles or defaults["inflate_obstacles"],
+        "simplify_path": bool(goal.simplify_path),
+        "smooth_path": bool(goal.smooth_path),
+    }
 
 
 def plan_route(

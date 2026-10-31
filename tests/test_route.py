@@ -322,3 +322,66 @@ def test_plan_route_reports_a_blocked_goal(footway_network_mapdata):
     with pytest.raises(RoutePlanningError) as e:
         plan_route(md, [start, goal], algorithm="astar", cell_size=1.0)
     assert e.value.reason == "goal_blocked"
+
+
+# ── PlanRoute goal -> plan_route kwargs ─────────────────────────────────────
+
+NODE_DEFAULTS = {
+    "algorithm": "graph",
+    "highway_types": ["footway"],
+    "spacing": 3.0,
+    "max_snap_distance": 100.0,
+    "cell_size": 0.25,
+    "inflate_obstacles": 0.25,
+    "simplify_path": True,
+    "smooth_path": True,
+}
+
+
+def _goal(**fields):
+    from types import SimpleNamespace
+
+    empty = {
+        "algorithm": "",
+        "highway_types": [],
+        "spacing": 0.0,
+        "max_snap_distance": 0.0,
+        "cell_size": 0.0,
+        "inflate_obstacles": 0.0,
+        "simplify_path": False,
+        "smooth_path": False,
+    }
+    return SimpleNamespace(**{**empty, **fields})
+
+
+def test_empty_goal_fields_take_the_node_defaults_but_bools_are_used_as_sent():
+    from map_data.pathsolver.route import goal_plan_kwargs
+
+    kwargs = goal_plan_kwargs(_goal(), NODE_DEFAULTS)
+    expected = {**NODE_DEFAULTS, "simplify_path": False, "smooth_path": False}
+    assert kwargs == expected
+
+
+def test_goal_fields_override_the_node_defaults():
+    from map_data.pathsolver.route import goal_plan_kwargs
+
+    goal = _goal(
+        algorithm="astar",
+        highway_types=["road"],
+        spacing=-1.0,
+        max_snap_distance=5.0,
+        cell_size=0.5,
+        inflate_obstacles=1.0,
+        simplify_path=True,
+        smooth_path=True,
+    )
+    assert goal_plan_kwargs(goal, NODE_DEFAULTS) == {
+        "algorithm": "astar",
+        "highway_types": ["road"],
+        "spacing": 0.0,  # negative = the planner's own vertices
+        "max_snap_distance": 5.0,
+        "cell_size": 0.5,
+        "inflate_obstacles": 1.0,
+        "simplify_path": True,
+        "smooth_path": True,
+    }

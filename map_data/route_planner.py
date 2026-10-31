@@ -32,9 +32,12 @@ gps_fix_topic : str
     ``/fixposition/odometry_llh``).
 earth_frame, local_frame : str
     ECEF and local frames for ``route_local`` (``FP_ECEF`` -> ``FP_ENU0``).
-algorithm, highway_types, spacing, max_snap_distance, cell_size,
-inflate_obstacles, simplify_path, smooth_path
-    Planner defaults applied to goals that leave the field empty/zero.
+algorithm, highway_types, spacing, max_snap_distance, cell_size, inflate_obstacles
+    Planner defaults for goals that leave the field empty/zero
+    (:func:`~map_data.pathsolver.route.goal_plan_kwargs`).
+simplify_path, smooth_path : bool
+    Used for ``~/goal`` goals only: a PlanRoute goal's bools are taken as sent.
+    They are also the initial state of the viewer's planner toggles.
 exclude_highway : str[]
     ``highway`` tag values never routed over (default ``["steps"]``: a wheeled
     robot cannot take stairs).
@@ -54,6 +57,15 @@ outside_map_tolerance : float
     loaded file, as a start off the map usually means the wrong one.
 fix_max_age : float
     Seconds after which the last fix is considered stale (0 = never).
+
+The eight planner parameters (``algorithm`` ... ``smooth_path``, see
+:data:`PLANNER_PARAMETERS`) are read on every goal, so ``ros2 param set`` applies to
+the next one, and their names are a stable interface for clients such as the viewer.
+``cell_size``, ``inflate_obstacles``, ``simplify_path`` and ``smooth_path`` default to
+``config/planner_defaults.yaml``.
+
+Cancelling a PlanRoute goal stops its grid search (the goal UUID is its
+``transfer_id``); the goal ends as canceled with reason ``cancelled``.
 """
 
 from __future__ import annotations
@@ -87,13 +99,14 @@ from map_data.annotations import (
     load_summary,
 )
 from map_data.pathsolver.graph_planner import DEFAULT_MAX_SNAP_DISTANCE, GraphPlanner
-from map_data.pathsolver.replan import grid_defaults
+from map_data.pathsolver.replan import cancel_replan_backend, grid_defaults
 from map_data.pathsolver.route import (
     GRAPH_ALGORITHM,
     OUTSIDE_MAP_TOLERANCE_M,
     RoutePlanningError,
     RouteResult,
     check_in_map,
+    goal_plan_kwargs,
     latlon_to_utm_path,
     plan_route,
 )
@@ -105,6 +118,17 @@ from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 from map_data_interfaces.action import PlanRoute
 
 WGS84_FRAME = "wgs84"
+#: Parameters a goal falls back to (goal_plan_kwargs); the viewer reads them by name.
+PLANNER_PARAMETERS = (
+    "algorithm",
+    "highway_types",
+    "spacing",
+    "max_snap_distance",
+    "cell_size",
+    "inflate_obstacles",
+    "simplify_path",
+    "smooth_path",
+)
 #: GraphPlanners kept per (map, way set, snap distance); a small LRU.
 PLANNER_CACHE_SIZE = 4
 
@@ -138,11 +162,17 @@ class RoutePlanner(Node):
         self.local_frame = p("local_frame", "FP_ENU0").value
         self.fix_max_age = float(p("fix_max_age", 10.0).value)
 
-        # Planner defaults (a goal field left empty/zero takes these).
-        self.default_algorithm = p("algorithm", GRAPH_ALGORITHM).value
-        self.default_highway_types = list(p("highway_types", ["footway"]).value)
-        self.default_spacing = float(p("spacing", 3.0).value)
-        self.default_max_snap = float(p("max_snap_distance", DEFAULT_MAX_SNAP_DISTANCE).value)
+        # Planner defaults (a goal field left empty/zero takes these), see _planner_defaults.
+        grid = grid_defaults()
+        p("algorithm", GRAPH_ALGORITHM)
+        p("highway_types", ["footway"])
+        p("spacing", 3.0)
+        p("max_snap_distance", DEFAULT_MAX_SNAP_DISTANCE)
+        # Unset, these four take config/planner_defaults.yaml, like map_data_plan and the viewer.
+        p("cell_size", float(grid["cell_size"]))
+        p("inflate_obstacles", float(grid["inflate_obstacles"]))
+        p("simplify_path", bool(grid["simplify_path"]))
+        p("smooth_path", bool(grid["smooth_path"]))
         # The start is the robot's own fix and may be far from any way; the goal is a
         # place someone wants to reach, and a goal snapped 50 m away is a typo, not a
         # route. Off-network goals are driven as a final straight leg (keep_goal).
@@ -151,12 +181,6 @@ class RoutePlanner(Node):
         self.outside_map_tolerance = float(
             p("outside_map_tolerance", OUTSIDE_MAP_TOLERANCE_M).value
         )
-        # Unset, these four take config/planner_defaults.yaml, like map_data_plan and the viewer.
-        grid = grid_defaults()
-        self.default_cell_size = float(p("cell_size", float(grid["cell_size"])).value)
-        self.default_inflate = float(p("inflate_obstacles", float(grid["inflate_obstacles"])).value)
-        self.default_simplify = bool(p("simplify_path", bool(grid["simplify_path"])).value)
-        self.default_smooth = bool(p("smooth_path", bool(grid["smooth_path"])).value)
 
         self._fix: NavSatFix | None = None
         self._fix_time = 0.0
@@ -214,11 +238,18 @@ class RoutePlanner(Node):
             return None
         return self._fix.latitude, self._fix.longitude
 
+    def _planner_defaults(self) -> dict:
+        """The planner parameters' current values (the goal_plan_kwargs defaults)."""
+        return {name: self.get_parameter(name).value for name in PLANNER_PARAMETERS}
+
     def _goal_topic_cb(self, msg: GeoPointStamped) -> None:
         """A single goal (QR code, operator) planned from the robot with the defaults."""
+        defaults = self._planner_defaults()
         goal = PlanRoute.Goal()
         goal.waypoints = [msg.position]
         goal.start_from_robot = True
+        goal.simplify_path = defaults["simplify_path"]
+        goal.smooth_path = defaults["smooth_path"]
         self.get_logger().info(
             f"Goal on {self.goal_topic}: {msg.position.latitude:.7f}, {msg.position.longitude:.7f}"
         )
@@ -231,8 +262,10 @@ class RoutePlanner(Node):
             return GoalResponse.REJECT
         return GoalResponse.ACCEPT
 
-    def _cancel_cb(self, _handle) -> CancelResponse:
-        return CancelResponse.ACCEPT  # planning is short; the result is still delivered
+    def _cancel_cb(self, handle) -> CancelResponse:
+        # Stops a grid search in progress, or one still waiting for the planner lock.
+        cancel_replan_backend(_transfer_id(handle))
+        return CancelResponse.ACCEPT
 
     def _execute(self, handle) -> PlanRoute.Result:
         def feedback(stage: str) -> None:
@@ -240,9 +273,16 @@ class RoutePlanner(Node):
             fb.stage = stage
             handle.publish_feedback(fb)
 
-        result = self._plan(handle.request, feedback)
+        result = self._plan(
+            handle.request,
+            feedback,
+            transfer_id=_transfer_id(handle),
+            cancel_requested=lambda: handle.is_cancel_requested,
+        )
         self._log_result(result)
-        if result.success:
+        if result.reason == "cancelled" and handle.is_cancel_requested:
+            handle.canceled()
+        elif result.success:
             handle.succeed()
         else:
             handle.abort()
@@ -262,7 +302,10 @@ class RoutePlanner(Node):
         try:
             with self._lock:
                 md = self._load_map(path)
-                self._graph_planner(path, md, self.default_highway_types, self.default_max_snap)
+                defaults = self._planner_defaults()
+                self._graph_planner(
+                    path, md, defaults["highway_types"], defaults["max_snap_distance"]
+                )
         except Exception as e:
             self.get_logger().error(f"preload of {path.name} failed: {e}")
             return
@@ -339,7 +382,13 @@ class RoutePlanner(Node):
         self._map_cache = (key, mtime, md)
         return md
 
-    def _plan(self, goal: PlanRoute.Goal, feedback) -> PlanRoute.Result:
+    def _plan(
+        self,
+        goal: PlanRoute.Goal,
+        feedback,
+        transfer_id: str | None = None,
+        cancel_requested=lambda: False,
+    ) -> PlanRoute.Result:
         res = PlanRoute.Result()
         res.route.header.frame_id = WGS84_FRAME
         res.route_local.header.frame_id = self.local_frame
@@ -378,10 +427,9 @@ class RoutePlanner(Node):
             except Exception as e:  # corrupt file, wrong format
                 return fail("file_not_found", f"could not load {path}: {e}")
 
-            algorithm = goal.algorithm or self.default_algorithm
-            highway_types = list(goal.highway_types) or self.default_highway_types
-            spacing = self.default_spacing if goal.spacing == 0.0 else max(goal.spacing, 0.0)
-            max_snap = goal.max_snap_distance or self.default_max_snap
+            kwargs = goal_plan_kwargs(goal, self._planner_defaults())
+            algorithm = kwargs["algorithm"]
+            highway_types = kwargs["highway_types"]
             start_utm, goal_utm = latlon_to_utm_path(
                 [points[0], points[-1]], md.zone_number, md.zone_letter
             )
@@ -394,7 +442,7 @@ class RoutePlanner(Node):
                 return fail(e.reason, f"{e.message}: {path}")
             planner = None
             if algorithm == GRAPH_ALGORITHM:
-                planner = self._graph_planner(path, md, highway_types, max_snap)
+                planner = self._graph_planner(path, md, highway_types, kwargs["max_snap_distance"])
                 goal_snap = planner.snap_distance(goal_utm)
                 if goal_snap > self.default_goal_max_snap:
                     return fail(
@@ -410,15 +458,9 @@ class RoutePlanner(Node):
                 route = plan_route(
                     md,
                     points,
-                    algorithm=algorithm,
-                    highway_types=highway_types,
-                    spacing=spacing,
-                    max_snap_distance=max_snap,
+                    **kwargs,
                     planner=planner,
-                    cell_size=goal.cell_size or self.default_cell_size,
-                    inflate_obstacles=goal.inflate_obstacles or self.default_inflate,
-                    simplify_path=goal.simplify_path or self.default_simplify,
-                    smooth_path=goal.smooth_path or self.default_smooth,
+                    transfer_id=transfer_id,
                     # The robot is where it is: keep its GNSS fix as the first
                     # route point instead of jumping to the nearest path.
                     keep_start=goal.start_from_robot,
@@ -430,6 +472,8 @@ class RoutePlanner(Node):
             except RoutePlanningError as e:
                 return fail(e.reason, e.message)
             dt = time.monotonic() - t0
+            if cancel_requested():
+                return fail("cancelled", "the goal was cancelled")
 
             if feedback:
                 feedback("publishing")
@@ -522,6 +566,11 @@ class RoutePlanner(Node):
             self.get_logger().info(f"Route planned: {result.message}")
         else:
             self.get_logger().error(f"Route planning failed ({result.reason}): {result.message}")
+
+
+def _transfer_id(handle) -> str:
+    """The goal's UUID, under which a cancel reaches the grid planner."""
+    return bytes(handle.goal_id.uuid).hex()
 
 
 def main() -> None:

@@ -41,7 +41,8 @@ route_planner:
     preload: true
 
     # --- planning defaults -----------------------------------------------------------
-    # A PlanRoute goal field left empty/zero falls back to these.
+    # A PlanRoute goal field left empty/zero falls back to these (its simplify_path and
+    # smooth_path are used as sent; the two below apply to ~/goal goals).
     # graph = follow the mapped ways (Robotour); astar / rrt = all-terrain grid planners.
     algorithm: "graph"
     # Way types the graph planner may route over: footway and/or road.

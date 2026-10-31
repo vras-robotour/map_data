@@ -19,9 +19,10 @@ string[] highway_types
 float64 spacing
 # graph: reject waypoints farther than this (m) from every allowed way; 0 = default (100).
 float64 max_snap_distance
-# grid planners only; 0 = defaults (0.25 m / 0.25 m).
+# grid planners only; 0 = the node's defaults.
 float64 cell_size
 float64 inflate_obstacles
+# grid planners only; used as sent (false = off), unlike the fields above.
 bool simplify_path
 bool smooth_path
 # GPX output: "" = <mission_dir>/route_<stamp>.gpx, "-" = do not save, else a file
