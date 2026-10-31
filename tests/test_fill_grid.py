@@ -113,6 +113,18 @@ def test_fill_grid_cells_outside_barrier_not_inf():
 # ── grid shape ────────────────────────────────────────────────────────────────
 
 
+def test_fill_grid_footway_just_outside_the_grid_lowers_its_edge_cells():
+    # The footway runs 1 m below the grid: only its influence reaches in.
+    md = _make_md_with_footway()
+    rp = ReplanPath([], **_make_args((_E0, _N0 + 11), (_E0 + 20, _N0 + 20)))
+    rp.fill_grid(md)
+
+    grid_2d = rp.path_grid.grid_2d_cache
+    assert grid_2d[0, 20] < rp.default_off_path_cost  # centre 1.25 m from it
+    assert grid_2d[3, 20] == rp.default_off_path_cost  # 2.75 m, beyond max_path_dist
+    assert grid_2d[-1, 20] == rp.default_off_path_cost  # top edge: no wrap-around
+
+
 def test_fill_grid_produces_2d_cache():
     md = _make_md_with_footway()
     args = _make_args((_E0, _N0), (_E0 + 20, _N0 + 20))

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import shapely as sh
+from scipy import ndimage
 from scipy.spatial import cKDTree
 
 from map_data.pathsolver.way_cost import way_cost
@@ -143,15 +144,23 @@ class PathGrid:
 
         if len(path_points):
             tree = cKDTree(path_points)
-            centers = np.stack(np.meshgrid(xs, ys), axis=-1)  # (num_y, num_x, 2)
+            # Query only the cells within r cells of a point's own cell: no other centre is
+            # within max_path_dist of it. Clipping keeps points off the grid conservative.
+            r = int(np.ceil(max_path_dist / self.cell_size)) + 1
+            cell = np.floor((path_points - self.low) / self.cell_size).astype(np.int64)
+            near = np.zeros((num_y, num_x), dtype=bool)
+            near[np.clip(cell[:, 1], 0, num_y - 1), np.clip(cell[:, 0], 0, num_x - 1)] = True
+            iy, ix = np.nonzero(ndimage.maximum_filter(near, size=2 * r + 1))
+            centers = np.column_stack([xs[ix], ys[iy]])
             dists, indices = tree.query(centers, distance_upper_bound=max_path_dist, workers=-1)
             mask = dists < max_path_dist
+            iy, ix = iy[mask], ix[mask]
             way_costs = np.array(costs)[way_index][indices[mask]]
             final_costs = (
                 way_costs
                 + (self.default_off_path_cost - way_costs) * (dists[mask] / max_path_dist) ** 2
             )
-            grid_2d[mask] = np.minimum(grid_2d[mask], final_costs)
+            grid_2d[iy, ix] = np.minimum(grid_2d[iy, ix], final_costs)
 
         self.grid_2d_cache = self.burn_obstacles(grid_2d, effective_obstacles)
         return effective_obstacles
