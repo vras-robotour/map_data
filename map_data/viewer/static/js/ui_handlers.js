@@ -719,6 +719,23 @@ function _buildPanelRow({ itemClass, idClass, labelHtml, idHtml, focusId, btnCla
     return row;
 }
 
+// A map with ~1000 deleted ways makes a ~1000-row list that every edit rebuilt and relaid out.
+// Rows are built PANEL_BATCH at a time, the next batch when the list is scrolled near its end.
+const PANEL_BATCH = 100;
+function _fillPanelList(list, items, buildRow) {
+    const body = list.parentElement; // the scrolling .bottom-panel-body
+    const keep = body.scrollTop;
+    let shown = 0;
+    const more = () => items.slice(shown, shown += PANEL_BATCH).forEach(d => list.appendChild(buildRow(d)));
+    list.textContent = '';
+    more();
+    body.onscroll = () => {
+        if (shown < items.length && body.scrollTop + body.clientHeight > body.scrollHeight - 100) more();
+    };
+    // A rebuilt list the user had scrolled down keeps its position.
+    while (keep && shown < items.length && body.scrollHeight < keep + body.clientHeight) more();
+}
+
 function renderChangesPanel() {
     const panel = document.getElementById('changes-panel');
     const list = document.getElementById('changes-list');
@@ -727,49 +744,51 @@ function renderChangesPanel() {
     if (!panel || !list || !count) return;
     if (!changeLog.length || currentAppMode === 'planner') { panel.hidden = true; return; }
     panel.hidden = false;
-    list.textContent = '';
-    [...changeLog].reverse().forEach(d => {
-        const wayId = d.id || d.way_id;
-        const catLabel = escHtml(d.category) + (d.label ? ' · ' + escHtml(d.label) : '');
-        const base = {
-            itemClass: 'change-item',
-            idClass: 'change-id',
-            focusId: wayId,
-            btnClass: 'btn btn-sm btn-outline-warning py-0 px-1',
-            btnHtml: '&#8617;',
-        };
-        let row = null;
-        if (d.type === 'way') row = _buildPanelRow({
-            ...base, labelHtml: `del ${catLabel}`, idHtml: `#${escHtml(d.id)}`,
-            btnTitle: 'Undo deletion', onBtnClick: () => undoWayDeletion(wayId),
-        });
-        if (d.type === 'node') row = _buildPanelRow({
-            ...base, labelHtml: 'del node in way',
-            idHtml: `#${escHtml(d.node_id)} &rarr; #${escHtml(d.way_id)}`,
-            btnTitle: 'Undo deletion', onBtnClick: () => undoNodeDeletion(wayId, d.node_id),
-        });
-        if (d.type === 'tag') row = _buildPanelRow({
-            ...base, labelHtml: `edit ${catLabel}`, idHtml: `#${escHtml(d.id)}`,
-            btnTitle: 'Undo tag edit', onBtnClick: () => undoTagOverride(wayId),
-        });
-        if (d.type === 'move') row = _buildPanelRow({
-            ...base, labelHtml: `move ${catLabel}`, idHtml: `#${escHtml(d.id)}`,
-            btnTitle: 'Undo move', onBtnClick: () => undoWayNodeMoves(wayId),
-        });
-        if (d.type === 'split') row = _buildPanelRow({
-            ...base, labelHtml: 'split way',
-            idHtml: `#${escHtml(d.way_id)} @ node #${escHtml(d.node_id)}`,
-            btnTitle: 'Undo split', onBtnClick: () => undoWaySplit(wayId, d.node_id),
-        });
-        if (d.type === 'add_node') row = _buildPanelRow({
-            ...base, labelHtml: 'add node in way',
-            idHtml: `#${escHtml(d.node_id)} &rarr; #${escHtml(d.way_id)}`,
-            btnTitle: 'Undo node addition', onBtnClick: () => undoNodeAddition(wayId, d.node_id),
-        });
-        if (row) list.appendChild(row);
-    });
     // Count what is listed, so an entry type without a row cannot inflate it.
-    count.textContent = `(${list.children.length})`;
+    const items = changeLog.filter(d => CHANGE_TYPES[d.type]).reverse();
+    count.textContent = `(${items.length})`;
+    _fillPanelList(list, items, _changeRow);
+}
+
+function _changeRow(d) {
+    const wayId = d.id || d.way_id;
+    const catLabel = escHtml(d.category) + (d.label ? ' · ' + escHtml(d.label) : '');
+    const base = {
+        itemClass: 'change-item',
+        idClass: 'change-id',
+        focusId: wayId,
+        btnClass: 'btn btn-sm btn-outline-warning py-0 px-1',
+        btnHtml: '&#8617;',
+    };
+    let row = null;
+    if (d.type === 'way') row = _buildPanelRow({
+        ...base, labelHtml: `del ${catLabel}`, idHtml: `#${escHtml(d.id)}`,
+        btnTitle: 'Undo deletion', onBtnClick: () => undoWayDeletion(wayId),
+    });
+    if (d.type === 'node') row = _buildPanelRow({
+        ...base, labelHtml: 'del node in way',
+        idHtml: `#${escHtml(d.node_id)} &rarr; #${escHtml(d.way_id)}`,
+        btnTitle: 'Undo deletion', onBtnClick: () => undoNodeDeletion(wayId, d.node_id),
+    });
+    if (d.type === 'tag') row = _buildPanelRow({
+        ...base, labelHtml: `edit ${catLabel}`, idHtml: `#${escHtml(d.id)}`,
+        btnTitle: 'Undo tag edit', onBtnClick: () => undoTagOverride(wayId),
+    });
+    if (d.type === 'move') row = _buildPanelRow({
+        ...base, labelHtml: `move ${catLabel}`, idHtml: `#${escHtml(d.id)}`,
+        btnTitle: 'Undo move', onBtnClick: () => undoWayNodeMoves(wayId),
+    });
+    if (d.type === 'split') row = _buildPanelRow({
+        ...base, labelHtml: 'split way',
+        idHtml: `#${escHtml(d.way_id)} @ node #${escHtml(d.node_id)}`,
+        btnTitle: 'Undo split', onBtnClick: () => undoWaySplit(wayId, d.node_id),
+    });
+    if (d.type === 'add_node') row = _buildPanelRow({
+        ...base, labelHtml: 'add node in way',
+        idHtml: `#${escHtml(d.node_id)} &rarr; #${escHtml(d.way_id)}`,
+        btnTitle: 'Undo node addition', onBtnClick: () => undoNodeAddition(wayId, d.node_id),
+    });
+    return row;
 }
 
 async function undoWaySplit(wayId, nodeId) {
