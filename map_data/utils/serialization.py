@@ -82,7 +82,8 @@ def atomic_write_text(path: str | Path, text: str) -> None:
     Replace ``path`` via an fsynced temp file, so a failed write cannot truncate it.
 
     The file keeps its mode (a new one gets the umask default, not mkstemp's 0600);
-    a symlinked ``path`` is written through to its target.
+    a symlinked ``path`` is written through to its target. The directory is fsynced
+    after the rename where the OS allows it.
     """
     p = Path(path).resolve()
     try:
@@ -101,6 +102,13 @@ def atomic_write_text(path: str | Path, text: str) -> None:
         with contextlib.suppress(OSError):
             os.unlink(tmp)
         raise
+    # fsync the directory so the rename survives a crash; not every OS can open one.
+    with contextlib.suppress(OSError):
+        dir_fd = os.open(p.parent, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
 
 
 def atomic_write_json(path: str | Path, data: Any, **dump_kwargs: Any) -> None:

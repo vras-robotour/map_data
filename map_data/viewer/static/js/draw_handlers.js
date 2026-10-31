@@ -242,9 +242,10 @@ async function _saveAnnotationGeometry(layer) {
     if (!ann) return true;
     const geom = layer.toGeoJSON().geometry;
     const prevGeom = layer._origGeometry || ann.geometry;
-    const res = await updateAnnotationApi(currentFile, annId, geom, ann.type, ann.properties);
-    if (!res.ok) {
-        setStatus('Failed to save annotation', 'text-danger');
+    try {
+        await updateAnnotationApi(currentFile, annId, geom, ann.type, ann.properties);
+    } catch (err) {
+        setStatus(`Failed to save annotation: ${err.message}`, 'text-danger');
         ann.geometry = prevGeom;
         _restoreAnnotationLayerGeometry(layer, prevGeom);
         return false;

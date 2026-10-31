@@ -148,11 +148,14 @@ def test_get_annotations_empty(app_client_with_file):
     assert resp.get_json()["annotations"] == []
 
 
+_LINE = {"type": "LineString", "coordinates": [[14.0, 50.0], [14.001, 50.001]]}
+
+
 def test_add_annotation(app_client_with_file):
     client, _, filename = app_client_with_file
     body = {
         "type": "obstacle",
-        "geometry": {"type": "Point", "coordinates": [14.0, 50.0]},
+        "geometry": _LINE,
         "properties": {},
     }
     resp = client.post(
@@ -170,7 +173,7 @@ def test_update_annotation(app_client_with_file):
     client, _, filename = app_client_with_file
     body = {
         "type": "obstacle",
-        "geometry": {"type": "Point", "coordinates": [14.0, 50.0]},
+        "geometry": _LINE,
         "properties": {},
     }
     ann_id = client.post(
@@ -179,21 +182,47 @@ def test_update_annotation(app_client_with_file):
         content_type="application/json",
     ).get_json()["id"]
 
-    update_body = {"geometry": {"type": "Point", "coordinates": [14.001, 50.001]}}
+    moved = {"type": "LineString", "coordinates": [[14.001, 50.001], [14.002, 50.002]]}
+    update_body = {"geometry": moved}
     resp = client.put(
         f"/api/annotations/{ann_id}?file={filename}",
         data=json.dumps(update_body),
         content_type="application/json",
     )
     assert resp.status_code == 200
-    assert resp.get_json()["geometry"]["coordinates"] == [14.001, 50.001]
+    assert resp.get_json()["geometry"] == moved
+
+
+def test_annotation_unsupported_geometry_rejected(app_client_with_file):
+    # The viewer cannot draw points, so a Point must not reach the store.
+    client, _, filename = app_client_with_file
+    point = {"type": "Point", "coordinates": [14.0, 50.0]}
+    resp = client.post(
+        f"/api/annotations?file={filename}",
+        data=json.dumps({"geometry": point}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+    ann_id = client.post(
+        f"/api/annotations?file={filename}",
+        data=json.dumps({"geometry": _LINE}),
+        content_type="application/json",
+    ).get_json()["id"]
+    resp = client.put(
+        f"/api/annotations/{ann_id}?file={filename}",
+        data=json.dumps({"geometry": point}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+    stored = client.get(f"/api/annotations?file={filename}").get_json()["annotations"]
+    assert [a["geometry"] for a in stored] == [_LINE]
 
 
 def test_delete_annotation(app_client_with_file):
     client, _, filename = app_client_with_file
     body = {
         "type": "obstacle",
-        "geometry": {"type": "Point", "coordinates": [14.0, 50.0]},
+        "geometry": _LINE,
         "properties": {},
     }
     ann_id = client.post(
@@ -1776,7 +1805,52 @@ def test_add_node_rejects_bad_body(seeded_store, body):
     assert client.post(f"/api/way_node?file={filename}&way_id=1", json=body).status_code == 400
 
 
-_LINE = {"type": "LineString", "coordinates": [[14.0, 50.0], [14.001, 50.001]]}
+_NODE_BODY = {"after_node_id": 101, "lat": 50.0, "lon": 14.0}
+_MOVE_BODY = {"nodes": [{"id": 101, "lat": 50.0, "lon": 14.0}]}
+
+
+@pytest.mark.parametrize(
+    ("method", "url", "body", "status"),
+    [
+        # Way 1 is the two-node footway [101, 102]; the map has no way 99 or node 999.
+        ("post", "/api/ways/split", {"way_id": 99, "node_id": 101}, 404),
+        ("post", "/api/ways/split", {"way_id": 1, "node_id": 999}, 400),
+        ("post", "/api/ways/split", {"way_id": 1, "node_id": 101}, 400),  # an end, not interior
+        ("post", "/api/way_node?way_id=99", _NODE_BODY, 404),
+        ("post", "/api/way_node?way_id=1", {**_NODE_BODY, "after_node_id": 999}, 400),
+        ("put", "/api/way_nodes/move?way_id=99", _MOVE_BODY, 404),
+        (
+            "put",
+            "/api/way_nodes/move?way_id=1",
+            {"nodes": [{"id": 999, "lat": 50.0, "lon": 14.0}]},
+            400,
+        ),
+    ],
+)
+def test_way_edits_reject_unknown_ways_and_nodes(seeded_store, method, url, body, status):
+    client, filename = seeded_store
+    sep = "&" if "?" in url else "?"
+    resp = getattr(client, method)(f"{url}{sep}file={filename}", json=body)
+    assert resp.status_code == status
+
+
+def test_move_point_barrier_by_its_own_id(tmp_path):
+    # A way without nodes is listed (and so moved) under its own ID, see get_way_nodes.
+    e, n, zn, zl = utm.from_latlon(50.0, 14.0)
+    md = MapData([np.array([[e, n], [e + 100, n + 100]]), int(zn), zl], coords_type="array")
+    md.barriers_list.append(
+        Way(id=2, nodes=[], tags={"barrier": "block"}, line=box(e, n, e + 1, n + 1))
+    )
+    md.save(str(tmp_path / "block.mapdata"))
+    client = create_app(data_dir=str(tmp_path)).test_client()
+
+    nodes = client.get("/api/way_nodes?file=block.mapdata&way_id=2").get_json()["nodes"]
+    assert [nd["id"] for nd in nodes] == [2]
+    resp = client.put(
+        "/api/way_nodes/move?file=block.mapdata&way_id=2",
+        json={"nodes": [{"id": 2, "lat": 50.0001, "lon": 14.0001}]},
+    )
+    assert resp.status_code == 204
 
 
 @pytest.mark.parametrize(

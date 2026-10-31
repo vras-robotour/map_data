@@ -145,6 +145,22 @@ def _resolve_way(
     return _ResolvedWay(way=way, category=category, effective_nodes_cache=effective_nc)
 
 
+def _way_node_ids(md: MapData, store: dict[str, Any], way_id: int) -> list[int]:
+    """
+    Return the node IDs of way *way_id* with its node deletions and added nodes applied.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        404 if the map has no way *way_id*.
+
+    """
+    resolved = _resolve_way(md, store, way_id)
+    if resolved.category is None:
+        abort(404, f"Way {way_id} not found")
+    return list(resolved.way.nodes) if resolved.way is not None else []
+
+
 def _apply_segment_deletions(
     seg: Any,
     seg_id: str,
@@ -523,8 +539,9 @@ def split_way_endpoint() -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing or ``way_id``/``node_id`` is invalid.
-        404 if the file or way doesn't exist.
+        400 if ``file`` is missing, ``way_id``/``node_id`` is invalid or
+        ``node_id`` is not an interior node of the way. 404 if the file or
+        way doesn't exist.
 
     """
     filename = _require_args("file")
@@ -536,8 +553,8 @@ def split_way_endpoint() -> Response:
     md = load_mapdata_cached(str(_mapdata_path(filename)))
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
-        if _resolve_way(md, store, int(original_way_id)).category is None:
-            abort(404, f"Way {original_way_id} not found")
+        if node_id_int not in _way_node_ids(md, store, int(original_way_id))[1:-1]:
+            abort(400, f"Node {node_id_int} is not an interior node of way {original_way_id}")
         splits = store.setdefault("split_ways", {})
         way_splits = splits.setdefault(original_way_id, [])
 
@@ -720,8 +737,9 @@ def add_way_node() -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if a parameter is missing or invalid, or ``lat``/``lon`` is out
-        of range.
+        400 if a parameter is missing or invalid, ``lat``/``lon`` is out
+        of range, or ``after_node_id`` is not on the way. 404 if the file
+        or way doesn't exist.
 
     """
     filename, way_id = _require_args("file", "way_id")
@@ -734,8 +752,11 @@ def add_way_node() -> Response:
     lat = _validated_number(body["lat"], "lat", _MIN_LAT, _MAX_LAT)
     lon = _validated_number(body["lon"], "lon", _MIN_LON, _MAX_LON)
 
+    md = load_mapdata_cached(str(_mapdata_path(filename)))
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
+        if after_node_id not in _way_node_ids(md, store, way_id_int):
+            abort(400, f"Node {after_node_id} is not on way {way_id_int}")
         synth_id = next_synthetic_node_id(store)
 
         store.setdefault("added_nodes", []).append(
@@ -832,7 +853,9 @@ def move_way_nodes() -> Response:
     (``[{"id", "lat", "lon"}, ...]``) and optional ``category``/``label``.
     Merged per node into ``store["node_position_overrides"]`` under the
     original way ID, so every segment shares them. Returns 204; 400 if a
-    parameter is missing or invalid or a position is out of range.
+    parameter is missing or invalid, a position is out of range or a node
+    is not on the way (its split ends included); 404 if the file or way
+    doesn't exist.
     """
     filename, way_id = _require_args("file", "way_id")
     way_id_int, _ = _split_way_id(way_id)
@@ -849,8 +872,19 @@ def move_way_nodes() -> Response:
         }
         for n in nodes
     }
+    md = load_mapdata_cached(str(_mapdata_path(filename)))
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
+        node_ids = _way_node_ids(md, store, way_id_int)
+        # A way without nodes (a point barrier) is moved under its own ID, see get_way_nodes.
+        on_way = (
+            {*node_ids, *get_detached_node_ids(store, way_id_int).values()}
+            if node_ids
+            else {way_id_int}
+        )
+        off_way = sorted(int(nid) for nid in moves if int(nid) not in on_way)
+        if off_way:
+            abort(400, f"Nodes {off_way} are not on way {way_id_int}")
         overrides = store.setdefault("node_position_overrides", {})
         way_key = str(way_id_int)
         if way_key not in overrides:

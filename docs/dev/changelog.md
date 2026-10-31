@@ -34,7 +34,7 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - A cancel that arrives before its plan starts still aborts it; cancelling a PlanRoute goal stops its grid search
 - Viewer `create_replan` reports `status: "cancelled"` only for a cancel; invalid parameters are 400
 - The viewer strips `access_token` from the URL after setting the cookie and shuts down cleanly on SIGINT/SIGTERM
-- Atomic writes keep the file mode and fsync; used for traversability and tracker settings saves
+- Atomic writes keep the file mode and fsync the file and its directory; used for traversability and tracker settings saves
 - The tracker trail takes one GPS source (the filtered fix when enabled) and ignores no-fix messages
 - `ReplanPath` cost attributes are lowercase: `highway_costs`, `surface_costs`, `path_cost_cap`, `default_off_path_cost`
 - Store IO and the way-edit pipeline moved from `map_data.viewer.helpers` to `map_data.edits`
@@ -47,7 +47,7 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - `fetch_area` applies the 25 km² limit to the downloaded box, margin included
 - `create_mapdata` finds its default demo GPX in a source checkout
 - Relation parsing: route relations are no longer merged into one way, relation tags only go to untagged outer members, and self-intersecting outers keep their holes
-- Closed fences, walls and hedges are rings, not filled areas
+- Closed fences, walls, hedges, guard rails, kerbs, handrails, chains, ropes and cable or jersey barriers are rings, not filled areas
 - The map's lat/lon box covers all four UTM corners; the UTM zone check compares zone letters correctly
 - Tag overrides apply before the traversability rules
 - Grid paths no longer cut through an obstacle on the leg from a requested point to the first grid cell
@@ -58,6 +58,12 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - Overpass truncated reads are retried; `map_data_info` survives an unreadable annotation sidecar
 - Viewer: stale responses are ignored, failed node moves roll back, only changed annotations are saved, a deleted added node re-anchors the nodes after it, tag overrides and hiding of split ways use the original way ID, and map text is escaped before it reaches the HTML
 - The cost grid overlay shows the planner's own grid
+- An empty multipolygon member role counts as `outer`
+- Viewer annotations with a geometry other than `LineString`, `Polygon` or `MultiPolygon` (e.g. `Point`) are rejected with 400
+- `plan_route` (and so a PlanRoute goal) rejects a negative or non-finite `inflate_obstacles` with `bad_parameter` instead of shrinking the obstacles
+- `osm_cloud`: a rejected parameter change keeps the previously published grid and intersections
+- Viewer way edits (split, add node, move nodes) reject an unknown way with 404 and a node not on the way with 400 instead of storing them
+- Viewer: saving a dragged annotation no longer reports failure and rolls back after a successful save
 
 ### Removed
 

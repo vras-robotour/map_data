@@ -109,7 +109,20 @@ def test_parse_osm_ways_area_polygon():
     assert w.is_area
 
 
-def test_parse_osm_ways_closed_barrier_is_a_ring():
+@pytest.mark.parametrize(
+    "value",
+    [
+        "fence",
+        "guard_rail",
+        "kerb",
+        "handrail",
+        "cable_barrier",
+        "jersey_barrier",
+        "chain",
+        "rope",
+    ],
+)
+def test_parse_osm_ways_closed_barrier_is_a_ring(value):
     data = _api().parse_json(
         json.dumps(
             {
@@ -122,7 +135,7 @@ def test_parse_osm_ways_closed_barrier_is_a_ring():
                         "type": "way",
                         "id": 113,
                         "nodes": [80, 81, 82, 80],
-                        "tags": {"barrier": "fence"},
+                        "tags": {"barrier": value},
                     },
                 ],
             }
@@ -338,6 +351,16 @@ def test_parse_osm_rels_stamps_tags_onto_untagged_member_ways():
     assert ways[104].in_out == "outer"
 
 
+def test_parse_osm_rels_empty_role_is_legacy_outer():
+    # An empty multipolygon member role is the legacy spelling of "outer".
+    data = _MULTIPOLYGON_JSON.replace('"role": "outer"', '"role": ""')
+    ways = _ways_from_json(data)
+    parse_osm_rels(_api().parse_json(data), ways)
+
+    assert ways[104].tags.get("natural") == "water"
+    assert ways[104].in_out == "outer"
+
+
 def test_parse_osm_rels_untagged_member_classified_as_barrier():
     ways = _ways_from_json(_MULTIPOLYGON_JSON)
     rels_data = _api().parse_json(_MULTIPOLYGON_JSON)
@@ -546,9 +569,10 @@ def test_parse_osm_rels_tagged_members_stay_separate():
     assert ways[131].in_out == "outer"
 
 
-def test_parse_osm_rels_empty_role_members_are_ignored():
+def test_parse_osm_rels_empty_role_boundary_members_are_ignored():
     ways = _ways_from_json(_MIXED_MEMBER_REL_JSON)
     data = _api().parse_json(_MIXED_MEMBER_REL_JSON)
+    data.relations[0].tags["type"] = "boundary"
     data.relations[0].members[0].role = ""
     data.relations[0].members[1].role = ""
 

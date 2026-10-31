@@ -372,18 +372,21 @@ class OSMCloud(Node):
                     self._ensure_intersection_pubs()
                 rebuild_intersections = True
 
+        # Build into locals and commit only once every rebuild has succeeded.
+        grid_cloud, poses, markers = self.grid_cloud, self.poses, self.markers
         try:
             if rebuild_cloud:
                 self.get_logger().info("Rebuilding grid cloud due to parameter change")
-                self.grid_cloud = self.get_cloud()
+                grid_cloud = self.get_cloud()
             if rebuild_intersections and self.publish_intersections:
                 self.get_logger().info("Rebuilding intersections due to parameter change")
-                self.poses, self.markers = self.get_intersections()
+                poses, markers = self.get_intersections()
         except (ValueError, TypeError, RuntimeError) as e:
             self.get_logger().error(f"Failed to rebuild after parameter change: {e}")
             for name, value in old.items():
                 setattr(self, name, value)
             return SetParametersResult(successful=False, reason=str(e))
+        self.grid_cloud, self.poses, self.markers = grid_cloud, poses, markers
 
         if rebuild_cloud or rebuild_intersections:
             self.publish_cb()

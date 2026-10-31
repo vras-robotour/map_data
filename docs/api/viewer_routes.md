@@ -114,11 +114,11 @@ Adds a drawn annotation.
 {"type": "obstacle", "geometry": {"type": "Polygon", "coordinates": [[[14.4, 50.07], ...]]}, "properties": {}}
 ```
 
-`geometry` is required. `type` is `"path"` (a drawn way) or anything else, default `"obstacle"`. Returns **201** with the annotation and its uuid4 `id`. **400**: invalid geometry or type.
+`geometry` is required: a `LineString`, `Polygon` or `MultiPolygon`. `type` is `"path"` (a drawn way) or anything else, default `"obstacle"`. Returns **201** with the annotation and its uuid4 `id`. **400**: invalid or unsupported geometry, or invalid type.
 
 ### `PUT /api/annotations/<ann_id>`
 
-Replaces the geometry, and `type`/`properties` when given. Returns the annotation. **404**: unknown ID.
+Replaces the geometry, and `type`/`properties` when given; the body is validated as for `POST`. Returns the annotation. **400**: invalid body. **404**: unknown ID.
 
 ### `DELETE /api/annotations/<ann_id>`
 
@@ -166,7 +166,7 @@ Hides or shows a whole way in the viewer. Export and planning still use hidden w
 
 ### `POST /api/ways/split`
 
-Body `{"way_id": 123456, "node_id": 789012}` (an interior node). The segment after the split starts at a new synthetic copy of the node, so the ends move independently and the planner does not route across the split. Returns `{"success": true, "segments": [...]}`.
+Body `{"way_id": 123456, "node_id": 789012}` (an interior node). The segment after the split starts at a new synthetic copy of the node, so the ends move independently and the planner does not route across the split. Returns `{"success": true, "segments": [...]}`. **400**: `node_id` is not an interior node of the edited way. **404**: unknown way.
 
 ### `DELETE /api/ways/split?way_id=<id>&node_id=<id>`
 
@@ -188,7 +188,7 @@ All take `?file=<name>&way_id=<id>`.
 
 ### `POST /api/way_node`
 
-Inserts a synthetic node after an existing one. Body `{"after_node_id": 111, "lat": 50.0712, "lon": 14.4013}`. Returns `{"id": <negative id>, "lat", "lon"}`.
+Inserts a synthetic node after an existing one. Body `{"after_node_id": 111, "lat": 50.0712, "lon": 14.4013}`. Returns `{"id": <negative id>, "lat", "lon"}`. **400**: `after_node_id` is not on the edited way. **404**: unknown way.
 
 ### `DELETE /api/way_node?node_id=<id>`
 
@@ -206,7 +206,7 @@ Records node positions for the way; every segment shares them.
 {"nodes": [{"id": 111, "lat": 50.0715, "lon": 14.4015}], "category": "footway", "label": "..."}
 ```
 
-All nodes are validated before anything is written. **204**.
+All nodes are validated before anything is written; each must be on the edited way (a split end counts, a way without nodes takes its own ID). **204**. **400**: invalid position or a node not on the way. **404**: unknown way.
 
 ### `DELETE /api/way_nodes/move`
 

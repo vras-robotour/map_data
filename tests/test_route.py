@@ -300,6 +300,10 @@ def test_viewer_uses_the_planner_grid_cell_budget():
         {"algorithm": "rrt", "sub_algorithm": "bfs"},
         {"algorithm": "astar", "cell_size": 0.0},
         {"algorithm": "astar", "cell_size": -0.5},
+        # A negative inflation would shrink the obstacles (buffer(-x)).
+        {"algorithm": "astar", "inflate_obstacles": -1.0},
+        {"algorithm": "astar", "inflate_obstacles": float("nan")},
+        {"algorithm": "astar", "inflate_obstacles": float("inf")},
     ],
 )
 def test_plan_route_rejects_bad_parameters(footway_network_mapdata, kwargs):
