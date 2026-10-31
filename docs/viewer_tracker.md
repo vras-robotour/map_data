@@ -12,7 +12,7 @@ It requires the viewer to be launched inside a sourced ROS 2 workspace so that t
 ## Robot marker
 
 When telemetry is received, a green arrow marker appears on the map at the robot's current
-position. The marker rotates to reflect the robot's heading (derived from the IMU azimuth topic).
+position. The marker rotates to the robot's heading (`heading_topic`, or `azimuth_topic` when that is empty).
 The robot marker is visible in all three modes as long as the **Robot** layer is enabled in
 the Layers panel.
 
@@ -55,7 +55,7 @@ if the corresponding ROS 2 topic is not configured.
 | State | `commander_state_topic` string (crl_commander mode), active Nav2 behavior tree node, or `IDLE` |
 | Follower | `road_follower` state: `ROAD` or `GPS:<reason>` |
 | Diagnostics | `OK`, or the number of ERROR/WARN statuses and the worst status message |
-| Collision | Active collision monitor action (`STOP`, `SLOWDOWN`, `LIMIT`) |
+| Collision | Active collision monitor action (`STOP`, `SLOWDOWN`, `APPROACH`, `LIMIT`); hidden for `DO_NOTHING` |
 | Recovery Active | Displayed in red when a recovery behavior is running |
 | Teleop Active | Displayed in yellow when teleop velocity commands or joystick inputs were received within 2 s |
 
@@ -73,7 +73,7 @@ listing active layers:
 | Waypoint window | `sequence_poses_topic` (`PoseArray`, e.g. `/goal_sequence`) | light-blue polyline |
 | Road path | `road_path_topic` (`path_centerline` prediction) | cyan polyline |
 | Goal | `goal_topic` | orange circle |
-| Trail | last `trail_length` fixes, spaced by `trail_min_step` m | thin green polyline |
+| Trail | last `trail_length` fixes of `gps_filtered_topic` (else `gps_fix_topic`), spaced by `trail_min_step` m; no-fix messages are skipped | thin green polyline |
 | Intersections | `intersections_topic` (`PoseArray`, from `osm_cloud`) | magenta rings |
 | Active intersection | `active_intersection_topic` with `intersection_enter_threshold` and `intersection_exit_threshold` | colored radius circles |
 
