@@ -345,6 +345,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         // Remove old layers before adding new ones
         Object.values(oldGeoLayers).forEach(l => l && map.removeLayer(l));
         drawnItems.clearLayers();
+        document.getElementById('planner-show-grid').checked = false; // its overlay was just removed
 
         ['road', 'footway', 'barrier', 'crossroad'].forEach(cat => {
             const features = cat === 'barrier'
