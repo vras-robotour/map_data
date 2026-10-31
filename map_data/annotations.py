@@ -17,9 +17,11 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+import shapely
 import utm
 from shapely import STRtree
-from shapely.geometry import LineString, Point
+from shapely.geometry import Point
 
 from map_data.edits import (
     AnnotationStoreError,
@@ -406,14 +408,19 @@ def join_ways(md: MapData, store: dict[str, Any]) -> None:
         return
 
     xy = {n: p.ravel()[:2] for n, p in md.get_points().items()}
-    segments, owner = [], []  # every edge of every way, and its (way index, edge index)
+    owner = []  # every edge of every way as its (way index, edge index)
     for wi, w in enumerate(ways):
         for i in range(len(w.nodes) - 1):
             if w.nodes[i] in xy and w.nodes[i + 1] in xy:
-                segments.append(LineString([xy[w.nodes[i]], xy[w.nodes[i + 1]]]))
                 owner.append((wi, i))
-    if not segments:
+    if not owner:
         return
+    # One vectorised call: a LineString per edge is ~10x slower on a map's ~6000 edges.
+    segments = list(
+        shapely.linestrings(
+            np.array([[xy[ways[wi].nodes[i]], xy[ways[wi].nodes[i + 1]]] for wi, i in owner])
+        )
+    )
     tree = STRtree(segments)
     inserts: dict[tuple[int, int], list[tuple[float, int]]] = {}  # (way, edge) -> [(along, id)]
     next_id = min([0, *md.nodes_cache]) - 1
