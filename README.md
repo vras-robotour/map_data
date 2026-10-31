@@ -64,7 +64,7 @@ colcon build --packages-up-to map_data
 source install/setup.bash
 ```
 
-The `osm_cloud` node additionally depends on [`ros2_numpy`](https://github.com/Box-Robotics/ros2_numpy), which is not released as a binary package — clone its `jazzy` branch into your colcon workspace `src/` and build it from source.
+The ROS 2 nodes additionally depend on [`ros2_numpy`](https://github.com/Box-Robotics/ros2_numpy), which is not released as a binary package — clone its `jazzy` branch into your colcon workspace `src/` and build it from source.
 
 To verify the ROS 2 runtime stack, run the smoke test script:
 

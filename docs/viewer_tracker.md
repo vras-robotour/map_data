@@ -22,6 +22,7 @@ the Layers panel.
 |---------|-------------|
 | **Center Robot** | Pan and zoom the map to the robot's current position |
 | **Clear Trail** | Clear the recorded trail (dropped on the tracker node, so it does not reappear with the next fix) |
+| **Topics…** | Open the topic configuration dialog |
 | **Follow** | Continuously pan the map to keep the robot centered as it moves |
 
 ## Status display
@@ -43,7 +44,7 @@ if the corresponding ROS 2 topic is not configured.
 
 | Field | Description |
 |-------|-------------|
-| Localization | GPS fix quality: **Fixed** (RTK fixed), **Float** (RTK float), or **No Fix** |
+| Localization | GPS fix quality: **Fixed** (RTK fixed), **Float** (RTK float), **Fix** (standalone fix), or **No Fix** |
 | Fix age | Seconds since the last fix; displays red `STALE` after `stale_after` |
 | Speed | Current robot speed in m/s (from odometry) |
 | Limit | Active speed limit value and unit (m/s or %) |
@@ -134,7 +135,7 @@ grey = not published, hollow = disabled).
 | `follower_state_topic` | `""` | Road follower state string (`std_msgs/String`, latched) |
 | `bt_log_topic` | `/behavior_tree_log` | Nav2 behavior tree log (`nav2_msgs/BehaviorTreeLog`) |
 | `speed_limit_topic` | `/speed_limit` | Active speed limit (`nav2_msgs/SpeedLimit`) |
-| `collision_monitor_state_topic` | `/collision_monitor_state` | Collision monitor state |
+| `collision_monitor_state_topic` | `/collision_monitor_state` | Collision monitor state (`nav2_msgs/CollisionMonitorState`) |
 | `recovery_heartbeat_topic` | `/recovery/heartbeat` | Recovery behavior heartbeat (`std_msgs/Header`) |
 | `teleop_topic` | `/cmd_vel_teleop` | Teleop velocity command (`geometry_msgs/TwistStamped`) |
 | `joy_topic` | `""` | Joystick (`sensor_msgs/Joy`); any input indicates active teleoperation |
@@ -152,7 +153,9 @@ grey = not published, hollow = disabled).
 | `trail_length` / `trail_min_step` | `500` / `0.5` | Robot trail size (points) and step distance (m) |
 | `stale_after` | `3.0` | Fix age threshold (s) after which position is marked stale |
 | `planner_node` | `/route_planner` | Node name whose ROS 2 parameters seed Planner toggles (`""` disables syncing) |
-| `*_feedback_topic` | Nav2 action feedback | Action feedback topics reporting current waypoint index |
+| `nav_through_poses_feedback_topic` | `/navigate_through_poses/_action/feedback` | Nav2 NavigateThroughPoses feedback topic reporting current waypoint index (`nav2_msgs/action/NavigateThroughPoses_Feedback`) |
+| `follow_gps_waypoints_feedback_topic` | `/follow_gps_waypoints/_action/feedback` | Nav2 FollowGPSWaypoints feedback topic reporting current waypoint index (`nav2_msgs/action/FollowGPSWaypoints_Feedback`) |
+| `follow_waypoints_feedback_topic` | `/follow_waypoints/_action/feedback` | Nav2 FollowWaypoints feedback topic reporting current waypoint index (`nav2_msgs/action/FollowWaypoints_Feedback`) |
 
 Telemetry is broadcast to the browser over WebSocket at **2 Hz** by default, configurable
 via `map_data_viewer --telemetry-rate <Hz>`. A message goes out only when something changed;

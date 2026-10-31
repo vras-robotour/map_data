@@ -96,7 +96,7 @@ ros2 action send_goal /route_planner/plan_route map_data_interfaces/action/PlanR
 | `local_frame` | `""` | Local frame name for `nav_msgs/Path` |
 | `algorithm` | `""` | Default algorithm: `graph`, `astar`, or `rrt` |
 | `highway_types` | `""` | Allowed way types: `footway`, `road`, or `footway,road` |
-| `spacing` | `""` | Metres between output waypoints (0 = raw) |
+| `spacing` | `""` | Meters between output waypoints (0 = raw) |
 | `preload` | `""` | Load map and graph at startup (`true` or `false`) |
 | `use_sim_time` | `false` | Use simulation time |
 

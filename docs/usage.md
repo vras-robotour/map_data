@@ -88,13 +88,13 @@ reclassify the ways, so tag CSV edits need a new download.
 | `-h, --help` | | Show help message and exit |
 | `-f FILE, --file FILE` | `buchlovice.gpx` | GPX file (a path, or a name in the package's `data/` directory or the bundled `demo/`). Without `-d`, its `.mapdata` sibling is re-saved |
 | `-d, --download` | `false` | Download fresh data from OSM within the waypoint bounds and parse it |
-| `--cache` | | Use the local OSM response cache (30-day expiry) |
+| `--cache` | `false` | Use the local OSM response cache (30-day expiry) |
 
 ### OSM caching
 
-Downloaded OSM responses are cached locally keyed by the query hash and bounding box.
-If `--cache` is active and a cache entry exists for the exact bounding box and query within
-30 days (`OSM_CACHE_MAX_AGE = 30 days`), `create_mapdata` reuses the cached response without
+Downloaded OSM responses are cached locally keyed by query hash (which embeds the bounding box).
+If `--cache` is active and a cache entry exists matching the query within 30 days
+(`OSM_CACHE_MAX_AGE = 30 days`), `create_mapdata` reuses the cached response without
 querying Overpass again.
 
 ### Output file location
