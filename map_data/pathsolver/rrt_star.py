@@ -203,8 +203,9 @@ class RRTStar:
         _sub = self.grid[_yi_lo:_yi_hi, _xi_lo:_xi_hi]
         _ys, _xs = np.where(_sub < self.traversability_threshold)
         if len(_xs) > 0:
-            self._trav_xs = (_xs + _xi_lo) * grid_scale + self.low[0]
-            self._trav_ys = (_ys + _yi_lo) * grid_scale + self.low[1]
+            # Cell centres: _sample_point jitters by half a cell either way.
+            self._trav_xs = (_xs + _xi_lo + 0.5) * grid_scale + self.low[0]
+            self._trav_ys = (_ys + _yi_lo + 0.5) * grid_scale + self.low[1]
         else:
             self._trav_xs = None
             self._trav_ys = None

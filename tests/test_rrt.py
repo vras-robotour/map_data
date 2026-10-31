@@ -421,3 +421,23 @@ def test_default_rng_does_not_touch_the_global_random():
     state_before = random.getstate()
     assert _make_rrt(max_iter=500).find_path() is not None
     assert random.getstate() == state_before
+
+
+def test_traversable_cell_samples_stay_inside_the_cell(monkeypatch):
+    import map_data.pathsolver.rrt_star as rrt_mod
+
+    monkeypatch.setattr(rrt_mod, "UNIFORM_SAMPLE_RATE", -1.0)  # always sample a free cell
+    grid = np.full((10, 10), np.inf)
+    grid[3, 2] = 0.0  # the only free cell: x in [2, 3), y in [3, 4)
+    rrt = RRTStar(
+        np.array([0.5, 0.5]),
+        np.array([9.5, 9.5]),
+        None,
+        grid,
+        (0.0, 0.0),
+        informed=False,
+        rng=random.Random(0),
+    )
+    samples = np.array([rrt._sample_point() for _ in range(200)])
+    assert np.all((samples[:, 0] >= 2.0) & (samples[:, 0] <= 3.0))
+    assert np.all((samples[:, 1] >= 3.0) & (samples[:, 1] <= 4.0))
