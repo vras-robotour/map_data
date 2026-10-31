@@ -50,7 +50,7 @@ Starts a background download and parse of an OSM area; returns `{"task_id": "<uu
 }
 ```
 
-- The box must be at most 25 km² (`MAX_FETCH_AREA_KM2`); `grid_margin` is added around it.
+- The box plus its `grid_margin` must be at most 25 km² (`MAX_FETCH_AREA_KM2`).
 - `name` is sanitized to `[A-Za-z0-9_-]`. An existing map, or a leftover `<name>.annotations.json`, is never overwritten: the map is saved as `<name>_1.mapdata`, `<name>_2.mapdata`, ...
 - `grid_margin`, `obstacle_radius`, `buffer_widths` are optional; defaults from `config/planner_defaults.yaml`.
 

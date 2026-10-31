@@ -86,7 +86,7 @@ reclassify the ways, so tag CSV edits need a new download.
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-h, --help` | | Show help message and exit |
-| `-f FILE, --file FILE` | `buchlovice.gpx` | GPX file (a path, or a name in the package's `data/` directory). Without `-d`, its `.mapdata` sibling is re-saved |
+| `-f FILE, --file FILE` | `buchlovice.gpx` | GPX file (a path, or a name in the package's `data/` directory or the bundled `demo/`). Without `-d`, its `.mapdata` sibling is re-saved |
 | `-d, --download` | `false` | Download fresh data from OSM within the waypoint bounds and parse it |
 | `--cache` | | Use the local OSM response cache (30-day expiry; ignored by `--no-cache`) |
 | `--no-cache` | | Bypass cache and refetch fresh data from OSM |
