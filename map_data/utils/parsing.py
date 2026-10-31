@@ -92,14 +92,16 @@ def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
     for rel in osm_rels_data.relations:
         # Only area relations have rings to merge; chaining a route relation would
         # make one way carrying every member's tags (one bridge blocks the route).
-        if (rel.tags or {}).get("type") not in AREA_RELATION_TYPES:
+        rel_type = (rel.tags or {}).get("type")
+        if rel_type not in AREA_RELATION_TYPES:
             continue
         outer_ids: list[int] = []
         inner_ids: list[int] = []
 
         for member in rel.members:
             if member._type_value == "way" and int(member.ref) in ways:
-                if member.role == "outer":
+                # An empty multipolygon role is the legacy spelling of "outer".
+                if member.role == "outer" or (not member.role and rel_type == "multipolygon"):
                     outer_ids.append(int(member.ref))
                 elif member.role == "inner":
                     inner_ids.append(int(member.ref))

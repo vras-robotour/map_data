@@ -58,6 +58,7 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - Overpass truncated reads are retried; `map_data_info` survives an unreadable annotation sidecar
 - Viewer: stale responses are ignored, failed node moves roll back, only changed annotations are saved, a deleted added node re-anchors the nodes after it, tag overrides and hiding of split ways use the original way ID, and map text is escaped before it reaches the HTML
 - The cost grid overlay shows the planner's own grid
+- An empty multipolygon member role counts as `outer`
 
 ### Removed
 
