@@ -1,5 +1,8 @@
 // ── UI Handlers ───────────────────────────────────────────────────────────────
 
+const OSM_NODE_STYLE = { radius: 5, color: '#fff', weight: 2, fillColor: '#f0a500', fillOpacity: 0.9 };
+const OSM_NODE_SELECTED_STYLE = { radius: 6, color: '#fff', weight: 2.5, fillColor: '#ff3300', fillOpacity: 1 };
+
 function setStatus(msg, cls = 'text-secondary') {
     const el = document.getElementById('status');
     if (!el) return;
@@ -181,9 +184,9 @@ function showProps(props, feature = null) {
     }
     const tags = props.tags || {};
     const meta = [
-        ['Category', `<span class="badge bg-secondary">${props.category}</span>`],
-        ['OSM ID', props.id ?? '—'],
-        ['Role', props.in_out || '—'],
+        ['Category', `<span class="badge bg-secondary">${escHtml(props.category || '')}</span>`],
+        ['OSM ID', escHtml(String(props.id ?? '—'))],
+        ['Role', escHtml(String(props.in_out || '—'))],
     ];
     const rows = [
         ...meta.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`),
@@ -315,7 +318,7 @@ async function loadNodesForEditing(feature, layer) {
     nodeMarkers = currentNodes.map((node, i) => {
         const [marker, hit] = makeHandle(
             [node.lat, node.lon],
-            { radius: 5, color: '#fff', weight: 2, fillColor: '#f0a500', fillOpacity: 0.9 },
+            OSM_NODE_STYLE,
             12, 'grab', e => _onOsmNodeDragDown(e, i),
         );
         nodeLayer.addLayer(marker);
@@ -348,7 +351,7 @@ async function loadNodesForEditing(feature, layer) {
     <div style="font-size:0.8rem;color:#aaa;margin-bottom:6px;">
       Editing <span class="badge bg-secondary">${escHtml(props.category)}</span>
       ${label ? `<span class="badge bg-dark ms-1">${escHtml(label)}</span>` : ''}
-      <span class="text-secondary ms-1">#${props.id}</span>
+      <span class="text-secondary ms-1">#${escHtml(String(props.id))}</span>
     </div>
     <div style="font-size:0.75rem;color:#6c7a9c;">${currentNodes.length} nodes — drag node or way to move</div>`;
     setStatus(`Editing way ${wayId}`, 'text-info');
@@ -359,17 +362,13 @@ function clickNode(index) {
     if (!node) return;
 
     if (selectedNodeIndex >= 0 && nodeMarkers[selectedNodeIndex]) {
-        nodeMarkers[selectedNodeIndex].setStyle({
-            radius: 4, color: '#fff', weight: 1.5, fillColor: '#f0a500', fillOpacity: 0.9,
-        });
+        nodeMarkers[selectedNodeIndex].setStyle(OSM_NODE_STYLE);
     }
 
     selectedNodeIndex = index;
 
     if (nodeMarkers[index]) {
-        nodeMarkers[index].setStyle({
-            radius: 6, color: '#fff', weight: 2.5, fillColor: '#ff3300', fillOpacity: 1,
-        });
+        nodeMarkers[index].setStyle(OSM_NODE_SELECTED_STYLE);
         nodeMarkers[index].bringToFront();
     }
 
@@ -487,9 +486,7 @@ async function toggleNodes() {
         nodeMarkers = [];
         nodeLayer = L.layerGroup().addTo(map);
         data.nodes.forEach((node, i) => {
-            const marker = L.circleMarker([node.lat, node.lon], {
-                radius: 4, color: '#fff', weight: 1.5, fillColor: '#f0a500', fillOpacity: 0.9,
-            }).on('click', e => {
+            const marker = L.circleMarker([node.lat, node.lon], OSM_NODE_STYLE).on('click', e => {
                 L.DomEvent.stopPropagation(e);
                 if (currentMode === 'view') clickNode(i);
             }).on('contextmenu', e => {
@@ -552,7 +549,7 @@ document.getElementById('way-edit-save')?.addEventListener('click', async () => 
     bootstrap.Modal.getOrCreateInstance(document.getElementById('way-edit-modal')).hide();
     const existingIdx = changeLog.findIndex(c => c.type === 'tag' && String(c.id) === String(editingWayId));
     if (existingIdx >= 0) changeLog.splice(existingIdx, 1);
-    changeLog.push({ type: 'tag', id: editingWayId, category: cat, label: lbl });
+    changeLog.push({ type: 'tag', id: editingWayId, category: cat, label: lbl, tags: { ...tags } });
     await _reloadWay(editingWayId);
     setStatus(`Tags saved for way ${editingWayId}`, 'text-success');
     renderChangesPanel();
@@ -904,7 +901,7 @@ const CHANGE_TYPES = {
     tag: {
         label: 'tag edit', undo: e => undoTagOverride(e.id),
         redo: (f, e, ann) => {
-            const tags = ann.tag_overrides?.[String(e.id)] || {};
+            const tags = e.tags || ann.tag_overrides?.[String(e.id)] || {};
             return () => api('PUT', `/api/ways/${e.id}/tags`, {
                 query: { file: f }, body: { tags, category: e.category, label: e.label }, readOnlyMsg: 'Editing',
             });
@@ -959,10 +956,11 @@ async function undoLastChange() {
 }
 
 async function redoLastChange() {
-    const r = redoStack.pop();
-    if (!currentFile || !r) { setStatus('Nothing to redo', 'text-secondary'); return; }
+    if (!currentFile || !redoStack.length) { setStatus('Nothing to redo', 'text-secondary'); return; }
+    const r = redoStack[redoStack.length - 1];
     const res = await r.run();
-    if (!res.ok) { setStatus('Redo failed', 'text-danger'); return; }
+    if (!res || !res.ok) { setStatus('Redo failed', 'text-danger'); return; }
+    redoStack.pop();
     if (r.type === 'way') {
         // The segments endpoint still returns deleted ways, so drop the layer
         // by hand like deleteCurrentWay does.
@@ -1007,13 +1005,18 @@ function showAnnProps(ann) {
     const propRows = Object.entries(props)
         .map(([k, v]) => `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v))}</td></tr>`)
         .join('') || '<tr><td colspan="2" style="color:#6c7a9c;font-style:italic;">No properties</td></tr>';
-    document.getElementById('props-content').innerHTML =
+    const el = document.getElementById('props-content');
+    el.innerHTML =
         `<table><tbody>
        <tr><td>Type</td><td><span class="badge bg-secondary">${escHtml(ann.type || 'obstacle')}</span></td></tr>
        ${propRows}
-     </tbody></table>
-     <button class="btn btn-sm btn-outline-info mt-2" style="font-size:0.72rem;width:100%;"
-             onclick="openAnnEditModal('${ann.id}')">&#9998; Edit Properties</button>`;
+     </tbody></table>`;
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn btn-sm btn-outline-info mt-2';
+    editBtn.style.cssText = 'font-size:0.72rem;width:100%;';
+    editBtn.innerHTML = '&#9998; Edit Properties';
+    editBtn.addEventListener('click', () => openAnnEditModal(ann.id));
+    el.appendChild(editBtn);
 }
 
 function renderAnnotationList() {
@@ -1025,23 +1028,55 @@ function renderAnnotationList() {
     if (!annotations.length && !addedNodeEntries.length || currentAppMode === 'planner') { panel.hidden = true; return; }
     panel.hidden = false;
     count.textContent = `(${annotations.length + addedNodeEntries.length})`;
-    const annHtml = annotations.map(a => `
-    <div class="ann-item">
-      <div>
-        <span>${escHtml(a.type)}</span>
-        <br><span class="ann-id">${a.id.slice(0, 8)}…</span>
-      </div>
-      <div class="d-flex gap-1">
-        <button class="btn btn-sm btn-outline-warning py-0 px-1" style="font-size:0.7rem;"
-                title="Revert geometry to last loaded state" onclick="revertAnnotationGeometry('${a.id}')">&#8634;</button>
-        <button class="btn btn-sm btn-outline-info py-0 px-1" style="font-size:0.7rem;"
-                onclick="openAnnEditModal('${a.id}')">&#9998;</button>
-        <button class="btn btn-sm btn-outline-danger py-0 px-1" style="font-size:0.7rem;"
-                onclick="removeAnnotationById('${a.id}')">&#10005;</button>
-      </div>
-    </div>
-  `).join('');
-    el.innerHTML = annHtml;
+    el.innerHTML = '';
+    annotations.forEach(a => {
+        const item = document.createElement('div');
+        item.className = 'ann-item';
+
+        const info = document.createElement('div');
+        info.innerHTML = `<span>${escHtml(a.type)}</span><br><span class="ann-id">${escHtml(a.id.slice(0, 8))}…</span>`;
+        item.appendChild(info);
+
+        const btnGroup = document.createElement('div');
+        btnGroup.className = 'd-flex gap-1';
+
+        const revBtn = document.createElement('button');
+        revBtn.className = 'btn btn-sm btn-outline-warning py-0 px-1';
+        revBtn.style.fontSize = '0.7rem';
+        revBtn.title = 'Revert geometry to last loaded state';
+        revBtn.setAttribute('aria-label', 'Revert annotation geometry');
+        revBtn.innerHTML = '&#8634;';
+        revBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            revertAnnotationGeometry(a.id);
+        });
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn btn-sm btn-outline-info py-0 px-1';
+        editBtn.style.fontSize = '0.7rem';
+        editBtn.setAttribute('aria-label', 'Edit annotation properties');
+        editBtn.innerHTML = '&#9998;';
+        editBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openAnnEditModal(a.id);
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn btn-sm btn-outline-danger py-0 px-1';
+        delBtn.style.fontSize = '0.7rem';
+        delBtn.setAttribute('aria-label', 'Delete annotation');
+        delBtn.innerHTML = '&#10005;';
+        delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            removeAnnotationById(a.id);
+        });
+
+        btnGroup.appendChild(revBtn);
+        btnGroup.appendChild(editBtn);
+        btnGroup.appendChild(delBtn);
+        item.appendChild(btnGroup);
+        el.appendChild(item);
+    });
     addedNodeEntries.forEach(d => {
         el.appendChild(_buildPanelRow({
             itemClass: 'ann-item',

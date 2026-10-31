@@ -563,21 +563,32 @@ function setupDrawEvents() {
             setTimeout(() => { if (currentMode === 'path') pathLineDraw.enable(); }, 50);
     });
 
-    map.on(L.Draw.Event.DELETED, e => {
+    map.on(L.Draw.Event.DELETED, async e => {
         const toDelete = [];
         e.layers.eachLayer(layer => {
             const annId = layer.options._ann_id;
             if (annId) toDelete.push(annId);
         });
-        Promise.all(
-            toDelete.map(id => api('DELETE', `/api/annotations/${id}`, {
-                query: { file: currentFile }, readOnlyMsg: 'Editing',
-            }))
-        ).then(() => {
+        if (toDelete.length === 0) return;
+        try {
+            const results = await Promise.all(
+                toDelete.map(id => api('DELETE', `/api/annotations/${id}`, {
+                    query: { file: currentFile }, readOnlyMsg: 'Editing',
+                }))
+            );
+            const failed = results.filter(r => !r || !r.ok);
+            if (failed.length > 0) {
+                setStatus('Failed to delete some annotations', 'text-danger');
+                loadMapData(currentFile);
+                return;
+            }
             annotations = annotations.filter(a => !toDelete.includes(a.id));
             renderAnnotationList();
             setStatus(`Deleted ${toDelete.length} annotation(s)`, 'text-success');
-        });
+        } catch (err) {
+            setStatus(`Failed to delete annotations: ${err.message}`, 'text-danger');
+            loadMapData(currentFile);
+        }
     });
 
     // Switch back to view when user cancels delete via Escape

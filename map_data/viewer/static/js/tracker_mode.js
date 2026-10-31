@@ -53,9 +53,9 @@ const trackerMode = (() => {
             document.dispatchEvent(new CustomEvent('robot-position', { detail: { lat: pos.lat, lon: pos.lon } }));
         }
 
-        // Check robot layer visibility
+        // Check robot layer visibility: in tracker mode (enabled === true), the robot stays visible
         const robotCb = document.querySelector('[data-layer="robot"]');
-        if (robotCb && !robotCb.checked) {
+        if (robotCb && !robotCb.checked && !enabled) {
             hideRobot();
             return;
         }

@@ -187,10 +187,14 @@ class PlannerMode {
         // drag handlers, which at telemetry rate would fight with dragging a waypoint.
         start.marker?.setLatLng([pos.lat, pos.lon]);
         start.hit?.setLatLng([pos.lat, pos.lon]);
-        this.hasPlannedPath = false;
+        this._resetPlannedPath();
         this.drawPathLine();
         this.updateUI();
         return true;
+    }
+
+    _resetPlannedPath() {
+        this.hasPlannedPath = false;
     }
 
     toggleStartAtRobot(on) {
@@ -311,9 +315,9 @@ class PlannerMode {
         const div = document.createElement('div');
         div.className = 'd-flex align-items-center gap-2';
         div.innerHTML = `
-            <span class="text-secondary" style="font-size:0.75rem; width:80px; overflow:hidden; text-overflow:ellipsis;">${label}</span>
-            <input type="number" class="form-control form-control-sm bg-dark text-light border-secondary ${className}" 
-                          data-type="${label}" value="${value}" step="0.05" min="0" max="1" style="font-size:0.7rem; height:24px;">
+            <span class="text-secondary" style="font-size:0.75rem; width:80px; overflow:hidden; text-overflow:ellipsis;">${escHtml(label)}</span>
+            <input type="number" class="form-control form-control-sm bg-dark text-light border-secondary ${escHtml(className)}" 
+                          data-type="${escHtml(label)}" value="${escHtml(String(value))}" step="0.05" min="0" max="1" style="font-size:0.7rem; height:24px;">
         `;
         return div;
     }
@@ -442,11 +446,9 @@ class PlannerMode {
     addPoint(lat, lon) {
         const point = { lat, lon, marker: null };
         this.points.push(point);
+        this._resetPlannedPath();
         this.redraw();
         this.updateUI();
-        // Reset path state if we just added a point and we are in graph mode
-        // (the server will return a path when replan is clicked)
-        this.hasPlannedPath = false;
     }
 
     redraw() {
@@ -552,6 +554,7 @@ class PlannerMode {
                 }
             }
             this.points.splice(bestIdx, 0, { lat: e.latlng.lat, lon: e.latlng.lng, marker: null });
+            this._resetPlannedPath();
             this.redraw();
             this.updateUI();
         });
@@ -563,7 +566,7 @@ class PlannerMode {
         p.marker.setLatLng(e.latlng);
         p.lat = e.latlng.lat;
         p.lon = e.latlng.lng;
-        this.hasPlannedPath = false;
+        this._resetPlannedPath();
         this.drawPathLine();
     }
 
@@ -574,6 +577,7 @@ class PlannerMode {
         this.lastDragEndTime = Date.now();
         map.dragging.enable();
         this.redraw();
+        this.updateUI();
     }
 
     clearMarkers() {
@@ -618,7 +622,7 @@ class PlannerMode {
         this.points = [];
         if (this.pathPolyline) map.removeLayer(this.pathPolyline);
         this.pathPolyline = null;
-        this.hasPlannedPath = false;
+        this._resetPlannedPath();
         if (geoLayers.costGrid) {
             map.removeLayer(geoLayers.costGrid);
             geoLayers.costGrid = null;
@@ -636,6 +640,7 @@ class PlannerMode {
         const start = this.points[0];
         const end = this.points[this.points.length - 1];
         this.points = [start, end];
+        this._resetPlannedPath();
         this.redraw();
         this.updateUI();
         setStatus('Middle points cleared', 'text-info');
@@ -785,7 +790,8 @@ class PlannerMode {
                 if (data.status === 'cancelled') {
                     setStatus('Replanning cancelled', 'text-info');
                 } else {
-                    setStatus('Replanning failed: path not found', 'text-danger');
+                    const reason = data.reason ? `: ${data.reason}` : ': path not found';
+                    setStatus(`Replanning failed${reason}`, 'text-danger');
                 }
             } else if (data.retrieveNum === -1) {
                 setStatus('Path is already optimal', 'text-success');
@@ -923,6 +929,7 @@ ${pts}
         showMenu(latlng, [
             ['🗑️ Delete Point', () => {
                 this.points = this.points.filter(p => p !== point);
+                this._resetPlannedPath();
                 this.redraw();
                 this.updateUI();
             }],

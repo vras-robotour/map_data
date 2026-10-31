@@ -55,6 +55,9 @@ function renderAnnotationLayer() {
         if (!cb.checked) map.removeLayer(drawnItems);
         else if (!map.hasLayer(drawnItems)) drawnItems.addTo(map);
     }
+    if (typeof currentMode !== 'undefined' && currentMode === 'edit' && typeof enableAnnotationEditMode === 'function') {
+        enableAnnotationEditMode();
+    }
 }
 
 function filterLayers(query) {
