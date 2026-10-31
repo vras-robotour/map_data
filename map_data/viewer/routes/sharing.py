@@ -146,8 +146,9 @@ class WormholeManager:
         Reads the subprocess's output until the ``"Wormhole code is: ..."``
         line, records it on ``active_transfers[transfer_id]["code"]`` and
         sets its ``"code_ready"`` event (waking up :meth:`get_transfer_code`),
-        then waits (up to 60s) for the process to exit. Always calls
-        :meth:`_cleanup_transfer` on exit (success, failure, or exception).
+        then waits (up to 600 s, then kills it) for the process to exit.
+        Always calls :meth:`_cleanup_transfer` on exit (success, failure, or
+        exception).
         """
         transfer_info = self.active_transfers.get(transfer_id)
         if not transfer_info:
@@ -163,7 +164,10 @@ class WormholeManager:
                     break
                 if line.strip():
                     logger.warning("Wormhole output (%s): %s", transfer_id, line.strip())
-            process.wait(timeout=60)
+            process.wait(timeout=600)  # the receiver may take minutes to type the code
+        except subprocess.TimeoutExpired:
+            logger.info("Wormhole transfer %s not received in time, stopping it", transfer_id)
+            process.kill()
         except Exception:
             logger.exception("Error in wormhole thread for %s", transfer_id)
             if process.poll() is None:

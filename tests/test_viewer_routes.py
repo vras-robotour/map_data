@@ -2,13 +2,15 @@ import ast
 import base64
 import io
 import json
+import logging
 import math
 import os
 import shutil
+import subprocess
 import threading
 import time
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from urllib.parse import quote
 
 import cv2
@@ -1583,6 +1585,31 @@ def test_get_transfer_code_wakes_up_on_event_instead_of_polling():
 
     assert code == "1-abc-def"
     assert elapsed < 1.0  # woken by the event, not stuck waiting out the timeout
+
+
+def test_wormhole_waits_long_for_the_receiver_then_kills_quietly(caplog):
+    manager = viewer_sharing.WormholeManager()
+    process = MagicMock()
+    process.stdout = iter(["Wormhole code is: 7-crossover-clockwork\n"])
+    process.wait.side_effect = subprocess.TimeoutExpired("wormhole", 600)
+    process.poll.return_value = None
+    temp_dir = MagicMock()
+    manager.active_transfers["tid"] = {
+        "process": process,
+        "temp_dir": temp_dir,
+        "code": None,
+        "code_ready": threading.Event(),
+    }
+
+    caplog.clear()  # the constructor warns when wormhole isn't installed
+    with caplog.at_level("INFO", logger=viewer_sharing.logger.name):
+        manager._capture_wormhole_code_thread("tid")
+
+    process.wait.assert_called_once_with(timeout=600)
+    process.kill.assert_called_once()
+    temp_dir.cleanup.assert_called_once()
+    assert "tid" not in manager.active_transfers
+    assert not [r for r in caplog.records if r.levelno > logging.INFO]
 
 
 # ── non-JSON / empty bodies on JSON endpoints ────────────────────────────────
