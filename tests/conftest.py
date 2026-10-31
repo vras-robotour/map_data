@@ -1,10 +1,15 @@
 """Shared fixtures and canned data for the test suite."""
 
 import json
+import logging
 from unittest.mock import MagicMock, patch
 
 import overpy
 import pytest
+
+# ROS's launch_testing pytest plugin imports launch, whose logger class sets
+# propagate=False, so caplog never sees map_data's loggers.
+logging.setLoggerClass(logging.Logger)
 
 # One footway way between two nodes — the canonical mocked Overpass response.
 # The nodes sit just inside a 50.000-50.001 / 14.000-14.001 bbox so the same

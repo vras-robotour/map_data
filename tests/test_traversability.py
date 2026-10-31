@@ -1,7 +1,5 @@
 """Tag rules deciding which ways the robot may drive on."""
 
-from pathlib import Path
-
 import pytest
 import yaml
 
@@ -12,10 +10,11 @@ from map_data.traversability import (
     load_traversability,
     resolve_traversability_path,
 )
+from map_data.utils.config import config_path
 from map_data.utils.way import Way
 
-PKG = Path(__file__).resolve().parents[1]
-DEFAULT_RULES_FILE = PKG / "config" / DEFAULT_CONFIG_NAME
+#: The installed share copy under a sourced ROS workspace, else the source tree's.
+DEFAULT_RULES_FILE = config_path(DEFAULT_CONFIG_NAME)
 
 
 def _way(**tags):

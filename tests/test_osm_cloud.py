@@ -4,17 +4,22 @@ import sys
 from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
-# Mock ROS2 modules before importing osm_cloud
-sys.modules["rclpy"] = MagicMock()
-sys.modules["rclpy.node"] = MagicMock()
-sys.modules["rclpy.qos"] = MagicMock()
-sys.modules["geometry_msgs.msg"] = MagicMock()
-sys.modules["rcl_interfaces.msg"] = MagicMock()
-sys.modules["ros2_numpy"] = MagicMock()
-sys.modules["sensor_msgs.msg"] = MagicMock()
-sys.modules["tf2_msgs.msg"] = MagicMock()
-sys.modules["tf2_ros"] = MagicMock()
-sys.modules["visualization_msgs.msg"] = MagicMock()
+# Mock ROS2 modules while importing osm_cloud; restored below so the real-ROS
+# tests (test_launch, test_tracker_node) still see the real rclpy.
+_ROS_STUBS = (
+    "rclpy",
+    "rclpy.node",
+    "rclpy.qos",
+    "geometry_msgs.msg",
+    "rcl_interfaces.msg",
+    "ros2_numpy",
+    "sensor_msgs.msg",
+    "tf2_msgs.msg",
+    "tf2_ros",
+    "visualization_msgs.msg",
+)
+_REAL_MODULES = {name: sys.modules.get(name) for name in _ROS_STUBS}
+sys.modules.update({name: MagicMock() for name in _ROS_STUBS})
 
 # ── Fake rclpy.node.Node ────────────────────────────────────────────────────
 #
@@ -96,6 +101,12 @@ from map_data.osm_cloud import (  # noqa: E402
     transform_points,
 )
 from map_data.utils.way import Way  # noqa: E402
+
+for _name, _module in _REAL_MODULES.items():
+    if _module is None:
+        del sys.modules[_name]
+    else:
+        sys.modules[_name] = _module
 
 # ── create_grid ───────────────────────────────────────────────────────────────
 

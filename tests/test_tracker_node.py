@@ -16,7 +16,6 @@ TOPICS = [s.name for s in SETTINGS if s.name.endswith("_topic")]
 
 @pytest.fixture
 def make_node():
-    # ros_node's own rclpy: test_osm_cloud replaces sys.modules["rclpy"] with a mock
     rclpy = ros_node.rclpy
     started = not rclpy.ok()
     if started:

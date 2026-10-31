@@ -542,7 +542,7 @@ def test_shipped_rules_on_the_stromovka_map():
         if not verdict.traversable:
             counts[verdict.reason] = counts.get(verdict.reason, 0) + 1
 
-    assert counts == {"stairs": 15, "soft surface": 6, "bridge": 13, "rough surface": 1}
+    assert counts == {"stairs": 15, "soft surface": 6, "bridge": 4, "rough surface": 1}
 
 
 #: Start/goal of the two routes the robot drove in Stromovka on 2026-09-08

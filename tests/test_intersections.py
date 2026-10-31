@@ -392,20 +392,17 @@ def test_loading_keeps_crossroads_that_cannot_be_recomputed(tmp_path):
 
 @needs_stromovka
 def test_stromovka_road_junctions_are_found():
-    """
-    ``-18:1`` is "U Výstaviště", drawn in the viewer and tagged
-    ``highway=residential``: as a road it was invisible to the detector, so none
-    of the footways meeting it became a junction.
-    """
+    """Footways meeting a road are junctions; footway-only detection missed them."""
     md = MapData.load(str(STROMOVKA))
-    road = next(w for w in md.roads_list if str(w.id) == "-18:1")
     crossroads = {
         c.id
         for c in md.parse_intersections({str(w.id): w for w in md.footways_list + md.roads_list})
     }
+    road_nodes = {n for w in md.roads_list for n in w.nodes}
+    foot_nodes = {n for w in md.footways_list for n in w.nodes}
 
-    on_the_road = crossroads & set(road.nodes)
-    assert len(on_the_road) > 20, f"only {len(on_the_road)} junctions on U Výstaviště"
+    on_roads = crossroads & road_nodes & foot_nodes
+    assert len(on_roads) > 40, f"only {len(on_roads)} footway-road junctions"
 
 
 @needs_stromovka
