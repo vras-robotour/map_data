@@ -8,6 +8,7 @@ package_name = "map_data"
 # carries the ROS/ament-specific metadata (data_files, entry points).
 setup(
     name=package_name,
+    python_requires=">=3.12",
     packages=find_packages(exclude=["tests"]),
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
@@ -25,7 +26,7 @@ setup(
             [
                 str(p)
                 for pat in ("*.gpx", "*.mapdata", "*.annotations.json")
-                for p in Path("data").glob(pat)
+                for p in Path("demo").glob(pat)
             ],
         ),
         (
@@ -43,8 +44,10 @@ setup(
     zip_safe=False,
     maintainer="vlkjan6",
     maintainer_email="vlkjan6@fel.cvut.cz",
-    description="ROS2 package for downloading, parsing, and visualizing OSM map data with\
-                 integrated A* and RRT* path planners.",
+    description=(
+        "ROS2 package for downloading, parsing, and visualizing OSM map data "
+        "with integrated A* and RRT* path planners."
+    ),
     license="BSD-3-Clause",
     entry_points={
         "console_scripts": [
