@@ -9,18 +9,19 @@ venv/
 .mypy_cache/
 .coverage
 htmlcov/
-.python-version
-uv.lock
 
 # Generated data
-*.png
 paths/*
+/*.png
 *.mapdata
 *.annotations.json
 site
 _demo_out/
 graphify-out/
 build/
+
+# Tools
+.claude/
 
 # Local working datasets (keep the directory, not its contents)
 data/*
