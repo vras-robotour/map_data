@@ -261,12 +261,12 @@ class RRTStar:
         _, best_idx = self._kdtree.query(point)
         best_d2 = float(((self._nodes_buf[best_idx] - point) ** 2).sum())
 
-        # Linear scan over nodes added since the last rebuild
-        for i in range(self._kdtree_n, n):
-            d2 = float(((self._nodes_buf[i] - point) ** 2).sum())
-            if d2 < best_d2:
-                best_d2 = d2
-                best_idx = i
+        # Linear scan over nodes added since the last rebuild; the first closest one wins.
+        if n > self._kdtree_n:
+            d2 = ((self._nodes_buf[self._kdtree_n : n] - point) ** 2).sum(axis=1)
+            i = int(np.argmin(d2))
+            if d2[i] < best_d2:
+                best_idx = self._kdtree_n + i
 
         return int(best_idx)
 
@@ -294,12 +294,8 @@ class RRTStar:
         result: list[int] = list(self._kdtree.query_ball_point(new_point, radius))  # type: ignore[union-attr]
 
         # Linear scan over nodes added since the last rebuild, excluding new_point itself
-        for i in range(self._kdtree_n, n):
-            if i == new_idx:
-                continue
-            d2 = float(((self._nodes_buf[i] - new_point) ** 2).sum())
-            if d2 < r2:
-                result.append(i)
+        d2 = ((self._nodes_buf[self._kdtree_n : new_idx] - new_point) ** 2).sum(axis=1)
+        result.extend((self._kdtree_n + np.flatnonzero(d2 < r2)).tolist())
 
         return result
 
