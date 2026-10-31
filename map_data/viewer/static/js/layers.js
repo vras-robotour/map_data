@@ -48,6 +48,7 @@ function addAnnotationToLayer(ann) {
 }
 
 function renderAnnotationLayer() {
+    if (currentMode === 'edit') disableAnnotationEditMode(); // unbind handles from the layers being dropped
     drawnItems.clearLayers();
     annotations.forEach(addAnnotationToLayer);
     const cb = document.querySelector(`[data-layer="annotation"]`);

@@ -1135,16 +1135,7 @@ async function revertAnnotationGeometry(id) {
         return;
     }
     ann.geometry = structuredClone(baseline);
-    if (editSelectedLayer && editSelectedLayer.options._ann_id === id) {
-        if (editSelectedLayer.editing) editSelectedLayer.editing.disable();
-        editSelectedLayer = null;
-    }
     renderAnnotationLayer();
-    if (currentMode === 'edit') {
-        // Re-attach drag handlers to the rebuilt annotation layers
-        disableAnnotationEditMode();
-        enableAnnotationEditMode();
-    }
     renderAnnotationList();
     setStatus('Annotation geometry reverted', 'text-success');
 }
