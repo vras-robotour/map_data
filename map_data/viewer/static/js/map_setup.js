@@ -269,10 +269,6 @@ async function initApp() {
         const k = e.key.toLowerCase();
         if ((e.ctrlKey || e.metaKey) && !e.altKey && (k === 'z' || (k === 'y' && !e.shiftKey))) {
             if (currentAppMode !== 'viewer' || document.querySelector('.modal.show')) return;
-            if (STATIC_BASE) {
-                setStatus('Editing is disabled in the static demo', 'text-warning');
-                return;
-            }
             e.preventDefault();
             runUndoRedo(k === 'z' && !e.shiftKey ? undoLastChange : redoLastChange);
             return;
@@ -282,13 +278,7 @@ async function initApp() {
 
         const keyMode = { a: 'add', d: 'delete', f: 'fetch', p: 'path' }[k];
         if (keyMode) {
-            if (currentAppMode === 'viewer') {
-                if (STATIC_BASE) {
-                    setStatus('Editing is disabled in the static demo', 'text-warning');
-                    return;
-                }
-                setMode(keyMode);
-            }
+            if (currentAppMode === 'viewer') setMode(keyMode);
             return;
         }
 

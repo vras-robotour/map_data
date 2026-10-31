@@ -517,8 +517,9 @@ async function _refreshAnnotationsState() {
     renderHiddenPanel();
 }
 
+// Highlights and shows the visible layer for `wayId`; returns it, or null.
 function _reselectFeature(wayId) {
-    for (const cat of ['road', 'footway', 'barrier']) {
+    for (const cat of ['road', 'footway', 'barrier', 'crossroad']) {
         const catLayer = geoLayers[cat];
         if (!catLayer) continue;
         let found = null;
@@ -526,8 +527,8 @@ function _reselectFeature(wayId) {
         if (found) {
             _highlight(found, cat);
             showProps(found._featureRef.properties, found._featureRef);
-            return true;
+            return found;
         }
     }
-    return false;
+    return null;
 }

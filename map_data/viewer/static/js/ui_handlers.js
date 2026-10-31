@@ -658,17 +658,10 @@ async function showWay(wayId) {
 
 function focusFeatureById(wayId) {
     // Search visible layers first
-    for (const cat of ['road', 'footway', 'barrier', 'crossroad']) {
-        const catLayer = geoLayers[cat];
-        if (!catLayer) continue;
-        let found = null;
-        catLayer.eachLayer(l => { if (String(l._featureId) === String(wayId)) found = l; });
-        if (found) {
-            _highlight(found, cat);
-            showProps(found._featureRef.properties, found._featureRef);
-            try { map.fitBounds(found.getBounds(), { maxZoom: 18, padding: [40, 40] }); } catch (_) { }
-            return;
-        }
+    const shown = _reselectFeature(wayId);
+    if (shown) {
+        try { map.fitBounds(shown.getBounds(), { maxZoom: 18, padding: [40, 40] }); } catch (_) { }
+        return;
     }
     // Search hidden layers still tracked in subtypeLayers
     for (const cat of ['road', 'footway', 'barrier']) {
