@@ -203,6 +203,7 @@ function updateWayWithSegments(originalWayId, segments) {
             }
         }).eachLayer(l => l.addTo(layerGroup)); // Add individual layers, not the group
     });
+    filterLayers(document.getElementById('feature-search')?.value || '');
     return firstLayer;
 }
 
