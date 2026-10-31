@@ -65,8 +65,6 @@ def parse_osm_ways(
         # A closed linear barrier is a ring, not the area it encloses.
         is_ring = coords[0] == coords[-1]
         is_area = is_ring and (way.tags.get("area") == "yes" or not _is_linear_barrier(way.tags))
-        if is_ring and not is_area:
-            coords = coords[:-1]
         # Skip, not raise: shapely needs 2 coordinates for a LineString and 4
         # (3 distinct + the closing one) for a Polygon.
         min_coords = 4 if is_area else 2

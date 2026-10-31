@@ -49,7 +49,7 @@ map_data_plan -f coords.mapdata -p 50.1038,14.4294 -p 50.1050,14.4250 -p 50.1067
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-h, --help` | | Show help message and exit |
-| `-f FILE, --file FILE` | *required* | `.mapdata` file path or filename in `data/` |
+| `-f FILE, --file FILE` | *required* | `.mapdata` file path or filename in `data/` (or the source checkout's `demo/`) |
 | `--annotations auto\|none\|FILE` | `auto` | Annotation store to merge: `auto` (`<file>.annotations.json`), `none`, or explicit file |
 | `--start START` | | Start coordinates as `lat,lon` |
 | `--goal GOAL` | | Goal coordinates as `lat,lon` or `geo:lat,lon` |
@@ -109,7 +109,7 @@ allowing dynamic updates via `ros2 param set`.
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `mapdata_file` | `""` | Default `.mapdata` filename or absolute path |
-| `data_dir` | package share `data` | Directory where bare `.mapdata` filenames are resolved |
+| `data_dir` | package share `data` | Directory where bare `.mapdata` filenames are resolved (then the package `demo/`) |
 | `annotations` | `auto` | Annotation store merged into the map: `auto`, `none`, or file path |
 | `exclude_highway` | `["steps"]` | Non-routable highway types excluded from graph and map |
 | `traversability_file` | `""` | Tag rule file (`""` = package `config/traversability.yaml`). [Traversability rules warning](#traversability-rules) |

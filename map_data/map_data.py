@@ -31,7 +31,6 @@ logger = logging.getLogger(__name__)
 
 _DEFAULTS = load_config("planner_defaults.yaml")
 GRID_MARGIN: float = _DEFAULTS.get("grid_margin", 150)
-BBOX_LEN = 4
 # geometric_intersections: endpoint-to-way distance (m) that still counts as
 # touching, and buffer radius (m) of the resulting crossroad polygons.
 TOUCH_TOLERANCE = 1.0
@@ -163,12 +162,14 @@ class MapData:
             (self.max_lat, self.min_long),
             (self.max_lat, self.max_long),
         ]
+        # Band letters only label latitude; the projection changes with the zone
+        # number and hemisphere.
         zones = set()
         for lat, lon in corners:
-            _, _, zn, zl = utm.from_latlon(lat, lon)
-            zones.add((zn, zl[-1]))
+            _, _, zn, _ = utm.from_latlon(lat, lon)
+            zones.add((zn, "N" if lat >= 0 else "S"))
         if len(zones) > 1:
-            zone_strs = ", ".join(f"{zn}{zl}" for zn, zl in sorted(zones))
+            zone_strs = ", ".join(f"{zn}{hemi}" for zn, hemi in sorted(zones))
             logger.warning(
                 "Waypoints span multiple UTM zones (%s). Geometry near zone boundaries "
                 "may be distorted. Consider splitting the area into smaller regions.",
@@ -207,7 +208,6 @@ class MapData:
         if not path:
             return
         cache_data = {
-            "bbox": [self.min_lat, self.min_long, self.max_lat, self.max_long],
             "created": time.time(),
             "query_hash": self._osm_query_hash(),
             "raw": raw,
@@ -227,15 +227,6 @@ class MapData:
             with path.open(encoding="utf-8") as f:
                 cache_data = json.load(f)
 
-            stored_bbox = cache_data.get("bbox")
-            current_bbox = [self.min_lat, self.min_long, self.max_lat, self.max_long]
-            if not stored_bbox or len(stored_bbox) != BBOX_LEN:
-                return None
-
-            # 1e-6 degree tolerance (~11cm at equator)
-            if not np.allclose(stored_bbox, current_bbox, atol=1e-6):
-                logger.info("OSM cache found but bounding box has changed. Re-querying.")
-                return None
             if cache_data.get("query_hash") != self._osm_query_hash():
                 logger.info("OSM cache found but the query has changed. Re-querying.")
                 return None

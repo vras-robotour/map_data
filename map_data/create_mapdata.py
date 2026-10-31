@@ -2,10 +2,9 @@
 
 import argparse
 import logging
-from pathlib import Path
 
 import map_data.map_data as md
-from map_data.utils.config import package_share, setup_logging
+from map_data.utils.config import resolve_data_file, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -17,15 +16,10 @@ def process_map_data(file_name: str, *, download: bool, use_cache: bool = False)
     *file_name* is a path, or a name in the package's ``data/`` directory or the
     bundled ``demo/`` (a source checkout; an install copies the demo into ``data/``).
     """
-    p = Path(file_name)
-    if p.exists():
-        full_path = p.resolve()
-    else:
-        candidates = [package_share(d) / file_name for d in ("data", "demo")]
-        full_path = next((c for c in candidates if c.exists()), candidates[0])
-        if not full_path.exists():
-            logger.error("File '%s' not found", file_name)
-            raise SystemExit(1)
+    full_path = resolve_data_file(file_name)
+    if full_path is None:
+        logger.error("File '%s' not found", file_name)
+        raise SystemExit(1)
 
     try:
         if download:
@@ -38,7 +32,7 @@ def process_map_data(file_name: str, *, download: bool, use_cache: bool = False)
         else:
             mapdata_path = str(full_path.with_suffix(".mapdata"))
             map_data = md.MapData.load(mapdata_path)
-            map_data.save()
+            map_data.save(mapdata_path)
         logger.info("Successfully processed map data for %s", file_name)
     except Exception as e:
         logger.exception("Error processing map data")

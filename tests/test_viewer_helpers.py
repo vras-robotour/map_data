@@ -6,7 +6,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 import utm
-from shapely.geometry import LineString, MultiPolygon, Polygon
+from shapely.geometry import LineString, MultiPolygon, Point, Polygon
 
 from map_data.edits import (
     AnnotationStoreError,
@@ -204,6 +204,16 @@ def test_rebuild_way_without_nodes_basic():
     assert len(result.nodes) == 3
 
 
+def test_rebuild_way_without_nodes_keeps_a_closed_way_closed():
+    coords = [(_E0, _N0), (_E0 + 50, _N0), (_E0 + 50, _N0 + 50), (_E0, _N0 + 50), (_E0, _N0)]
+    way = _make_way(8, [1, 2, 3, 4, 1], coords)
+
+    result = rebuild_way_without_nodes(way, {1}, _ZN, _ZL, None)
+
+    assert result.nodes == [2, 3, 4, 2]
+    assert result.line.is_closed
+
+
 def test_rebuild_way_without_nodes_too_few_nodes():
     way = _make_way(7, [1, 2], [(_E0, _N0), (_E0 + 10, _N0 + 10)])
     result = rebuild_way_without_nodes(way, {2}, _ZN, _ZL, None)
@@ -232,6 +242,29 @@ def test_apply_node_position_overrides_linestring():
     new_coords = list(result.line.coords)
     assert abs(new_coords[0][0] - (_E0 + 50)) < 1.0
     assert abs(new_coords[0][1] - (_N0 + 50)) < 1.0
+
+
+def _closed_fence():
+    square = [(_E0, _N0), (_E0 + 50, _N0), (_E0 + 50, _N0 + 50), (_E0, _N0 + 50)]
+    nodes_cache = {
+        nid: dict(zip(("lat", "lon"), utm.to_latlon(e, n, _ZN, _ZL), strict=True), tags={})
+        for nid, (e, n) in enumerate(square, 1)
+    }
+    line = LineString([*square, square[0]]).buffer(1.0)
+    way = Way(id=5, nodes=[1, 2, 3, 4, 1], line=line, tags={"barrier": "fence"}, in_out="")
+    return way, nodes_cache
+
+
+def test_apply_node_position_overrides_keeps_a_closed_fence_a_ring():
+    way, nodes_cache = _closed_fence()
+    lat, lon = utm.to_latlon(_E0 + 55, _N0, _ZN, _ZL)
+
+    result = apply_node_position_overrides(
+        way, {2: {"lat": lat, "lon": lon}}, _ZN, _ZL, nodes_cache, category="barrier"
+    )
+
+    assert not result.line.covers(Point(_E0 + 25, _N0 + 25))
+    assert result.line.covers(Point(_E0 + 55, _N0))
 
 
 # ── mapdata_to_geojson ────────────────────────────────────────────────────────

@@ -27,6 +27,21 @@ def package_share(subdir: str) -> Path:
         return (Path(__file__).parent / ".." / ".." / subdir).resolve()
 
 
+def resolve_data_file(name: str, data_dir: str | Path | None = None) -> Path | None:
+    """
+    Find the data file *name*, or ``None`` when there is none.
+
+    *name* as a path (absolute, or relative to the cwd), else in *data_dir*
+    (default: the package ``data/``), else in the package ``demo/`` (a source
+    checkout; an install copies the demo into ``data/``).
+    """
+    p = Path(name).expanduser()
+    if p.is_absolute() or p.is_file():
+        return p.resolve() if p.is_file() else None
+    base = Path(data_dir).expanduser() if data_dir else package_share("data")
+    return next((c for c in (base / name, package_share("demo") / name) if c.is_file()), None)
+
+
 def config_path(filename: str) -> Path:
     """Where a config file of the package would live (need not exist)."""
     return package_share("config") / filename

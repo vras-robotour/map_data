@@ -4,7 +4,7 @@ import logging
 import overpy
 import pytest
 from shapely.errors import GEOSException
-from shapely.geometry import LineString, Polygon
+from shapely.geometry import LineString, Point, Polygon
 
 from map_data.map_data import MapData
 from map_data.utils.parsing import (
@@ -146,6 +146,11 @@ def test_parse_osm_ways_closed_barrier_is_a_ring(value):
 
     assert not way.is_area
     assert way.line.geom_type == "LineString"
+    assert way.line.is_closed
+    # The side from the last node back to the first is blocked too.
+    (x0, y0), _, (x2, y2) = way.line.coords[:3]
+    _, _, (barrier,) = separate_ways({113: way}, {"barrier": ["*"]}, {}, {})
+    assert barrier.line.covers(Point((x0 + x2) / 2, (y0 + y2) / 2))
 
 
 def test_parse_osm_ways_populates_nodes_cache():

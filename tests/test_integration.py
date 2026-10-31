@@ -211,6 +211,8 @@ def test_osm_cache_roundtrip(tmp_path):
     loaded = md._load_osm_cache()
 
     assert loaded == _WAYS_JSON
+    # The bbox is part of the hashed query, so it is not stored separately.
+    assert "bbox" not in json.loads((tmp_path / "test.osm_cache.json").read_text())
 
 
 def test_osm_cache_bbox_mismatch_returns_none(tmp_path):
@@ -219,7 +221,7 @@ def test_osm_cache_bbox_mismatch_returns_none(tmp_path):
 
     md._save_osm_cache(_EMPTY_JSON)
 
-    # Shift the stored bounding box by more than the 1e-6 tolerance
+    # A moved bounding box changes the query, hence its hash.
     md.min_lat += 1.0
     result = md._load_osm_cache()
     assert result is None
@@ -272,6 +274,14 @@ def test_mapdata_zone_check_ignores_band_letters():
     md._check_utm_zone_boundary()
 
 
+def test_mapdata_zone_check_ignores_a_latitude_band_boundary(caplog):
+    e, n, zn, zl = utm.from_latlon(48.0, 16.0)  # bands T and U meet at 48°N
+
+    MapData([np.array([[e, n]]), int(zn), zl], coords_type="array")
+
+    assert "multiple UTM zones" not in caplog.text
+
+
 def test_create_mapdata_no_cache_bypasses_the_cache(tmp_path, monkeypatch, mock_overpass_client):
     gpx = tmp_path / "map.gpx"
     gpx.write_text('<gpx><wpt lat="50.0" lon="14.0"/><wpt lat="50.001" lon="14.001"/></gpx>')
@@ -282,6 +292,18 @@ def test_create_mapdata_no_cache_bypasses_the_cache(tmp_path, monkeypatch, mock_
     mock_overpass_client.query_raw.assert_called_once()
 
 
+def test_create_mapdata_resaves_to_the_loaded_file(tmp_path):
+    path = tmp_path / "map.mapdata"
+    _make_md().save(str(path))  # no source GPX: coords_file is None
+    data = json.loads(path.read_text())
+    data["stale"] = True
+    path.write_text(json.dumps(data))
+
+    process_map_data(str(path), download=False)
+
+    assert "stale" not in json.loads(path.read_text())
+
+
 def test_create_mapdata_finds_a_bare_name_in_the_demo_dir(
     tmp_path, monkeypatch, mock_overpass_client
 ):
@@ -289,7 +311,7 @@ def test_create_mapdata_finds_a_bare_name_in_the_demo_dir(
     (tmp_path / "demo").mkdir()
     gpx = tmp_path / "demo" / "map.gpx"
     gpx.write_text('<gpx><wpt lat="50.0" lon="14.0"/><wpt lat="50.001" lon="14.001"/></gpx>')
-    monkeypatch.setattr("map_data.create_mapdata.package_share", lambda d: tmp_path / d)
+    monkeypatch.setattr("map_data.utils.config.package_share", lambda d: tmp_path / d)
     monkeypatch.chdir(tmp_path)
 
     process_map_data("map.gpx", download=True)
