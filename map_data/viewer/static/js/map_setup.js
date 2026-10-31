@@ -127,13 +127,13 @@ async function initApp() {
         if (file) loadMapData(file);
     });
 
-  document.getElementById('clear-btn')?.addEventListener('click', () => {
-    clearMapData();
-  });
+    document.getElementById('clear-btn')?.addEventListener('click', () => {
+        clearMapData();
+    });
 
-  document.getElementById('feature-search')?.addEventListener('input', e => {
-    filterLayers(e.target.value);
-  });
+    document.getElementById('feature-search')?.addEventListener('input', e => {
+        filterLayers(e.target.value);
+    });
 
     // [data-mode]: #gpx-create-btn is styled as a .mode-btn but opens a file picker
     document.querySelectorAll('.mode-btn[data-mode]').forEach(btn => {
