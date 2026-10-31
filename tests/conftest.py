@@ -29,6 +29,15 @@ FOOTWAY_WAYS_JSON = json.dumps(
 EMPTY_OSM_JSON = json.dumps({"version": 0.6, "elements": []})
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _stop_viewer_ros():
+    """Stop the tracker node a viewer test started under ROS; its executor thread aborts exit."""
+    yield
+    from map_data.viewer.app import stop_ros
+
+    stop_ros()
+
+
 @pytest.fixture
 def mock_overpass_client():
     """
