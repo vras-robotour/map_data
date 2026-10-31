@@ -1,12 +1,14 @@
 import json
 import threading
 import types
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 import utm
 from shapely.geometry import LineString, MultiPolygon, Polygon
 
+from map_data.utils import serialization
 from map_data.utils.serialization import atomic_write_json
 from map_data.utils.way import Way
 from map_data.viewer.helpers import (
@@ -108,6 +110,30 @@ def test_atomic_write_json_writes_through_symlink(tmp_path):
     atomic_write_json(str(link), store, indent=2)
     assert link.is_symlink()
     assert json.loads(target.read_text()) == store
+
+
+def test_atomic_write_json_keeps_the_file_mode(tmp_path):
+    path = tmp_path / "ann.json"
+    path.write_text("{}")
+    path.chmod(0o644)
+    atomic_write_json(path, {"a": 1})
+    assert path.stat().st_mode & 0o777 == 0o644
+
+
+def test_atomic_write_json_new_file_gets_the_umask_default(tmp_path):
+    # mkstemp alone would leave 0600.
+    atomic_write_json(tmp_path / "new.json", {})
+    assert (tmp_path / "new.json").stat().st_mode & 0o777 == 0o666 & ~serialization._UMASK
+
+
+def test_atomic_write_json_fsyncs_before_replacing(tmp_path):
+    calls = []
+    with (
+        patch.object(serialization.os, "fsync", side_effect=lambda fd: calls.append("fsync")),
+        patch.object(serialization.os, "replace", side_effect=lambda *a: calls.append("replace")),
+    ):
+        atomic_write_json(tmp_path / "x.json", {})
+    assert calls == ["fsync", "replace"]
 
 
 # ── get_deleted_way_ids ───────────────────────────────────────────────────────

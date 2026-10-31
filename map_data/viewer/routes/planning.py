@@ -35,6 +35,7 @@ from map_data.traversability import (
 )
 from map_data.utils.config import config_path, load_config
 from map_data.utils.parsing import ways_to_shapely
+from map_data.utils.serialization import atomic_write_text
 from map_data.utils.way import NON_ROUTABLE_HIGHWAY_VALUES
 
 from .common import (
@@ -142,7 +143,7 @@ def save_traversability() -> Response:
         abort(400, "Missing traversability")
     _request_rules(body)
     path = _traversability_path()
-    path.write_text(body["traversability"])
+    atomic_write_text(path, body["traversability"])
     return jsonify({"path": str(path)})
 
 

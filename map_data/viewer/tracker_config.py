@@ -21,6 +21,8 @@ from typing import Any
 
 import yaml
 
+from map_data.utils.serialization import atomic_write_text
+
 NODE_NAME = "map_data_tracker"
 DEFAULT_CONFIG_NAME = "tracker.yaml"
 
@@ -345,7 +347,5 @@ def save_tracker_config(path: str | Path, settings: Mapping[str, Any]) -> Path:
         raise TrackerConfigError(f"could not set {', '.join(wrong)} in {target}; edit it by hand")
 
     target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f".{target.name}.tmp")
-    tmp.write_text(new_text)
-    tmp.replace(target)
+    atomic_write_text(target, new_text)
     return target
