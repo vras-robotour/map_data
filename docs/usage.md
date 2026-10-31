@@ -1,42 +1,38 @@
-# General Usage
+# General usage
 
-This page covers the core CLI tools and ROS2 nodes for parsing, visualizing, and publishing map data.
+This page covers the core CLI tools and ROS 2 nodes for parsing, inspecting, and publishing map data.
 
-!!! note "ROS2 requirement"
-    Only `osm_cloud` requires a sourced ROS2 workspace. The `create_mapdata` CLI,
-    the `MapData` class, path planning modules, and the interactive viewer work **standalone**.
+!!! note "ROS 2 requirement"
+    ROS 2 is required for `osm_cloud` and `route_planner`. The `create_mapdata` CLI,
+    `map_data_info`, the `MapData` class, path planning modules, and the interactive viewer
+    (except the Tracker mode) work **standalone**.
 
 ## What gets downloaded
 
-When `create_mapdata` (or `MapData.run_all()`) is called, three concurrent
-[Overpass API](https://overpass-api.de/) queries are sent, covering the bounding box of the
-GPX waypoints:
+When `create_mapdata` (or `MapData.run_all()`) is called, a single Overpass API union query
+is sent covering the bounding box of the GPX waypoints:
 
-| Query | What it fetches |
-|-------|----------------|
-| **Ways** | Every OSM way inside the bounding box, plus every constituent node |
-| **Relations** | Every relation that references at least one of those ways |
-| **Nodes** | Every standalone OSM node inside the bounding box |
+```text
+[out:json][timeout:50];way(bbox)->.w;(.w; .w >; .w <; node(bbox););out;
+```
 
-The downloaded data is then filtered and classified into `roads_list`, `footways_list`, and
+This retrieves:
+
+- Every OSM way intersecting the bounding box.
+- All constituent nodes of those ways.
+- Relations that reference those ways.
+- Standalone nodes inside the bounding box.
+
+The downloaded data is filtered and classified into `roads_list`, `footways_list`, and
 `barriers_list` according to the tag values in the CSV files in `parameters/`. Ways and nodes
-whose tags do not match any configured category are discarded during parsing, not during
-download.
+whose tags do not match any configured category are discarded during parsing.
 
-### Bounding box and margins
+### Bounding box calculation
 
-The query bounding box is the convex hull of the GPX waypoints, expanded outward by
-`osm_margin + reserve_margin` on all sides. With the defaults (`osm_margin = 100 m`,
-`reserve_margin = 50 m`) that is **150 m beyond the outermost waypoint**.
-
-| Margin | Default | Purpose |
-|--------|---------|---------|
-| `osm_margin` | 100 m | Ensures that features near the route boundary — particularly barriers and building footprints — are fully captured, even when their geometry extends a few metres past the last waypoint. |
-| `reserve_margin` | 50 m | Clips the internal UTM bounding box (`min_x/max_x/min_y/max_y`) used by the path planners. The extra buffer prevents the planning grid from touching the download boundary, where data may be incomplete. |
-
-Both values are configurable in `config/planner_defaults.yaml`. Increase `osm_margin` for routes
-near dense urban areas with large building footprints, or decrease it to reduce query time and
-file size for simple open-terrain routes.
+The query bounding box is derived from the minimum and maximum UTM coordinates of the GPX
+waypoints, expanded outward in all directions by `grid_margin` (default `50 m` in
+`config/planner_defaults.yaml`). The four corner coordinates are converted to WGS-84
+latitude/longitude to form the Overpass query bounding box `[min_lat, min_long, max_lat, max_long]`.
 
 ## Inspecting a .mapdata file
 
@@ -67,7 +63,8 @@ Annotations: 3 (manual edits)
 ========================================
 ```
 
-`map_data_info` is available after installing the package (standalone `pip install -e .` or `colcon build`).
+`map_data_info` is available after installing the package (standalone `pip install -e .`,
+`uv sync`, or `colcon build`).
 
 With `--validate`, the tool checks the file for structural issues instead of printing
 statistics: missing metadata fields, ways without geometry, duplicate way IDs, nodes
@@ -80,95 +77,113 @@ map_data_info coords.mapdata --validate
 
 ## Parsing and creating files
 
-`create_mapdata` creates a `.mapdata` file from a `.gpx` or `.yaml` waypoint file, or
-re-parses an existing `.mapdata` with the current tag configuration.
+`create_mapdata` creates a `.mapdata` file from a `.gpx` waypoint file, or re-parses an
+existing `.mapdata` file with current tag configurations.
 
-| Flag | Description |
-|------|-------------|
-| `-d` | Download fresh OSM data from the input file's bounds and parse it |
-| `-f <filename>` | `.gpx` or `.yaml` waypoint file to parse (with `-d`), or `.mapdata` file to re-parse (without `-d`) |
+### Command-line options
 
-!!! tip "YAML waypoint format"
-    Besides `.gpx` files, `create_mapdata` and `MapData` also accept a simple YAML format:
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-h, --help` | | Show help message and exit |
+| `-f FILE, --file FILE` | `buchlovice.gpx` | GPX file name to parse (with `-d`), or `.mapdata` file to re-parse (without `-d`) |
+| `-d, --download` | `false` | Download fresh data from OSM within the waypoint bounds and parse it |
+| `--cache` | | Use the local OSM response cache (30-day expiry; ignored by `--no-cache`) |
+| `--no-cache` | | Bypass cache and refetch fresh data from OSM |
 
-    ```yaml
-    waypoints:
-      - latitude: 50.1234
-        longitude: 14.5678
-        elevation: 200.0   # optional, defaults to 0
-      - latitude: 50.1240
-        longitude: 14.5690
-    ```
+### OSM caching
 
-    Save the file with a `.yaml` extension and use it wherever a `.gpx` file is accepted.
+Downloaded OSM responses are cached locally keyed by the query hash and bounding box.
+If `--cache` is active and a cache entry exists for the exact bounding box and query within
+30 days (`OSM_CACHE_MAX_AGE = 30 days`), `create_mapdata` reuses the cached response without
+querying Overpass again. Pass `--no-cache` to force a network refetch.
+
+### Output file location
+
+When saving, `create_mapdata` writes the `.mapdata` file next to the input GPX file, replacing
+the `.gpx` extension with `.mapdata`.
 
 Download and parse OSM data for a GPX file:
 
 ```bash
 create_mapdata -d -f coords.gpx
-# or, in a sourced ROS2 workspace:
+# or, in a sourced ROS 2 workspace:
 ros2 run map_data create_mapdata -d -f coords.gpx
 ```
 
-This creates `coords.mapdata` in the package data directory.
-
-Re-parse an existing `.mapdata` file (e.g. after editing tag CSVs):
+Re-parse an existing `.mapdata` file (for example after editing tag CSVs):
 
 ```bash
 create_mapdata -f coords.mapdata
 ```
 
-## Publishing a point cloud of footways, roads and intersections
+## Publishing a point cloud of footways, roads, and intersections
 
-`osm_cloud` is a ROS2 node that publishes a `sensor_msgs/PointCloud2` on the `grid`
-topic (cost-aware grid around the footways and/or roads in `highway_types`) and
-optionally publishes intersections as a
-`geometry_msgs/PoseArray` and `visualization_msgs/MarkerArray`.
+`osm_cloud` is a ROS 2 node that publishes a `sensor_msgs/PointCloud2` on the configured
+grid topic (`osm_grid` via launch, or `grid` on the node) with a cost-aware grid around
+traversable ways, and optionally publishes intersections as a `geometry_msgs/PoseArray`
+and `visualization_msgs/MarkerArray`.
 
-### ROS2 parameters
+When started without an input file (`mapdata_file` or `gpx_file`), `osm_cloud` logs an error
+and idles rather than crashing, preventing a tight restart loop under launch respawn. Runtime
+parameter changes via ROS 2 parameters are validated before applying; invalid changes are
+rejected (`SetParametersResult(successful=False)`).
+
+### ROS 2 parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `utm_frame` | `"utm"` | TF frame name for UTM coordinates (`transform_mode` `tf`/`auto`) |
-| `local_frame` | `"local_utm"` | TF frame the grid and intersections are published in (`FP_ENU0` in `osm_grid.yaml`) |
-| `earth_frame` | `"FP_ECEF"` | ECEF TF frame used by `transform_mode: geodetic` |
-| `transform_mode` | `"tf"` | `tf`: look up `utm_frame → local_frame` in TF; `auto`: local frame at the map centre; `geodetic`: UTM → lat/lon → ECEF, then the `earth_frame → local_frame` TF (exact for GNSS/INS stacks; `osm_grid.yaml` sets this) |
-| `mapdata_file` | `None` | Absolute path to a `.mapdata` file |
-| `annotations` | `"auto"` | Annotation store merged into `mapdata_file`, as in `route_planner`: `auto` = `<map>.annotations.json` next to it, `none` = the unedited map, or a path |
-| `exclude_highway` | `["steps"]` | `highway=` values dropped from the map (stairs are not routable, so they get no rings) |
-| `traversability_file` | `""` | Tag rule file deciding which ways the robot may drive on (`""` = the package's `config/traversability.yaml`; see [Traversability rules](planning.md#traversability-rules)). Must be the same file `route_planner` uses. Launch argument: `traversability:=<file>` |
-| `highway_types` | `["footway"]` | Way types the grid is drawn from: `footway`, `road` or both. Keep it equal to `route_planner`'s `highway_types`. Launch argument: `highway_types:=footway,road` |
-| `gpx_file` | `None` | Absolute path to a `.gpx` file (used if no `.mapdata`) |
+| `mapdata_file` | `""` | Absolute path to a `.mapdata` file |
+| `gpx_file` | `""` | Absolute path to a `.gpx` file (used when `mapdata_file` is empty) |
+| `grid_topic` | `grid` | Topic name for the published point cloud (`osm_grid` in `osm_cloud.launch.py`) |
+| `intersections_topic` | `intersections` | Topic name for intersection poses (`PoseArray`) |
+| `intersection_markers_topic` | `intersection_markers` | Topic name for intersection markers (`MarkerArray`) |
+| `local_frame` | `map` | TF frame the grid and intersections are published in (`FP_ENU0` in `osm_grid.yaml`) |
+| `utm_frame` | `utm` | TF frame name for UTM coordinates (`transform_mode` `tf` or `auto`) |
+| `earth_frame` | `FP_ECEF` | ECEF TF frame used by `transform_mode: geodetic` |
+| `transform_mode` | `tf` | Placement mode: `tf` looks up `utm_frame -> local_frame` on `/tf_static`; `auto` calculates the local frame at the map center and broadcasts the static transform; `geodetic` converts UTM -> lat/lon -> ECEF and applies `earth_frame -> local_frame` from `/tf_static` (exact for GNSS/INS stacks; default in `osm_grid.yaml`) |
+| `annotations` | `auto` | Annotation store merged into `mapdata_file`: `auto` = `<map>.annotations.json` next to it, `none` = unedited map, or a file path |
+| `exclude_highway` | `["steps"]` | `highway=` tag values dropped from the map (non-routable, so they receive no intersection rings) |
+| `traversability_file` | `""` | Tag rule file deciding which ways are traversable (`""` = package default `config/traversability.yaml`). [Traversability rules warning](planning.md#traversability-rules). Must match `route_planner`'s file |
+| `highway_types` | `["footway"]` | Way types the grid is drawn from: `footway`, `road`, or both. Must match `route_planner`'s `highway_types` |
 | `save_mapdata` | `false` | Save generated mapdata when loading from a `.gpx` |
-| `max_path_dist` | `1.0` | Max distance (m) at which a grid point receives a cost |
-| `neighbor_cost` | `"linear"` | Cost falloff for cells near ways: `"linear"` = proportional to distance, `"quadratic"` = distance squared, `"zero"` = constant regardless of distance |
-| `grid_res` | `0.25` | Grid point spacing (m) |
-| `grid_max` | `[0.0, 0.0]` | Upper bounds of the local-frame grid (m). `[0, 0]` triggers auto-calc. |
-| `grid_min` | `[0.0, 0.0]` | Lower bounds of the local-frame grid (m). `[0, 0]` triggers auto-calc. |
+| `max_path_dist` | `1.0` | Maximum distance (m) from way centerlines at which grid cells receive a cost |
+| `neighbor_cost` | `linear` | Cost falloff for cells near ways: `linear`, `quadratic`, or `zero` |
+| `grid_res` | `0.25` | Grid resolution / point spacing (m) |
+| `grid_max` | `[0.0, 0.0]` | Upper bounds of the local-frame grid (m); `[0, 0]` enables auto-calculation |
+| `grid_min` | `[0.0, 0.0]` | Lower bounds of the local-frame grid (m); `[0, 0]` enables auto-calculation |
 | `publish_intersections` | `true` | Whether to publish footway intersections |
-| `republish_period` | `0.0` | Publishers are latched and publish once at start-up (and after parameter changes, or when the placement transform changes); set > 0 s to additionally re-publish periodically |
+| `republish_period` | `0.0` | Periodic re-publish interval (s); `0.0` publishes once (latched) and on changes |
 
-The `earth_frame → local_frame` (or `utm_frame → local_frame`) transform is followed for the node's whole life: when it appears late, or moves because the GNSS/INS driver restarted with a new ENU0 origin, the grid and the intersections are rebuilt and re-published. In `geodetic` mode an all-zero transform (a Fixposition unit publishes `FP_ECEF → FP_ENU0` as zeros until it has a fusion fix) is rejected and waited out, and a grid that comes out empty over a map that has ways is logged as an error instead of being published.
+### Static transform placement
+
+`osm_cloud` listens to `/tf_static` for its placement transform rather than subscribing to
+the high-rate `/tf` stream. When the placement transform changes (for example when a GNSS/INS
+driver restarts with a new ENU0 origin), the grid and intersections are rebuilt and re-published
+automatically. In `geodetic` mode, all-zero transforms (such as an uninitialized fusion fix)
+are rejected and waited out.
 
 ### Launching
 
-The recommended way to run the node is via the provided launch file, which also sets
-up the required static transforms and enables intersection publishing by default:
+Run the node via its launch file:
 
 ```bash
 ros2 launch map_data osm_cloud.launch.py \
     mapdata_file:=/path/to/coords.mapdata \
-    grid_topic:=osm_cloud
+    grid_topic:=osm_grid
 ```
 
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `mapdata_path` | package share/data | Directory containing the map file |
-| `mapdata_file` | `stromovka.mapdata` | Map data filename |
-| `gpx_file` | `stromovka.gpx` | GPX fallback filename |
+| `config_file` | `helhest_jr.yaml` | Parameter file in `config/` (or path) with topic configurations |
+| `osm_grid_params` | `osm_grid.yaml` | Parameter file in `config/` (or path) with OSM grid parameters |
+| `mapdata_path` | package share `data` | Directory where bare map filenames are resolved |
+| `mapdata_file` | `""` | Map data filename (resolved in `mapdata_path` or absolute) |
+| `gpx_file` | `""` | GPX fallback filename (resolved in `mapdata_path` or absolute) |
 | `grid_topic` | `osm_grid` | Topic name for the published point cloud |
-| `local_frame` | from yaml | Override the frame the grid/intersections are published in |
-| `utm_frame` | from yaml | Override the UTM frame name |
-| `earth_frame` | from yaml | Override the ECEF frame name (`geodetic` mode) |
-| `transform_mode` | from yaml | Override the placement mode (`tf` / `auto` / `geodetic`) |
-| `annotations` | `auto` | Annotation store merged into the map (`auto` / `none` / path); always forwarded, so it wins over the yaml files |
+| `local_frame` | `""` | Override frame for the grid/intersections (empty = value from `osm_grid_params`) |
+| `utm_frame` | `""` | Override UTM frame name (empty = from yaml) |
+| `earth_frame` | `""` | Override ECEF frame name in `geodetic` mode (empty = from yaml) |
+| `transform_mode` | `""` | Override placement mode: `tf`, `auto`, or `geodetic` (empty = from yaml) |
+| `annotations` | `auto` | Annotation store merged into the map: `auto`, `none`, or file path |
+| `traversability` | `""` | Tag rule file deciding traversable ways (empty = from yaml) |
+| `highway_types` | `""` | Way types drawn into the grid: `footway`, `road`, or `footway,road` (empty = from yaml) |
