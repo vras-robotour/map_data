@@ -26,8 +26,6 @@ function _enforceLayerOrder() {
         const layer = geoLayers[cat];
         if (layer && map.hasLayer(layer)) layer.bringToFront();
     });
-    // Ensure robot is on top
-    trackerMode.showRobot();
     if (map.hasLayer(drawnItems)) drawnItems.bringToFront();
 }
 
