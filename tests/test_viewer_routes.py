@@ -1308,7 +1308,7 @@ def test_create_wormhole_missing_gpx_rejected(app_client):
     with patch.object(viewer_sharing.wormhole_manager, "create_transfer") as mock_create:
         resp = client.post("/api/create_wormhole", json={})
     assert resp.status_code == 400
-    assert resp.get_json()["success"] is False
+    assert resp.get_json() == {"error": "No GPX data provided"}
     mock_create.assert_not_called()
 
 
@@ -1325,15 +1325,15 @@ def test_create_wormhole_code_timeout_cancels_transfer(app_client):
     ):
         resp = client.post("/api/create_wormhole", json={"gpx": "<gpx></gpx>"})
     assert resp.status_code == 500
-    assert resp.get_json()["success"] is False
+    assert resp.get_json() == {"error": "Failed to capture wormhole code in time"}
     mock_cancel.assert_called_once_with("tid-2")
 
 
 def test_cancel_wormhole_unknown_transfer(app_client):
     client, _ = app_client
     resp = client.post("/api/cancel_wormhole", json={"transfer_id": "does-not-exist"})
-    assert resp.status_code == 200
-    assert resp.get_json() == {"success": False, "message": "Invalid or unknown transfer ID"}
+    assert resp.status_code == 404
+    assert resp.get_json() == {"error": "Invalid or unknown transfer ID"}
 
 
 def test_get_transfer_code_wakes_up_on_event_instead_of_polling():
@@ -1367,7 +1367,7 @@ def test_json_endpoints_reject_missing_content_type(app_client, endpoint):
     # No Content-Type header at all.
     resp = client.post(endpoint, data="transfer_id=x")
     assert resp.status_code == 400
-    assert resp.get_json()["success"] is False
+    assert "error" in resp.get_json()
 
 
 @pytest.mark.parametrize(
@@ -1379,7 +1379,7 @@ def test_json_endpoints_reject_empty_json_body(app_client, endpoint):
     # Correct content type but an empty body.
     resp = client.post(endpoint, data="", content_type="application/json")
     assert resp.status_code == 400
-    assert resp.get_json()["success"] is False
+    assert "error" in resp.get_json()
 
 
 def test_cancel_replan_with_transfer_id_succeeds(app_client):
@@ -1396,7 +1396,7 @@ def test_cancel_replan_missing_transfer_id_rejected(app_client):
     with patch.object(viewer_planning, "cancel_replan_backend") as mock_cancel:
         resp = client.post("/api/cancel_replan", json={})
     assert resp.status_code == 400
-    assert resp.get_json()["success"] is False
+    assert "error" in resp.get_json()
     mock_cancel.assert_not_called()
 
 
@@ -1693,3 +1693,33 @@ def test_upload_gpx_rejects_bad_options(app_client):
         data = {"file": (io.BytesIO(b"<gpx/>"), "t.gpx"), "options": options}
         resp = client.post("/api/upload_gpx", data=data, content_type="multipart/form-data")
         assert resp.status_code == 400
+
+
+# ── error contract ───────────────────────────────────────────────────────────
+
+
+def test_errors_are_json(app_client_with_file):
+    client, _, filename = app_client_with_file
+    for resp in (
+        client.get("/api/ways/9999?file=" + filename),  # abort() in a route
+        client.get("/api/mapdata"),  # missing parameter
+        client.get("/api/no_such_endpoint"),  # routing 404
+        client.get(f"/api/qr?lat=x&lon=14&file={filename}"),
+    ):
+        assert resp.status_code in (400, 404)
+        assert resp.is_json
+        assert set(resp.get_json()) == {"error"}
+
+    resp = client.delete("/api/files")
+    assert resp.status_code == 405
+    assert resp.get_json() == {"error": resp.get_json()["error"]}
+    assert "GET" in resp.headers["Allow"]
+
+
+def test_unhandled_exception_is_a_json_500(app_client_with_file):
+    client, _, filename = app_client_with_file
+    client.application.config["PROPAGATE_EXCEPTIONS"] = False  # TESTING re-raises otherwise
+    with patch.object(viewer_files, "mapdata_to_geojson", side_effect=RuntimeError("secret")):
+        resp = client.get(f"/api/mapdata?file={filename}")
+    assert resp.status_code == 500
+    assert "secret" not in resp.get_json()["error"]

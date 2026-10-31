@@ -407,14 +407,17 @@ def cancel_replan_route() -> ResponseReturnValue:
     ResponseReturnValue
         JSON ``{"success": true}`` for any provided ``transfer_id`` (an
         unknown or already finished one is not reported as an error by
-        :func:`~map_data.pathsolver.replan.cancel_replan_backend`);
-        ``{"success": false, "message": ...}`` with status 400 if the
-        request body is not JSON or lacks ``transfer_id``.
+        :func:`~map_data.pathsolver.replan.cancel_replan_backend`).
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if the request body is not JSON or lacks ``transfer_id``.
 
     """
-    transfer_id = (request.get_json(silent=True) or {}).get("transfer_id")
+    transfer_id = _json_object().get("transfer_id")
     if not transfer_id:
-        return jsonify({"success": False, "message": "No transfer_id provided"}), 400
+        abort(400, "No transfer_id provided")
     cancel_replan_backend(transfer_id)
     return jsonify({"success": True})
 

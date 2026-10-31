@@ -13,6 +13,7 @@ from typing import Any
 
 from flask import (
     Response,
+    abort,
     jsonify,
     request,
 )
@@ -21,6 +22,7 @@ from flask.typing import ResponseReturnValue
 from map_data.utils.qr import geo_uri, qr_png, qr_svg
 
 from .common import (
+    _json_object,
     bp,
 )
 
@@ -65,7 +67,7 @@ def get_qr() -> ResponseReturnValue:
     try:
         text, scale, caption = _qr_request()
     except (KeyError, ValueError) as e:
-        return jsonify({"error": f"lat/lon required: {e}"}), 400
+        abort(400, f"lat/lon required: {e}")
     if request.path.endswith(".svg"):
         svg = qr_svg(text, scale=scale, caption=caption)
         return _qr_response(svg, "image/svg+xml", text, ".svg")
@@ -237,27 +239,29 @@ def create_wormhole() -> ResponseReturnValue:
     -------
     Response
         JSON ``{"success": true, "code": ..., "transfer_id": ...}`` on
-        success (status 200); on failure, ``{"success": false,
-        "message": ...}`` with status 400 (missing ``gpx``) or 500
-        (wormhole code not captured in time, or an internal error).
+        success (status 200).
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if ``gpx`` is missing. 500 if the wormhole code is not captured
+        in time, or on an internal error.
 
     """
-    gpx_data = (request.get_json(silent=True) or {}).get("gpx")
+    gpx_data = _json_object().get("gpx")
     if not gpx_data:
-        return jsonify({"success": False, "message": "No GPX data provided"}), 400
+        abort(400, "No GPX data provided")
 
     try:
         transfer_id = wormhole_manager.create_transfer(gpx_data)
         code = wormhole_manager.get_transfer_code(transfer_id, timeout=15)
-        if code:
-            return jsonify({"success": True, "code": code, "transfer_id": transfer_id})
-        wormhole_manager.cancel_transfer(transfer_id)
-        return jsonify(
-            {"success": False, "message": "Failed to capture wormhole code in time"},
-        ), 500
     except Exception:
         logger.exception("Error creating wormhole")
-        return jsonify({"success": False, "message": "Internal server error"}), 500
+        abort(500, "Internal server error")
+    if not code:
+        wormhole_manager.cancel_transfer(transfer_id)
+        abort(500, "Failed to capture wormhole code in time")
+    return jsonify({"success": True, "code": code, "transfer_id": transfer_id})
 
 
 @bp.route("/api/cancel_wormhole", methods=["POST"])
@@ -268,14 +272,19 @@ def cancel_wormhole() -> ResponseReturnValue:
     Returns
     -------
     ResponseReturnValue
-        JSON ``{"success": ..., "message": ...}`` per
-        :meth:`WormholeManager.cancel_transfer`; ``{"success": false,
-        "message": ...}`` with status 400 if the request body is not
-        JSON or lacks ``transfer_id``.
+        JSON ``{"success": true, "message": ...}``.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 if the request body is not JSON or lacks ``transfer_id``. 404 if
+        the transfer is unknown.
 
     """
-    transfer_id = (request.get_json(silent=True) or {}).get("transfer_id")
+    transfer_id = _json_object().get("transfer_id")
     if not transfer_id:
-        return jsonify({"success": False, "message": "No transfer_id provided"}), 400
+        abort(400, "No transfer_id provided")
     success, message = wormhole_manager.cancel_transfer(transfer_id)
-    return jsonify({"success": success, "message": message})
+    if not success:
+        abort(404, message)
+    return jsonify({"success": True, "message": message})

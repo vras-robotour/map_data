@@ -65,6 +65,7 @@ from flask import (
     jsonify,
     request,
 )
+from werkzeug.exceptions import HTTPException
 
 from map_data.annotations import (
     _CAT_FOR_LIST,
@@ -93,6 +94,15 @@ from ..helpers import (
 )
 
 bp = Blueprint("viewer", __name__)
+
+
+@bp.app_errorhandler(HTTPException)
+def _http_error(e: HTTPException) -> Response:
+    """Answer every HTTP error as JSON ``{"error": description}``, the API's one error shape."""
+    resp = e.get_response()  # keeps the status and headers such as Allow
+    resp.set_data(current_app.json.dumps({"error": e.description}))
+    resp.content_type = "application/json"
+    return resp
 
 
 @bp.app_errorhandler(AnnotationStoreError)
