@@ -30,7 +30,7 @@ whose tags do not match any configured category are discarded during parsing.
 ### Bounding box calculation
 
 The query bounding box is derived from the minimum and maximum UTM coordinates of the GPX
-waypoints, expanded outward in all directions by `grid_margin` (default `50 m` in
+waypoints, expanded outward in all directions by `grid_margin` (default `150 m` in
 `config/planner_defaults.yaml`). The four corner coordinates are converted to WGS-84
 latitude/longitude to form the Overpass query bounding box `[min_lat, min_long, max_lat, max_long]`.
 

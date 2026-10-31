@@ -58,10 +58,10 @@ map_data_plan -f coords.mapdata -p 50.1038,14.4294 -p 50.1050,14.4250 -p 50.1067
 | `--ways TYPE [TYPE ...]` | `footway` | Allowed way types: `footway`, `road`, or both (`--ways footway road`) |
 | `--traversability FILE` | package default | Tag rule file determining drivable ways and costs (`config/traversability.yaml`) |
 | `--no-traversability` | `false` | Ignore traversability rules entirely (stairs remain excluded) |
-| `--spacing SPACING` | `0.0` | Maximum metres between output waypoints (`0.0` keeps planner vertices) |
+| `--spacing SPACING` | `0.0` | Maximum meters between output waypoints (`0.0` keeps planner vertices) |
 | `--max-snap-distance DIST` | `100.0` | Graph: reject waypoints farther than this (m) from every allowed way |
-| `--cell-size CELL_SIZE` | `0.25` | Grid: cell resolution in metres |
-| `--inflate-obstacles DIST` | `0.25` | Grid: barrier inflation margin in metres |
+| `--cell-size CELL_SIZE` | `0.25` | Grid: cell resolution in meters |
+| `--inflate-obstacles DIST` | `0.25` | Grid: barrier inflation margin in meters |
 | `--simplify`, `--no-simplify` | `--simplify` | Grid: simplify path vertices using Douglas-Peucker (`--no-simplify` retains all cells) |
 | `--smooth`, `--no-smooth` | `--no-smooth` | Grid: smooth path using gradient-descent optimization |
 | `--save SAVE` | | Write route to GPX file |
@@ -125,7 +125,7 @@ allowing dynamic updates via `ros2 param set`.
 | `fix_max_age` | `10.0` | Maximum age (s) before GPS fix is considered stale |
 | `algorithm` | `graph` | Fallback algorithm (`graph`, `astar`, `rrt`) |
 | `highway_types` | `["footway"]` | Fallback way types (`footway`, `road`, or both) |
-| `spacing` | `3.0` | Fallback waypoint spacing in metres |
+| `spacing` | `3.0` | Fallback waypoint spacing in meters |
 | `max_snap_distance` | `100.0` | Maximum snap distance (m) from start to nearest way |
 | `goal_max_snap_distance` | `30.0` | Maximum snap distance (m) for goal; farther fails with `snap_too_far` |
 | `outside_map_tolerance` | `100.0` | Allowed distance (m) endpoints may lie outside map bounds |
@@ -144,7 +144,7 @@ allowing dynamic updates via `ros2 param set`.
     - `"-"`: disables GPX file output.
     - Explicit filename or path: writes to that path (resolved under `mission_dir` if relative).
 - **`spacing` semantics:**
-    - `spacing > 0`: resamples the path so consecutive waypoints are at most `spacing` metres apart.
+    - `spacing > 0`: resamples the path so consecutive waypoints are at most `spacing` meters apart.
     - `spacing == 0`: uses the node's default spacing (`3.0 m`).
     - Negative spacing (`spacing < 0`, e.g. `-1.0`): preserves raw planner vertices without densification.
 
@@ -258,7 +258,7 @@ same grid as a fallback.
 ## Cost grid
 
 `ReplanPath.fill_grid()` converts OSM map data into a 2-D NumPy array of floating-point costs,
-one value per grid cell representing a `cell_size × cell_size` metre patch.
+one value per grid cell representing a `cell_size × cell_size` meter patch.
 
 **Cell cost assignment:**
 

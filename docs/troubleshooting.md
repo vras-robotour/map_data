@@ -12,7 +12,7 @@ The Overpass API enforces per-IP rate limits. If a request is rejected, `map_dat
 
 ### Query timeout (HTTP 504)
 
-Overpass imposes a default query timeout. Very large bounding boxes (many kilometres across) may exceed it. Reduce the query area by using a shorter GPX route or decreasing `grid_margin` in `config/planner_defaults.yaml`.
+Overpass imposes a default query timeout. Very large bounding boxes (many kilometers across) may exceed it. Reduce the query area by using a shorter GPX route or decreasing `grid_margin` in `config/planner_defaults.yaml`.
 
 ### No features returned
 
@@ -92,7 +92,7 @@ After sourcing, run `ros2 run map_data create_mapdata ...`.
 
 ### `osm_cloud` publishes an empty cloud
 
-A Fixposition unit publishes `FP_ECEF -> FP_ENU0` as all zeros until it has a fusion fix. In `transform_mode: geodetic`, an all-zero transform puts the origin at the center of the Earth (-6378 km altitude), collapsing the map into a metre-wide box.
+A Fixposition unit publishes `FP_ECEF -> FP_ENU0` as all zeros until it has a fusion fix. In `transform_mode: geodetic`, an all-zero transform puts the origin at the center of the Earth (-6378 km altitude), collapsing the map into a meter-wide box.
 
 The node rejects all-zero transforms, waits for a valid transform on `/tf_static`, and logs an error without publishing if the grid is empty while the map contains ways. If you see transform warnings, ensure the GNSS/INS unit has achieved a valid RTK/fusion fix.
 
