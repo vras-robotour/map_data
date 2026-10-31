@@ -31,5 +31,9 @@ data/*
 !demo/*.mapdata
 !demo/*.annotations.json
 
+# Committed test fixture
+!tests/data/*.mapdata
+!tests/data/*.annotations.json
+
 # OS
 .DS_Store

@@ -2,10 +2,10 @@
 
 import copy
 import json
-from pathlib import Path
 
 import pytest
 import utm
+from conftest import STROMOVKA_FIXTURE
 from shapely.geometry import LineString
 
 from map_data.annotations import (
@@ -156,9 +156,6 @@ def test_tag_override_applies_before_traversability(footway_network_mapdata):
 
 # ── excluded way types ─────────────────────────────────────────────────────
 
-#: The Stromovka map used on the robot; not committed (data/*.mapdata is ignored).
-KRALOVSKA = Path(__file__).resolve().parents[1] / "data" / "kralovska_obora.mapdata"
-
 
 def _add_stairway(md, lat0, lon0):
     """
@@ -222,14 +219,13 @@ def test_loader_excludes_stairs_by_default(footway_network_mapdata):
     assert len(kept.footways_list) == 4
 
 
-@pytest.mark.skipif(not KRALOVSKA.is_file(), reason="kralovska_obora.mapdata is not in the repo")
 def test_exclude_ways_on_the_stromovka_map():
-    md = MapData.load(str(KRALOVSKA))
+    md = MapData.load(str(STROMOVKA_FIXTURE))
     n_crossroads = len(md.crossroads_list)
 
     removed = md.apply_traversability(TraversabilityRules().extend({"steps"}))
 
-    assert removed == 15  # the 15 stairways of the Královská obora map
+    assert removed == 7  # the stairways of the fixture
     assert not any(w.tags.get("highway") == "steps" for w in md.footways_list)
     assert len(md.crossroads_list) < n_crossroads
 
@@ -590,14 +586,13 @@ def test_drawn_path_baked_into_an_export_survives_a_split_and_a_new_path(footway
     ]
 
 
-@pytest.mark.skipif(not KRALOVSKA.is_file(), reason="kralovska_obora.mapdata is not in the repo")
 def test_shipped_rules_on_the_stromovka_map():
     """
     The counts the comments in ``config/traversability.yaml`` quote. They are
     what the operator sees in the node log, so a rule that silently stops
     matching (an OSM retag, a typo) shows up here.
     """
-    md = MapData.load(str(KRALOVSKA))
+    md = MapData.load(str(STROMOVKA_FIXTURE))
     rules = load_traversability()
 
     counts: dict[str, int] = {}
@@ -606,11 +601,12 @@ def test_shipped_rules_on_the_stromovka_map():
         if not verdict.traversable:
             counts[verdict.reason] = counts.get(verdict.reason, 0) + 1
 
-    assert counts == {"stairs": 15, "soft surface": 6, "bridge": 4, "rough surface": 1}
+    assert counts == {"stairs": 7, "soft surface": 2, "bridge": 2, "rough surface": 1}
 
 
-#: Start/goal of the two routes the robot drove in Stromovka on 2026-09-08
-#: (first and last point of field_sync/2026-09-08/missions/route_*.gpx).
+#: Start/goal of the first route the robot drove in Stromovka on 2026-09-08, and the start of
+#: the second with a goal inside the fixture (first and last point of
+#: field_sync/2026-09-08/missions/route_*.gpx).
 FIELD_ROUTES = {
     "route_20260908-103357": (
         (50.104521772138874, 14.428430322399514),
@@ -618,7 +614,7 @@ FIELD_ROUTES = {
     ),
     "route_20260908-105547": (
         (50.10674062206266, 14.42576494185599),
-        (50.109685402615185, 14.417962599968284),
+        (50.10518, 14.42189),
     ),
 }
 #: A rule that lengthens a driven route by more than this is not shipped enabled.
@@ -627,7 +623,7 @@ MAX_DETOUR_FACTOR = 1.3
 
 def _plan_field_routes(rules, **kwargs):
     """``{name: length_m}`` for :data:`FIELD_ROUTES` on the Stromovka map."""
-    md, _ = load_mapdata_with_annotations(KRALOVSKA, NO_ANNOTATIONS, traversability=rules)
+    md, _ = load_mapdata_with_annotations(STROMOVKA_FIXTURE, NO_ANNOTATIONS, traversability=rules)
     return {
         name: plan_route(
             md,
@@ -642,10 +638,9 @@ def _plan_field_routes(rules, **kwargs):
     }
 
 
-@pytest.mark.skipif(not KRALOVSKA.is_file(), reason="kralovska_obora.mapdata is not in the repo")
 def test_shipped_rules_keep_the_driven_routes_plannable():
     """
-    The defaults must not cut Stromovka in two. Both 2026-09-08 routes have to
+    The defaults must not cut Stromovka in two. Both field routes have to
     plan, and neither may grow by more than a third against the plain shortest
     path — the reason the ``tunnel`` rule is shipped commented out.
     """
@@ -661,9 +656,6 @@ def test_shipped_rules_keep_the_driven_routes_plannable():
 
 # ── apply_store copies, it does not deep-copy ──────────────────────────────
 
-#: The full Stromovka map with the robot's real annotation store next to it.
-STROMOVKA = Path(__file__).resolve().parents[1] / "data" / "stromovka.mapdata"
-
 
 def _snapshot(md):
     """Everything about *md* the annotation passes could plausibly clobber."""
@@ -678,15 +670,14 @@ def _snapshot(md):
     )
 
 
-@pytest.mark.skipif(not STROMOVKA.is_file(), reason="stromovka.mapdata is not in the repo")
 def test_apply_store_leaves_the_original_map_untouched():
     """
     ``apply_store`` shallow-copies (deep-copying a whole map cost ~370 ms of
     every load), so the caller's ``MapData`` and its ``Way`` objects must come
     out of a merge exactly as they went in.
     """
-    md = MapData.load(str(STROMOVKA))
-    store = load_annotations(str(annotation_path_for(STROMOVKA)))
+    md = MapData.load(str(STROMOVKA_FIXTURE))
+    store = load_annotations(str(annotation_path_for(STROMOVKA_FIXTURE)))
     assert store["deleted_ways"], "expected the shipped store to delete ways"
     # The shipped store has no tag overrides; retag a surviving way so that pass runs too.
     deleted = {str(d["id"]) for d in store["deleted_ways"]}

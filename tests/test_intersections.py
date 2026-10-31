@@ -10,26 +10,16 @@ line inside the corridor instead of a crossing point.
 """
 
 import json
-from pathlib import Path
 
 import numpy as np
-import pytest
 import utm
+from conftest import STROMOVKA_FIXTURE
 from shapely.geometry import LineString
 
 from map_data.annotations import annotation_path_for, load_mapdata_with_annotations
 from map_data.map_data import MapData
 from map_data.traversability import TraversabilityRules
 from map_data.utils.way import Way
-
-#: The full Stromovka map used on the robot; not committed (data/* is ignored).
-STROMOVKA = Path(__file__).resolve().parents[1] / "data" / "stromovka_full.mapdata"
-
-needs_stromovka = pytest.mark.skipif(
-    not STROMOVKA.is_file(),
-    reason="stromovka_full.mapdata is not in the repo",
-)
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -400,10 +390,9 @@ def test_loading_keeps_crossroads_that_cannot_be_recomputed(tmp_path):
 # ── the real map the robot drives ─────────────────────────────────────────────
 
 
-@needs_stromovka
 def test_stromovka_road_junctions_are_found():
     """Footways meeting a road are junctions; footway-only detection missed them."""
-    md = MapData.load(str(STROMOVKA))
+    md = MapData.load(str(STROMOVKA_FIXTURE))
     crossroads = {
         c.id
         for c in md.parse_intersections({str(w.id): w for w in md.footways_list + md.roads_list})
@@ -412,18 +401,16 @@ def test_stromovka_road_junctions_are_found():
     foot_nodes = {n for w in md.footways_list for n in w.nodes}
 
     on_roads = crossroads & road_nodes & foot_nodes
-    assert len(on_roads) > 40, f"only {len(on_roads)} footway-road junctions"
+    assert len(on_roads) > 10, f"only {len(on_roads)} footway-road junctions"
 
 
-@needs_stromovka
 def test_stromovka_has_no_junction_without_a_fork():
     """
     Every crossroad must have more than two directions leaving it. The map has
-    three annotated ways (two of them cycleways) drawn along existing footways
-    and reusing their node ids, which used to make a junction of every node they
-    share.
+    two annotated cycleways drawn along an existing footway and reusing its node
+    ids, which used to make a junction of every node they share.
     """
-    md = MapData.load(str(STROMOVKA))
+    md = MapData.load(str(STROMOVKA_FIXTURE))
     ways = md.footways_list + md.roads_list
     crossroads = md.parse_intersections({str(w.id): w for w in ways})
 
@@ -440,16 +427,15 @@ def test_stromovka_has_no_junction_without_a_fork():
     assert through == [], f"{len(through)} crossroads sit mid-corridor"
 
 
-@needs_stromovka
 def test_stromovka_duplicate_cycleways_make_no_junctions_of_their_own():
     """
     ``-1`` and ``-15`` are two annotated cycleways tracing the same corridor
-    along existing footways, sharing 70 node ids. Two ways through a node
+    along an existing footway, sharing all its node ids. Two ways through a node
     between the same neighbours are one path, so they may not make a junction
     between themselves: every crossroad on that corridor has to be owed to a
     third way that actually branches there.
     """
-    md = MapData.load(str(STROMOVKA))
+    md = MapData.load(str(STROMOVKA_FIXTURE))
     ways = md.footways_list + md.roads_list
     crossroads = md.parse_intersections({str(w.id): w for w in ways})
 

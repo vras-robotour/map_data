@@ -1,0 +1,31 @@
+{
+ "version": 1,
+ "annotations": [],
+ "added_nodes": [
+  {
+   "id": -1,
+   "way_id": 33898716,
+   "after_node_id": 388382563,
+   "lat": 50.103856199999996,
+   "lon": 14.4236779
+  }
+ ],
+ "deleted_ways": [
+  {
+   "id": 143977082,
+   "category": "footway",
+   "label": ""
+  },
+  {
+   "id": 482510596,
+   "category": "footway",
+   "label": ""
+  }
+ ],
+ "deleted_nodes": [],
+ "split_ways": {},
+ "detached_nodes": [],
+ "node_position_overrides": {},
+ "tag_overrides": {},
+ "change_log": []
+}
