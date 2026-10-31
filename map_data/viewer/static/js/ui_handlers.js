@@ -297,13 +297,13 @@ async function loadNodesForEditing(feature, layer) {
     if (geomType === 'LineString') {
         const latlngs = feature.geometry.coordinates.map(c => [c[1], c[0]]);
         osmDragGhost = L.polyline(latlngs, {
-            renderer: L.svg(), color: '#000', weight: 15, opacity: 0,
+            renderer: handleRenderer(), color: '#000', weight: 15, opacity: 0,
             interactive: true, bubblingMouseEvents: false,
         });
     } else if (geomType === 'Polygon') {
         const ring = feature.geometry.coordinates[0].map(c => [c[1], c[0]]);
         osmDragGhost = L.polygon(ring, {
-            renderer: L.svg(), color: '#000', weight: 15, opacity: 0, fillOpacity: 0,
+            renderer: handleRenderer(), color: '#000', weight: 15, opacity: 0, fillOpacity: 0,
             interactive: true, bubblingMouseEvents: false,
         });
     }
