@@ -413,7 +413,7 @@ class RoutePlanner(Node):
             res.success = False
             res.reason = reason
             res.message = message
-            self._publish_status(f"FAILED {reason}: {message!r}")
+            self._publish_status(f"FAILED {reason}: {message}")
             return res
 
         # Never wait for the lock: a blocked callback holds an executor thread, and enough of
@@ -596,7 +596,7 @@ class RoutePlanner(Node):
         if result.success:
             self.get_logger().info(f"Route planned: {result.message}")
         else:
-            self.get_logger().error(f"Route planning failed ({result.reason}): {result.message!r}")
+            self.get_logger().error(f"Route planning failed ({result.reason}): {result.message}")
 
 
 def _transfer_id(handle) -> str:
