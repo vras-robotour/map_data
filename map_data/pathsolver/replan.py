@@ -324,8 +324,6 @@ class ReplanPath:
             goal,
             self.low,
             self.cell_size,
-            # _post_process_path simplifies the whole route once.
-            simplify_path=False,
             grid_cost_weight=self.grid_cost_weight,
         )
 
