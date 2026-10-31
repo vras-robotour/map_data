@@ -114,11 +114,11 @@ Adds a drawn annotation.
 {"type": "obstacle", "geometry": {"type": "Polygon", "coordinates": [[[14.4, 50.07], ...]]}, "properties": {}}
 ```
 
-`geometry` is required. `type` is `"path"` (a drawn way) or anything else, default `"obstacle"`. Returns **201** with the annotation and its uuid4 `id`. **400**: invalid geometry or type.
+`geometry` is required: a `LineString`, `Polygon` or `MultiPolygon`. `type` is `"path"` (a drawn way) or anything else, default `"obstacle"`. Returns **201** with the annotation and its uuid4 `id`. **400**: invalid or unsupported geometry, or invalid type.
 
 ### `PUT /api/annotations/<ann_id>`
 
-Replaces the geometry, and `type`/`properties` when given. Returns the annotation. **404**: unknown ID.
+Replaces the geometry, and `type`/`properties` when given; the body is validated as for `POST`. Returns the annotation. **400**: invalid body. **404**: unknown ID.
 
 ### `DELETE /api/annotations/<ann_id>`
 

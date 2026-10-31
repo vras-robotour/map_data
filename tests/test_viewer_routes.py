@@ -148,11 +148,14 @@ def test_get_annotations_empty(app_client_with_file):
     assert resp.get_json()["annotations"] == []
 
 
+_LINE = {"type": "LineString", "coordinates": [[14.0, 50.0], [14.001, 50.001]]}
+
+
 def test_add_annotation(app_client_with_file):
     client, _, filename = app_client_with_file
     body = {
         "type": "obstacle",
-        "geometry": {"type": "Point", "coordinates": [14.0, 50.0]},
+        "geometry": _LINE,
         "properties": {},
     }
     resp = client.post(
@@ -170,7 +173,7 @@ def test_update_annotation(app_client_with_file):
     client, _, filename = app_client_with_file
     body = {
         "type": "obstacle",
-        "geometry": {"type": "Point", "coordinates": [14.0, 50.0]},
+        "geometry": _LINE,
         "properties": {},
     }
     ann_id = client.post(
@@ -179,21 +182,47 @@ def test_update_annotation(app_client_with_file):
         content_type="application/json",
     ).get_json()["id"]
 
-    update_body = {"geometry": {"type": "Point", "coordinates": [14.001, 50.001]}}
+    moved = {"type": "LineString", "coordinates": [[14.001, 50.001], [14.002, 50.002]]}
+    update_body = {"geometry": moved}
     resp = client.put(
         f"/api/annotations/{ann_id}?file={filename}",
         data=json.dumps(update_body),
         content_type="application/json",
     )
     assert resp.status_code == 200
-    assert resp.get_json()["geometry"]["coordinates"] == [14.001, 50.001]
+    assert resp.get_json()["geometry"] == moved
+
+
+def test_annotation_unsupported_geometry_rejected(app_client_with_file):
+    # The viewer cannot draw points, so a Point must not reach the store.
+    client, _, filename = app_client_with_file
+    point = {"type": "Point", "coordinates": [14.0, 50.0]}
+    resp = client.post(
+        f"/api/annotations?file={filename}",
+        data=json.dumps({"geometry": point}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+    ann_id = client.post(
+        f"/api/annotations?file={filename}",
+        data=json.dumps({"geometry": _LINE}),
+        content_type="application/json",
+    ).get_json()["id"]
+    resp = client.put(
+        f"/api/annotations/{ann_id}?file={filename}",
+        data=json.dumps({"geometry": point}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+    stored = client.get(f"/api/annotations?file={filename}").get_json()["annotations"]
+    assert [a["geometry"] for a in stored] == [_LINE]
 
 
 def test_delete_annotation(app_client_with_file):
     client, _, filename = app_client_with_file
     body = {
         "type": "obstacle",
-        "geometry": {"type": "Point", "coordinates": [14.0, 50.0]},
+        "geometry": _LINE,
         "properties": {},
     }
     ann_id = client.post(
@@ -1774,9 +1803,6 @@ def test_move_rejects_bad_nodes(seeded_store, nodes):
 def test_add_node_rejects_bad_body(seeded_store, body):
     client, filename = seeded_store
     assert client.post(f"/api/way_node?file={filename}&way_id=1", json=body).status_code == 400
-
-
-_LINE = {"type": "LineString", "coordinates": [[14.0, 50.0], [14.001, 50.001]]}
 
 
 @pytest.mark.parametrize(

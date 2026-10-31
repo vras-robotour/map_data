@@ -29,7 +29,8 @@ def _validated_annotation_body(filename: str) -> dict[str, Any]:
 
     The body needs a ``geometry``; ``type`` must be a string and
     ``properties`` an object whose ``width``, if any, is a positive number.
-    The geometry is trial-converted to the map's UTM zone, as
+    The geometry must be a ``LineString``, ``Polygon`` or ``MultiPolygon``
+    and is trial-converted to the map's UTM zone, as
     :func:`~map_data.annotations.merge_annotations` does on every load, so
     one that cannot be converted never reaches the store.
 
@@ -56,10 +57,13 @@ def _validated_annotation_body(filename: str) -> dict[str, Any]:
             abort(400, "'width' must be a positive number")
     md = load_mapdata_cached(str(_mapdata_path(filename)))
     try:
-        geojson_geom_to_utm(body["geometry"], md.zone_number, md.zone_letter)
+        geom = geojson_geom_to_utm(body["geometry"], md.zone_number, md.zone_letter)
     # Any failure here (wrong shape, bad coordinates, too few points) is bad input.
     except Exception:
         abort(400, "Invalid 'geometry'")
+    # None: a type the viewer cannot draw (e.g. Point) and merge would drop.
+    if geom is None:
+        abort(400, "Unsupported 'geometry' type")
     return body
 
 
