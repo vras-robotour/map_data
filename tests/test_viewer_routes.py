@@ -15,6 +15,7 @@ import utm
 from shapely.geometry import LineString
 
 from map_data.map_data import MapData
+from map_data.pathsolver.route import RoutePlanningError
 from map_data.utils.way import Way
 from map_data.viewer.app import ACCESS_TOKEN_COOKIE, MAX_CONTENT_LENGTH, create_app
 from map_data.viewer.cache import _file_signature
@@ -1041,6 +1042,27 @@ def test_create_replan_minimal_grid_request(app_client_with_file):
     for lat, lon in data["newPath"]:
         assert 49.9 < lat < 50.1
         assert 13.9 < lon < 14.1
+
+
+def test_create_replan_defaults_come_from_grid_defaults(app_client_with_file, monkeypatch):
+    client, _, filename = app_client_with_file
+    defaults = {
+        "cell_size": 0.5,
+        "inflate_obstacles": 0.0,
+        "simplify_path": False,
+        "smooth_path": True,
+    }
+    monkeypatch.setattr(viewer_planning, "grid_defaults", lambda: defaults)
+    seen = {}
+
+    def fake_plan_route(md, points, **kwargs):
+        seen.update(kwargs)
+        raise RoutePlanningError("no_path", "stop here")
+
+    monkeypatch.setattr(viewer_planning, "plan_route", fake_plan_route)
+    body = {"points": [[50.0, 14.0], [50.0005, 14.0005]], "file": filename, "algorithm": "rrt"}
+    assert client.post("/api/create_replan", json=body).status_code == 200
+    assert {k: seen[k] for k in defaults} == defaults
 
 
 @pytest.mark.parametrize(
