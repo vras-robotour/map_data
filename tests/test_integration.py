@@ -282,6 +282,18 @@ def test_create_mapdata_no_cache_bypasses_the_cache(tmp_path, monkeypatch, mock_
     mock_overpass_client.query_raw.assert_called_once()
 
 
+def test_create_mapdata_resaves_to_the_loaded_file(tmp_path):
+    path = tmp_path / "map.mapdata"
+    _make_md().save(str(path))  # no source GPX: coords_file is None
+    data = json.loads(path.read_text())
+    data["stale"] = True
+    path.write_text(json.dumps(data))
+
+    process_map_data(str(path), download=False)
+
+    assert "stale" not in json.loads(path.read_text())
+
+
 def test_create_mapdata_finds_a_bare_name_in_the_demo_dir(
     tmp_path, monkeypatch, mock_overpass_client
 ):

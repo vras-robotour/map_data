@@ -38,7 +38,7 @@ def process_map_data(file_name: str, *, download: bool, use_cache: bool = False)
         else:
             mapdata_path = str(full_path.with_suffix(".mapdata"))
             map_data = md.MapData.load(mapdata_path)
-            map_data.save()
+            map_data.save(mapdata_path)
         logger.info("Successfully processed map data for %s", file_name)
     except Exception as e:
         logger.exception("Error processing map data")
