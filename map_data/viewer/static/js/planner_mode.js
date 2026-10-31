@@ -478,7 +478,7 @@ class PlannerMode {
                 fillOpacity: 1,
                 draggable: true,
                 bubblingMouseEvents: false
-            }).addTo(map);
+            });
 
             // Custom drag handling for CircleMarker
             const onWpDown = (e) => {
@@ -493,7 +493,7 @@ class PlannerMode {
             const wpHit = L.circleMarker([p.lat, p.lon], {
                 radius: 14, fillOpacity: 0, opacity: 0,
                 bubblingMouseEvents: false, interactive: true,
-            }).addTo(map);
+            });
             wpHit.on('mousedown', onWpDown);
             this.markerLayer.addLayer(wpHit);
 
@@ -520,8 +520,9 @@ class PlannerMode {
     drawPathLine() {
         if (this.pathPolyline) {
             map.removeLayer(this.pathPolyline);
+            this.pathPolyline = null;
         }
-        if (this.points.length < 2) return;
+        if (!this.active || this.points.length < 2) return;
 
         const algorithm = document.querySelector('input[name="plan-mode"]:checked').value;
         // For graph mode, don't show the straight line if a path hasn't been returned by the server
