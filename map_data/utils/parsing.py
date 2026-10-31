@@ -20,7 +20,22 @@ BUFFER_WIDTHS = _DEFAULTS.get("buffer_widths", {"road": 7, "footway": 3, "barrie
 CLASSIFYING_TAGS = frozenset({"highway", "barrier", "building", "natural", "landuse", "waterway"})
 LINEAR_BARRIER_TAGS = frozenset({"barrier", "natural"})
 LINEAR_BARRIER_VALUES = frozenset(
-    {"fence", "wall", "hedge", "cliff", "city_wall", "retaining_wall", "ditch"}
+    {
+        "fence",
+        "wall",
+        "hedge",
+        "cliff",
+        "city_wall",
+        "retaining_wall",
+        "ditch",
+        "guard_rail",
+        "kerb",
+        "handrail",
+        "cable_barrier",
+        "jersey_barrier",
+        "chain",
+        "rope",
+    }
 )
 
 

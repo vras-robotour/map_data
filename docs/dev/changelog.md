@@ -47,7 +47,7 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - `fetch_area` applies the 25 km² limit to the downloaded box, margin included
 - `create_mapdata` finds its default demo GPX in a source checkout
 - Relation parsing: route relations are no longer merged into one way, relation tags only go to untagged outer members, and self-intersecting outers keep their holes
-- Closed fences, walls and hedges are rings, not filled areas
+- Closed fences, walls, hedges, guard rails, kerbs, handrails, chains, ropes and cable or jersey barriers are rings, not filled areas
 - The map's lat/lon box covers all four UTM corners; the UTM zone check compares zone letters correctly
 - Tag overrides apply before the traversability rules
 - Grid paths no longer cut through an obstacle on the leg from a requested point to the first grid cell

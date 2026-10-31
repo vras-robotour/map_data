@@ -109,7 +109,20 @@ def test_parse_osm_ways_area_polygon():
     assert w.is_area
 
 
-def test_parse_osm_ways_closed_barrier_is_a_ring():
+@pytest.mark.parametrize(
+    "value",
+    [
+        "fence",
+        "guard_rail",
+        "kerb",
+        "handrail",
+        "cable_barrier",
+        "jersey_barrier",
+        "chain",
+        "rope",
+    ],
+)
+def test_parse_osm_ways_closed_barrier_is_a_ring(value):
     data = _api().parse_json(
         json.dumps(
             {
@@ -122,7 +135,7 @@ def test_parse_osm_ways_closed_barrier_is_a_ring():
                         "type": "way",
                         "id": 113,
                         "nodes": [80, 81, 82, 80],
-                        "tags": {"barrier": "fence"},
+                        "tags": {"barrier": value},
                     },
                 ],
             }
