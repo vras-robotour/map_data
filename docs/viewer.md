@@ -63,7 +63,7 @@ Two environment variables provide access control:
 **`MAP_DATA_ACCESS_TOKEN`** can be supplied in three ways:
 
 - Header: `X-Access-Token: <token>` (for automated clients and robots).
-- Query parameter: `http://host:5000/?access_token=<token>`.
+- Query parameter: `http://host:5000/?access_token=<token>`. The viewer sets the cookie and redirects to the same URL without the token.
 - Cookie: `map_data_access_token`, set automatically when authenticating via the query parameter above.
 
 **CSRF protection:** To prevent cross-site request forgery, the cookie alone only
@@ -83,26 +83,21 @@ export MAP_DATA_CORS_ORIGINS=http://192.168.1.50:5000
 map_data_viewer --host 0.0.0.0 --data-dir /path/to/data
 ```
 
-### Tile layer API keys
+### Base layers
 
-The index page reads `THUNDERFOREST_API_KEY` and `SEZNAM_API_KEY` from the environment:
-
-```bash
-export THUNDERFOREST_API_KEY=your_key_here
-export SEZNAM_API_KEY=your_key_here
-map_data_viewer
-```
-
-Both are optional; without them the viewer defaults to standard OpenStreetMap and satellite base layers.
+The layer control (bottom left) switches between OpenStreetMap and Esri satellite imagery; neither needs an API key. The choice is remembered in the browser.
 
 ## Loading map data
 
-The viewer loads files from its data directory:
+The file selector lists the `.mapdata` files in the data directory; opening one needs no network access except for the base layer tiles.
 
-- **`.mapdata`** — pre-parsed map files. Loaded directly without external network requests.
-- **`.gpx`** — GPS tracks. The viewer parses them on load by fetching OSM data for the track bounds.
+New maps come from:
 
-GPX files can also be dragged and dropped directly onto the browser window.
+- **GPX import** (`G`, or the GPX button): uploads a track, downloads the OSM data around it and saves a new `.mapdata` (`/api/upload_gpx`).
+- **Fetch area**: downloads a drawn box of up to 25 km² in the background (`/api/fetch_area`).
+- **Drag and drop**: a `.mapdata` file is uploaded as is; a `.gpx` file builds a new map, or in Planner mode loads its points as waypoints.
+
+`.gpx` files in the data directory are not opened by the viewer.
 
 ## Modes
 
