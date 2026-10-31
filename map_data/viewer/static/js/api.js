@@ -55,7 +55,11 @@ async function fetchAnnotations(filename) {
         catch (_) { return { annotations: [] }; }
     }
     const res = await api('GET', '/api/annotations', { query: { file: filename } });
-    if (!res.ok) return { annotations: [] };
+    if (!res.ok) {
+        // 409: the store was unreadable and moved aside; the map still loads without it.
+        setStatus(`Annotations not loaded: ${await errorText(res)}`, 'text-danger');
+        return { annotations: [] };
+    }
     return await res.json();
 }
 

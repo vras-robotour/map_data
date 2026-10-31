@@ -887,15 +887,12 @@ ${pts}
         setStatus('Creating wormhole...', 'text-warning');
         try {
             const res = await api('POST', '/api/create_wormhole', { body: { gpx } });
+            if (!res.ok) throw new Error(await errorText(res));
             const data = await res.json();
-            if (data.success) {
-                this.currentWormholeId = data.transfer_id;
-                this.showWormholeDialog(data.code);
-            } else {
-                alert('Wormhole failed: ' + data.message);
-            }
+            this.currentWormholeId = data.transfer_id;
+            this.showWormholeDialog(data.code);
         } catch (err) {
-            alert('Error: ' + err.message);
+            setStatus(`Wormhole failed: ${err.message}`, 'text-danger');
         }
     }
 
