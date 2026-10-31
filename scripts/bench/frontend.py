@@ -692,6 +692,7 @@ def run_flows(browser, base, mapname, patches) -> list[str]:
     )
     mid = r.ev("currentNodes.length >> 1")
     before = r.ev(f"[currentNodes[{mid}].lat, currentNodes[{mid}].lon]")
+    nb_before = r.ev(f"[currentNodes[{mid} + 1].lat, currentNodes[{mid} + 1].lon]")
     r.ev(
         f"(() => {{ const n = currentNodes[{mid}]; map.setView([n.lat, n.lon], 18, {{animate: false}}); }})()"
     )
@@ -710,12 +711,44 @@ def run_flows(browser, base, mapname, patches) -> list[str]:
     )
     after = r.ev(f"[currentNodes[{mid}].lat, currentNodes[{mid}].lon]")
     check("edit: node drag moves node + logs change", after != before)
+    nb_after = r.ev(f"[currentNodes[{mid} + 1].lat, currentNodes[{mid} + 1].lon]")
+    check("edit: node drag leaves the neighbour node alone (not a way drag)", nb_after == nb_before)
     p.mouse.move(5, 5)
     p.keyboard.press("Control+z")
     p.wait_for_function(
         "document.getElementById('status').textContent.startsWith('Undid')", timeout=20000
     )
     check("undo reverts move", r.ev("!changeLog.some(c => c.type === 'move')"))
+    p.wait_for_timeout(300)
+
+    # midpoint handle: drag it to insert a node, then undo the insertion
+    pt = r.hit(longway)
+    p.mouse.click(pt["x"], pt["y"])
+    p.wait_for_function("midpointMarkers.length > 3", timeout=10000)
+    n_add = r.ev("changeLog.filter(c => c.type === 'add_node').length")
+    mp = r.ev(
+        "(() => { const m = midpointMarkers[2].getLatLng(); map.setView(m, 18, {animate: false});"
+        " const q = map.latLngToContainerPoint(m); const b = map.getContainer().getBoundingClientRect();"
+        " return {x: b.left + q.x, y: b.top + q.y}; })()"
+    )
+    p.mouse.move(mp["x"], mp["y"])
+    p.mouse.down()
+    for i in range(1, 9):
+        p.mouse.move(mp["x"] + i * 3, mp["y"] + i * 3)
+    p.mouse.up()
+    p.wait_for_function(
+        f"changeLog.filter(c => c.type === 'add_node').length > {n_add}", timeout=15000
+    )
+    check("edit: midpoint drag inserts a node", True)
+    p.wait_for_function(
+        "document.getElementById('status').textContent === 'Node added'", timeout=15000
+    )
+    p.mouse.move(5, 5)
+    p.keyboard.press("Control+z")
+    p.wait_for_function(
+        f"changeLog.filter(c => c.type === 'add_node').length === {n_add}", timeout=20000
+    )
+    check("undo node insertion", True)
     p.wait_for_timeout(300)
 
     # split at an inner node of an editable way, then undo the split
@@ -765,6 +798,22 @@ def run_flows(browser, base, mapname, patches) -> list[str]:
         p.mouse.move(cpt["x"] + i * 4, cpt["y"] + i * 2)
     p.mouse.up()
     p.wait_for_timeout(500)
+    # vertex handle of the annotation (a shared-renderer handle): drag it
+    g0 = r.ev("JSON.stringify(annotations.find(a => a.id === window.__annId).geometry)")
+    vp = r.ev(
+        "(() => { const m = annVertexMarkers[0].getLatLng(); const q = map.latLngToContainerPoint(m);"
+        " const b = map.getContainer().getBoundingClientRect(); return {x: b.left + q.x, y: b.top + q.y}; })()"
+    )
+    p.mouse.move(vp["x"], vp["y"])
+    p.mouse.down()
+    for i in range(1, 9):
+        p.mouse.move(vp["x"] - i * 3, vp["y"] - i * 3)
+    p.mouse.up()
+    p.wait_for_function(
+        f"JSON.stringify(annotations.find(a => a.id === window.__annId).geometry) !== {json.dumps(g0)}",
+        timeout=10000,
+    )
+    check("annotation vertex drag saved", True)
     p.click('.mode-btn[data-mode="view"]')  # commits the drag
     p.wait_for_function(
         f"JSON.stringify(annotations.find(a => a.id === window.__annId).geometry) !== {json.dumps(old_geom)}",
