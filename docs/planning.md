@@ -309,3 +309,40 @@ value.
 | Mapped pedestrian or road network, robot must stay on ways | Graph planning |
 | Urban route with well-defined barrier obstacles | Grid A\* |
 | Large open area, sparse obstacles | RRT\* |
+
+
+---
+
+## Using astar_search directly
+
+`astar_search` is the generic A\* implementation that powers both `GraphPlanner` and
+`grid_astar`. You can use it directly to build a custom planner for any graph-like problem.
+
+```python
+from map_data.pathsolver.astar import astar_search
+
+
+# Example: plan over a simple weighted grid
+def neighbors(node):
+    r, c = node
+    candidates = [(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)]
+    return [(n, 1.0) for n in candidates if 0 <= n[0] < 10 and 0 <= n[1] < 10]
+
+
+def heuristic(node):
+    goal = (9, 9)
+    return abs(node[0] - goal[0]) + abs(node[1] - goal[1])
+
+
+path = astar_search(
+    start_node=(0, 0),
+    goal_node=(9, 9),
+    get_neighbors_func=neighbors,
+    heuristic_func=heuristic,
+)
+# path is a list of (row, col) tuples from start to goal, or None if unreachable
+```
+
+`get_neighbors_func` must return an iterable of `(neighbor_node, edge_cost)` tuples.
+`heuristic_func` must be admissible (never overestimate the true cost to the goal) for A\* to
+return an optimal path.
