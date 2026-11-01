@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [4.0.0] — 2026-11-01
 
 Regenerate `.mapdata` files built by an earlier version: relation and fence parsing changed (see *Fixed*). Python 3.12 or newer is required.
 
