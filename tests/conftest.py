@@ -42,6 +42,20 @@ def _stop_viewer_ros():
     stop_ros()
 
 
+@pytest.fixture(autouse=True)
+def _csrf_header(monkeypatch):
+    """Send X-Requested-With from every Flask test client, as the browser UI does."""
+    from flask.testing import FlaskClient
+
+    init = FlaskClient.__init__
+
+    def init_with_header(self, *args, **kwargs):
+        init(self, *args, **kwargs)
+        self.environ_base["HTTP_X_REQUESTED_WITH"] = "pytest"
+
+    monkeypatch.setattr(FlaskClient, "__init__", init_with_header)
+
+
 @pytest.fixture
 def mock_overpass_client():
     """

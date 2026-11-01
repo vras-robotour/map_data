@@ -51,13 +51,17 @@ Then open `http://127.0.0.1:5000` in a browser.
 
 The viewer binds to `127.0.0.1` (loopback only) by default, rejects file paths that attempt
 directory traversal outside the data directory, and avoids deserializing untrusted data.
-When bound to `--host 0.0.0.0` on a network, anyone who can reach the port has access to the API.
+When bound to any other address (e.g. `--host 0.0.0.0`) without `MAP_DATA_ACCESS_TOKEN`,
+the viewer uses a token kept in `~/.config/map_data/access_token` (`$XDG_CONFIG_HOME`
+respected; created with mode 0600 on first start) and logs the
+`http://<host>:<port>/?access_token=<token>` URL to open. The token stays the same across
+restarts; delete the file to issue a new one.
 
 Two environment variables provide access control:
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `MAP_DATA_ACCESS_TOKEN` | unset (auth disabled) | When set, every HTTP request and Socket.IO connection must supply this token, or it is rejected with `401`. |
+| `MAP_DATA_ACCESS_TOKEN` | unset: no auth on loopback, the token file otherwise | When set, every HTTP request and Socket.IO connection must supply this token, or it is rejected with `401`. |
 | `MAP_DATA_CORS_ORIGINS` | unset (same-origin only) | Controls which origins may open a Socket.IO connection to the server. |
 
 **`MAP_DATA_ACCESS_TOKEN`** can be supplied in three ways:
@@ -66,11 +70,11 @@ Two environment variables provide access control:
 - Query parameter: `http://host:5000/?access_token=<token>`. The viewer sets the cookie and redirects to the same URL without the token.
 - Cookie: `map_data_access_token`, set automatically when authenticating via the query parameter above.
 
-**CSRF protection:** To prevent cross-site request forgery, the cookie alone only
-authenticates read requests (`GET`/`HEAD`/`OPTIONS`). State-changing requests
-(`POST`/`PUT`/`DELETE`) must either supply the token via the `X-Access-Token` header or
-carry the cookie together with an `X-Requested-With` header, which the viewer's frontend
-attaches automatically. Request payloads are capped at 100 MB.
+**CSRF protection:** state-changing requests (`POST`/`PUT`/`DELETE`) must carry an
+`X-Requested-With` header (any value) or the `X-Access-Token` header, with or without a
+token configured; otherwise they are rejected with `403`. The viewer's frontend attaches
+the header automatically; scripts add it, e.g. `curl -H 'X-Requested-With: curl'`.
+Uploads are capped at 100 MB, JSON bodies at 10 MB.
 
 **`MAP_DATA_CORS_ORIGINS`** sets Socket.IO's allowed origins. Left unset, only the request's
 own origin is accepted. Set to a comma-separated list of origins or `*` to widen access.

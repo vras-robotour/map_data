@@ -73,6 +73,7 @@ class Bench:
         self.dir, self.name, self.reps, self.cold_reps = data_dir, name, reps, cold_reps
         self.file = f"{name}.mapdata"
         self.client = create_app(data_dir=str(data_dir)).test_client()
+        self.client.environ_base["HTTP_X_REQUESTED_WITH"] = "bench"  # CSRF guard
         self.rows: list[dict[str, Any]] = []
         md = MapData.load(str(data_dir / self.file))
         self.zone = (md.zone_number, md.zone_letter)

@@ -1,10 +1,13 @@
 import argparse
 import hmac
 import importlib.util
+import ipaddress
 import logging
 import os
 import re
+import secrets
 import signal
+import socket
 import sys
 import threading
 import time
@@ -63,8 +66,8 @@ ACCESS_TOKEN_HEADER = "X-Access-Token"
 ACCESS_TOKEN_QUERY_PARAM = "access_token"
 ACCESS_TOKEN_COOKIE = "map_data_access_token"
 
-# CSRF guard for cookie auth: a state-changing request authenticated by the cookie alone
-# must also carry this header (any value). Browsers send custom headers cross-site only
+# CSRF guard: a state-changing request must carry this header (any value) or the token
+# header, with or without a token configured. Browsers send custom headers cross-site only
 # after a CORS preflight, which the HTTP API never grants; static/js/utils.js sets it.
 CSRF_CUSTOM_HEADER = "X-Requested-With"
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -104,16 +107,59 @@ def _access_token_valid(req: Any) -> bool:
     if supplied:
         return hmac.compare_digest(supplied.encode(), expected.encode())
     cookie = req.cookies.get(ACCESS_TOKEN_COOKIE)
-    if not cookie or not hmac.compare_digest(cookie.encode(), expected.encode()):
-        return False
-    # Cookie alone suffices for safe methods; anything else also needs the CSRF header,
-    # since the browser attaches the cookie to cross-site requests too. SocketIO is
-    # exempt: engineio checks the Origin itself (MAP_DATA_CORS_ORIGINS).
-    if getattr(req, "method", "GET") in _SAFE_METHODS:
-        return True
-    if req.path.startswith("/socket.io"):
-        return True
-    return CSRF_CUSTOM_HEADER in req.headers
+    return bool(cookie) and hmac.compare_digest(cookie.encode(), expected.encode())
+
+
+def _csrf_header_present(req: Any) -> bool:
+    """Whether *req* is safe, SocketIO (engineio checks the Origin) or carries a custom header."""
+    return (
+        req.method in _SAFE_METHODS
+        or req.path.startswith("/socket.io")
+        or CSRF_CUSTOM_HEADER in req.headers
+        or ACCESS_TOKEN_HEADER in req.headers
+    )
+
+
+def _token_file() -> Path:
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME") or "~/.config").expanduser()
+    return config_home / "map_data" / "access_token"
+
+
+def _ensure_access_token(host: str, port: int) -> None:
+    """
+    Give a viewer that listens beyond loopback an access token.
+
+    MAP_DATA_ACCESS_TOKEN wins; otherwise the token in :func:`_token_file` is used, created
+    (mode 0600) on first use, so links and cookies survive a restart.
+    """
+    try:
+        loopback = host == "localhost" or ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        loopback = False
+    if loopback or _configured_access_token():
+        return
+    path = _token_file()
+    try:
+        token = path.read_text().strip()
+    except FileNotFoundError:
+        token = ""
+    if not token:
+        token = secrets.token_urlsafe(24)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(token + "\n")
+    os.environ["MAP_DATA_ACCESS_TOKEN"] = token
+    logger.warning(
+        "Listening on %s without MAP_DATA_ACCESS_TOKEN: using the token in %s. Open "
+        "http://%s:%d/?%s=%s",
+        host,
+        path,
+        socket.gethostname(),
+        port,
+        ACCESS_TOKEN_QUERY_PARAM,
+        token,
+    )
 
 
 @socketio.on("connect")
@@ -184,6 +230,8 @@ def create_app(
     def _enforce_access_token() -> ResponseReturnValue | None:
         if not _access_token_valid(request):
             abort(401, "Missing or invalid access token")
+        if not _csrf_header_present(request):
+            abort(403, f"Missing {CSRF_CUSTOM_HEADER} header")
         expected = _configured_access_token()
         if (
             expected
@@ -314,6 +362,7 @@ def main() -> None:
 
     setup_logging()
     logging.getLogger("werkzeug").addFilter(_redact_token)
+    _ensure_access_token(args.host, args.port)
     tracker_config = Path(args.config).resolve() if args.config else None
     if tracker_config and not tracker_config.is_file():
         logger.warning("%s does not exist yet: default topics, Save creates it", tracker_config)

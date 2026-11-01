@@ -105,6 +105,9 @@ map_data_viewer
 map_data_viewer --data-dir /path/to/data --host 0.0.0.0 --port 8080
 ```
 
+Bound beyond loopback, the viewer requires an access token and logs the URL to open; see
+[Deployment security](https://vras-robotour.github.io/map_data/viewer/#deployment-security).
+
 ## License
 
 BSD 3-Clause License. See [LICENSE](LICENSE) for more information.

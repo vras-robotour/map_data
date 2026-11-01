@@ -873,16 +873,52 @@ def test_auth_get_with_cookie_accepted(app_client, monkeypatch):
     assert client.get("/api/files").status_code == 200
 
 
-def test_auth_mutating_cookie_only_rejected(app_client_with_file, monkeypatch):
+@pytest.mark.parametrize("token", ["sekret", None])
+def test_auth_mutating_without_csrf_header_rejected(app_client_with_file, monkeypatch, token):
     client, _, filename = app_client_with_file
-    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "sekret")
-    client.set_cookie(ACCESS_TOKEN_COOKIE, "sekret")
+    client.environ_base.pop("HTTP_X_REQUESTED_WITH")  # a cross-site form or no-cors fetch
+    if token:
+        monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", token)
+        client.set_cookie(ACCESS_TOKEN_COOKIE, token)
+    else:
+        monkeypatch.delenv("MAP_DATA_ACCESS_TOKEN", raising=False)
     resp = client.delete(
         f"/api/ways/1?file={filename}",
         data=json.dumps({}),
         content_type="application/json",
     )
-    assert resp.status_code == 401
+    assert resp.status_code == 403
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1"])
+def test_loopback_viewer_gets_no_token(tmp_path, monkeypatch, host):
+    from map_data.viewer import app as viewer_app
+
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "")  # unset, and restored after the test
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    viewer_app._ensure_access_token(host, 5000)
+    assert os.environ["MAP_DATA_ACCESS_TOKEN"] == ""
+    assert not (tmp_path / "map_data").exists()
+
+
+def test_lan_viewer_keeps_a_private_token(tmp_path, monkeypatch):
+    from map_data.viewer import app as viewer_app
+
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "")  # unset, and restored after the test
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    viewer_app._ensure_access_token("0.0.0.0", 5000)
+    token = os.environ["MAP_DATA_ACCESS_TOKEN"]
+    path = tmp_path / "map_data" / "access_token"
+    assert path.read_text().strip() == token
+    assert path.stat().st_mode & 0o777 == 0o600
+
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "")
+    viewer_app._ensure_access_token("0.0.0.0", 5000)  # restart: same token, cookies stay valid
+    assert os.environ["MAP_DATA_ACCESS_TOKEN"] == token
+
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "explicit")
+    viewer_app._ensure_access_token("0.0.0.0", 5000)
+    assert os.environ["MAP_DATA_ACCESS_TOKEN"] == "explicit"
 
 
 def test_auth_mutating_cookie_with_csrf_header_accepted(app_client_with_file, monkeypatch):
