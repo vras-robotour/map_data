@@ -7,14 +7,19 @@ const trackerMode = (() => {
     let roadPathLayer = null;
     let trailLayer = null;
     let intersectionsLayer = null;
-    let _intersectionsKey = null;
+    let intersectionsKey = null;
+    // Geometry the telemetry sends only when it changes, and the trail it sends as appends
+    const GEOMETRY = ['waypoints', 'sequence', 'sequence_window', 'road_path', 'intersections'];
+    let geometry = {};
+    let trail = [];
+    let trailTotal = 0;
     let activeEnterCircle = null;
     let activeExitCircle = null;
     let goalMarker = null;
     let enabled = false;
 
     // The robot marker's SVG, resolved once per marker element
-    let _robotSvg = null;
+    let robotSvg = null;
 
     const ROBOT_ICON_HTML = `
     <div class="robot-marker-container">
@@ -31,15 +36,36 @@ const trackerMode = (() => {
         socket = io();
 
         socket.on('telemetry', (data) => {
-            // Update map (robot icon) regardless of whether 'Tracker' mode is active
-            // This allows seeing the robot in Viewer and Planner modes
+            mergeTelemetry(data);
+            // The robot is drawn in every app mode; the status panel only in tracker mode
             updateMap(data);
 
-            // UI status only updates if Tracker mode is actually enabled
             if (enabled) {
                 updateUI(data);
             }
         });
+    }
+
+    // Fill in the geometry a message left out (unchanged) and grow the trail by its appends,
+    // so the rest of the code always sees the complete state.
+    function mergeTelemetry(data) {
+        const mission = data.mission;
+        GEOMETRY.forEach(k => {
+            if (k in mission) geometry[k] = mission[k];
+            else mission[k] = geometry[k];
+        });
+        const pos = data.position;
+        if (pos.trail) {
+            trail = pos.trail;
+        } else if (pos.trail_append) {
+            // Skip fixes already held (a broadcast that crossed the connect snapshot)
+            const fresh = pos.trail_append.slice(
+                Math.max(0, pos.trail_append.length - (pos.trail_total - trailTotal)));
+            trail = trail.concat(fresh).slice(-pos.trail_length);
+        }
+        // A delta older than the connect snapshot must not move the count back
+        trailTotal = pos.trail ? pos.trail_total : Math.max(trailTotal, pos.trail_total);
+        pos.trail = trail;
     }
 
     function updateMap(data) {
@@ -53,9 +79,9 @@ const trackerMode = (() => {
             document.dispatchEvent(new CustomEvent('robot-position', { detail: { lat: pos.lat, lon: pos.lon } }));
         }
 
-        // Check robot layer visibility
+        // Tracker mode keeps the robot visible even with the Robot layer switched off
         const robotCb = document.querySelector('[data-layer="robot"]');
-        if (robotCb && !robotCb.checked) {
+        if (robotCb && !robotCb.checked && !enabled) {
             hideRobot();
             return;
         }
@@ -86,16 +112,16 @@ const trackerMode = (() => {
             }
 
             // Rotate marker — resolve the SVG element once and reuse it
-            if (!_robotSvg) {
+            if (!robotSvg) {
                 const el = robotMarker.getElement();
-                if (el) _robotSvg = el.querySelector('svg');
+                if (el) robotSvg = el.querySelector('svg');
             }
-            if (_robotSvg) {
-                _robotSvg.style.transform = `rotate(${heading}deg)`;
+            if (robotSvg) {
+                robotSvg.style.transform = `rotate(${heading}deg)`;
             }
         }
 
-        // Planned path; a key of length and end points missed replans that keep them
+        // Planned path
         robotPathLayer = updatePolyline(robotPathLayer, data.mission && data.mission.waypoints,
             { color: '#00ff00', weight: 3, opacity: 0.6, dashArray: '5, 10' });
 
@@ -113,17 +139,17 @@ const trackerMode = (() => {
         const inter = data.mission && data.mission.intersections;
         if (inter && inter.length) {
             const key = `${inter.length}:${inter[0].lat},${inter[0].lon}`;
-            if (key !== _intersectionsKey) {
+            if (key !== intersectionsKey) {
                 if (intersectionsLayer) map.removeLayer(intersectionsLayer);
                 intersectionsLayer = L.layerGroup(inter.map(p => L.circleMarker([p.lat, p.lon], {
                     radius: 4, color: '#e879f9', weight: 1.5, fill: false, opacity: 0.8
                 }))).addTo(map);
-                _intersectionsKey = key;
+                intersectionsKey = key;
             }
         } else if (intersectionsLayer) {
             map.removeLayer(intersectionsLayer);
             intersectionsLayer = null;
-            _intersectionsKey = null;
+            intersectionsKey = null;
         }
 
         // Active intersection with the enter (red) / exit (yellow) hysteresis radii in metres
@@ -144,7 +170,7 @@ const trackerMode = (() => {
         }
 
         // Grey out the marker when the fix is stale
-        if (_robotSvg) _robotSvg.style.opacity = (data.position && data.position.stale) ? '0.35' : '1';
+        if (robotSvg) robotSvg.style.opacity = (data.position && data.position.stale) ? '0.35' : '1';
 
         // Current navigation goal
         const goal = data.position && data.position.goal;
@@ -180,7 +206,7 @@ const trackerMode = (() => {
         robotLayers().forEach(l => {
             if (l && map.hasLayer(l)) map.removeLayer(l);
         });
-        _robotSvg = null; // Leaflet recreates the element on the next addTo()
+        robotSvg = null; // Leaflet recreates the element on the next addTo()
     }
 
     function showRobot() {
@@ -201,13 +227,10 @@ const trackerMode = (() => {
         return `<svg width="28" height="14" viewBox="0 0 28 14" style="vertical-align:middle;margin-right:4px">${body}</svg>`;
     }
 
-    // The tracker status panel's markup lives in index.html (#tracker-status-content);
-    // this is just a tiny lookup, not a cache — the panel updates only once per
-    // telemetry frame, so there's no need to precompute/store the ~25 element refs.
+    // Status panel markup lives in index.html (#tracker-status-content)
     const $ = id => document.getElementById(id);
 
-    // The legend's swatch icons are static (never change), so render them once
-    // up front instead of on every telemetry update.
+    // Legend swatches are static, so they are rendered once
     function _renderLegend() {
         [
             ['tsi-leg-robot', swatch('marker', '#00ff00')],
@@ -372,7 +395,7 @@ const trackerMode = (() => {
 
         const collision = $('tsi-collision');
         if (hasCollision) {
-            const showCollision = s.collision_action && s.collision_action !== 'PASSTHROUGH';
+            const showCollision = s.collision_action && s.collision_action !== 'DO_NOTHING';
             collision.hidden = !showCollision;
             if (showCollision) $('tsi-collision-val').textContent = s.collision_action;
         } else {
@@ -425,13 +448,13 @@ const trackerMode = (() => {
 
 
     // ── Topics dialog: switch the tracker's topics live and save them to its config file ──
-    let _settings = null; // last GET /api/tracker/settings response
+    let trackerSettings = null; // last GET /api/tracker/settings response
 
     const isTopic = s => s.name.endsWith('_topic');
     const listId = type => 'tts-list-' + type.replace(/[^A-Za-z0-9]/g, '_');
 
     function expectedType(s) {
-        return s.name === 'heading_topic' ? _settings.heading_types[$('tts-heading_type').value] : s.msg_type;
+        return s.name === 'heading_topic' ? trackerSettings.heading_types[$('tts-heading_type').value] : s.msg_type;
     }
 
     // Dot left of a topic: green = published with the expected type, yellow = another type,
@@ -444,7 +467,7 @@ const trackerMode = (() => {
         $(`tts-type-${s.name}`).textContent = type.split('/').pop();
         let color = 'transparent', title = 'disabled';
         if (topic) {
-            const types = _settings.topics[topic] || _settings.topics[`/${topic}`];
+            const types = trackerSettings.topics[topic] || trackerSettings.topics[`/${topic}`];
             if (!types) { color = '#6b7280'; title = 'not published'; }
             else if (types.includes(type)) { color = '#22c55e'; title = `published as ${type}`; }
             else { color = '#facc15'; title = `published as ${types.join(', ')}; the tracker expects ${type}`; }
@@ -456,10 +479,10 @@ const trackerMode = (() => {
     function renderTopicsForm() {
         // One suggestion list per message type, from the topics on the ROS graph
         const byType = {};
-        for (const [topic, types] of Object.entries(_settings.topics)) {
+        for (const [topic, types] of Object.entries(trackerSettings.topics)) {
             for (const t of types) (byType[t] ||= []).push(topic);
         }
-        const types = new Set([..._settings.settings.map(s => s.msg_type), ...Object.values(_settings.heading_types)]);
+        const types = new Set([...trackerSettings.settings.map(s => s.msg_type), ...Object.values(trackerSettings.heading_types)]);
         $('tracker-topics-lists').replaceChildren(...[...types].filter(Boolean).map(type => {
             const dl = document.createElement('datalist');
             dl.id = listId(type);
@@ -470,7 +493,7 @@ const trackerMode = (() => {
         const form = $('tracker-topics-form');
         form.replaceChildren();
         let section = null;
-        for (const s of _settings.settings) {
+        for (const s of trackerSettings.settings) {
             if (s.section !== section) {
                 section = s.section;
                 const title = document.createElement('div');
@@ -504,7 +527,7 @@ const trackerMode = (() => {
                 field = document.createElement('select');
                 field.className = 'form-select form-select-sm bg-dark text-light border-secondary';
                 field.append(...s.choices.map(c => new Option(c, c)));
-                field.addEventListener('change', () => updateDot(_settings.settings.find(x => x.name === 'heading_topic')));
+                field.addEventListener('change', () => updateDot(trackerSettings.settings.find(x => x.name === 'heading_topic')));
             } else {
                 field = document.createElement('input');
                 field.type = 'text';
@@ -525,8 +548,8 @@ const trackerMode = (() => {
 
     // Fill the form with the live ('value') or the config file's ('saved') settings
     function fillTopicsForm(which) {
-        for (const s of _settings.settings) $(`tts-${s.name}`).value = s[which];
-        _settings.settings.filter(isTopic).forEach(updateDot);
+        for (const s of trackerSettings.settings) $(`tts-${s.name}`).value = s[which];
+        trackerSettings.settings.filter(isTopic).forEach(updateDot);
     }
 
     async function showTopicsModal() {
@@ -537,23 +560,23 @@ const trackerMode = (() => {
         try {
             const res = await api('GET', '/api/tracker/settings');
             if (!res.ok) throw new Error(await errorText(res));
-            _settings = await res.json();
+            trackerSettings = await res.json();
         } catch (err) {
             setStatus(`Failed to load tracker topics: ${err.message}`, 'text-danger');
             return;
         }
         showError('tracker-topics-error', '');
         renderTopicsForm();
-        $('tracker-topics-path').textContent = _settings.path;
+        $('tracker-topics-path').textContent = trackerSettings.path;
         const fileNote = $('tracker-topics-file-error');
-        fileNote.textContent = _settings.file_error ? `Cannot read the config file: ${_settings.file_error}`
-            : (_settings.exists ? '' : 'The config file does not exist yet; Save creates it.');
+        fileNote.textContent = trackerSettings.file_error ? `Cannot read the config file: ${trackerSettings.file_error}`
+            : (trackerSettings.exists ? '' : 'The config file does not exist yet; Save creates it.');
         fileNote.hidden = !fileNote.textContent;
         bootstrap.Modal.getOrCreateInstance($('tracker-topics-modal')).show();
     }
 
     async function applyTopics(save) {
-        const settings = Object.fromEntries(_settings.settings.map(s => [s.name, $(`tts-${s.name}`).value.trim()]));
+        const settings = Object.fromEntries(trackerSettings.settings.map(s => [s.name, $(`tts-${s.name}`).value.trim()]));
         try {
             const res = await api('PUT', '/api/tracker/settings', { body: { settings, save } });
             if (!res.ok) throw new Error(await errorText(res));
@@ -565,11 +588,11 @@ const trackerMode = (() => {
             return;
         }
         showError('tracker-topics-error', '');
-        bootstrap.Modal.getInstance($('tracker-topics-modal')).hide();
+        bootstrap.Modal.getOrCreateInstance($('tracker-topics-modal')).hide();
     }
 
     $('tracker-topics-btn')?.addEventListener('click', showTopicsModal);
-    $('tracker-topics-reload')?.addEventListener('click', () => _settings && fillTopicsForm('saved'));
+    $('tracker-topics-reload')?.addEventListener('click', () => trackerSettings && fillTopicsForm('saved'));
     $('tracker-topics-apply')?.addEventListener('click', () => applyTopics(false));
     $('tracker-topics-save')?.addEventListener('click', () => applyTopics(true));
 
@@ -589,6 +612,7 @@ const trackerMode = (() => {
             const res = await api('DELETE', '/api/tracker/trail');
             if (!res.ok) throw new Error(await errorText(res));
             const { dropped } = await res.json();
+            trail = [];
             if (trailLayer) {
                 map.removeLayer(trailLayer);
                 trailLayer = null;
@@ -619,7 +643,7 @@ const trackerMode = (() => {
         },
         disable: () => {
             enabled = false;
-            // Note: We don't remove the layer here because it's now globally visible
+            // Robot layers stay: they are visible in every app mode
         },
         showRobot: showRobot,
         hideRobot: hideRobot,

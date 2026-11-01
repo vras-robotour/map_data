@@ -29,8 +29,8 @@ function _applyDeltaInPlace(lls, orig, dlat, dlng) {
 }
 
 function escHtml(s) {
-    // textContent -> innerHTML escapes &, <, > but not quotes; the two fixups
-    // keep attribute values (value="${escHtml(v)}") safe as before.
+    // textContent -> innerHTML escapes &, <, > but not quotes; the quote
+    // replacements make the result safe inside attribute values too.
     if (s === null || s === undefined) return '';
     return Object.assign(document.createElement('span'), { textContent: String(s) }).innerHTML
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -46,17 +46,16 @@ function kvRow(cls, k = '', v = '') {
       <input class="form-control form-control-sm bg-dark text-light border-secondary ${cls}-val"
              placeholder="value" value="${escHtml(v)}" style="flex:1;font-size:0.75rem;">
       <button type="button" class="btn btn-sm btn-outline-danger px-1"
+              aria-label="Remove property"
               onclick="this.closest('.d-flex').remove()">×</button>
     </div>`;
 }
 
 // ── CSRF header on same-origin API calls ─────────────────────────────────────
-// When the server runs with MAP_DATA_ACCESS_TOKEN set, cookie-authenticated
-// state-changing requests must also carry a custom header as CSRF proof
-// (cross-site pages can't set custom headers without a CORS preflight, which
-// the server never grants). Wrapping fetch here covers every API call site in
-// one place; cross-origin URLs (e.g. tile/CDN hosts) are left untouched so
-// they don't suddenly require a preflight.
+// With MAP_DATA_ACCESS_TOKEN set, the server requires a custom header on
+// cookie-authenticated state-changing requests as CSRF proof (cross-site pages
+// can't set one without a CORS preflight, which the server never grants).
+// Cross-origin URLs (tile/CDN hosts) are left alone so they need no preflight.
 const _rawFetch = window.fetch.bind(window);
 window.fetch = function (input, init) {
     if (typeof input === 'string' || input instanceof URL) {
@@ -72,10 +71,18 @@ window.fetch = function (input, init) {
     return _rawFetch(input, init);
 };
 
-// Flask's abort() answers with an HTML page; pull the message out of it.
+// Flask's abort() answers with an HTML page; JSON error handlers return {"error": "..."}.
 async function errorText(res) {
-    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-    return (doc.querySelector('p') || doc.body).textContent.trim();
+    const raw = await res.text();
+    try {
+        const data = JSON.parse(raw);
+        if (data && typeof data === 'object' && data.error) {
+            return String(data.error).trim();
+        }
+    } catch (_) {}
+    const doc = new DOMParser().parseFromString(raw, 'text/html');
+    const msg = (doc.querySelector('p') || doc.body)?.textContent?.trim();
+    return msg || raw.trim();
 }
 
 // Shows `msg` in the error element `id`, or hides it when `msg` is empty.
@@ -111,18 +118,23 @@ function _layerBaseStyle(layer) {
     return _annStyle(ann || {});
 }
 
-// Builds a visible circle-marker handle plus a larger transparent hit-target
-// marker at the same point, both wired to the same mousedown handler and
-// hover cursor — the pattern every draggable vertex/midpoint/node handle uses.
-// Returns [visible, hit]; the caller adds both to whatever layer group it uses.
+// One SVG renderer shared by every handle and the way-drag ghost: a renderer per marker meant two
+// extra <svg> elements per node. Layers keep their add order inside it, so the ghost (added first)
+// stays under the node handles.
+let _handleRenderer = null;
+function handleRenderer() { return _handleRenderer ??= L.svg(); }
+
+// Visible circle-marker handle plus a larger transparent hit target at the same
+// point, sharing the mousedown handler and cursor. Returns [visible, hit]; the
+// caller adds both to its layer group.
 function makeHandle(latlng, style, hitRadius, cursor, onDown) {
-    const visible = L.circleMarker(latlng, { bubblingMouseEvents: false, renderer: L.svg(), ...style });
+    const visible = L.circleMarker(latlng, { bubblingMouseEvents: false, renderer: handleRenderer(), ...style });
     visible.on('mousedown', onDown);
     visible.on('add', () => { const el = visible.getElement(); if (el) el.style.cursor = cursor; });
 
     const hit = L.circleMarker(latlng, {
         radius: hitRadius, fillOpacity: 0, opacity: 0,
-        bubblingMouseEvents: false, renderer: L.svg(), interactive: true,
+        bubblingMouseEvents: false, renderer: handleRenderer(), interactive: true,
     });
     hit.on('mousedown', onDown);
     hit.on('add', () => { const el = hit.getElement(); if (el) el.style.cursor = cursor; });
@@ -130,9 +142,8 @@ function makeHandle(latlng, style, hitRadius, cursor, onDown) {
     return [visible, hit];
 }
 
-// Opens a Leaflet popup styled as a small context menu at `latlng`, with one
-// button per [label, onClick] entry. The popup is closed before the handler
-// runs, same as every context menu in the app already did by hand.
+// Context-menu popup at `latlng` with one button per [label, onClick] entry;
+// the popup is closed before the handler runs.
 function showMenu(latlng, entries, { minWidth = 150 } = {}) {
     const container = document.createElement('div');
     container.className = 'context-menu';

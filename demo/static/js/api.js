@@ -1,8 +1,7 @@
 // ── API ──────────────────────────────────────────────────────────────────────
 
-// Static-demo escape hatch: when window.__mapdataStaticBase is set the page is
-// a flat-file scrape of the viewer (GitHub Pages demo) — read-only GETs map to
-// pre-baked JSON files and every mutating call is refused with a status note.
+// When window.__mapdataStaticBase is set the page is the read-only static demo
+// (GitHub Pages): a few GETs map to pre-baked JSON files, other calls are refused.
 const STATIC_BASE = window.__mapdataStaticBase || null;
 
 async function _staticJson(relPath) {
@@ -16,10 +15,8 @@ function _staticReadOnly(action) {
     throw new Error('Read-only static demo');
 }
 
-// Shared fetch wrapper for every non-static-demo API call: builds the query
-// string, sets JSON headers/body (or leaves FormData bodies alone), and
-// refuses up-front (via _staticReadOnly) when `readOnlyMsg` is given and the
-// page is running as the read-only static demo.
+// Fetch wrapper for API calls; FormData bodies are sent as-is, others as JSON.
+// A `readOnlyMsg` marks the call as refused in the static demo.
 async function api(method, path, { query, body, readOnlyMsg, signal } = {}) {
     if (STATIC_BASE && readOnlyMsg) _staticReadOnly(readOnlyMsg);
     const qs = query ? '?' + new URLSearchParams(query) : '';
@@ -38,13 +35,14 @@ async function api(method, path, { query, body, readOnlyMsg, signal } = {}) {
 async function fetchFileList() {
     if (STATIC_BASE) return await _staticJson('api/files.json');
     const res = await api('GET', '/api/files');
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }
 
 async function fetchMapData(filename) {
     if (STATIC_BASE) return await _staticJson('api/mapdata.json');
     const res = await api('GET', '/api/mapdata', { query: { file: filename } });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }
 
@@ -54,7 +52,11 @@ async function fetchAnnotations(filename) {
         catch (_) { return { annotations: [] }; }
     }
     const res = await api('GET', '/api/annotations', { query: { file: filename } });
-    if (!res.ok) return { annotations: [] };
+    if (!res.ok) {
+        // 409: the store was unreadable and moved aside; the map still loads without it.
+        setStatus(`Annotations not loaded: ${await errorText(res)}`, 'text-danger');
+        return { annotations: [] };
+    }
     return await res.json();
 }
 
@@ -62,6 +64,7 @@ async function createAnnotationApi(filename, type, geometry, properties) {
     const res = await api('POST', '/api/annotations', {
         query: { file: filename }, body: { type, geometry, properties }, readOnlyMsg: 'Editing',
     });
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }
 
@@ -69,13 +72,14 @@ async function updateAnnotationApi(filename, annId, geometry, type, properties) 
     const res = await api('PUT', `/api/annotations/${annId}`, {
         query: { file: filename }, body: { geometry, type, properties }, readOnlyMsg: 'Editing',
     });
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }
 
 async function fetchWayNodes(filename, wayId) {
     if (STATIC_BASE) return await _staticJson(`api/way_nodes/${String(wayId).replace(':', '_')}.json`);
     const res = await api('GET', '/api/way_nodes', { query: { file: filename, way_id: wayId } });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }
 
@@ -85,7 +89,7 @@ async function fetchWayApi(filename, wayId) {
 
 async function fetchWaySegmentsApi(filename, wayId) {
     const res = await api('GET', `/api/ways/${wayId}/segments`, { query: { file: filename }, readOnlyMsg: 'Way lookup' });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }
 
@@ -104,13 +108,26 @@ function formatFetchProgress(task) {
 
 async function fetchAreaApi(params, onProgress) {
     const res = await api('POST', '/api/fetch_area', { body: params, readOnlyMsg: 'OSM fetching' });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await errorText(res));
     const { task_id } = await res.json();
     const startedAt = Date.now();
+    let pollFailures = 0;
     while (true) {
         await new Promise(r => setTimeout(r, 1500));
-        const poll = await api('GET', `/api/fetch_area/${task_id}`);
-        if (!poll.ok) throw new Error(await poll.text());
+        let poll;
+        try {
+            poll = await api('GET', `/api/fetch_area/${task_id}`);
+        } catch (err) {
+            pollFailures++;
+            if (pollFailures >= 3) throw err;
+            continue;
+        }
+        if (!poll.ok) {
+            pollFailures++;
+            if (pollFailures >= 3) throw new Error(await errorText(poll));
+            continue;
+        }
+        pollFailures = 0;
         const task = await poll.json();
         if (task.status === 'done') return task.result;
         if (task.status === 'failed') throw new Error(task.error || 'Fetch failed');
@@ -120,12 +137,12 @@ async function fetchAreaApi(params, onProgress) {
 
 async function uploadGpxApi(formData) {
     const res = await api('POST', '/api/upload_gpx', { body: formData, readOnlyMsg: 'Uploading' });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }
 
 async function uploadMapdataApi(formData) {
     const res = await api('POST', '/api/upload_mapdata', { body: formData, readOnlyMsg: 'Uploading' });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(await errorText(res));
     return await res.json();
 }
