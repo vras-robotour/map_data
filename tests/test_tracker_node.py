@@ -1,11 +1,13 @@
 """TrackerNode in a real rclpy context: config, subscription types, live reconfiguration."""
 
+import json
+import threading
 import time
 
 import pytest
 
 from map_data.viewer import ros_node
-from map_data.viewer.tracker_config import SETTINGS, TrackerConfigError, topic_type
+from map_data.viewer.tracker_config import HEADING_TYPES, SETTINGS, TrackerConfigError
 
 pytestmark = pytest.mark.skipif(
     not ros_node.ROS_AVAILABLE, reason="needs ROS 2 (rclpy, nav2_msgs, ...)"
@@ -14,9 +16,15 @@ pytestmark = pytest.mark.skipif(
 TOPICS = [s.name for s in SETTINGS if s.name.endswith("_topic")]
 
 
+def topic_type(name, settings):
+    """Message type TrackerNode subscribes to setting ``name`` with."""
+    if name == "heading_topic":
+        return HEADING_TYPES.get(settings.get("heading_type", ""), "")
+    return next((s.msg_type for s in SETTINGS if s.name == name), "")
+
+
 @pytest.fixture
 def make_node():
-    # ros_node's own rclpy: test_osm_cloud replaces sys.modules["rclpy"] with a mock
     rclpy = ros_node.rclpy
     started = not rclpy.ok()
     if started:
@@ -180,3 +188,135 @@ def test_clear_trail_forgets_the_fixes_and_marks_the_telemetry_dirty(make_node):
     assert list(node.trail) == []
     assert node._dirty  # the browser is told at once, not only on the next fix
     assert node.clear_trail() == 0
+
+
+def _fix(lat, lon, status=0):
+    from sensor_msgs.msg import NavSatFix
+
+    msg = NavSatFix()
+    msg.latitude, msg.longitude, msg.status.status = lat, lon, status
+    return msg
+
+
+def test_trail_comes_from_the_filtered_fix_when_its_topic_is_on(make_node):
+    node = make_node({"gps_fix_topic": "/fix", "gps_filtered_topic": "/ekf", "trail_min_step": 0.0})
+    node._gps_callback(_fix(50.0, 14.0))
+    assert list(node.trail) == []  # a raw fix beside the filtered one would zigzag the trail
+    node._ekf_callback(_fix(50.1, 14.1))
+    assert list(node.trail) == [{"lat": 50.1, "lon": 14.1}]
+
+
+def test_trail_comes_from_the_raw_fix_without_a_filtered_topic(make_node):
+    node = make_node({"gps_fix_topic": "/fix", "gps_filtered_topic": ""})
+    node._gps_callback(_fix(50.0, 14.0))
+    assert list(node.trail) == [{"lat": 50.0, "lon": 14.0}]
+
+
+@pytest.mark.parametrize("callback", ["_gps_callback", "_ekf_callback"])
+@pytest.mark.parametrize(("lat", "lon", "status"), [(50.0, 14.0, -1), (float("nan"), 14.0, 0)])
+def test_a_fix_without_a_position_is_dropped(make_node, callback, lat, lon, status):
+    node = make_node({"gps_fix_topic": "/fix", "gps_filtered_topic": "/ekf"})
+    getattr(node, callback)(_fix(lat, lon, status))
+    assert node.pose_gps is None
+    assert node.pose_ekf is None
+    assert list(node.trail) == []
+    json.dumps(node.get_telemetry(), allow_nan=False)  # a NaN would break the browser's parser
+
+
+def test_apply_settings_while_the_executor_spins(make_node):
+    """The viewer calls apply_settings from a Flask thread while the node is spinning."""
+    from std_msgs.msg import Float32
+
+    node = make_node({"battery_state_topic": "", "bus_voltage_topic": "/v0"})
+    try:
+        from rclpy.experimental.events_executor import EventsExecutor
+
+        executor = EventsExecutor()
+    except ImportError:
+        executor = ros_node.rclpy.executors.SingleThreadedExecutor()
+    executor.add_node(node)
+    spinner = threading.Thread(target=executor.spin, daemon=True)
+    spinner.start()
+    pubs = {t: node.create_publisher(Float32, t, 10) for t in ("/v0", "/v1")}
+    try:
+        for i in range(10):
+            topic = f"/v{i % 2}"
+            node.apply_settings({"bus_voltage_topic": topic})
+            deadline = time.time() + 5
+            while node.bus_voltage != float(i + 1) and time.time() < deadline:
+                pubs[topic].publish(Float32(data=float(i + 1)))
+                time.sleep(0.02)
+            assert node.bus_voltage == float(i + 1), topic
+    finally:
+        executor.shutdown()
+        spinner.join(5)
+    assert not spinner.is_alive()
+
+
+def test_planner_parameters_come_from_the_route_planner_node(make_node):
+    """The viewer's planner toggles start from route_planner's parameters, read live."""
+    import os
+
+    ns = f"/test_{os.getpid()}"  # keeps a real /route_planner on the same domain out
+    node = make_node({"planner_node": f"{ns}/route_planner"})
+    names = ("cell_size", "inflate_obstacles", "simplify_path", "smooth_path")
+    assert node.planner_parameters(names) is None  # not running: no wait
+
+    planner = ros_node.Node("route_planner", namespace=ns)
+    for name, value in zip(names, (0.5, 0.0, False, True), strict=True):
+        planner.declare_parameter(name, value)
+    try:
+        from rclpy.experimental.events_executor import EventsExecutor
+
+        executor = EventsExecutor()
+    except ImportError:
+        executor = ros_node.rclpy.executors.SingleThreadedExecutor()
+    executor.add_node(node)
+    executor.add_node(planner)
+    spinner = threading.Thread(target=executor.spin, daemon=True)
+    spinner.start()
+    try:
+        deadline = time.time() + 5
+        while (params := node.planner_parameters(names)) is None and time.time() < deadline:
+            time.sleep(0.05)
+        assert params == dict(zip(names, (0.5, 0.0, False, True), strict=True))
+        assert node.planner_parameters(("cell_size", "not_declared")) == {}
+    finally:
+        executor.shutdown()
+        spinner.join(5)
+        planner.destroy_node()
+    assert not spinner.is_alive()
+
+
+def test_collision_action_names_match_nav2():
+    from nav2_msgs.msg import CollisionMonitorState as State
+
+    for name in ("DO_NOTHING", "STOP", "SLOWDOWN", "APPROACH", "LIMIT"):
+        assert ros_node._COLLISION_ACTIONS[getattr(State, name)] == name
+
+
+def test_telemetry_sends_geometry_only_when_it_changes(make_node):
+    node = make_node({"gps_fix_topic": "/fix", "gps_filtered_topic": "", "trail_min_step": 0.0})
+    route = [{"lat": 50.0, "lon": 14.0}, {"lat": 50.1, "lon": 14.1}]
+    node._set(sequence_gps=route)
+    node._gps_callback(_fix(50.0, 14.0))
+
+    first = node.get_telemetry()
+    assert first["position"]["trail"] == [{"lat": 50.0, "lon": 14.0}]
+    assert first["mission"]["sequence"] == route
+
+    node._gps_callback(_fix(50.123456789, 14.0))
+    second = node.get_telemetry()
+    assert "trail" not in second["position"]
+    assert second["position"]["trail_append"] == [{"lat": 50.1234568, "lon": 14.0}]
+    assert second["position"]["trail_total"] == 2
+    assert "sequence" not in second["mission"]
+
+    full = node.snapshot()  # a connecting browser; the broadcast state stays as it was
+    assert len(full["position"]["trail"]) == 2
+    assert full["mission"]["sequence"] == route
+    node._set(bus_voltage=24.0)
+    assert set(node.get_telemetry()["mission"]) == {"current_waypoint_index"}
+
+    node.clear_trail()
+    assert node.get_telemetry()["position"]["trail"] == []

@@ -1,10 +1,4 @@
-"""
-Small helpers shared by the package's launch files.
-
-Launch arguments are strings, node parameters are typed, and a config file name may be
-either an absolute path or a name in the package's ``config/`` directory. These live in
-the package (not in ``launch/``) so they can be unit-tested without a running launch.
-"""
+"""Helpers for the launch files; in the package so they are testable without a launch."""
 
 from __future__ import annotations
 

@@ -1,464 +1,332 @@
 # Viewer REST API
 
 !!! note "Internal API"
-    This API is consumed by the viewer's JavaScript frontend. It is documented here for
-    developers who want to build custom tooling or integrate with the viewer programmatically.
+    The viewer's JavaScript is the client of this API. It is documented for tooling that talks to a running viewer.
 
-All endpoints are served by the Flask app started with `map_data_viewer`. Data endpoints live
-under `/api/`. Errors return standard HTTP status codes with a plain-text description.
+All endpoints are served by `map_data_viewer`. Handlers live in `map_data.viewer.routes`, one module per section: `files`, `annotations`, `ways` (ways and nodes), `planning`, `sharing` (goal QR codes and wormhole); shared helpers in `common`. The tracker endpoints are in `map_data.viewer.tracker_routes`.
 
-The handlers live in the `map_data.viewer.routes` package, one module per section below:
-`files` (file management and export), `annotations`, `ways` (ways and nodes), `planning`
-(path planning and traversability), and `sharing` (goal QR codes and wormhole). Shared helpers
-are in `common`; the tracker endpoints are in `map_data.viewer.tracker_routes`.
+## Conventions
+
+- **Errors** are JSON `{"error": "<message>"}` with the HTTP status, for every endpoint.
+- **413**: a JSON body over 10 MB, or any request over 100 MB (the multipart uploads).
+- Every response carries `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Content-Security-Policy: frame-ancestors 'none'`.
+- **409**: the file's annotation store exists but is not a readable JSON object. It is moved aside to `<store>.corrupt-<timestamp>` and never overwritten; reload to continue with an empty store.
+- **`file`** is a `.mapdata` name in the data directory. A name that resolves outside it is 400, a missing file 404.
+- **`way_id`** is an OSM way ID or a split segment `"<id>:<index>"`.
+- Edits are written to `<stem>.annotations.json` under a per-file lock; the `.mapdata` file is never modified. See [Data formats](../dev/data_formats.md#annotationsjson-sidecar-format).
 
 ---
 
-## File Management
+## Files
 
 ### `GET /api/files`
 
-List available `.mapdata` and `.gpx` files in the data directory.
-
-**Response**
-
-```json
-{
-  "mapdata": ["stromovka.mapdata", "coords.mapdata"],
-  "gpx": ["coords.gpx", "route.gpx"]
-}
-```
-
----
+`{"mapdata": [name, ...], "gpx": [name, ...]}`, sorted. Empty lists when the data directory does not exist.
 
 ### `GET /api/mapdata?file=<name>`
 
-Load all parsed features for a `.mapdata` file as a GeoJSON FeatureCollection. Stored
-annotations (tag overrides, deletions, splits, node moves) are applied before the response
-is returned.
+The map with its way edits and tag overrides applied, as a GeoJSON `FeatureCollection`. Drawn annotations are not included (the client draws them from `/api/annotations`). The response has an `ETag`; a matching `If-None-Match` gets 304.
 
-**Query parameters**
-
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `file` | yes | Filename in the data directory (e.g. `coords.mapdata`) |
-
-**Response** — GeoJSON FeatureCollection. Each feature has:
+Way feature properties:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `id` | `int` or `"int:int"` | OSM way ID, or virtual ID `"123:0"` for split segments |
-| `category` | `string` | `"road"`, `"footway"`, or `"barrier"` |
-| `tags` | `object` | OSM tags, with any stored overrides merged in |
-| `in_out` | `string \| null` | Direction hint (`"in"`, `"out"`, or `null`) |
-| `is_node` | `bool` | `true` if the barrier is a point feature (node) rather than a polygon |
+| `id` | int or str | Way ID, `"<id>:<index>"` for split segments |
+| `category` | str | `road`, `footway`, `barrier` or `crossroad` |
+| `tags` | object | OSM tags with overrides applied |
+| `in_out` | str | `"outer"` / `"inner"` for multipolygon members, else `""` |
+| `is_node` | bool | `true` for a barrier made from a single obstacle node |
 
----
+Geometry is `Polygon`, `MultiPolygon` or `LineString`; roads and footways are buffered polygons. Waypoints are `Point` features with `category: "waypoint"` and `index`.
 
 ### `POST /api/fetch_area`
 
-Download and parse a new OSM area and save the result as a `.mapdata` file. Queries the
-Overpass API — may take several seconds for large areas.
-
-**Request body**
+Starts a background download and parse of an OSM area; returns `{"task_id": "<uuid4>"}` at once.
 
 ```json
 {
-  "min_lat": 50.07,
-  "max_lat": 50.09,
-  "min_lon": 14.40,
-  "max_lon": 14.43,
-  "name": "my_area"
+  "min_lat": 50.07, "min_lon": 14.40, "max_lat": 50.09, "max_lon": 14.43,
+  "name": "my_area",
+  "grid_margin": 150, "obstacle_radius": 2.0,
+  "buffer_widths": {"road": 7, "footway": 3, "barrier": 2}
 }
 ```
 
-**Response 200**
+- The box plus its `grid_margin` must be at most 25 km² (`MAX_FETCH_AREA_KM2`).
+- `name` is sanitized to `[A-Za-z0-9_-]`. An existing map, or a leftover `<name>.annotations.json`, is never overwritten: the map is saved as `<name>_1.mapdata`, `<name>_2.mapdata`, ...
+- `grid_margin`, `obstacle_radius`, `buffer_widths` are optional; defaults from `config/planner_defaults.yaml`.
 
-```json
-{
-  "filename": "my_area.mapdata",
-  "roads": 14,
-  "footways": 52,
-  "barriers": 91,
-  "crossroads": 23
-}
-```
+**400**: missing or invalid field, box too large, empty name. **429**: two Overpass fetches (`fetch_area` or `upload_gpx`) already running.
 
-**Error 503** — Overpass API unavailable; try again later.
+### `GET /api/fetch_area/<task_id>`
 
----
+The task record, polled by the client:
+
+| `status` | Other fields |
+|---|---|
+| `pending`, `querying`, `parsing` | `detail` (progress text) |
+| `done` | `result`: `{"filename", "roads", "footways", "barriers", "crossroads"}` |
+| `failed` | `error` |
+
+A finished task is kept for 60 s after it is first polled. **404**: unknown or evicted task.
 
 ### `POST /api/upload_gpx`
 
-Upload a `.gpx` file, parse it (fetching OSM data for its bounds), and save the result as a
-`.mapdata` file.
-
-**Request** — `multipart/form-data`
+Builds a map around an uploaded GPX track, synchronously. `multipart/form-data`:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `file` | yes | The `.gpx` file |
-| `name` | no | Base name for the output file (defaults to the uploaded filename) |
+| `file` | yes | The GPX file |
+| `name` | no | Output stem (default: the upload's stem), sanitized as for `fetch_area` |
+| `options` | no | JSON object with `grid_margin`, `obstacle_radius`, `buffer_widths` |
 
-**Response 200** — same shape as `/api/fetch_area`.
+Saved under the next free name, as for `fetch_area`; the Overpass cache is written next to it. Returns `{"filename", "roads", "footways", "barriers", "crossroads"}`.
 
----
+**400**: bad file, name or options, or the area (with margin) exceeds 25 km². **429**: two Overpass fetches already running. **503**: Overpass unreachable. **500**: parsing failed.
+
+### `POST /api/upload_mapdata`
+
+Saves an uploaded `.mapdata` file (`multipart/form-data`, field `file`) under the next free name. It is checked with `MapData.load` under a temporary name first, so an unreadable file never appears. Returns `{"filename": "<saved name>"}`.
+
+**400**: missing file, wrong extension or unreadable map.
 
 ### `GET /api/export?file=<name>`
 
-Export a `.mapdata` file as a human-readable JSON file, with all stored annotations applied.
-
-**Response** — file download, `Content-Type: application/json`, filename `<name>.exported.mapdata`.
-
----
+Downloads `<stem>.exported.mapdata`: the map with every annotation applied, as `.mapdata` JSON. Nothing is written to the data directory.
 
 ### `GET /api/export/geojson?file=<name>`
 
-Export a `.mapdata` file as a GeoJSON `FeatureCollection`, with all stored annotations applied —
-the same merged data as `/api/export`, but in GeoJSON form for use in QGIS, geojson.io, or other
-GIS tools.
-
-**Response** — file download, `Content-Type: application/geo+json`, filename `<name>.geojson`.
+Downloads the same merged map as `<stem>.geojson` (`application/geo+json`).
 
 ---
 
 ## Annotations
 
-All annotation endpoints require `?file=<name>`.
+All take `?file=<name>`.
 
-### `GET /api/annotations?file=<name>`
+### `GET /api/annotations`
 
-Return the raw annotation store for a file (the full contents of the `.annotations.json` sidecar).
+The whole annotation store (every edit, not only drawn annotations).
 
----
+### `POST /api/annotations`
 
-### `POST /api/annotations?file=<name>`
-
-Add a new drawn annotation (obstacle polygon or custom path).
-
-**Request body**
+Adds a drawn annotation.
 
 ```json
-{
-  "type": "obstacle",
-  "geometry": { "type": "Polygon", "coordinates": [[[14.4, 50.07], ...]] },
-  "properties": {}
-}
+{"type": "obstacle", "geometry": {"type": "Polygon", "coordinates": [[[14.4, 50.07], ...]]}, "properties": {}}
 ```
 
-`type` is `"obstacle"` or `"path"`.
+`geometry` is required: a `LineString`, `Polygon` or `MultiPolygon`. `type` is `"path"` (a drawn way) or anything else, default `"obstacle"`. Returns **201** with the annotation and its uuid4 `id`. **400**: invalid or unsupported geometry, or invalid type.
 
-**Response 201** — the created annotation with a generated `id` field.
+### `PUT /api/annotations/<ann_id>`
 
----
+Replaces the geometry, and `type`/`properties` when given; the body is validated as for `POST`. Returns the annotation. **400**: invalid body. **404**: unknown ID.
 
-### `PUT /api/annotations/<ann_id>?file=<name>`
+### `DELETE /api/annotations/<ann_id>`
 
-Update an annotation's geometry, type, or properties.
-
-**Request body** — same fields as POST.
-
-**Response 200** — updated annotation object.
-
----
-
-### `DELETE /api/annotations/<ann_id>?file=<name>`
-
-Delete an annotation.
-
-**Response 204.**
+**204**. **404**: unknown ID.
 
 ---
 
 ## Ways
 
-### `GET /api/ways/<way_id>?file=<name>`
+All take `?file=<name>`.
 
-Get a single way as a GeoJSON Feature with all stored edits applied. Supports virtual IDs
-(`123:0`, `123:1`) for individual segments of a split way.
+### `GET /api/ways/<way_id>`
 
-**Response** — GeoJSON Feature (same properties as `/api/mapdata` features).
+The edited way or segment as a GeoJSON Feature (properties as in `/api/mapdata`). **404**: unknown way, way reduced to nothing by node deletions, or segment index out of range.
 
----
+### `DELETE /api/ways/<way_id>`
 
-### `DELETE /api/ways/<way_id>?file=<name>`
+Marks a way, or one segment, as deleted (idempotent). Optional body `{"category", "label"}` for the change list. **204**.
 
-Mark a way as deleted. The deletion is stored in the annotations sidecar and does not modify
-the `.mapdata` file. Deleted ways are excluded from map display and planning.
+### `PUT /api/ways/<way_id>/restore`
 
-**Request body** (optional)
+Undoes the deletion of the same way or segment ID. **204**.
 
-```json
-{ "category": "footway", "label": "Fence segment" }
-```
+### `PUT /api/ways/<way_id>/tags`
 
-**Response 204.**
-
----
-
-### `PUT /api/ways/<way_id>/tags?file=<name>`
-
-Override OSM tags for a way. The provided tags are merged on top of the original OSM tags on
-every subsequent load.
-
-**Request body**
+Replaces the way's tag override; applies to every segment.
 
 ```json
-{ "tags": { "highway": "footway", "surface": "gravel" }, "category": "footway", "label": "..." }
+{"tags": {"highway": "footway", "surface": "gravel"}, "category": "footway", "label": "..."}
 ```
 
-**Response 204.**
+**204**. **400**: `tags` is not an object of strings.
 
----
+### `DELETE /api/ways/<way_id>/tags`
 
-### `DELETE /api/ways/<way_id>/tags?file=<name>`
+Removes the tag override. **204**.
 
-Remove stored tag overrides for a way, reverting to the original OSM tags.
+### `PUT /api/ways/<way_id>/hide`, `PUT /api/ways/<way_id>/show`
 
-**Response 204.**
+Hides or shows a whole way in the viewer. Export and planning still use hidden ways. Optional body `{"category", "label"}`. **204**.
 
----
+### `GET /api/ways/<way_id>/segments`
 
-### `PUT /api/ways/<way_id>/hide?file=<name>`
+`{"segments": [Feature, ...]}`, empty for a missing or fully deleted way.
 
-Temporarily hide a way from the map. Hidden ways are still included in exports and planning.
+### `POST /api/ways/split`
 
-**Response 204.**
+Body `{"way_id": 123456, "node_id": 789012}` (an interior node). The segment after the split starts at a new synthetic copy of the node, so the ends move independently and the planner does not route across the split. Returns `{"success": true, "segments": [...]}`. **400**: `node_id` is not an interior node of the edited way. **404**: unknown way.
 
----
+### `DELETE /api/ways/split?way_id=<id>&node_id=<id>`
 
-### `PUT /api/ways/<way_id>/show?file=<name>`
-
-Un-hide a previously hidden way.
-
-**Response 204.**
-
----
-
-### `PUT /api/ways/<way_id>/restore?file=<name>`
-
-Restore a deleted way (undo a prior DELETE).
-
-**Response 204.**
-
----
-
-### `GET /api/ways/<way_id>/segments?file=<name>`
-
-Get the individual segments of a split way as GeoJSON Features.
-
-**Response**
-
-```json
-{ "segments": [ { "type": "Feature", ... }, ... ] }
-```
-
----
-
-### `POST /api/ways/split?file=<name>`
-
-Split a way at a node, creating two independently editable segments.
-
-**Request body**
-
-```json
-{ "way_id": 123456, "node_id": 789012 }
-```
-
-**Response 200**
-
-```json
-{ "success": true, "segments": [ ... ] }
-```
-
----
-
-### `DELETE /api/ways/split?file=<name>&way_id=<id>&node_id=<id>`
-
-Undo a way split.
-
-**Response 200** — `{"segments": [...]}`
+Removes one split point; the detached copy and the moves of both ends are dropped. Returns `{"segments": [...]}`.
 
 ---
 
 ## Nodes
 
-### `GET /api/way_nodes?file=<name>&way_id=<id>`
+All take `?file=<name>&way_id=<id>`.
 
-Get the ordered node list for a way, including WGS84 coordinates.
-
-**Response**
+### `GET /api/way_nodes`
 
 ```json
-{
-  "way_id": 123456,
-  "nodes": [
-    { "id": 111, "lat": 50.071, "lon": 14.401, "tags": {} },
-    { "id": 112, "lat": 50.072, "lon": 14.402, "tags": {} }
-  ]
-}
+{"way_id": "123456", "nodes": [{"id": 111, "lat": 50.071, "lon": 14.401, "tags": {}}]}
 ```
 
----
+`nodes` is `[]` when deletions removed the whole way or segment.
 
-### `DELETE /api/way_node?file=<name>`
+### `POST /api/way_node`
 
-Delete a single node from a way.
+Inserts a synthetic node after an existing one. Body `{"after_node_id": 111, "lat": 50.0712, "lon": 14.4013}`. Returns `{"id": <negative id>, "lat", "lon"}`. **400**: `after_node_id` is not on the edited way. **404**: unknown way.
 
-**Request body**
+### `DELETE /api/way_node?node_id=<id>`
+
+Deletes a node from the way, or from one segment when `way_id` is a segment ID. A node added with `POST /api/way_node` is removed outright. **204**.
+
+### `PUT /api/way_node/restore?node_id=<id>`
+
+Undoes a node deletion (same `way_id`). Removed added nodes cannot be restored. **204**.
+
+### `PUT /api/way_nodes/move`
+
+Records node positions for the way; every segment shares them.
 
 ```json
-{ "way_id": 123456, "node_id": 111, "category": "footway", "label": "..." }
+{"nodes": [{"id": 111, "lat": 50.0715, "lon": 14.4015}], "category": "footway", "label": "..."}
 ```
 
-**Response 204.**
+All nodes are validated before anything is written; each must be on the edited way (a split end counts, a way without nodes takes its own ID). **204**. **400**: invalid position or a node not on the way. **404**: unknown way.
+
+### `DELETE /api/way_nodes/move`
+
+Discards every node move of the way. **204**.
 
 ---
 
-### `PUT /api/way_node/restore?file=<name>`
-
-Restore a deleted node.
-
-**Request body**
-
-```json
-{ "way_id": 123456, "node_id": 111 }
-```
-
-**Response 204.**
-
----
-
-### `PUT /api/way_nodes/move?file=<name>`
-
-Move one or more nodes to new WGS84 positions (used by drag-and-drop editing).
-
-**Request body**
-
-```json
-{
-  "way_id": 123456,
-  "nodes": [
-    { "id": 111, "lat": 50.0715, "lon": 14.4015 }
-  ]
-}
-```
-
-**Response 200** — the updated way as a GeoJSON Feature.
-
----
-
-### `DELETE /api/way_nodes/move?file=<name>&way_id=<id>`
-
-Reset all node position overrides for a way, restoring original OSM positions.
-
-**Response 204.**
-
----
-
-## Path Planning
+## Planning
 
 ### `GET /api/planner_defaults`
 
-Return the planner default configuration from `config/planner_defaults.yaml`.
+`config/planner_defaults.yaml` as JSON (see [Planner configuration](../dev/planner_config.md)), plus:
 
-**Response** — the YAML file contents as a JSON object (see [Planner Configuration](../dev/planner_config.md)).
+| Field | Description |
+|---|---|
+| `source` | `"route_planner"` when the viewer runs with ROS 2 and the tracker's `planner_node` answers, else `"yaml"` |
+| `node` | The node name, only with `source: "route_planner"` |
 
----
-
-### `GET /api/cost_grid?file=<name>&min_lat=&min_lon=&max_lat=&max_lon=`
-
-Compute the traversal cost grid for a bounding box. Used by the **Show Cost Grid** overlay
-in the Planner. Cells have cost 0.0 (free path) up to 1.0 (hard obstacle).
-
-**Query parameters**
-
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `file` | yes | Map filename |
-| `min_lat`, `min_lon`, `max_lat`, `max_lon` | yes | Bounding box in WGS84 degrees |
-| `highway_costs` | no | JSON-encoded cost override dict (e.g. `{"footway":0.0,"residential":0.5}`) |
-| `surface_costs` | no | JSON-encoded surface cost override dict |
-
-**Response** — `{"image": "data:image/png;base64,...", "bounds": [[south, west], [north, east]]}`,
-ready for `L.imageOverlay(image, bounds)`. The UTM grid is resampled onto a lat/lon-aligned
-raster (~1 px per cell); pixels outside the grid are transparent. Colours: black = obstacle
-(cost ≥ 1), translucent grey = off-path (cost ≥ `default_off_path_cost`), green → red = path
-cost / `path_cost_cap`. Both fields are `null` for an empty grid.
-
----
+With `route_planner`, that node's `cell_size`, `inflate_obstacles`, `simplify_path` and `smooth_path` replace the file's values.
 
 ### `POST /api/create_replan`
 
-Run path planning on a set of waypoints. The main planning endpoint.
-
-**Request body**
+Plans a route on the edited map with `plan_route`.
 
 ```json
 {
   "file": "coords.mapdata",
   "points": [[50.071, 14.401], [50.075, 14.408]],
-  "algorithm": "astar",
-  "sub_algorithm": "astar",
+  "algorithm": "graph",
   "allowed_ways": ["footway"],
-  "cell_size": 0.25,
-  "inflate_obstacles": 0.25,
-  "simplify_path": true,
-  "smooth_path": false,
-  "transfer_id": "550e8400-e29b-41d4-a716",
-  "highway_costs": { "footway": 0.0, "residential": 0.5 },
-  "surface_costs": { "asphalt": 0.0, "grass": 0.5 }
+  "transfer_id": "0b8f4c1e-..."
 }
 ```
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `algorithm` | `"rrt"` | `"astar"` = Grid A*, `"rrt"` = RRT*, `"graph"` = on-way graph planning |
-| `sub_algorithm` | `"astar"` | Used when `algorithm` is `"astar"` or `"rrt"` — selects the segment-level solver (`"rrt"` falls back to `"astar"` when it finds no path) |
-| `allowed_ways` | `["footway"]` | Way categories to treat as low-cost: `"footway"`, `"road"`, or both |
-| `transfer_id` | `null` | Client-generated UUID; pass to `/api/cancel_replan` to abort |
+| `file`, `points` | required | Map and `[[lat, lon], ...]`, at least two |
+| `algorithm` | `"rrt"` | `"graph"` follows the ways; `"astar"` / `"rrt"` use the grid planner |
+| `sub_algorithm` | `"astar"` | The grid search actually run (`"astar"` or `"rrt"`); RRT* falls back to A* |
+| `allowed_ways` | `["footway"]` | `"footway"` and/or `"road"` |
+| `cell_size` | `planner_defaults.yaml` | 0.05–10 m |
+| `inflate_obstacles` | `planner_defaults.yaml` | 0–10 m |
+| `simplify_path`, `smooth_path` | `planner_defaults.yaml` | Booleans |
+| `grid_cost_weight` | `planner_defaults.yaml` | 0–1000 |
+| `highway_costs`, `surface_costs` | `planner_defaults.yaml` | `{tag value: cost}`, for both planners |
+| `traversability` | the rule file | Rule YAML text |
+| `transfer_id` | none | Makes a grid plan cancellable with `/api/cancel_replan`; unique per request |
 
 **Response**
 
-| `retrieveNum` | `newPath` | Meaning |
-|---------------|-----------|---------|
-| `0` | `[[lat,lon],...]` | Path changed from input |
-| `-1` | `[[lat,lon],...]` | Path unchanged (already obstacle-free) |
-| `1` | `null` | Cancelled or failed (check `status` field) |
+| Body | Meaning |
+|---|---|
+| `{"retrieveNum": 0, "newPath": [[lat, lon], ...]}` | Route differs from the input polyline |
+| `{"retrieveNum": -1, "newPath": [[lat, lon], ...]}` | Route equals the input polyline |
+| `{"retrieveNum": 1, "newPath": null, "status": "cancelled", "reason": "cancelled"}` | Cancelled with `/api/cancel_replan` |
+| `{"retrieveNum": 1, "newPath": null, "status": "failed", "reason": "<reason>"}` | No route |
 
----
+Failure `reason`s: `snap_too_far`, `unreachable`, `start_outside_map`, `goal_outside_map` (graph); `no_path`, `start_blocked`, `goal_blocked`, `start_outside_map`, `goal_outside_map` (grid). See [Action failure reasons](../planning.md#action-failure-reasons).
+
+**400**: missing or invalid parameter, unknown algorithm, fewer than two points, or a grid needing more than 4 million cells (`grid_too_large`). **404**: unknown file.
 
 ### `POST /api/cancel_replan`
 
-Cancel an in-progress planning request.
+Body `{"transfer_id": "..."}`. Returns `{"success": true}`, also for an unknown or finished ID. A cancel that arrives before its plan starts still aborts it. **400**: no `transfer_id`, or not a string.
 
-**Request body**
+### `GET /api/cost_grid`
 
-```json
-{ "transfer_id": "550e8400-e29b-41d4-a716" }
-```
+Query: `file`, `min_lat`, `min_lon`, `max_lat`, `max_lon`, optional JSON-encoded `highway_costs` / `surface_costs`, optional `allowed_ways` (comma-separated `footway`/`road`, default `footway`).
 
-**Response** — `{"success": true}`
+Renders the edited map's 1 m cost grid over the box: `{"image": "data:image/png;base64,...", "bounds": [[south, west], [north, east]]}` for `L.imageOverlay`, both `null` for an empty grid. Black = obstacle, translucent grey = off-path (≥ `default_off_path_cost`), green → red = way cost / `path_cost_cap`. **400**: the box needs more than 4 million cells, or `allowed_ways` names another category.
+
+### `GET /api/traversability`
+
+`{"yaml": "<rule file text>", "path": "<path>"}`; empty text if the file is missing.
+
+### `PUT /api/traversability`
+
+Body `{"traversability": "<yaml text>"}`. Validates the rules and writes the text verbatim (comments kept). Returns `{"path": "<path>"}`. `route_planner` uses the new rules on its next goal; `osm_cloud` needs a restart. **400**: invalid rules.
+
+### `POST /api/traversability/blocked`
+
+Body `{"file", "traversability"?, "allowed_ways"?}`. Lists the ways the graph planner will not route over: `{"blocked": [[way_id, reason], ...]}`.
+
+---
+
+## Sharing
+
+### `GET /api/qr`, `GET /api/qr.svg`
+
+`?lat=50.11&lon=14.41[&scale=12][&download=1][&caption=...]`
+
+A QR code of the goal as PNG or SVG; the payload is `geo:<lat>,<lon>`, also sent in the `X-Geo-URI` header. `scale` is pixels per module. `caption` is the text under the code: absent = the payload, empty = none. `download=1` adds a `Content-Disposition` file name. **400**: missing or invalid coordinates.
+
+### `POST /api/create_wormhole`
+
+Body `{"gpx": "<GPX text>"}`. Starts `wormhole send` (the [magic-wormhole](https://magic-wormhole.readthedocs.io/) CLI must be on `PATH`) and waits up to 15 s for the code. Returns `{"success": true, "code": "7-guitar-academy", "transfer_id": "<uuid4>"}`; the receiver runs `wormhole receive <code>`.
+
+**400**: no `gpx`, or not a string. **429**: 4 transfers already running. **500**: the CLI failed to start or no code within 15 s.
+
+### `POST /api/cancel_wormhole`
+
+Body `{"transfer_id": "..."}`. Returns `{"success": true, "message": "Transfer cancelled"}`. **400**: no `transfer_id`, or not a string. **404**: unknown transfer.
 
 ---
 
 ## Tracker
 
-Every tracker endpoint answers **503** when the tracker is not running (no ROS 2 context).
+Every tracker endpoint answers **503** without a ROS 2 context.
 
 ### `GET /api/tracker/settings`
-
-The tracker's topic settings, what its config file holds, and the topics on the ROS graph.
-
-**Response**
 
 ```json
 {
   "path": "/.../config/tracker.yaml",
   "exists": true,
   "file_error": null,
-  "heading_types": { "imu": "sensor_msgs/msg/Imu", "...": "..." },
-  "topics": { "/gps/fix": ["sensor_msgs/msg/NavSatFix"] },
+  "heading_types": {"imu": "sensor_msgs/msg/Imu", "...": "..."},
+  "topics": {"/gps/fix": ["sensor_msgs/msg/NavSatFix"]},
   "settings": [
     {
       "name": "gps_fix_topic",
@@ -474,77 +342,18 @@ The tracker's topic settings, what its config file holds, and the topics on the 
 }
 ```
 
-`value` is the live setting and `saved` is the config file's value (the default when the file
-does not set it). `file_error` is set, and `saved` falls back to the defaults, when the file
-cannot be read.
-
----
+`value` is live, `saved` the config file's value (the default when unset). When the file cannot be read, `file_error` is set and `saved` falls back to the defaults.
 
 ### `PUT /api/tracker/settings`
 
-Apply settings to the running tracker, which resubscribes and restarts its telemetry, and
-optionally save them to the config file with its comments kept.
-
-**Request body**
-
 ```json
-{ "settings": { "gps_fix_topic": "/fixposition/odometry_llh", "heading_type": "yaw_vector3" }, "save": true }
+{"settings": {"gps_fix_topic": "/fixposition/odometry_llh", "heading_type": "yaw_vector3"}, "save": true}
 ```
 
-`settings` may be a subset. With `save`, all of the tracker's current settings are written.
+Applies a subset of settings to the running tracker, which resubscribes. With `save`, all current settings are written to the config file, comments kept. Returns `{"changed": bool, "path": str | null}`.
 
-**Response 200** — `{"changed": true, "path": "/.../config/tracker.yaml"}` (`path` is `null` without `save`).
-
-**Error 400** — unknown setting, non-string value, whitespace, invalid topic name or `heading_type`.
-Nothing is applied.
-
-**Error 500** — applied, but the config file could not be written.
+**400**: unknown setting or invalid value; nothing is applied. **500**: applied but not saved.
 
 ### `DELETE /api/tracker/trail`
 
-Forget the robot trail recorded so far. The trail lives on the tracker node, so clearing it
-only in the browser would bring it back with the next telemetry frame.
-
-**Response 200** — `{"dropped": 137}`, the number of fixes discarded.
-
----
-
-## Wormhole (Robot File Transfer)
-
-Wormhole endpoints use [magic-wormhole](https://magic-wormhole.readthedocs.io/) to transfer
-files peer-to-peer. Requires `pip install magic-wormhole` on the server.
-
-### `POST /api/create_wormhole`
-
-Send a GPX file to a robot over the network. The server starts a wormhole send process and
-waits up to 15 seconds for the one-time transfer code to be generated.
-
-**Request body**
-
-```json
-{ "gpx": "<?xml version=\"1.0\"?>..." }
-```
-
-**Response 200**
-
-```json
-{ "success": true, "code": "7-guitar-academy", "transfer_id": "uuid" }
-```
-
-Give the code to the robot operator, who runs `wormhole receive <code>` to receive the file.
-
-**Response 500** if `wormhole` is not installed or the code was not captured in time.
-
----
-
-### `POST /api/cancel_wormhole`
-
-Cancel an active wormhole transfer.
-
-**Request body**
-
-```json
-{ "transfer_id": "uuid" }
-```
-
-**Response** — `{"success": bool, "message": "..."}`
+Clears the robot trail kept on the tracker node. Returns `{"dropped": <number of fixes>}`.

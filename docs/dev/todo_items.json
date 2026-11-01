@@ -3,7 +3,7 @@
     "type": "improvement",
     "sev": "nice-to-have",
     "title": "Speed up planning hot paths with native extensions",
-    "desc": "The main bottlenecks are the Python <code>_bresenham</code> generator and <code>_segment_cost</code> in RRT* (called O(max_iter × neighbors) times), and the <code>heapq</code> loop in <code>grid_astar</code>. Recommended approach: (1) try <code>@numba.njit</code> on these inner loops first — zero build overhead, easy to toggle; (2) replace <code>grid_astar</code> with <code>skimage.graph.route_through_array</code> which is C-backed; (3) Cython or pybind11 only if numba is unacceptable for deployment. Full C/C++ rewrite is not justified given that numpy, cKDTree, and Shapely/GEOS are already native.",
+    "desc": "The main bottlenecks are the Python <code>_bresenham_cells</code> generator (shared by grid A* and RRT*) and <code>_segment_cost</code> in RRT* (called O(max_iter × neighbors) times), and the <code>heapq</code> loop in <code>grid_astar</code>. Recommended approach: (1) try <code>@numba.njit</code> on these inner loops first — zero build overhead, easy to toggle; (2) replace <code>grid_astar</code> with <code>skimage.graph.route_through_array</code> which is C-backed; (3) Cython or pybind11 only if numba is unacceptable for deployment. Full C/C++ rewrite is not justified given that numpy, cKDTree, and Shapely/GEOS are already native.",
     "file": "map_data/pathsolver/rrt_star.py, map_data/pathsolver/grid_astar.py"
   },
   {
@@ -17,14 +17,14 @@
     "type": "improvement",
     "sev": "nice-to-have",
     "title": "Progress reporting for fetch_area via SocketIO",
-    "desc": "The fetch task is polled over REST while a SocketIO channel already exists for telemetry — pushing progress (query, parse, save stages) would remove the polling and its 404-on-second-poll footgun.",
+    "desc": "The fetch task is polled over REST while a SocketIO channel already exists for telemetry; pushing the query, parse and save stages would remove the polling.",
     "file": "map_data/viewer/routes/files.py, map_data/viewer/app.py"
   },
   {
     "type": "improvement",
     "sev": "nice-to-have",
-    "title": "Wire up or remove the node anti-tag mechanism",
-    "desc": "<code>parameters/anti_obstacle_tags.csv</code> is loaded nowhere and <code>parse_osm_nodes</code> has no anti-tag override analogous to <code>Way.is_barrier</code>. Related: <code>way_node_ids</code> is built from <em>all</em> ways, so obstacle nodes sitting on any way (the normal OSM position for <code>barrier=gate</code>/<code>bollard</code>) are always skipped and never become obstacles — if intentional, document it.",
-    "file": "map_data/utils/parsing.py, map_data/map_data.py, parameters/anti_obstacle_tags.csv"
+    "title": "Obstacle nodes on ways are never obstacles",
+    "desc": "<code>parse_osm_nodes</code> skips every node that belongs to a parsed way, so a <code>barrier=bollard</code> or <code>barrier=gate</code> on a footway (its usual OSM position) never blocks the planner. Decide whether barrier nodes on routable ways should become obstacles (or a traversability rule) instead.",
+    "file": "map_data/utils/parsing.py"
   }
 ]

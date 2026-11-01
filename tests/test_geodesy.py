@@ -12,7 +12,7 @@ from map_data.utils.geodesy import (
     utm_to_local_via_ecef,
 )
 
-# FP_ECEF -> FP_ENU0 static transform from a Stromovka bag (2026-08-21); the local
+# FP_ECEF -> FP_ENU0 static transform from a Stromovka bag; the local
 # frame's pose expressed in ECEF (translation + unit quaternion x, y, z, w).
 _ENU_IN_ECEF_T = np.array([3969770.044, 1021450.309, 4870458.658])
 _ENU_IN_ECEF_Q = np.array([0.209, 0.27, 0.743, 0.576])

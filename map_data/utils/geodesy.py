@@ -1,13 +1,9 @@
 """
 Geodetic conversions between UTM, WGS84 lat/lon and Earth-Centred Earth-Fixed (ECEF).
 
-Map data is stored in UTM. Robots that localise with a GNSS/INS unit (e.g. Fixposition)
-expose an Earth frame in ECEF coordinates and a local ENU frame as a static TF child of it.
-Converting UTM -> lat/lon -> ECEF and then applying the (inverse) Earth->local TF places map
-features in the local frame *exactly*, whereas treating UTM as a translated copy of the
-local ENU frame is off by UTM grid convergence and scale (several metres per kilometre).
-
-All functions are vectorised over NumPy arrays and have no ROS dependency.
+Going UTM -> lat/lon -> ECEF -> local frame (via a GNSS/INS unit's Earth->local TF) places
+map features exactly; treating UTM as a shifted local ENU frame is off by grid convergence
+and scale (several metres per kilometre). Vectorised, no ROS dependency.
 """
 
 from __future__ import annotations

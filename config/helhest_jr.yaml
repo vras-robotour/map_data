@@ -3,8 +3,8 @@
 # helhest_bringup tmuxinator/nuc/robotour.yml).
 #
 #   map_data_viewer --config config/helhest_jr.yaml   (TRACKER > Topics saves changes back here)
-#   ros2 launch map_data osm_cloud.launch.py          (its default config_file; grid parameters
-#                                                      come from config/osm_grid.yaml)
+#   ros2 launch map_data osm_cloud.launch.py          (grid parameters come from
+#                                                      config/osm_grid.yaml)
 #
 # Every *_topic can be set to "" to disable the feature and hide its UI row. Every tracker
 # parameter is spelled out so no nav2-style default of tracker.yaml leaks in.
@@ -62,24 +62,10 @@ map_data_tracker:
     sequence_poses_topic: "/goal_sequence"           # road_follower's current waypoint window (PoseArray, FP_ECEF)
     road_path_topic: ""                              # path_centerline on the jetson, cyan
     intersections_topic: ""                          # osm_cloud crossroads (FP_ENU0), magenta rings
-    active_intersection_topic: ""                                     # enter/exit circles
+    active_intersection_topic: ""                    # enter/exit circles
     intersection_enter_threshold: 5.0                # keep equal to road_and_gps_follower.yaml
     intersection_exit_threshold: 6.0
+    planner_node: "/route_planner"                   # its parameters seed the Planner toggles ("" = off)
     nav_through_poses_feedback_topic: ""             # no Nav2 actions
     follow_gps_waypoints_feedback_topic: ""
     follow_waypoints_feedback_topic: ""
-
-osm_cloud:
-  ros__parameters:
-    grid_topic: "grid"
-    # Same map as route_planner: the annotation store is merged and stairs are dropped,
-    # so the rings on /intersections sit on ways the planner actually routes over.
-    # osm_cloud.launch.py forwards its annotations:= argument (default "auto") on top of
-    # this file, so override it there rather than here when using the launch file.
-    annotations: "auto"
-    exclude_highway: ["steps"]
-    # Tag rules deciding which ways the robot may drive on; "" = the package's
-    # config/traversability.yaml. Keep it equal to route_planner's traversability_file.
-    traversability_file: ""
-    intersections_topic: "intersections"
-    intersection_markers_topic: "intersection_markers"

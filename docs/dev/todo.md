@@ -1,4 +1,4 @@
-# Known Issues & Backlog
+# Known issues and backlog
 
 <div class="todo-app">
 <style>

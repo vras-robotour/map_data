@@ -1,16 +1,17 @@
 """
 ROS 2 side of the viewer's Tracker mode.
 
-``TrackerNode`` subscribes to a configurable set of robot topics and turns them into one
-JSON-serialisable telemetry snapshot (``get_telemetry``) that ``app.py`` pushes to the
-browser over a WebSocket. Every topic is a parameter; an empty topic disables the feature
-and hides its UI row. The parameters come from a config file (see :mod:`.tracker_config`)
-and the topics and frames can be switched at runtime with ``apply_settings``.
+``TrackerNode`` subscribes to a configurable set of robot topics and turns them into
+JSON-serialisable telemetry deltas (``get_telemetry``, with ``snapshot`` on connect) that
+``app.py`` pushes to the browser over Socket.IO. Every topic is a parameter; an empty
+topic disables the feature and hides its UI row. The parameters come from a config file
+(see :mod:`.tracker_config`) and the topics and frames can be switched at runtime with
+``apply_settings``.
 
 Geometry (paths, goals) may arrive in any TF frame. With ``earth_frame`` set (e.g.
 ``FP_ECEF`` on a Fixposition stack) poses are transformed into that ECEF frame through TF
-and converted to lat/lon exactly; with ``earth_frame`` empty the legacy behaviour
-(transform into ``utm_frame`` and ``utm.to_latlon``) is used.
+and converted to lat/lon exactly; with it empty they go through ``utm_frame`` and
+``utm.to_latlon``.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import math
 import threading
 import time
 from collections import deque
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -46,10 +47,12 @@ try:
     )
     from nav2_msgs.msg import BehaviorTreeLog, CollisionMonitorState, SpeedLimit
     from nav_msgs.msg import Odometry, Path
+    from rcl_interfaces.msg import ParameterType
+    from rcl_interfaces.srv import GetParameters
     from rclpy.exceptions import NameValidationException
     from rclpy.expand_topic_name import expand_topic_name
     from rclpy.node import Node
-    from rclpy.parameter import Parameter
+    from rclpy.parameter import Parameter, parameter_value_to_python
     from rclpy.qos import (
         DurabilityPolicy,
         HistoryPolicy,
@@ -71,10 +74,9 @@ except ImportError:
 
 RECOVERY_TIMEOUT = 5.0
 TELEOP_TIMEOUT = 2.0
-# crl_commander republishes its plan and goal every tick (20 Hz) while it has them, and
-# publishes an *empty* plan while it has no goal; a planner that publishes once (nav2)
-# never sends empties. So: empties for this long drop the plan, and the goal with it when
-# it went quiet too. Silence alone never clears anything.
+# crl_commander republishes plan and goal at 20 Hz while it has them and an *empty* plan
+# while it has none; nav2 publishes once and never sends empties. Empties for this long
+# drop the plan, and the goal if it went quiet too; silence alone clears nothing.
 PLAN_STALE_TIMEOUT = 3.0
 PATH_SUBSAMPLE = 10  # keep every n-th pose of long paths (plus the last one)
 ROAD_PATH_SUBSAMPLE = 5
@@ -82,9 +84,25 @@ ROAD_PATH_SUBSAMPLE = 5
 # like a planner path would cut every corner: thin it only once it gets long.
 SEQUENCE_MAX_POINTS = 200
 SPEECH_HISTORY = 5  # spoken messages kept for the sidebar
+LATLON_DIGITS = 7  # ~1 cm; keeps the telemetry JSON short
+# Mission lists sent only when they change. Their callbacks replace the lists, never
+# mutate them, so an identity check detects a change.
+GEOMETRY = {
+    "waypoints": "waypoints_gps",
+    "sequence": "sequence_gps",
+    "sequence_window": "sequence_window_gps",
+    "road_path": "road_path_gps",
+    "intersections": "intersections_gps",
+}
 
-# Ordered like nav2's SpeedLimit / CollisionMonitor enums
-_COLLISION_ACTIONS: dict[int, str] = {0: "STOP", 1: "SLOWDOWN", 2: "LIMIT", 3: "PASSTHROUGH"}
+# nav2_msgs/CollisionMonitorState action_type constants.
+_COLLISION_ACTIONS: dict[int, str] = {
+    0: "DO_NOTHING",
+    1: "STOP",
+    2: "SLOWDOWN",
+    3: "APPROACH",
+    4: "LIMIT",
+}
 
 
 def heading_from_yaw(yaw_rad: float) -> float:
@@ -109,7 +127,10 @@ def xyz_to_latlon(xyz: np.ndarray, to_ecef: np.ndarray | None) -> list[dict[str,
     if to_ecef is not None:
         pts = pts @ to_ecef[:3, :3].T + to_ecef[:3, 3]
     lla = ecef_to_latlon_array(pts)
-    return [{"lat": float(lat), "lon": float(lon)} for lat, lon, _ in lla]
+    return [
+        {"lat": round(float(lat), LATLON_DIGITS), "lon": round(float(lon), LATLON_DIGITS)}
+        for lat, lon, _ in lla
+    ]
 
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -137,13 +158,10 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         """
         super().__init__(NODE_NAME)
 
-        # See tracker_config.SETTINGS for the topics. heading_type: "imu" (sensor_msgs/Imu
-        # orientation), "yaw_vector3" (Vector3Stamped, x = yaw rad, e.g. Fixposition
-        # /fixposition/ypr) or "odometry" (nav_msgs/Odometry orientation). earth_frame: ECEF
-        # frame for exact pose -> lat/lon conversion; empty = legacy utm_frame path.
-        # Robot trail: last trail_length fixes, appended when the robot moved trail_min_step.
-        # A fix older than stale_after (s) is flagged stale in the UI. The intersection
-        # thresholds are drawn around the active intersection (match road_follower's).
+        # Topics, frames, heading_type: tracker_config.SETTINGS. The trail keeps the last
+        # trail_length fixes, trail_min_step m apart; a fix older than stale_after s is
+        # flagged stale; the intersection thresholds (road_follower's) are drawn around the
+        # active intersection.
         for name, default in node_parameters(config or {}).items():
             self.declare_parameter(name, default)
 
@@ -165,10 +183,9 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
 
         self.tf_buffer = Buffer()
         if self.get_parameter("tf_static_only").value:
-            # A TransformListener digests the whole /tf firehose (250 Hz on helhest_jr); when
-            # every frame we look up is static, one /tf_static subscription is enough.
-            # (TransformListener(static_only=True) would do it but is kilted-only.) Kept out
-            # of _tracker_subscriptions so apply_settings does not destroy it.
+            # Every frame looked up is static, so /tf_static suffices; a TransformListener
+            # would also digest /tf (TransformListener(static_only=True) is kilted-only).
+            # Kept out of _tracker_subscriptions so apply_settings does not destroy it.
             self._tf_static_sub = self.create_subscription(
                 TFMessage,
                 "/tf_static",
@@ -182,13 +199,13 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         else:
             self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        # Use Best Effort QoS for telemetry to match bags and typical sensor publishers
+        # Best effort matches both reliable and best-effort publishers (sensors, bags)
         self._qos_best_effort = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
             history=HistoryPolicy.KEEP_LAST,
             depth=10,
         )
-        # Latched publishers (goal, sequence): receive the last message when starting late
+        # Latched publishers (sequence, intersections): receive the last message when starting late
         self._qos_latched = QoSProfile(
             depth=1,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
@@ -198,6 +215,13 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         self._subscribe()
         # A plan and goal are volatile: a planner that exits takes them with it
         self.create_timer(1.0, self._drop_orphaned_plan)
+        # The route_planner node whose parameters seed the viewer's planner toggles
+        self.planner_node: str = self.get_parameter("planner_node").value
+        self._planner_client = (
+            self.create_client(GetParameters, f"{self.planner_node}/get_parameters")
+            if self.planner_node
+            else None
+        )
 
         enabled = [k for k, v in self.enabled_features.items() if v]
         self.get_logger().info(
@@ -208,6 +232,10 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
     def _reset_state_locked(self) -> None:
         """Forget all telemetry (at start and when the topics change); hold self._lock."""
         self.trail: deque[dict[str, float]] = deque(maxlen=self.trail_length)
+        self._trail_total = 0  # fixes ever appended; the broadcast sends the new ones
+        self._trail_full = True  # the next broadcast sends the whole trail
+        self._sent_trail_total = 0
+        self._sent_geometry: dict[str, Any] = {}
         self._last_fix_time: float | None = None
         self._stale_reported = False
 
@@ -254,7 +282,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
 
     # ------------------------------------------------------------------ subscriptions
     def _subscribe(self) -> None:
-        """Subscribe to every configured topic and publish the resulting feature flags."""
+        """Subscribe to every configured topic and record the resulting feature flags."""
         self.earth_frame: str = self.get_parameter("earth_frame").value
         self.utm_frame: str = self.get_parameter("utm_frame").value
         qos_best_effort = self._qos_best_effort
@@ -463,6 +491,32 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         """Current topics, frames and heading_type (see ``tracker_config.SETTINGS``)."""
         return {name: self.get_parameter(name).value for name in SETTING_DEFAULTS}
 
+    def planner_parameters(
+        self, names: Sequence[str], timeout: float = 0.5
+    ) -> dict[str, Any] | None:
+        """
+        Current values of *names* on :attr:`planner_node` (omitting any that are unset).
+
+        ``None`` when the node is not on the graph or does not answer within *timeout*
+        seconds, so a web request never waits on an absent planner.
+        """
+        client = self._planner_client
+        if client is None or not client.service_is_ready():
+            return None
+        future = client.call_async(GetParameters.Request(names=list(names)))
+        deadline = time.monotonic() + timeout
+        while not future.done():  # the executor thread completes it
+            if time.monotonic() > deadline:
+                client.remove_pending_request(future)
+                return None
+            time.sleep(0.01)
+        values = future.result().values
+        return {
+            name: parameter_value_to_python(value)
+            for name, value in zip(names, values, strict=False)
+            if value.type != ParameterType.PARAMETER_NOT_SET
+        }
+
     def apply_settings(self, values: Mapping[str, Any]) -> bool:
         """
         Switch topics / frames at runtime: resubscribe and restart the telemetry.
@@ -487,6 +541,8 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             except (ValueError, NameValidationException) as ex:
                 raise TrackerConfigError(f"{name}: {ex}") from ex
 
+        # Called from a Flask thread while the executor spins: creating and destroying
+        # subscriptions wakes the executor, so this needs no hand-over (see the test).
         with self._reconfigure_lock:
             current = self.settings()
             changed = {name: value for name, value in new.items() if current[name] != value}
@@ -508,6 +564,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         with self._lock:
             dropped = len(self.trail)
             self.trail.clear()
+            self._trail_full = True
             self._dirty = True
         return dropped
 
@@ -517,9 +574,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
 
     # ------------------------------------------------------------------ telemetry snapshot
     def _build_status_locked(self) -> dict[str, Any]:
-        """
-        Build status snapshot. Caller must hold self._lock.
-        """
+        """Build the status part of the telemetry; hold self._lock."""
         now = time.time()
         temp_max = None
         if self.temperatures:
@@ -553,39 +608,72 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         }
 
     def get_telemetry(self) -> dict[str, Any] | None:
+        """
+        Telemetry for the periodic broadcast, or None when nothing changed.
+
+        The mission geometry is included only when it changed since the last call and
+        the trail as the fixes appended since then (``trail_append``); :meth:`snapshot`
+        gives a newly connected browser the rest.
+        """
         with self._lock:
-            age = None if self._last_fix_time is None else time.time() - self._last_fix_time
-            stale = age is not None and age > self.stale_after
+            age, stale = self._fix_age_locked()
             # Emit once more when the fix goes stale so the UI can flag it
             if not self._dirty and not (stale and not self._stale_reported):
                 return None
             self._dirty = False
             self._stale_reported = stale
-            return {
-                "enabled_features": dict(self.enabled_features),
-                "position": {
-                    "gps": dict(self.pose_gps) if self.pose_gps else {},
-                    "ekf": dict(self.pose_ekf) if self.pose_ekf else {},
-                    "goal": dict(self.goal_gps) if self.goal_gps else None,
-                    "fix_age": None if age is None else round(age, 1),
-                    "stale": stale,
-                    "stale_after": self.stale_after,
-                    "trail": list(self.trail),
-                    "active_intersection": (
-                        dict(self.active_intersection_gps) if self.active_intersection_gps else None
-                    ),
-                    "intersection_thresholds": dict(self.intersection_thresholds),
-                },
-                "mission": {
-                    "waypoints": list(self.waypoints_gps),
-                    "current_waypoint_index": self.current_waypoint,
-                    "sequence": list(self.sequence_gps),
-                    "sequence_window": list(self.sequence_window_gps),
-                    "road_path": list(self.road_path_gps),
-                    "intersections": list(self.intersections_gps),
-                },
-                "status": self._build_status_locked(),
-            }
+            data = self._telemetry_locked(age, stale)
+            new = self._trail_total - self._sent_trail_total
+            if self._trail_full or new > len(self.trail):
+                data["position"]["trail"] = list(self.trail)
+            elif new:
+                data["position"]["trail_append"] = list(self.trail)[-new:]
+            self._trail_full = False
+            self._sent_trail_total = self._trail_total
+            for key, attr in GEOMETRY.items():
+                value = getattr(self, attr)
+                if value is not self._sent_geometry.get(key):
+                    data["mission"][key] = list(value)
+                    self._sent_geometry[key] = value
+            return data
+
+    def snapshot(self) -> dict[str, Any]:
+        """The complete telemetry, for a browser that just connected (no state changes)."""
+        with self._lock:
+            data = self._telemetry_locked(*self._fix_age_locked())
+            data["position"]["trail"] = list(self.trail)
+            for key, attr in GEOMETRY.items():
+                data["mission"][key] = list(getattr(self, attr))
+            return data
+
+    def _fix_age_locked(self) -> tuple[float | None, bool]:
+        """Seconds since the last fix and whether it is stale; hold self._lock."""
+        age = None if self._last_fix_time is None else time.time() - self._last_fix_time
+        return age, age is not None and age > self.stale_after
+
+    def _telemetry_locked(self, age: float | None, stale: bool) -> dict[str, Any]:
+        """Telemetry without the trail and the mission geometry; hold self._lock."""
+        return {
+            "enabled_features": dict(self.enabled_features),
+            "position": {
+                "gps": dict(self.pose_gps) if self.pose_gps else {},
+                "ekf": dict(self.pose_ekf) if self.pose_ekf else {},
+                "goal": dict(self.goal_gps) if self.goal_gps else None,
+                "fix_age": None if age is None else round(age, 1),
+                "stale": stale,
+                "stale_after": self.stale_after,
+                "trail_total": self._trail_total,
+                "trail_length": self.trail_length,
+                "active_intersection": (
+                    dict(self.active_intersection_gps) if self.active_intersection_gps else None
+                ),
+                "intersection_thresholds": dict(self.intersection_thresholds),
+            },
+            "mission": {
+                "current_waypoint_index": self.current_waypoint,
+            },
+            "status": self._build_status_locked(),
+        }
 
     # ------------------------------------------------------------------ geometry -> lat/lon
     def _tf_static_callback(self, msg: TFMessage) -> None:
@@ -615,7 +703,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             m = self._lookup_matrix(self.earth_frame, frame_id)
             return None if m is None else xyz_to_latlon(xyz, m)
 
-        # Legacy: UTM frame in TF, zone inferred from the current fix
+        # No earth_frame: UTM frame in TF, zone inferred from the current fix
         if frame_id != self.utm_frame:
             m = self._lookup_matrix(self.utm_frame, frame_id)
             if m is None:
@@ -628,7 +716,10 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         else:
             zone_number, zone_letter = 33, "U"
         lat, lon = utm.to_latlon(xyz[:, 0], xyz[:, 1], zone_number, zone_letter, strict=False)
-        return [{"lat": float(a), "lon": float(b)} for a, b in zip(lat, lon, strict=True)]
+        return [
+            {"lat": round(float(a), LATLON_DIGITS), "lon": round(float(b), LATLON_DIGITS)}
+            for a, b in zip(lat, lon, strict=True)
+        ]
 
     @staticmethod
     def _poses_xyz(poses: list[Any]) -> np.ndarray:
@@ -637,20 +728,34 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         ).reshape(-1, 3)
 
     # ------------------------------------------------------------------ callbacks: position
+    @staticmethod
+    def _has_position(msg: NavSatFix) -> bool:
+        """False for a no-fix message (status < 0) or one whose lat/lon is NaN/inf."""
+        return (
+            msg.status.status >= 0 and math.isfinite(msg.latitude) and math.isfinite(msg.longitude)
+        )
+
     def _gps_callback(self, msg: NavSatFix) -> None:
         with self._lock:
-            first = self.pose_gps is None
             self.gps_fix_status = int(msg.status.status)
+            if not self._has_position(msg):
+                self._dirty = True  # the UI still shows the fix status
+                return
+            first = self.pose_gps is None
             self.pose_gps = {"lat": msg.latitude, "lon": msg.longitude}
             if self.current_heading is not None:
                 self.pose_gps["heading"] = self.current_heading
             self._last_fix_time = time.time()
-            self._append_trail_locked(msg.latitude, msg.longitude)
+            # One source feeds the trail: the filtered fix when its topic is on, else this one
+            if not self.enabled_features.get("gps_ekf"):
+                self._append_trail_locked(msg.latitude, msg.longitude)
             self._dirty = True
         if first:
             self.get_logger().info(f"First GPS fix received: {msg.latitude}, {msg.longitude}")
 
     def _ekf_callback(self, msg: NavSatFix) -> None:
+        if not self._has_position(msg):
+            return
         with self._lock:
             first = self.pose_ekf is None
             self.pose_ekf = {"lat": msg.latitude, "lon": msg.longitude}
@@ -668,7 +773,8 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
             last = self.trail[-1]
             if haversine_m(last["lat"], last["lon"], lat, lon) < self.trail_min_step:
                 return
-        self.trail.append({"lat": lat, "lon": lon})
+        self.trail.append({"lat": round(lat, LATLON_DIGITS), "lon": round(lon, LATLON_DIGITS)})
+        self._trail_total += 1
 
     def _set_heading(self, heading: float) -> None:
         heading = round(heading, 1)
@@ -825,7 +931,7 @@ class TrackerNode(Node if ROS_AVAILABLE else object):  # type: ignore[misc] # dy
         with self._lock:
             self.bus_voltage = round(float(msg.voltage), 2) if math.isfinite(msg.voltage) else None
             self.bus_current = round(float(msg.current), 2) if math.isfinite(msg.current) else None
-            # sensor_msgs says 0..1; some drivers publish 0..100 (Helhest does) - normalise
+            # sensor_msgs says 0..1; some drivers publish 0..100
             pct = float(msg.percentage)
             if math.isfinite(pct):
                 self.battery_percentage = round(pct * 100.0 if pct <= 1.0 else pct, 1)

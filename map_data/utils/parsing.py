@@ -5,7 +5,9 @@ import numpy as np
 import overpy
 import utm
 from shapely import geometry
+from shapely.errors import GEOSException
 from shapely.ops import linemerge, unary_union
+from shapely.validation import make_valid
 
 from map_data.utils.config import load_config
 from map_data.utils.way import Way
@@ -15,6 +17,26 @@ logger = logging.getLogger(__name__)
 _DEFAULTS = load_config("planner_defaults.yaml")
 OBSTACLE_RADIUS = _DEFAULTS.get("obstacle_radius", 2.0)
 BUFFER_WIDTHS = _DEFAULTS.get("buffer_widths", {"road": 7, "footway": 3, "barrier": 2})
+CLASSIFYING_TAGS = frozenset({"highway", "barrier", "building", "natural", "landuse", "waterway"})
+LINEAR_BARRIER_TAGS = frozenset({"barrier", "natural"})
+LINEAR_BARRIER_VALUES = frozenset(
+    {
+        "fence",
+        "wall",
+        "hedge",
+        "cliff",
+        "city_wall",
+        "retaining_wall",
+        "ditch",
+        "guard_rail",
+        "kerb",
+        "handrail",
+        "cable_barrier",
+        "jersey_barrier",
+        "chain",
+        "rope",
+    }
+)
 
 
 def parse_osm_ways(
@@ -23,14 +45,25 @@ def parse_osm_ways(
     force_zone_number: int | None = None,
     force_zone_letter: str | None = None,
 ) -> dict[int, Way]:
-    ways = {}
+    ways: dict[int, Way] = {}
+    lats: list[float] = []
+    lons: list[float] = []
     for way in osm_ways_data.ways:
-        lats = np.array([float(n.lat) for n in way.nodes])
-        lons = np.array([float(n.lon) for n in way.nodes])
-        easting, northing, _, _ = utm.from_latlon(
-            lats, lons, force_zone_number=force_zone_number, force_zone_letter=force_zone_letter
-        )
-        coords = list(zip(easting, northing, strict=True))
+        lats.extend(float(n.lat) for n in way.nodes)
+        lons.extend(float(n.lon) for n in way.nodes)
+    if not lats:  # utm.from_latlon rejects empty arrays
+        return ways
+    eastings, northings, _, _ = utm.from_latlon(
+        np.array(lats),
+        np.array(lons),
+        force_zone_number=force_zone_number,
+        force_zone_letter=force_zone_letter,
+    )
+    cursor = 0
+    for way in osm_ways_data.ways:
+        end = cursor + len(way.nodes)
+        coords = list(zip(eastings[cursor:end], northings[cursor:end], strict=True))
+        cursor = end
 
         for n in way.nodes:
             if n.id not in nodes_cache:
@@ -40,10 +73,11 @@ def parse_osm_ways(
                     "tags": dict(n.tags) if n.tags else {},
                 }
 
-        is_area = coords[0] == coords[-1]
-        # Degenerate ways must not abort the whole parse: a LineString needs
-        # at least 2 coordinates and a closed ring (Polygon) at least 4
-        # (3 distinct + the closing one), else shapely raises.
+        # A closed linear barrier is a ring, not the area it encloses.
+        is_ring = coords[0] == coords[-1]
+        is_area = is_ring and (way.tags.get("area") == "yes" or not _is_linear_barrier(way.tags))
+        # Skip, not raise: shapely needs 2 coordinates for a LineString and 4
+        # (3 distinct + the closing one) for a Polygon.
         min_coords = 4 if is_area else 2
         if len(coords) < min_coords:
             logger.warning(
@@ -67,23 +101,34 @@ def parse_osm_ways(
 AREA_RELATION_TYPES = frozenset({"multipolygon", "boundary"})
 
 
+def _is_linear_barrier(tags: dict[str, str]) -> bool:
+    return any(tags.get(key) in LINEAR_BARRIER_VALUES for key in LINEAR_BARRIER_TAGS)
+
+
+def _has_classifying_tags(tags: dict[str, str]) -> bool:
+    return any(key in CLASSIFYING_TAGS for key in tags)
+
+
 def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
     consumed_ids: set[int] = set()
     kept_ids: set[int] = set()
 
     for rel in osm_rels_data.relations:
-        # Only area relations have rings to merge. Route relations (hiking, bike,
-        # bus) list their ways with an empty role: chaining those merged a whole
-        # route into one way carrying every member's tags, so a single bridge
-        # member made the entire route non-traversable.
-        if (rel.tags or {}).get("type") not in AREA_RELATION_TYPES:
+        # Only area relations have rings to merge; chaining a route relation would
+        # make one way carrying every member's tags (one bridge blocks the route).
+        rel_type = (rel.tags or {}).get("type")
+        if rel_type not in AREA_RELATION_TYPES:
             continue
         outer_ids: list[int] = []
         inner_ids: list[int] = []
 
         for member in rel.members:
             if member._type_value == "way" and int(member.ref) in ways:
-                (outer_ids if member.role == "outer" else inner_ids).append(int(member.ref))
+                # An empty multipolygon member role is treated as "outer".
+                if member.role == "outer" or (not member.role and rel_type == "multipolygon"):
+                    outer_ids.append(int(member.ref))
+                elif member.role == "inner":
+                    inner_ids.append(int(member.ref))
 
         outer_ids = combine_ways(outer_ids, ways, consumed=consumed_ids)
         inner_ids = combine_ways(inner_ids, ways, consumed=consumed_ids)
@@ -91,9 +136,7 @@ def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
         kept_ids.update(inner_ids)
         rel_tags = dict(rel.tags) if rel.tags else {}
 
-        # Inner rings are holes in the relation geometry (e.g. a courtyard in
-        # a building): subtract them from the outer polygons so the merged
-        # geometry does not cover them.
+        # Inner rings are holes (e.g. a courtyard): subtract them from the outers.
         inner_rings = [
             ways[wid].line
             for wid in inner_ids
@@ -103,19 +146,18 @@ def parse_osm_rels(osm_rels_data: overpy.Result, ways: dict[int, Way]) -> None:
         for wid in outer_ids:
             way = ways[wid]
             way.in_out = "outer"
-            way.tags.update(rel_tags)
+            if not _has_classifying_tags(way.tags):
+                way.tags.update(rel_tags)
             if inner_rings and way.is_area and isinstance(way.line, geometry.Polygon):
                 holes = [ring for ring in inner_rings if way.line.intersects(ring)]
                 if holes:
-                    way.line = way.line.difference(unary_union(holes))
+                    _subtract_holes(way, holes)
 
         for wid in inner_ids:
             ways[wid].in_out = "inner"
 
-    # Member ways merged into a relation geometry would otherwise be
-    # classified a second time by separate_ways (duplicate barriers). Drop
-    # them once ALL relations are processed — a way can be a member of
-    # several relations, and one of them may have kept it unmerged.
+    # Drop merged members so separate_ways does not classify them twice; only
+    # after all relations, as another relation may have kept a way unmerged.
     for wid in consumed_ids - kept_ids:
         ways.pop(wid, None)
 
@@ -126,6 +168,7 @@ def parse_osm_nodes(
     way_node_ids: set[int],
     obstacle_tags: dict[str, list[str]],
     not_obstacle_tags: dict[str, list[str]],
+    anti_obstacle_tags: dict[str, list[str]],
     obstacle_radius: float | None = None,
     force_zone_number: int | None = None,
     force_zone_letter: str | None = None,
@@ -142,7 +185,7 @@ def parse_osm_nodes(
         if node.id in way_node_ids:
             continue
 
-        if Way(tags=node.tags).is_barrier(obstacle_tags, not_obstacle_tags, {}):
+        if Way(tags=node.tags).is_barrier(obstacle_tags, not_obstacle_tags, anti_obstacle_tags):
             easting, northing, _, _ = utm.from_latlon(
                 float(node.lat),
                 float(node.lon),
@@ -167,23 +210,29 @@ def combine_ways(
     consumed: set[int] | None = None,
 ) -> list[int]:
     """
-    Merge chains of member ways into single ways (added to *ways* under new
-    negative ids). When *consumed* is given, the ids of member ways that were
-    merged into a new way are added to it so the caller can drop them from
-    *ways* — the merged way fully replaces them.
+    Merge chains of member ways into new ways added to *ways* under negative ids.
+
+    Returns the ids standing for *ids* afterwards. *consumed* collects the ids of
+    member ways a merged way replaces.
     """
     if not ids:
         return ids
 
-    ways_to_merge = [ways[wid] for wid in ids if wid in ways and not ways[wid].is_area]
-    area_ids = [wid for wid in ids if wid in ways and ways[wid].is_area]
+    ways_to_merge = []
+    area_ids = []
+    for wid in ids:
+        if wid not in ways:
+            continue
+        if ways[wid].is_area or _has_classifying_tags(ways[wid].tags):
+            area_ids.append(wid)
+        else:
+            ways_to_merge.append(ways[wid])
 
     if not ways_to_merge:
         return ids
 
     endpoint_map: dict[int, list[Way]] = {}
     for way in ways_to_merge:
-        # way.nodes is a list of IDs now
         endpoint_map.setdefault(way.nodes[0], []).append(way)
         endpoint_map.setdefault(way.nodes[-1], []).append(way)
 
@@ -255,7 +304,18 @@ def combine_ways(
         else:
             merged_ids.append(start_way.id)
 
-    return area_ids + merged_ids
+    return sorted(area_ids) + merged_ids
+
+
+def _subtract_holes(way: Way, holes: list[geometry.base.BaseGeometry]) -> None:
+    """Subtract *holes* from *way*, accepting a self-intersecting outer ring."""
+    if way.line is None:
+        return
+    try:
+        outer = way.line if way.line.is_valid else make_valid(way.line)
+        way.line = outer.difference(unary_union(holes))
+    except GEOSException as e:
+        logger.warning("Could not subtract holes from way %s: %s", way.id, e)
 
 
 def separate_ways(
@@ -285,9 +345,8 @@ def buffer_line(way: Way, width: float) -> Way:
     line = way.line
     if line is None:
         raise ValueError(f"buffer_line: way {way.id} has no geometry to buffer")
-    # Closed roads/footways (e.g. roundabouts) are parsed as Polygon because first==last
-    # node. Buffering a Polygon fills its interior; convert to LineString first so the
-    # buffer produces an annular ring around the path instead.
+    # A closed road/footway (roundabout) is parsed as a Polygon; buffer its ring,
+    # not its interior.
     if isinstance(line, geometry.Polygon) and way.tags.get("area") != "yes":
         line = geometry.LineString(line.exterior.coords)
     way.line = line.buffer(width / 2)
@@ -296,7 +355,5 @@ def buffer_line(way: Way, width: float) -> Way:
 
 
 def ways_to_shapely(ways: list[Way]) -> list[geometry.base.BaseGeometry]:
-    """
-    Convert a list of Way objects to their underlying Shapely geometries.
-    """
+    """Geometries of the *ways* that have one."""
     return [w.line for w in ways if w.line]

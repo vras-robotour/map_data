@@ -1,3 +1,6 @@
+# osm_cloud profile for the Helhest stack; osm_cloud.launch.py loads it.
+# The node's own defaults are site-neutral (map_data/osm_cloud.py), so this file is not a
+# copy of them: it overrides them.
 osm_cloud:
   ros__parameters:
     # Frames: the Helhest field stack localises with a Fixposition GNSS/INS unit whose
@@ -16,13 +19,6 @@ osm_cloud:
     grid_max: [0.0, 0.0]
     grid_min: [0.0, 0.0]
     publish_intersections: true
-    # Annotation store merged into mapdata_file, with route_planner's semantics:
-    # "auto" = <map>.annotations.json next to the map, "none" = the unedited map, or a
-    # path. The planner and this node must load the same map, or a junction on a
-    # retagged or deleted way still gets a ring nothing routes over.
-    # osm_cloud.launch.py forwards its annotations:= argument (default "auto") on top
-    # of this file, so override it there rather than here when using the launch file.
-    annotations: "auto"
     # highway= values dropped from the map: stairs are footways in OSM, but the planner
     # does not route over them, so they get no intersection rings and no road cost.
     exclude_highway: ["steps"]

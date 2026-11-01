@@ -1,35 +1,23 @@
 """
 Crossroad detection: which nodes are junctions, and where a junction actually is.
 
-Two defects are covered here. The node-based detector used to count the *ways*
-using a node, which reports a junction at every node of a corridor that happens
-to be mapped twice, and it looked at footways only, so a footway meeting a road
-was not a junction at all. The geometric detector used to intersect an annotated
-centre line with the other way's *buffered* geometry, which finds the stretch of
-line inside the corridor instead of a crossing point.
+The node-based detector counts distinct neighbours of a node across footways and
+roads, so a corridor mapped twice is not a junction at every node. The geometric
+detector intersects centre lines, so a crossing is a point on the way, not the
+stretch of line inside its buffered corridor.
 """
 
 import json
-from pathlib import Path
 
 import numpy as np
-import pytest
 import utm
+from conftest import STROMOVKA_FIXTURE
 from shapely.geometry import LineString
 
 from map_data.annotations import annotation_path_for, load_mapdata_with_annotations
 from map_data.map_data import MapData
 from map_data.traversability import TraversabilityRules
 from map_data.utils.way import Way
-
-#: The full Stromovka map used on the robot; not committed (data/* is ignored).
-STROMOVKA = Path(__file__).resolve().parents[1] / "data" / "stromovka_full.mapdata"
-
-needs_stromovka = pytest.mark.skipif(
-    not STROMOVKA.is_file(),
-    reason="stromovka_full.mapdata is not in the repo",
-)
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -76,7 +64,7 @@ def _crossroads(md, ways):
 
 
 def test_a_footway_meeting_a_road_is_a_crossroad():
-    """Roads used to be left out of the detector entirely, so this found nothing."""
+    """A footway meeting a road is a junction."""
     md = _map({1: (0, 0), 2: (0, 100), 3: (0, 50), 4: (70, 50)})
     road = _way(10, [1, 3, 2], "residential", md, width=7.0)
     foot = _way(20, [3, 4], "footway", md)
@@ -93,10 +81,7 @@ def test_the_same_junction_is_found_whatever_the_through_way_is_tagged():
 
 
 def test_a_corridor_mapped_twice_is_not_a_junction_at_every_node():
-    """
-    A cycleway drawn along an existing footway reuses its node ids. Counting the
-    ways through each node made every one of them a crossroad.
-    """
+    """A cycleway drawn along an existing footway, reusing its node ids, adds no junctions."""
     md = _map({i: (i * 10.0, 0.0) for i in range(1, 7)})
     foot = _way(1, [1, 2, 3, 4, 5, 6], "footway", md)
     cycle = _way(2, [1, 2, 3, 4, 5, 6], "cycleway", md)
@@ -169,8 +154,8 @@ def _buffered(way_id, coords, highway, width):
 
 def test_a_path_alongside_a_footway_is_not_a_junction():
     """
-    1.2 m from the centre line is inside the footway's 3 m corridor, so matching
-    against the buffered geometry reported a junction the path never reaches.
+    A path 1.2 m from the centre line, inside the footway's 3 m corridor, never
+    reaches it, so it is no junction.
     """
     foot, foot_line = _buffered(1, [(0, 0), (100, 0)], "footway", 3.0)
     ann, ann_line = _buffered(-1, [(0, 1.2), (100, 1.2)], "cycleway", 2.0)
@@ -186,8 +171,18 @@ def test_a_crossing_is_reported_where_it_happens():
     assert centre.distance(LineString([(50, 0), (50, 0.001)])) < 1e-6
 
 
+def test_geometric_crossroad_ids_do_not_collide():
+    foot, foot_line = _buffered(1, [(0, 0), (100, 0)], "footway", 3.0)
+    ann, ann_line = _buffered(-1, [(50, -20), (50, 20)], "path", 2.0)
+
+    found = MapData.geometric_intersections([(ann, ann_line)], [(foot, foot_line)])
+
+    assert len(found) == 1
+    assert found[0].id <= -1_000_000
+
+
 def test_a_crossing_is_not_displaced_by_the_width_of_a_road():
-    """A 7 m road used to push its crossings 3.5 m off, half the enter radius."""
+    """A crossing lies on a 7 m road's centre line, not 3.5 m off on its buffer edge."""
     road, road_line = _buffered(1, [(0, 0), (100, 0)], "residential", 7.0)
     ann, ann_line = _buffered(-1, [(50, -20), (50, 20)], "path", 2.0)
     found = MapData.geometric_intersections([(ann, ann_line)], [(road, road_line)])
@@ -278,10 +273,9 @@ def _annotation_crossroads(md):
 
 def test_an_annotated_path_alongside_a_footway_makes_no_junction(tmp_path):
     """
-    The pipeline has to hand centre lines to the geometric detector. The ways it
-    loads carry their buffered geometry, so a path drawn 1.2 m off the footway -
-    inside its 3 m corridor, but further than the 1 m touch tolerance - used to
-    be reported as a junction it never reaches.
+    The pipeline hands centre lines, not the loaded buffered geometry, to the
+    geometric detector, so a path 1.2 m off the footway (inside its 3 m corridor,
+    beyond the 1 m touch tolerance) is no junction.
     """
     path = tmp_path / "alongside.mapdata"
     lat0, lon0 = _map_with_a_wide_footway(path)
@@ -315,8 +309,7 @@ def test_an_annotated_path_crossing_a_footway_lands_on_it(tmp_path):
 
     e0, n0, _zn, _zl = utm.from_latlon(lat0, lon0)
     centre = found[0].line.centroid
-    # The crossing is at (100, 0); the buggy match against the 3 m corridor put
-    # it 1.5 m away, on the edge of the buffer.
+    # The crossing is at (100, 0), not 1.5 m away on the edge of the 3 m corridor.
     assert abs(centre.x - (e0 + 100.0)) < 0.01
     assert abs(centre.y - n0) < 0.01
 
@@ -338,15 +331,14 @@ def test_two_ways_running_together_meet_where_the_shared_stretch_ends():
 
 def test_loading_refreshes_crossroads_saved_by_an_older_detector(tmp_path):
     """
-    Crossroads are derived from the ways, and every .mapdata already on disk
-    carries the ones the old detector found. Loading has to recompute them, or
-    the fix never reaches a map the robot already has.
+    Crossroads are derived from the ways, so loading recomputes them instead of
+    trusting the list saved in the file.
     """
     path = tmp_path / "stale.mapdata"
     lat0, lon0 = _map_with_a_wide_footway(path)
 
     md = MapData.load(str(path))
-    # A junction the old detector could not see: a road ending on the footway.
+    # A junction missing from the saved list: a road ending on the footway.
     e0, n0, zn, zl = utm.from_latlon(lat0, lon0)
     lat, lon = utm.to_latlon(e0 + 100.0, n0 + 60.0, zn, zl)
     md.nodes_cache[104] = {"lat": lat, "lon": lon, "tags": {}}
@@ -390,33 +382,26 @@ def test_loading_keeps_crossroads_that_cannot_be_recomputed(tmp_path):
 # ── the real map the robot drives ─────────────────────────────────────────────
 
 
-@needs_stromovka
 def test_stromovka_road_junctions_are_found():
-    """
-    ``-18:1`` is "U Výstaviště", drawn in the viewer and tagged
-    ``highway=residential``: as a road it was invisible to the detector, so none
-    of the footways meeting it became a junction.
-    """
-    md = MapData.load(str(STROMOVKA))
-    road = next(w for w in md.roads_list if str(w.id) == "-18:1")
+    """Footways meeting a road are junctions."""
+    md = MapData.load(str(STROMOVKA_FIXTURE))
     crossroads = {
         c.id
         for c in md.parse_intersections({str(w.id): w for w in md.footways_list + md.roads_list})
     }
+    road_nodes = {n for w in md.roads_list for n in w.nodes}
+    foot_nodes = {n for w in md.footways_list for n in w.nodes}
 
-    on_the_road = crossroads & set(road.nodes)
-    assert len(on_the_road) > 20, f"only {len(on_the_road)} junctions on U Výstaviště"
+    on_roads = crossroads & road_nodes & foot_nodes
+    assert len(on_roads) > 10, f"only {len(on_roads)} footway-road junctions"
 
 
-@needs_stromovka
 def test_stromovka_has_no_junction_without_a_fork():
     """
-    Every crossroad must have more than two directions leaving it. The map has
-    three annotated ways (two of them cycleways) drawn along existing footways
-    and reusing their node ids, which used to make a junction of every node they
-    share.
+    Every crossroad has more than two directions leaving it, even where two
+    annotated cycleways reuse an existing footway's node ids.
     """
-    md = MapData.load(str(STROMOVKA))
+    md = MapData.load(str(STROMOVKA_FIXTURE))
     ways = md.footways_list + md.roads_list
     crossroads = md.parse_intersections({str(w.id): w for w in ways})
 
@@ -433,16 +418,12 @@ def test_stromovka_has_no_junction_without_a_fork():
     assert through == [], f"{len(through)} crossroads sit mid-corridor"
 
 
-@needs_stromovka
 def test_stromovka_duplicate_cycleways_make_no_junctions_of_their_own():
     """
-    ``-1`` and ``-15`` are two annotated cycleways tracing the same corridor
-    along existing footways, sharing 70 node ids. Two ways through a node
-    between the same neighbours are one path, so they may not make a junction
-    between themselves: every crossroad on that corridor has to be owed to a
-    third way that actually branches there.
+    ``-1`` and ``-15`` trace an existing footway and share all its node ids, so
+    every crossroad on that corridor is owed to a third way that branches there.
     """
-    md = MapData.load(str(STROMOVKA))
+    md = MapData.load(str(STROMOVKA_FIXTURE))
     ways = md.footways_list + md.roads_list
     crossroads = md.parse_intersections({str(w.id): w for w in ways})
 

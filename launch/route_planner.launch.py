@@ -104,6 +104,8 @@ def launch_setup(context, *args, **kwargs):
         executable="route_planner",
         name="route_planner",
         output="screen",
+        respawn=True,
+        respawn_delay=1.0,
         parameters=[
             resolve_config_file(LaunchConfiguration("params_file").perform(context)),
             overrides,

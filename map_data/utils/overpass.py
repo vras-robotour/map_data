@@ -18,10 +18,8 @@ OVERPASS_ENDPOINTS = [
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
 
-# HTTP timeout for a single request. Overpass servers apply their own,
-# usually much shorter, default query timeout (e.g. 25s) unless the query
-# itself carries a `[timeout:N]` directive, so callers building queries
-# should request a server-side timeout comfortably below this value.
+# HTTP timeout per request. Queries should set a `[timeout:N]` below it, as the
+# server default (e.g. 25 s) is much shorter.
 REQUEST_TIMEOUT = 180
 USER_AGENT = f"map_data/{__version__} (research; +https://github.com/vras-robotour/map_data)"
 
@@ -50,8 +48,7 @@ class OverpassClient:
         retries: int | None = None,
         on_attempt: Callable[[str, int, int], None] | None = None,
     ) -> str | None:
-        # Give every endpoint two shots by default rather than hardcoding a
-        # count that has to be kept in sync by hand as endpoints are added.
+        # Two attempts per endpoint by default.
         if retries is None:
             retries = 2 * len(self.endpoints)
         body = parse.urlencode({"data": query_str}).encode()
@@ -75,10 +72,11 @@ class OverpassClient:
                         return text
                 else:
                     problem = f"HTTP {status}: {text[:200]}"
-            except OSError as e:  # URLError, timeouts, connection resets
+            except (OSError, http.client.HTTPException) as e:
+                # URLError, timeouts, connection resets and truncated reads.
                 problem = str(e)
             logger.warning("Overpass request failed on %s: %s", endpoint, problem)
-            self._endpoint_index += 1  # try the next endpoint
+            self._endpoint_index += 1
             if attempt < retries:
                 time.sleep(2 * attempt)
 
@@ -86,13 +84,7 @@ class OverpassClient:
 
     @staticmethod
     def _body_error(text: str) -> str | None:
-        """
-        Detect an error hidden in an HTTP 200 body.
-
-        Returns a short description of the problem (an Overpass ``remark``
-        such as ``runtime error: Query timed out ...``, or a non-JSON body),
-        or ``None`` if the body looks like a valid result.
-        """
+        """Short description of an error in an HTTP 200 body (``remark``, non-JSON), or None."""
         try:
             data = json.loads(text)
         except json.JSONDecodeError:
@@ -110,7 +102,7 @@ class OverpassClient:
             status, text = self._http(status_url, timeout=10)
             if status == http.HTTPStatus.OK and "slots available now" in text:
                 m = re.search(r"(\d+) slots available now", text)
-                if m and int(m.group(1)) > 0:
+                if m is not None and int(m.group(1)) > 0:
                     return
                 m_wait = re.search(r"in (\d+) seconds", text)
                 wait_secs = min(int(m_wait.group(1)) + 2 if m_wait else 60, max_wait)

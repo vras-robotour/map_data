@@ -1,25 +1,28 @@
 import json
 import threading
 import types
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 import utm
-from shapely.geometry import LineString, MultiPolygon, Polygon
+from shapely.geometry import LineString, MultiPolygon, Point, Polygon
 
-from map_data.utils.serialization import atomic_write_json
-from map_data.utils.way import Way
-from map_data.viewer.helpers import (
+from map_data.edits import (
+    AnnotationStoreError,
     annotation_store,
     apply_node_position_overrides,
     geojson_geom_to_utm,
-    geom_to_geojson,
     get_deleted_way_ids,
     load_annotations,
-    mapdata_to_geojson,
+    quarantine_annotation_store,
     rebuild_way_without_nodes,
     split_way,
 )
+from map_data.utils import serialization
+from map_data.utils.serialization import atomic_write_json
+from map_data.utils.way import Way
+from map_data.viewer.helpers import geom_to_geojson, mapdata_to_geojson
 
 # Prague area — UTM zone 33U
 _ZN, _ZL = 33, "U"
@@ -68,6 +71,18 @@ def test_geom_to_geojson_linestring():
     assert len(result["coordinates"]) == 2
 
 
+def test_geom_to_geojson_is_cached_on_geometry_value():
+    geom_to_geojson.cache_clear()
+    first = geom_to_geojson(LineString([(_E0, _N0), (_E0 + 10, _N0)]), _ZN, _ZL)
+    again = geom_to_geojson(
+        LineString([(_E0, _N0), (_E0 + 10, _N0)]), _ZN, _ZL
+    )  # equal, new object
+    moved = geom_to_geojson(LineString([(_E0, _N0), (_E0 + 11, _N0)]), _ZN, _ZL)
+    assert again is first
+    assert moved != first
+    assert geom_to_geojson.cache_info().hits == 1
+
+
 def test_geojson_geom_to_utm_roundtrip():
     poly = Polygon([(_E0, _N0), (_E0 + 10, _N0), (_E0 + 10, _N0 + 10), (_E0, _N0 + 10), (_E0, _N0)])
     geojson = geom_to_geojson(poly, _ZN, _ZL)
@@ -97,6 +112,21 @@ def test_save_and_load_annotations_roundtrip(tmp_path):
     assert loaded == store
 
 
+def test_quarantine_leaves_a_readable_store_alone(tmp_path):
+    path = tmp_path / "ann.json"
+    path.write_text('{"version": 1, "annotations": []}')
+    assert quarantine_annotation_store(str(path)) is None
+    assert path.is_file()
+
+
+@pytest.mark.parametrize("content", ["{", "[]", "3"])
+def test_load_annotations_rejects_an_unreadable_store(tmp_path, content):
+    path = tmp_path / "ann.json"
+    path.write_text(content)
+    with pytest.raises(AnnotationStoreError):
+        load_annotations(str(path))
+
+
 def test_atomic_write_json_writes_through_symlink(tmp_path):
     # colcon symlink-install: install/.../data/x.annotations.json -> src/.../data/x.annotations.json
     target = tmp_path / "src" / "ann.json"
@@ -108,6 +138,31 @@ def test_atomic_write_json_writes_through_symlink(tmp_path):
     atomic_write_json(str(link), store, indent=2)
     assert link.is_symlink()
     assert json.loads(target.read_text()) == store
+
+
+def test_atomic_write_json_keeps_the_file_mode(tmp_path):
+    path = tmp_path / "ann.json"
+    path.write_text("{}")
+    path.chmod(0o644)
+    atomic_write_json(path, {"a": 1})
+    assert path.stat().st_mode & 0o777 == 0o644
+
+
+def test_atomic_write_json_new_file_gets_the_umask_default(tmp_path):
+    # mkstemp alone would leave 0600.
+    atomic_write_json(tmp_path / "new.json", {})
+    assert (tmp_path / "new.json").stat().st_mode & 0o777 == 0o666 & ~serialization._UMASK
+
+
+def test_atomic_write_json_fsyncs_the_file_then_the_directory(tmp_path):
+    calls = []
+    with (
+        patch.object(serialization.os, "fsync", side_effect=lambda fd: calls.append("fsync")),
+        patch.object(serialization.os, "replace", side_effect=lambda *a: calls.append("replace")),
+    ):
+        atomic_write_json(tmp_path / "x.json", {})
+    # The second fsync makes the rename itself durable.
+    assert calls == ["fsync", "replace", "fsync"]
 
 
 # ── get_deleted_way_ids ───────────────────────────────────────────────────────
@@ -161,6 +216,16 @@ def test_rebuild_way_without_nodes_basic():
     assert len(result.nodes) == 3
 
 
+def test_rebuild_way_without_nodes_keeps_a_closed_way_closed():
+    coords = [(_E0, _N0), (_E0 + 50, _N0), (_E0 + 50, _N0 + 50), (_E0, _N0 + 50), (_E0, _N0)]
+    way = _make_way(8, [1, 2, 3, 4, 1], coords)
+
+    result = rebuild_way_without_nodes(way, {1}, _ZN, _ZL, None)
+
+    assert result.nodes == [2, 3, 4, 2]
+    assert result.line.is_closed
+
+
 def test_rebuild_way_without_nodes_too_few_nodes():
     way = _make_way(7, [1, 2], [(_E0, _N0), (_E0 + 10, _N0 + 10)])
     result = rebuild_way_without_nodes(way, {2}, _ZN, _ZL, None)
@@ -189,6 +254,29 @@ def test_apply_node_position_overrides_linestring():
     new_coords = list(result.line.coords)
     assert abs(new_coords[0][0] - (_E0 + 50)) < 1.0
     assert abs(new_coords[0][1] - (_N0 + 50)) < 1.0
+
+
+def _closed_fence():
+    square = [(_E0, _N0), (_E0 + 50, _N0), (_E0 + 50, _N0 + 50), (_E0, _N0 + 50)]
+    nodes_cache = {
+        nid: dict(zip(("lat", "lon"), utm.to_latlon(e, n, _ZN, _ZL), strict=True), tags={})
+        for nid, (e, n) in enumerate(square, 1)
+    }
+    line = LineString([*square, square[0]]).buffer(1.0)
+    way = Way(id=5, nodes=[1, 2, 3, 4, 1], line=line, tags={"barrier": "fence"}, in_out="")
+    return way, nodes_cache
+
+
+def test_apply_node_position_overrides_keeps_a_closed_fence_a_ring():
+    way, nodes_cache = _closed_fence()
+    lat, lon = utm.to_latlon(_E0 + 55, _N0, _ZN, _ZL)
+
+    result = apply_node_position_overrides(
+        way, {2: {"lat": lat, "lon": lon}}, _ZN, _ZL, nodes_cache, category="barrier"
+    )
+
+    assert not result.line.covers(Point(_E0 + 25, _N0 + 25))
+    assert result.line.covers(Point(_E0 + 55, _N0))
 
 
 # ── mapdata_to_geojson ────────────────────────────────────────────────────────

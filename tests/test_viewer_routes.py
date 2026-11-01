@@ -1,27 +1,47 @@
+import ast
 import base64
 import io
 import json
+import logging
 import math
 import os
+import shutil
+import subprocess
 import threading
 import time
-from unittest.mock import patch
-from urllib.parse import quote
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+from urllib.parse import quote, unquote
 
 import cv2
 import numpy as np
 import pytest
 import utm
-from shapely.geometry import LineString
+from conftest import STROMOVKA_FIXTURE
+from shapely.geometry import LineString, box
 
 from map_data.map_data import MapData
+from map_data.pathsolver.replan import grid_defaults
+from map_data.pathsolver.route import RoutePlanningError
 from map_data.utils.way import Way
-from map_data.viewer.app import ACCESS_TOKEN_COOKIE, MAX_CONTENT_LENGTH, create_app
-from map_data.viewer.cache import _file_signature
+from map_data.viewer.app import (
+    ACCESS_TOKEN_COOKIE,
+    MAX_CONTENT_LENGTH,
+    SECURITY_HEADERS,
+    _redact_token,
+    create_app,
+)
+from map_data.viewer.cache import _file_signature, load_mapdata_cached
 from map_data.viewer.routes import files as viewer_files
 from map_data.viewer.routes import planning as viewer_planning
 from map_data.viewer.routes import sharing as viewer_sharing
-from map_data.viewer.routes.common import MAX_FETCH_AREA_KM2, MAX_GRID_CELLS, _bbox_area_km2
+from map_data.viewer.routes.common import (
+    MAX_FETCH_AREA_KM2,
+    MAX_GRID_CELLS,
+    _bbox_area_km2,
+    get_merged_mapdata,
+)
+from map_data.viewer.tracker_routes import TRACKER_EXTENSION
 
 
 def _make_mapdata(path):
@@ -136,11 +156,14 @@ def test_get_annotations_empty(app_client_with_file):
     assert resp.get_json()["annotations"] == []
 
 
+_LINE = {"type": "LineString", "coordinates": [[14.0, 50.0], [14.001, 50.001]]}
+
+
 def test_add_annotation(app_client_with_file):
     client, _, filename = app_client_with_file
     body = {
         "type": "obstacle",
-        "geometry": {"type": "Point", "coordinates": [14.0, 50.0]},
+        "geometry": _LINE,
         "properties": {},
     }
     resp = client.post(
@@ -158,7 +181,7 @@ def test_update_annotation(app_client_with_file):
     client, _, filename = app_client_with_file
     body = {
         "type": "obstacle",
-        "geometry": {"type": "Point", "coordinates": [14.0, 50.0]},
+        "geometry": _LINE,
         "properties": {},
     }
     ann_id = client.post(
@@ -167,21 +190,47 @@ def test_update_annotation(app_client_with_file):
         content_type="application/json",
     ).get_json()["id"]
 
-    update_body = {"geometry": {"type": "Point", "coordinates": [14.001, 50.001]}}
+    moved = {"type": "LineString", "coordinates": [[14.001, 50.001], [14.002, 50.002]]}
+    update_body = {"geometry": moved}
     resp = client.put(
         f"/api/annotations/{ann_id}?file={filename}",
         data=json.dumps(update_body),
         content_type="application/json",
     )
     assert resp.status_code == 200
-    assert resp.get_json()["geometry"]["coordinates"] == [14.001, 50.001]
+    assert resp.get_json()["geometry"] == moved
+
+
+def test_annotation_unsupported_geometry_rejected(app_client_with_file):
+    # The viewer cannot draw points, so a Point must not reach the store.
+    client, _, filename = app_client_with_file
+    point = {"type": "Point", "coordinates": [14.0, 50.0]}
+    resp = client.post(
+        f"/api/annotations?file={filename}",
+        data=json.dumps({"geometry": point}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+    ann_id = client.post(
+        f"/api/annotations?file={filename}",
+        data=json.dumps({"geometry": _LINE}),
+        content_type="application/json",
+    ).get_json()["id"]
+    resp = client.put(
+        f"/api/annotations/{ann_id}?file={filename}",
+        data=json.dumps({"geometry": point}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+    stored = client.get(f"/api/annotations?file={filename}").get_json()["annotations"]
+    assert [a["geometry"] for a in stored] == [_LINE]
 
 
 def test_delete_annotation(app_client_with_file):
     client, _, filename = app_client_with_file
     body = {
         "type": "obstacle",
-        "geometry": {"type": "Point", "coordinates": [14.0, 50.0]},
+        "geometry": _LINE,
         "properties": {},
     }
     ann_id = client.post(
@@ -217,6 +266,16 @@ def test_delete_way(app_client_with_file):
         store = json.load(f)
     deleted_ids = {(d["id"] if isinstance(d, dict) else d) for d in store.get("deleted_ways", [])}
     assert 1 in deleted_ids
+
+
+def test_annotations_of_a_map_in_a_subfolder_sit_beside_it(app_client):
+    # Where the ROS nodes (annotation_path_for) read them.
+    client, tmp_path = app_client
+    (tmp_path / "sub").mkdir()
+    _make_mapdata(tmp_path / "sub" / "test.mapdata")
+    assert client.delete("/api/ways/1?file=sub/test.mapdata", json={}).status_code == 204
+    assert (tmp_path / "sub" / "test.annotations.json").is_file()
+    assert not (tmp_path / "test.annotations.json").exists()
 
 
 def test_get_way_not_found(app_client_with_file):
@@ -373,7 +432,7 @@ def test_restore_way(app_client_with_file):
         data=json.dumps({"category": "footway", "label": ""}),
         content_type="application/json",
     )
-    # Now restore
+    # Then restore
     resp = client.put(
         f"/api/ways/1/restore?file={filename}",
         data=json.dumps({}),
@@ -485,8 +544,8 @@ def _mapdata_way_ids(client, filename):
 
 
 def test_unsplit_way_segment_keeps_plain_id(app_client_3node):
-    # A single-way reload used to label an unsplit way "2:0"; deleting that layer
-    # stored a segment deletion the full load ignores, so the way came back.
+    # An unsplit way keeps its plain id, so deleting it is a way deletion
+    # the full map load honours.
     client, _, filename = app_client_3node
     seg = client.get(f"/api/ways/2/segments?file={filename}").get_json()["segments"]
     assert [f["properties"]["id"] for f in seg] == [2]
@@ -509,6 +568,20 @@ def test_split_undo_moves_segment_deletion_to_plain_id(app_client_3node, tmp_pat
     store = json.loads((tmp_path / "three.annotations.json").read_text())
     assert [d["id"] for d in store["deleted_ways"]] == [2]
     assert 2 not in _mapdata_way_ids(client, filename)
+
+
+def test_way_segments_skip_deleted_ways(app_client_3node):
+    client, _, filename = app_client_3node
+    client.post(f"/api/ways/split?file={filename}", json={"way_id": 2, "node_id": 202})
+
+    def seg_ids():
+        resp = client.get(f"/api/ways/2/segments?file={filename}")
+        return [f["properties"]["id"] for f in resp.get_json()["segments"]]
+
+    client.delete(f"/api/ways/2:1?file={filename}", json={})
+    assert seg_ids() == ["2:0"]
+    client.delete(f"/api/ways/2?file={filename}", json={})
+    assert seg_ids() == []
 
 
 def _way_nodes(client, filename, way_id):
@@ -602,6 +675,17 @@ def test_fetch_area_rejects_oversized_bbox(app_client):
     )
     assert resp.status_code == 400
     assert "km" in resp.get_data(as_text=True)
+
+
+def test_fetch_area_limit_counts_the_download_margin(app_client):
+    client, _ = app_client
+    box = {"min_lat": 50.0, "max_lat": 50.044, "min_lon": 14.0, "max_lon": 14.068}
+    assert _bbox_area_km2(box["min_lat"], box["min_lon"], box["max_lat"], box["max_lon"]) < (
+        MAX_FETCH_AREA_KM2
+    )
+    resp = client.post("/api/fetch_area", json={**box, "name": "edge", "grid_margin": 150})
+    assert resp.status_code == 400
+    assert "margin" in resp.get_json()["error"]
 
 
 def test_fetch_area_rejects_non_numeric_bbox(app_client):
@@ -789,16 +873,52 @@ def test_auth_get_with_cookie_accepted(app_client, monkeypatch):
     assert client.get("/api/files").status_code == 200
 
 
-def test_auth_mutating_cookie_only_rejected(app_client_with_file, monkeypatch):
+@pytest.mark.parametrize("token", ["sekret", None])
+def test_auth_mutating_without_csrf_header_rejected(app_client_with_file, monkeypatch, token):
     client, _, filename = app_client_with_file
-    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "sekret")
-    client.set_cookie(ACCESS_TOKEN_COOKIE, "sekret")
+    client.environ_base.pop("HTTP_X_REQUESTED_WITH")  # a cross-site form or no-cors fetch
+    if token:
+        monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", token)
+        client.set_cookie(ACCESS_TOKEN_COOKIE, token)
+    else:
+        monkeypatch.delenv("MAP_DATA_ACCESS_TOKEN", raising=False)
     resp = client.delete(
         f"/api/ways/1?file={filename}",
         data=json.dumps({}),
         content_type="application/json",
     )
-    assert resp.status_code == 401
+    assert resp.status_code == 403
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1"])
+def test_loopback_viewer_gets_no_token(tmp_path, monkeypatch, host):
+    from map_data.viewer import app as viewer_app
+
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "")  # unset, and restored after the test
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    viewer_app._ensure_access_token(host, 5000)
+    assert os.environ["MAP_DATA_ACCESS_TOKEN"] == ""
+    assert not (tmp_path / "map_data").exists()
+
+
+def test_lan_viewer_keeps_a_private_token(tmp_path, monkeypatch):
+    from map_data.viewer import app as viewer_app
+
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "")  # unset, and restored after the test
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    viewer_app._ensure_access_token("0.0.0.0", 5000)
+    token = os.environ["MAP_DATA_ACCESS_TOKEN"]
+    path = tmp_path / "map_data" / "access_token"
+    assert path.read_text().strip() == token
+    assert path.stat().st_mode & 0o777 == 0o600
+
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "")
+    viewer_app._ensure_access_token("0.0.0.0", 5000)  # restart: same token, cookies stay valid
+    assert os.environ["MAP_DATA_ACCESS_TOKEN"] == token
+
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "explicit")
+    viewer_app._ensure_access_token("0.0.0.0", 5000)
+    assert os.environ["MAP_DATA_ACCESS_TOKEN"] == "explicit"
 
 
 def test_auth_mutating_cookie_with_csrf_header_accepted(app_client_with_file, monkeypatch):
@@ -932,18 +1052,35 @@ def test_cost_grid_small_bbox_returns_image(app_client_with_file):
     assert {153, 102} <= alphas  # the footway's path cells and open terrain
 
 
+def test_cost_grid_shows_obstacles(tmp_path):
+    e, n, zn, zl = utm.from_latlon(50.0, 14.0)
+    md = MapData([np.array([[e, n], [e + 100, n + 100]]), int(zn), zl], coords_type="array")
+    md.barriers_list.append(
+        Way(id=2, nodes=[], tags={"barrier": "wall"}, line=box(e + 10, n + 10, e + 40, n + 40))
+    )
+    md.save(str(tmp_path / "wall.mapdata"))
+    client = create_app(data_dir=str(tmp_path)).test_client()
+
+    resp = client.get(
+        "/api/cost_grid?file=wall.mapdata&min_lat=50.0&min_lon=14.0&max_lat=50.0005&max_lon=14.0005"
+    )
+
+    rgba = _decode_png_rgba(resp.get_json()["image"])
+    assert (rgba[..., 3] == 255).any()  # the wall is drawn opaque black
+    assert not rgba[rgba[..., 3] == 255][:, :3].any()
+
+
 def test_cost_grid_image_resamples_utm_cells_onto_latlon_pixels():
     # 200 x 100 one-metre cells near Prague (meridian convergence ~0.4 deg), with
     # one column band per colour class.
     zn, zl = 33, "U"
     x0, y0, _, _ = utm.from_latlon(50.1, 14.42, zn, zl)
     low = (x0, y0)
-    xs, ys = np.meshgrid(np.arange(200) + 0.5, np.arange(100) + 0.5)
-    band_cost = np.array([0.0, 0.425, 0.95, 1.0])
+    xs, _ = np.meshgrid(np.arange(200) + 0.5, np.arange(100) + 0.5)
+    band_cost = np.array([0.0, 0.425, 0.95, np.inf])
     costs = band_cost[(xs // 50).astype(int)]
-    grid = np.column_stack([xs.ravel() + x0, ys.ravel() + y0, np.zeros(xs.size), costs.ravel()])
 
-    rgba, ((s, w), (n, e)) = viewer_planning._cost_grid_image(grid, low, 1.0, 0.9, 0.85, zn, zl)
+    rgba, ((s, w), (n, e)) = viewer_planning._cost_grid_image(costs, low, 1.0, 0.9, 0.85, zn, zl)
     expected_by_band = [(0, 255, 0, 153), (127, 127, 0, 153), (68, 68, 68, 102), (0, 0, 0, 255)]
     height, width, _ = rgba.shape
     seen_outside = False
@@ -961,6 +1098,20 @@ def test_cost_grid_image_resamples_utm_cells_onto_latlon_pixels():
             assert tuple(rgba[row, col]) == expected, (row, col)
     # The rotated grid leaves transparent corners in its lat/lon bounding box.
     assert seen_outside
+
+
+def test_cost_grid_draws_only_the_allowed_ways(app_client_with_file):
+    client, _, filename = app_client_with_file
+    bbox = "min_lat=50.0&min_lon=14.0&max_lat=50.0005&max_lon=14.0005"
+    url = f"/api/cost_grid?file={filename}&{bbox}"
+
+    def alphas(allowed):
+        data = client.get(f"{url}&allowed_ways={allowed}").get_json()
+        return set(np.unique(_decode_png_rgba(data["image"])[..., 3]).tolist())
+
+    assert 153 in alphas("footway,road")  # the footway's path cells
+    assert 153 not in alphas("road")
+    assert client.get(f"{url}&allowed_ways=footway,stairs").status_code == 400
 
 
 def test_cost_grid_oversized_bbox_rejected(app_client_with_file):
@@ -1012,6 +1163,60 @@ def test_cost_grid_malformed_cost_dict_rejected(app_client_with_file, bad_costs)
     assert resp.status_code == 400
 
 
+# ── planner_defaults ─────────────────────────────────────────────────────────
+
+
+class _FakeTracker:
+    planner_node = "/route_planner"
+
+    def __init__(self, params):
+        self.params = params
+        self.asked = None
+
+    def planner_parameters(self, names):
+        self.asked = names
+        return self.params
+
+
+def test_node_planner_parameters_are_route_planner_parameters():
+    src = (Path(__file__).resolve().parents[1] / "map_data" / "route_planner.py").read_text()
+    assign = next(
+        n
+        for n in ast.parse(src).body
+        if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "PLANNER_PARAMETERS"
+    )
+    assert set(viewer_planning.NODE_PLANNER_PARAMETERS) <= set(ast.literal_eval(assign.value))
+
+
+def test_planner_defaults_from_yaml_without_planner_node(app_client):
+    client, _ = app_client
+    client.application.extensions.pop(TRACKER_EXTENSION, None)
+    data = client.get("/api/planner_defaults").get_json()
+    assert data["source"] == "yaml"
+    assert "node" not in data
+    assert data["cell_size"] == grid_defaults()["cell_size"]
+
+
+@pytest.mark.parametrize("answer", [None, {}])
+def test_planner_defaults_from_yaml_when_planner_node_is_silent(app_client, answer):
+    client, _ = app_client
+    client.application.extensions[TRACKER_EXTENSION] = _FakeTracker(answer)
+    assert client.get("/api/planner_defaults").get_json()["source"] == "yaml"
+
+
+def test_planner_defaults_from_planner_node(app_client):
+    client, _ = app_client
+    node = _FakeTracker({"simplify_path": False, "cell_size": 0.5})
+    client.application.extensions[TRACKER_EXTENSION] = node
+    data = client.get("/api/planner_defaults").get_json()
+    assert node.asked == viewer_planning.NODE_PLANNER_PARAMETERS
+    assert (data["source"], data["node"]) == ("route_planner", "/route_planner")
+    assert (data["simplify_path"], data["cell_size"]) == (False, 0.5)
+    # Keys the node does not report keep the file's values
+    assert data["smooth_path"] == grid_defaults()["smooth_path"]
+    assert data["highway_costs"]
+
+
 # ── create_replan ────────────────────────────────────────────────────────────
 
 
@@ -1019,7 +1224,7 @@ def _replan_body(filename, **overrides):
     body = {
         "points": [[50.0, 14.0], [50.0005, 14.0005]],
         "file": filename,
-        "algorithm": "grid",
+        "algorithm": "rrt",  # what the viewer sends for All terrain
         "sub_algorithm": "astar",
         "cell_size": 1.0,
     }
@@ -1043,6 +1248,27 @@ def test_create_replan_minimal_grid_request(app_client_with_file):
         assert 13.9 < lon < 14.1
 
 
+def test_create_replan_defaults_come_from_grid_defaults(app_client_with_file, monkeypatch):
+    client, _, filename = app_client_with_file
+    defaults = {
+        "cell_size": 0.5,
+        "inflate_obstacles": 0.0,
+        "simplify_path": False,
+        "smooth_path": True,
+    }
+    monkeypatch.setattr(viewer_planning, "grid_defaults", lambda: defaults)
+    seen = {}
+
+    def fake_plan_route(md, points, **kwargs):
+        seen.update(kwargs)
+        raise RoutePlanningError("no_path", "stop here")
+
+    monkeypatch.setattr(viewer_planning, "plan_route", fake_plan_route)
+    body = {"points": [[50.0, 14.0], [50.0005, 14.0005]], "file": filename, "algorithm": "rrt"}
+    assert client.post("/api/create_replan", json=body).status_code == 200
+    assert {k: seen[k] for k in defaults} == defaults
+
+
 @pytest.mark.parametrize(
     "overrides",
     [
@@ -1063,6 +1289,7 @@ def test_create_replan_minimal_grid_request(app_client_with_file):
         {"allowed_ways": "footway"},
         {"grid_cost_weight": "heavy"},
         {"transfer_id": 42},
+        {"algorithm": "Graph"},
     ],
 )
 def test_create_replan_invalid_params_rejected(app_client_with_file, overrides):
@@ -1073,6 +1300,14 @@ def test_create_replan_invalid_params_rejected(app_client_with_file, overrides):
         content_type="application/json",
     )
     assert resp.status_code == 400
+
+
+def test_create_replan_start_outside_the_map_fails_not_cancels(app_client_with_file):
+    client, _, filename = app_client_with_file
+    body = _replan_body(filename, points=[[49.0, 13.0], [50.0005, 14.0005]])
+    data = client.post("/api/create_replan", json=body).get_json()
+    assert data["status"] == "failed"
+    assert data["reason"] == "start_outside_map"
 
 
 def test_create_replan_missing_points_rejected(app_client_with_file):
@@ -1187,12 +1422,122 @@ def test_upload_mapdata_duplicate_name_disambiguated(app_client):
     assert (tmp_path / "dup_1.mapdata").is_file()
 
 
+def test_upload_mapdata_normalises_extension_case(app_client):
+    client, tmp_path = app_client
+    resp = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(_mapdata_bytes(tmp_path)), "UP.MAPDATA")},
+        content_type="multipart/form-data",
+    )
+    assert resp.get_json()["filename"] == "UP.mapdata"
+    assert "UP.mapdata" in client.get("/api/files").get_json()["mapdata"]
+
+
+def test_upload_mapdata_skips_a_name_with_a_leftover_store(app_client):
+    client, tmp_path = app_client
+    (tmp_path / "dup.annotations.json").write_text('{"deleted_ways": [{"id": 1}]}')
+    resp = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(_mapdata_bytes(tmp_path)), "dup.mapdata")},
+        content_type="multipart/form-data",
+    )
+    assert resp.get_json()["filename"] == "dup_1.mapdata"
+
+
+def _poll_fetch(client, task_id):
+    for _ in range(100):
+        task = client.get(f"/api/fetch_area/{task_id}").get_json()
+        if task["status"] in ("done", "failed"):
+            return task
+        time.sleep(0.05)
+    raise AssertionError("fetch task did not finish")
+
+
+def test_fetch_area_does_not_overwrite_an_existing_map(app_client, mock_overpass_client):
+    client, tmp_path = app_client
+    (tmp_path / "small.mapdata").write_text("old")
+    bbox = {"min_lat": 50.0, "max_lat": 50.001, "min_lon": 14.0, "max_lon": 14.001}
+    resp = client.post("/api/fetch_area", json={**bbox, "name": "small"})
+    task = _poll_fetch(client, resp.get_json()["task_id"])
+    assert task["result"]["filename"] == "small_1.mapdata"
+    assert (tmp_path / "small.mapdata").read_text() == "old"
+
+
+def test_fetch_area_reserves_its_path_until_it_saves(app_client, mock_overpass_client):
+    client, tmp_path = app_client
+    release = threading.Event()
+    canned = mock_overpass_client.query_raw.return_value
+
+    def _blocked_query(*args, **kwargs):
+        release.wait(5)
+        return canned
+
+    mock_overpass_client.query_raw.side_effect = _blocked_query
+    bbox = {"min_lat": 50.0, "max_lat": 50.001, "min_lon": 14.0, "max_lon": 14.001}
+    task_id = client.post("/api/fetch_area", json={**bbox, "name": "same"}).get_json()["task_id"]
+
+    payload = _mapdata_bytes(tmp_path)
+    upload = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(payload), "same.mapdata")},
+        content_type="multipart/form-data",
+    )
+    assert upload.get_json()["filename"] == "same_1.mapdata"
+    release.set()
+    assert _poll_fetch(client, task_id)["result"]["filename"] == "same.mapdata"
+    assert (tmp_path / "same_1.mapdata").read_bytes() == payload
+    assert viewer_files._reserved_paths == set()
+
+
+def test_upload_gpx_does_not_overwrite_an_existing_map(app_client, mock_overpass_client):
+    client, tmp_path = app_client
+    (tmp_path / "trk.mapdata").write_text("old")
+    gpx = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">\n'
+        '  <wpt lat="50.0" lon="14.0"/>\n'
+        '  <wpt lat="50.001" lon="14.001"/>\n'
+        "</gpx>"
+    )
+    data = {"file": (io.BytesIO(gpx.encode()), "trk.gpx")}
+    resp = client.post("/api/upload_gpx", data=data, content_type="multipart/form-data")
+    assert resp.status_code == 200
+    assert resp.get_json()["filename"] == "trk_1.mapdata"
+    assert (tmp_path / "trk.mapdata").read_text() == "old"
+    # the OSM response cache lands beside the map, not in the server's working directory
+    assert (tmp_path / "trk_1.osm_cache.json").is_file()
+    assert not Path("trk.osm_cache.json").exists()
+
+
 # ── native export ────────────────────────────────────────────────────────────
 
 
 def test_export_native_missing_param(app_client):
     client, _ = app_client
     assert client.get("/api/export").status_code == 400
+
+
+def test_merged_mapdata_leaves_the_cached_map_untouched(tmp_path):
+    for src in STROMOVKA_FIXTURE.parent.glob("stromovka.*"):
+        shutil.copy(src, tmp_path / src.name)
+    app = create_app(data_dir=str(tmp_path))
+    store_path = tmp_path / "stromovka.annotations.json"
+    store = json.loads(store_path.read_text())
+    with app.test_request_context():
+        base = load_mapdata_cached(str(tmp_path / "stromovka.mapdata"))
+        victim = next(w for w in base.footways_list if w.id == 33898716)
+        store["tag_overrides"] = {str(victim.id): {"highway": "steps"}}
+        store_path.write_text(json.dumps(store))
+
+        def snapshot():
+            return list(base.footways_list), dict(base.nodes_cache), dict(victim.tags)
+
+        before = snapshot()
+        merged, _ = get_merged_mapdata("stromovka.mapdata")
+
+    assert snapshot() == before
+    assert len(merged.footways_list) < len(base.footways_list)  # the deleted ways are gone
+    assert any(w.tags.get("highway") == "steps" for w in merged.roads_list + merged.footways_list)
 
 
 def test_export_native_not_found(app_client):
@@ -1247,7 +1592,7 @@ def test_create_wormhole_missing_gpx_rejected(app_client):
     with patch.object(viewer_sharing.wormhole_manager, "create_transfer") as mock_create:
         resp = client.post("/api/create_wormhole", json={})
     assert resp.status_code == 400
-    assert resp.get_json()["success"] is False
+    assert resp.get_json() == {"error": "No GPX data provided"}
     mock_create.assert_not_called()
 
 
@@ -1264,15 +1609,15 @@ def test_create_wormhole_code_timeout_cancels_transfer(app_client):
     ):
         resp = client.post("/api/create_wormhole", json={"gpx": "<gpx></gpx>"})
     assert resp.status_code == 500
-    assert resp.get_json()["success"] is False
+    assert resp.get_json() == {"error": "Failed to capture wormhole code in time"}
     mock_cancel.assert_called_once_with("tid-2")
 
 
 def test_cancel_wormhole_unknown_transfer(app_client):
     client, _ = app_client
     resp = client.post("/api/cancel_wormhole", json={"transfer_id": "does-not-exist"})
-    assert resp.status_code == 200
-    assert resp.get_json() == {"success": False, "message": "Invalid or unknown transfer ID"}
+    assert resp.status_code == 404
+    assert resp.get_json() == {"error": "Invalid or unknown transfer ID"}
 
 
 def test_get_transfer_code_wakes_up_on_event_instead_of_polling():
@@ -1294,6 +1639,31 @@ def test_get_transfer_code_wakes_up_on_event_instead_of_polling():
     assert elapsed < 1.0  # woken by the event, not stuck waiting out the timeout
 
 
+def test_wormhole_waits_long_for_the_receiver_then_kills_quietly(caplog):
+    manager = viewer_sharing.WormholeManager()
+    process = MagicMock()
+    process.stdout = iter(["Wormhole code is: 7-crossover-clockwork\n"])
+    process.wait.side_effect = subprocess.TimeoutExpired("wormhole", 600)
+    process.poll.return_value = None
+    temp_dir = MagicMock()
+    manager.active_transfers["tid"] = {
+        "process": process,
+        "temp_dir": temp_dir,
+        "code": None,
+        "code_ready": threading.Event(),
+    }
+
+    caplog.clear()  # the constructor warns when wormhole isn't installed
+    with caplog.at_level("INFO", logger=viewer_sharing.logger.name):
+        manager._capture_wormhole_code_thread("tid")
+
+    process.wait.assert_called_once_with(timeout=600)
+    process.kill.assert_called_once()
+    temp_dir.cleanup.assert_called_once()
+    assert "tid" not in manager.active_transfers
+    assert not [r for r in caplog.records if r.levelno > logging.INFO]
+
+
 # ── non-JSON / empty bodies on JSON endpoints ────────────────────────────────
 
 
@@ -1306,7 +1676,7 @@ def test_json_endpoints_reject_missing_content_type(app_client, endpoint):
     # No Content-Type header at all.
     resp = client.post(endpoint, data="transfer_id=x")
     assert resp.status_code == 400
-    assert resp.get_json()["success"] is False
+    assert "error" in resp.get_json()
 
 
 @pytest.mark.parametrize(
@@ -1318,7 +1688,7 @@ def test_json_endpoints_reject_empty_json_body(app_client, endpoint):
     # Correct content type but an empty body.
     resp = client.post(endpoint, data="", content_type="application/json")
     assert resp.status_code == 400
-    assert resp.get_json()["success"] is False
+    assert "error" in resp.get_json()
 
 
 def test_cancel_replan_with_transfer_id_succeeds(app_client):
@@ -1335,7 +1705,7 @@ def test_cancel_replan_missing_transfer_id_rejected(app_client):
     with patch.object(viewer_planning, "cancel_replan_backend") as mock_cancel:
         resp = client.post("/api/cancel_replan", json={})
     assert resp.status_code == 400
-    assert resp.get_json()["success"] is False
+    assert "error" in resp.get_json()
     mock_cancel.assert_not_called()
 
 
@@ -1488,3 +1858,434 @@ def test_mapdata_etag_serves_304_until_an_edit(app_client_3node):
     assert edited.status_code == 200
     assert edited.headers["ETag"] != etag
     assert 2 not in [f["properties"].get("id") for f in edited.get_json()["features"]]
+
+
+# ── unreadable annotation store ──────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("content", [b"{not json", b"[1, 2]", b"\xff\xfe", b"null"])
+def test_unreadable_store_is_moved_aside_not_overwritten(app_client_with_file, content):
+    client, tmp_path, filename = app_client_with_file
+    ann_path = tmp_path / "test.annotations.json"
+    ann_path.write_bytes(content)
+
+    resp = client.delete(f"/api/ways/1?file={filename}", json={})
+    assert resp.status_code == 409
+    assert "error" in resp.get_json()
+    backups = list(tmp_path.glob("test.annotations.json.corrupt-*"))
+    assert [b.read_bytes() for b in backups] == [content]
+    assert not ann_path.exists()
+
+    # The next edit starts a fresh store and leaves the backup alone.
+    assert client.delete(f"/api/ways/1?file={filename}", json={}).status_code == 204
+    assert json.loads(ann_path.read_text())["deleted_ways"][0]["id"] == 1
+    assert backups[0].read_bytes() == content
+
+
+def test_unreadable_store_on_read_is_409(app_client_with_file):
+    client, tmp_path, filename = app_client_with_file
+    for url in (f"/api/annotations?file={filename}", f"/api/mapdata?file={filename}"):
+        (tmp_path / "test.annotations.json").write_text("{not json")
+        assert client.get(url).status_code == 409
+    assert len(list(tmp_path.glob("test.annotations.json.corrupt-*"))) == 2
+
+
+# ── bad input never reaches the annotation store ─────────────────────────────
+
+_SEED_STORE = '{"version": 1, "annotations": [], "deleted_ways": [{"id": 99}]}'
+
+
+@pytest.fixture
+def seeded_store(app_client_with_file):
+    """A client plus a store file whose bytes every rejected request must leave alone."""
+    client, tmp_path, filename = app_client_with_file
+    ann_path = tmp_path / "test.annotations.json"
+    ann_path.write_text(_SEED_STORE)
+    yield client, filename
+    assert ann_path.read_text() == _SEED_STORE
+    assert client.get(f"/api/mapdata?file={filename}").status_code == 200
+
+
+@pytest.mark.parametrize(
+    "nodes",
+    [
+        [{"id": "abc", "lat": 50.0, "lon": 14.0}],
+        [{"id": 101, "lat": "x", "lon": 14.0}],
+        [{"id": 101, "lat": 95.0, "lon": 14.0}],
+        [{"id": 101, "lat": 50.0}],
+        [{"id": 1.5, "lat": 50.0, "lon": 14.0}],
+        [{"id": 101, "lat": 50.0, "lon": 14.0}, {"id": 102, "lat": None, "lon": 14.0}],
+        [5],
+    ],
+)
+def test_move_rejects_bad_nodes(seeded_store, nodes):
+    client, filename = seeded_store
+    resp = client.put(f"/api/way_nodes/move?file={filename}&way_id=1", json={"nodes": nodes})
+    assert resp.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"after_node_id": 101, "lat": "x", "lon": 14.0},
+        {"after_node_id": 101, "lat": 50.0, "lon": 200.0},
+        {"after_node_id": 101, "lat": True, "lon": 14.0},
+        {"after_node_id": "abc", "lat": 50.0, "lon": 14.0},
+    ],
+)
+def test_add_node_rejects_bad_body(seeded_store, body):
+    client, filename = seeded_store
+    assert client.post(f"/api/way_node?file={filename}&way_id=1", json=body).status_code == 400
+
+
+_NODE_BODY = {"after_node_id": 101, "lat": 50.0, "lon": 14.0}
+_MOVE_BODY = {"nodes": [{"id": 101, "lat": 50.0, "lon": 14.0}]}
+
+
+@pytest.mark.parametrize(
+    ("method", "url", "body", "status"),
+    [
+        # Way 1 is the two-node footway [101, 102]; the map has no way 99 or node 999.
+        ("post", "/api/ways/split", {"way_id": 99, "node_id": 101}, 404),
+        ("post", "/api/ways/split", {"way_id": 1, "node_id": 999}, 400),
+        ("post", "/api/ways/split", {"way_id": 1, "node_id": 101}, 400),  # an end, not interior
+        ("post", "/api/way_node?way_id=99", _NODE_BODY, 404),
+        ("post", "/api/way_node?way_id=1", {**_NODE_BODY, "after_node_id": 999}, 400),
+        ("put", "/api/way_nodes/move?way_id=99", _MOVE_BODY, 404),
+        (
+            "put",
+            "/api/way_nodes/move?way_id=1",
+            {"nodes": [{"id": 999, "lat": 50.0, "lon": 14.0}]},
+            400,
+        ),
+    ],
+)
+def test_way_edits_reject_unknown_ways_and_nodes(seeded_store, method, url, body, status):
+    client, filename = seeded_store
+    sep = "&" if "?" in url else "?"
+    resp = getattr(client, method)(f"{url}{sep}file={filename}", json=body)
+    assert resp.status_code == status
+
+
+def test_move_point_barrier_by_its_own_id(tmp_path):
+    # A way without nodes is listed (and so moved) under its own ID, see get_way_nodes.
+    e, n, zn, zl = utm.from_latlon(50.0, 14.0)
+    md = MapData([np.array([[e, n], [e + 100, n + 100]]), int(zn), zl], coords_type="array")
+    md.barriers_list.append(
+        Way(id=2, nodes=[], tags={"barrier": "block"}, line=box(e, n, e + 1, n + 1))
+    )
+    md.save(str(tmp_path / "block.mapdata"))
+    client = create_app(data_dir=str(tmp_path)).test_client()
+
+    nodes = client.get("/api/way_nodes?file=block.mapdata&way_id=2").get_json()["nodes"]
+    assert [nd["id"] for nd in nodes] == [2]
+    resp = client.put(
+        "/api/way_nodes/move?file=block.mapdata&way_id=2",
+        json={"nodes": [{"id": 2, "lat": 50.0001, "lon": 14.0001}]},
+    )
+    assert resp.status_code == 204
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"geometry": "x"},
+        {"geometry": {"type": "LineString", "coordinates": [[14.0, 50.0]]}},
+        {"geometry": {"type": "Polygon", "coordinates": "x"}},
+        {"geometry": {"type": "LineString", "coordinates": [[14.0, 95.0], [14.0, 96.0]]}},
+        {"geometry": _LINE, "properties": []},
+        {"geometry": _LINE, "properties": {"width": "abc"}},
+        {"geometry": _LINE, "properties": {"width": -1}},
+        {"geometry": _LINE, "type": ["path"]},
+    ],
+)
+def test_annotation_rejects_bad_body(seeded_store, body):
+    client, filename = seeded_store
+    assert client.post(f"/api/annotations?file={filename}", json=body).status_code == 400
+
+
+def test_annotation_update_rejects_bad_geometry(app_client_with_file):
+    client, tmp_path, filename = app_client_with_file
+    ann = client.post(f"/api/annotations?file={filename}", json={"geometry": _LINE}).get_json()
+    before = (tmp_path / "test.annotations.json").read_text()
+    resp = client.put(
+        f"/api/annotations/{ann['id']}?file={filename}",
+        json={"geometry": {"type": "LineString", "coordinates": [[14.0, 50.0]]}},
+    )
+    assert resp.status_code == 400
+    assert (tmp_path / "test.annotations.json").read_text() == before
+
+
+@pytest.mark.parametrize(
+    ("method", "url", "body"),
+    [
+        ("post", "/api/ways/split", {"way_id": 4242, "node_id": 101}),
+        ("post", "/api/ways/split", {"way_id": 1.0, "node_id": 101}),
+        ("delete", "/api/ways/1", [1]),
+        ("put", "/api/ways/1/tags", ["highway"]),
+        ("put", "/api/ways/1/tags", {"tags": {"highway": ["footway"]}}),
+        ("put", "/api/ways/abc/hide", {}),
+        ("delete", "/api/ways/1:-1", {}),
+        ("put", "/api/ways/1:x/restore", {}),
+    ],
+)
+def test_way_edits_reject_bad_ids_and_bodies(seeded_store, method, url, body):
+    client, filename = seeded_store
+    resp = getattr(client, method)(f"{url}?file={filename}", json=body)
+    assert resp.status_code in (400, 404)
+
+
+def test_get_way_rejects_negative_segment(app_client_with_file):
+    client, _, filename = app_client_with_file
+    assert client.get(f"/api/ways/1:-1?file={filename}").status_code == 400
+    assert client.get(f"/api/way_nodes?file={filename}&way_id=1:-1").status_code == 400
+
+
+def test_upload_gpx_rejects_bad_options(app_client):
+    client, _ = app_client
+    for options in ("{not json", "[1]"):
+        data = {"file": (io.BytesIO(b"<gpx/>"), "t.gpx"), "options": options}
+        resp = client.post("/api/upload_gpx", data=data, content_type="multipart/form-data")
+        assert resp.status_code == 400
+
+
+# ── error contract ───────────────────────────────────────────────────────────
+
+
+def test_errors_are_json(app_client_with_file):
+    client, _, filename = app_client_with_file
+    for resp in (
+        client.get("/api/ways/9999?file=" + filename),  # abort() in a route
+        client.get("/api/mapdata"),  # missing parameter
+        client.get("/api/no_such_endpoint"),  # routing 404
+        client.get(f"/api/qr?lat=x&lon=14&file={filename}"),
+    ):
+        assert resp.status_code in (400, 404)
+        assert resp.is_json
+        assert set(resp.get_json()) == {"error"}
+
+    resp = client.delete("/api/files")
+    assert resp.status_code == 405
+    assert resp.get_json() == {"error": resp.get_json()["error"]}
+    assert "GET" in resp.headers["Allow"]
+
+
+def test_unhandled_exception_is_a_json_500(app_client_with_file):
+    client, _, filename = app_client_with_file
+    client.application.config["PROPAGATE_EXCEPTIONS"] = False  # TESTING re-raises otherwise
+    with patch.object(viewer_files, "mapdata_to_geojson", side_effect=RuntimeError("secret")):
+        resp = client.get(f"/api/mapdata?file={filename}")
+    assert resp.status_code == 500
+    assert "secret" not in resp.get_json()["error"]
+
+
+# ── split ids ────────────────────────────────────────────────────────────────
+
+
+def _way_features(client, filename, way_id):
+    features = client.get(f"/api/mapdata?file={filename}").get_json()["features"]
+    return [f for f in features if str(f["properties"].get("id")).split(":")[0] == str(way_id)]
+
+
+def test_tag_override_applies_to_split_segments(app_client_3node):
+    client, _, filename = app_client_3node
+    client.post(f"/api/ways/split?file={filename}", json={"way_id": 2, "node_id": 202})
+    resp = client.put(f"/api/ways/2:0/tags?file={filename}", json={"tags": {"highway": "service"}})
+    assert resp.status_code == 204
+    segments = _way_features(client, filename, 2)
+    assert len(segments) == 2
+    for f in segments:
+        assert f["properties"]["tags"]["highway"] == "service"
+        assert f["properties"]["category"] == "road"
+
+
+def test_tag_delete_by_segment_id_removes_the_override(app_client_3node):
+    client, tmp_path, filename = app_client_3node
+    client.post(f"/api/ways/split?file={filename}", json={"way_id": 2, "node_id": 202})
+    client.put(f"/api/ways/2:1/tags?file={filename}", json={"tags": {"highway": "service"}})
+    assert client.delete(f"/api/ways/2:1/tags?file={filename}").status_code == 204
+    store = json.loads((tmp_path / "three.annotations.json").read_text())
+    assert store["tag_overrides"] == {}
+    assert not [e for e in store["change_log"] if e["type"] == "tag"]
+
+
+def test_deleting_an_added_node_keeps_the_one_added_after_it(app_client_with_file):
+    client, _, filename = app_client_with_file
+    url = f"/api/way_node?file={filename}&way_id=1"
+    a = client.post(url, json={"after_node_id": 101, "lat": 50.0001, "lon": 14.0001}).get_json()
+    b = client.post(url, json={"after_node_id": a["id"], "lat": 50.0002, "lon": 14.0002})
+    b = b.get_json()
+    assert client.delete(f"{url}&node_id={a['id']}").status_code == 204
+    nodes = client.get(f"/api/way_nodes?file={filename}&way_id=1").get_json()["nodes"]
+    assert [n["id"] for n in nodes] == [101, b["id"], 102]
+
+
+# ── hardening ────────────────────────────────────────────────────────────────
+
+_GPX = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">\n'
+    '  <wpt lat="50.0" lon="14.0"/>\n'
+    '  <wpt lat="50.001" lon="14.001"/>\n'
+    "</gpx>"
+)
+
+
+def test_upload_mapdata_rejects_a_non_integer_node_id(app_client):
+    client, tmp_path = app_client
+    data = json.loads(_mapdata_bytes(tmp_path))
+    data["footways"][0]["nodes"] = ["<img src=x onerror=alert(1)>", 102]
+    resp = client.post(
+        "/api/upload_mapdata",
+        data={"file": (io.BytesIO(json.dumps(data).encode()), "xss.mapdata")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 400
+    assert resp.get_json() == {"error": "Invalid .mapdata file"}
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["upload_src"]
+
+
+def test_upload_mapdata_validates_under_a_reserved_hidden_name(app_client):
+    client, tmp_path = app_client
+    real_load = MapData.load
+    seen = {}
+
+    def _load(path):
+        seen["listed"] = list(tmp_path.glob("*.mapdata"))  # what /api/files would list
+        seen["reserved"] = set(viewer_files._reserved_paths)
+        return real_load(path)
+
+    with patch.object(viewer_files.MapData, "load", side_effect=_load):
+        resp = client.post(
+            "/api/upload_mapdata",
+            data={"file": (io.BytesIO(_mapdata_bytes(tmp_path)), "new.mapdata")},
+            content_type="multipart/form-data",
+        )
+    assert resp.get_json()["filename"] == "new.mapdata"
+    assert seen["listed"] == []  # not visible while it is still being validated
+    assert seen["reserved"] == {tmp_path / "new.mapdata"}
+    assert viewer_files._reserved_paths == set()
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_create_wormhole_caps_the_running_transfers(app_client):
+    client, _ = app_client
+    manager = viewer_sharing.WormholeManager()
+    done = threading.Event()
+
+    def _blocking_stdout():
+        done.wait(5)
+        yield from ()
+
+    def _popen(*args, **kwargs):
+        process = MagicMock()
+        process.stdout = _blocking_stdout()
+        return process
+
+    with (
+        patch.object(viewer_sharing, "wormhole_manager", manager),
+        patch.object(viewer_sharing.subprocess, "Popen", side_effect=_popen),
+        patch.object(manager, "get_transfer_code", return_value="1-a-b"),
+    ):
+        statuses = [
+            client.post("/api/create_wormhole", json={"gpx": "<gpx/>"})
+            for _ in range(viewer_sharing.MAX_ACTIVE_TRANSFERS + 1)
+        ]
+        done.set()
+    assert [r.status_code for r in statuses] == [200] * viewer_sharing.MAX_ACTIVE_TRANSFERS + [429]
+    assert "error" in statuses[-1].get_json()
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "body"),
+    [
+        ("/api/create_wormhole", {"gpx": ["<gpx/>"]}),
+        ("/api/cancel_wormhole", {"transfer_id": ["x"]}),
+        ("/api/cancel_replan", {"transfer_id": {"a": 1}}),
+    ],
+)
+def test_json_endpoints_reject_non_string_ids(app_client, endpoint, body):
+    client, _ = app_client
+    resp = client.post(endpoint, json=body)
+    assert resp.status_code == 400
+    assert "must be a string" in resp.get_json()["error"]
+
+
+def test_overpass_fetches_answer_429_when_both_slots_are_taken(app_client, mock_overpass_client):
+    client, _ = app_client
+    assert viewer_files._overpass_slots.acquire(blocking=False)
+    assert viewer_files._overpass_slots.acquire(blocking=False)
+    try:
+        bbox = {"min_lat": 50.0, "max_lat": 50.001, "min_lon": 14.0, "max_lon": 14.001}
+        fetch = client.post("/api/fetch_area", json={**bbox, "name": "busy"})
+        gpx = client.post(
+            "/api/upload_gpx",
+            data={"file": (io.BytesIO(_GPX.encode()), "busy.gpx")},
+            content_type="multipart/form-data",
+        )
+    finally:
+        viewer_files._overpass_slots.release()
+        viewer_files._overpass_slots.release()
+    assert fetch.status_code == 429
+    assert gpx.status_code == 429
+    assert "error" in fetch.get_json()
+    assert viewer_files._reserved_paths == set()
+    mock_overpass_client.query_raw.assert_not_called()
+
+
+def test_overpass_slots_are_released_after_each_fetch(app_client, mock_overpass_client):
+    client, _ = app_client
+    bbox = {"min_lat": 50.0, "max_lat": 50.001, "min_lon": 14.0, "max_lon": 14.001}
+    for name in ("a", "b", "c"):
+        task_id = client.post("/api/fetch_area", json={**bbox, "name": name}).get_json()["task_id"]
+        assert _poll_fetch(client, task_id)["status"] == "done"
+    for name in ("d", "e", "f"):
+        data = {"file": (io.BytesIO(_GPX.encode()), f"{name}.gpx")}
+        resp = client.post("/api/upload_gpx", data=data, content_type="multipart/form-data")
+        assert resp.status_code == 200
+
+
+def test_a_json_body_over_10_mb_is_413(app_client):
+    client, _ = app_client
+    body = json.dumps({"transfer_id": "x" * (10 * 1024 * 1024)})
+    resp = client.post("/api/cancel_replan", data=body, content_type="application/json")
+    assert resp.status_code == 413
+    assert "error" in resp.get_json()
+
+
+def test_a_multipart_upload_over_10_mb_is_not_413(app_client):
+    client, _ = app_client
+    big = io.BytesIO(b"x" * (11 * 1024 * 1024))
+    resp = client.post(
+        "/api/upload_mapdata",
+        data={"file": (big, "big.mapdata")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 400  # rejected as invalid content, not for its size
+
+
+def test_the_werkzeug_log_filter_redacts_the_token():
+    args = ("127.0.0.1", "GET /?file=a&access_token=sekret HTTP/1.1", "302", "-")
+    record = logging.LogRecord("werkzeug", logging.INFO, "", 0, '%s - "%s" %s %s', args, None)
+    assert _redact_token(record) is True
+    assert "sekret" not in record.getMessage()
+    assert "file=a&access_token=*** HTTP/1.1" in record.getMessage()
+
+
+def test_responses_carry_the_security_headers(app_client):
+    client, _ = app_client
+    for resp in (client.get("/"), client.get("/api/does-not-exist")):
+        for name, value in SECURITY_HEADERS.items():
+            assert resp.headers[name] == value
+    assert SECURITY_HEADERS["Content-Security-Policy"] == "frame-ancestors 'none'"
+
+
+@pytest.mark.parametrize("path", ["/\\evil.example/x", "//evil.example/x", "/\\/evil.example"])
+def test_the_token_strip_redirect_stays_on_site(app_client, monkeypatch, path):
+    client, _ = app_client
+    monkeypatch.setenv("MAP_DATA_ACCESS_TOKEN", "sekret")
+    resp = client.get(path, query_string={"access_token": "sekret"})
+    assert resp.status_code == 302
+    location = unquote(resp.headers["Location"])  # werkzeug sends a backslash as %5C
+    assert location.startswith("/")
+    assert location[1] not in "/\\"

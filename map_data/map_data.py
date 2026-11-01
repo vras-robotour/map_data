@@ -1,13 +1,10 @@
-"""
-Central data class for OSM-based map data.
-
-This module provides the MapData class which orchestrates downloading,
-caching, and parsing OpenStreetMap data for use in path planning.
-"""
+"""MapData: download, cache and parse the OpenStreetMap data of an area."""
 
 import json
 import logging
+import time
 from collections.abc import Callable
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -34,42 +31,29 @@ logger = logging.getLogger(__name__)
 
 _DEFAULTS = load_config("planner_defaults.yaml")
 GRID_MARGIN: float = _DEFAULTS.get("grid_margin", 150)
-BBOX_LEN = 4
 # geometric_intersections: endpoint-to-way distance (m) that still counts as
 # touching, and buffer radius (m) of the resulting crossroad polygons.
 TOUCH_TOLERANCE = 1.0
 CROSSROAD_RADIUS = 1.5
+OSM_CACHE_MAX_AGE = 30 * 24 * 60 * 60
 
 
 class MapData:
     """
-    Central data class for OSM-based map data.
+    OSM features of the area around a set of GPS waypoints.
 
-    Parses GPS waypoints from a GPX file (or a raw coordinate array),
-    downloads the corresponding OSM features via the Overpass API, and
-    exposes them as three categorised lists of :class:`~map_data.utils.way.Way`
-    objects: ``roads_list``, ``footways_list``, and ``barriers_list``.
-
-    The class can be used entirely without ROS2. A running ROS2 context is
-    only required for the ``create_mapdata`` CLI node.
+    Parses the waypoints from a GPX file (or a UTM array), downloads the OSM
+    features of their bounding box via Overpass and sorts them into
+    ``roads_list``, ``footways_list`` and ``barriers_list`` of
+    :class:`~map_data.utils.way.Way`. Needs no ROS.
 
     Attributes
     ----------
     waypoints : np.ndarray
-        ``(N, 2)`` array of UTM easting/northing coordinates parsed from the
-        input file.
-    zone_number : int
-        UTM zone number inferred from the waypoints.
-    zone_letter : str
-        UTM zone letter inferred from the waypoints.
-    roads_list : list of Way
-        Parsed road ways (vehicle-intended highways).
-    footways_list : list of Way
-        Parsed footway ways (pedestrian paths).
-    barriers_list : list of Way
-        Parsed barrier features (walls, buildings, fences, water, …).
+        ``(N, 2)`` UTM easting/northing of the input points.
     crossroads_list : list of Way
-        Footway intersection points detected during parsing.
+        Junction discs where footways/roads branch, plus the
+        ``annotation_intersection`` ones of drawn paths.
 
     """
 
@@ -81,6 +65,7 @@ class MapData:
     ANTI_BARRIER_TAGS: dict[str, list[str]]
     OBSTACLE_TAGS: dict[str, list[str]]
     NOT_OBSTACLE_TAGS: dict[str, list[str]]
+    ANTI_OBSTACLE_TAGS: dict[str, list[str]]
 
     def __init__(
         self,
@@ -96,19 +81,22 @@ class MapData:
 
         Parameters
         ----------
-        coords : str or array-like
-            If *coords_type* is ``"file"``, the path to a ``.gpx`` file.
-            If *coords_type* is ``"array"``, a tuple
-            ``(waypoints, zone_number, zone_letter)`` where *waypoints* is
-            an ``(N, 2)`` array of UTM easting/northing coordinates.
-        coords_type : str
-            ``"file"`` (default) to parse a GPX file, or ``"array"`` to
-            supply pre-converted UTM coordinates directly.
+        coords : str or tuple
+            A ``.gpx`` path (``coords_type="file"``) or
+            ``(waypoints, zone_number, zone_letter)`` with ``(N, 2)`` UTM
+            waypoints (``coords_type="array"``).
+        coords_type : str, default "file"
+            ``"file"`` to load a GPX file, or ``"array"`` for a UTM waypoint tuple.
+        grid_margin : float, optional
+            Margin (m) around waypoints for map bounds (default 150 m).
+        obstacle_radius : float, optional
+            Buffer radius (m) for point obstacles (default from config).
+        buffer_widths : dict of {str: float}, optional
+            Buffer widths (m) by way category (road, footway, barrier).
 
         """
         if coords_type == "file":
-            # coords_type == "file" guarantees coords is a str here, but coords_type
-            # isn't a Literal type so mypy can't correlate the two params.
+            # coords is a str here; mypy can't correlate it with coords_type.
             with Path(coords).open() as f:  # type: ignore[arg-type]
                 gpx_object = gpxparse(f)
             self.coords_file: str | None = coords  # type: ignore[assignment] # see arg-type note above
@@ -134,8 +122,7 @@ class MapData:
             )
             self.waypoints = np.column_stack([easting, northing])
         elif coords_type == "array":
-            # coords_type == "array" guarantees coords is the (ndarray, int, str)
-            # tuple here, but mypy can't correlate the two params (see above).
+            # coords is the (ndarray, int, str) tuple here (see above).
             self.waypoints = np.array(coords[0])
             self.zone_number = coords[1]  # type: ignore[assignment]
             self.zone_letter = coords[2]
@@ -152,18 +139,14 @@ class MapData:
         self._obstacle_radius = obstacle_radius
         self._buffer_widths = buffer_widths
 
-        self.max_lat, self.max_long = utm.to_latlon(
-            self.max_x,
-            self.max_y,
+        corners = utm.to_latlon(
+            np.array([self.min_x, self.max_x, self.min_x, self.max_x]),
+            np.array([self.min_y, self.min_y, self.max_y, self.max_y]),
             self.zone_number,
             self.zone_letter,
         )
-        self.min_lat, self.min_long = utm.to_latlon(
-            self.min_x,
-            self.min_y,
-            self.zone_number,
-            self.zone_letter,
-        )
+        self.min_lat, self.max_lat = float(np.min(corners[0])), float(np.max(corners[0]))
+        self.min_long, self.max_long = float(np.min(corners[1])), float(np.max(corners[1]))
 
         self._check_utm_zone_boundary()
 
@@ -175,7 +158,7 @@ class MapData:
         #: ``{reason: count}`` of the last :meth:`apply_traversability` call.
         self.traversability_removed: dict[str, int] = {}
 
-        # Raw data stored temporarily during parsing
+        # Overpass result, held from run_queries until run_parse.
         self.osm_data: overpy.Result | None = None
 
         self._load_tag_configs()
@@ -187,12 +170,14 @@ class MapData:
             (self.max_lat, self.min_long),
             (self.max_lat, self.max_long),
         ]
+        # Band letters only label latitude; the projection changes with the zone
+        # number and hemisphere.
         zones = set()
         for lat, lon in corners:
-            _, _, zn, zl = utm.from_latlon(lat, lon)
-            zones.add((zn, zl))
+            _, _, zn, _ = utm.from_latlon(lat, lon)
+            zones.add((zn, "N" if lat >= 0 else "S"))
         if len(zones) > 1:
-            zone_strs = ", ".join(f"{zn}{zl}" for zn, zl in sorted(zones))
+            zone_strs = ", ".join(f"{zn}{hemi}" for zn, hemi in sorted(zones))
             logger.warning(
                 "Waypoints span multiple UTM zones (%s). Geometry near zone boundaries "
                 "may be distorted. Consider splitting the area into smaller regions.",
@@ -207,6 +192,7 @@ class MapData:
             "ANTI_BARRIER_TAGS",
             "OBSTACLE_TAGS",
             "NOT_OBSTACLE_TAGS",
+            "ANTI_OBSTACLE_TAGS",
         ):
             setattr(self, attr, self._csv_to_dict(params_path / f"{attr.lower()}.csv"))
 
@@ -230,7 +216,8 @@ class MapData:
         if not path:
             return
         cache_data = {
-            "bbox": [self.min_lat, self.min_long, self.max_lat, self.max_long],
+            "created": time.time(),
+            "query_hash": self._osm_query_hash(),
             "raw": raw,
         }
         try:
@@ -248,15 +235,11 @@ class MapData:
             with path.open(encoding="utf-8") as f:
                 cache_data = json.load(f)
 
-            # Validate bbox
-            stored_bbox = cache_data.get("bbox")
-            current_bbox = [self.min_lat, self.min_long, self.max_lat, self.max_long]
-            if not stored_bbox or len(stored_bbox) != BBOX_LEN:
+            if cache_data.get("query_hash") != self._osm_query_hash():
+                logger.info("OSM cache found but the query has changed. Re-querying.")
                 return None
-
-            # 1e-6 degree tolerance (~11cm at equator)
-            if not np.allclose(stored_bbox, current_bbox, atol=1e-6):
-                logger.info("OSM cache found but bounding box has changed. Re-querying.")
+            if time.time() - cache_data.get("created", 0) > OSM_CACHE_MAX_AGE:
+                logger.info("OSM cache is stale. Re-querying.")
                 return None
 
             logger.info("Using cached OSM responses from %s", path)
@@ -265,6 +248,18 @@ class MapData:
             logger.debug("Could not load OSM cache: %s", e)
             return None
 
+    def _osm_query_hash(self) -> str:
+        return sha256(self._osm_query().encode()).hexdigest()
+
+    def _osm_query(self) -> str:
+        bbox = f"{self.min_lat},{self.min_long},{self.max_lat},{self.max_long}"
+        # Server-side timeout below the HTTP one, so Overpass reports a slow query
+        # as an error instead of the client giving up mid-response.
+        ql_timeout = REQUEST_TIMEOUT - 10
+        return (
+            f"[out:json][timeout:{ql_timeout}];way({bbox})->.w;(.w; .w >; .w <; node({bbox}););out;"
+        )
+
     def run_queries(
         self,
         *,
@@ -272,23 +267,16 @@ class MapData:
         progress_cb: Callable[[str], None] | None = None,
     ) -> None:
         """
-        Download OSM ways, relations, and nodes from the Overpass API.
+        Download the bounding box's ways, their nodes and relations, and all nodes.
 
-        Fires a single Overpass query covering the bounding box of the
-        loaded waypoints — the union of ways, their nodes, the relations
-        referencing them, and all standalone nodes in the box — and stores
-        the parsed result internally. Call :meth:`run_parse` afterwards to
-        convert it into :class:`~map_data.utils.way.Way` objects.
+        One Overpass query; the result is kept for :meth:`run_parse`.
 
         Parameters
         ----------
         use_cache : bool
-            If ``True`` (default), attempt to load the response from a
-            local ``.osm_cache.json`` file before querying the API.
+            Try the ``.osm_cache.json`` next to the GPX file first.
         progress_cb : callable, optional
-            Called with a short human-readable status string before each
-            Overpass request attempt (e.g. which mirror/attempt is in
-            flight), so a caller can surface fetch progress to a user.
+            Called with a status string before each Overpass request attempt.
 
         """
         client = OverpassClient()
@@ -304,14 +292,7 @@ class MapData:
                     self.osm_data = result
                     return
 
-        bbox = f"{self.min_lat},{self.min_long},{self.max_lat},{self.max_long}"
-        # Server-side timeout stays comfortably below OverpassClient's HTTP
-        # timeout so a slow query is reported by Overpass (as a proper
-        # error) rather than by the client giving up mid-response.
-        ql_timeout = REQUEST_TIMEOUT - 10
-        query = (
-            f"[out:json][timeout:{ql_timeout}];way({bbox})->.w;(.w; .w >; .w <; node({bbox}););out;"
-        )
+        query = self._osm_query()
 
         def _on_attempt(endpoint: str, attempt: int, retries: int) -> None:
             if progress_cb is not None:
@@ -322,9 +303,7 @@ class MapData:
             logger.error("Overpass query failed.")
             return
 
-        # query_raw validates 200 bodies, but stay defensive: a malformed
-        # response that slips through must not kill the run with an
-        # uncaught overpy/json traceback.
+        # A malformed body that passes query_raw's check must not crash the run.
         try:
             result = client.api.parse_json(raw)
         except (overpy.exception.OverPyException, json.JSONDecodeError):
@@ -340,15 +319,12 @@ class MapData:
         """
         Parse the downloaded OSM data into categorised Way lists.
 
-        Populates :attr:`roads_list`, :attr:`footways_list`,
-        :attr:`barriers_list`, and :attr:`crossroads_list`. The raw OSM
-        response buffers are cleared after parsing to free memory.
+        Fills the way and crossroad lists and drops the raw Overpass result.
 
         Returns
         -------
         int
-            ``0`` on success, ``1`` if OSM data has not been downloaded yet
-            (call :meth:`run_queries` first).
+            ``0`` on success, ``1`` if :meth:`run_queries` has not succeeded.
 
         """
         if self.osm_data is None:
@@ -368,9 +344,10 @@ class MapData:
             way_node_ids,
             self.OBSTACLE_TAGS,
             self.NOT_OBSTACLE_TAGS,
-            obstacle_radius=self._obstacle_radius,
-            force_zone_number=self.zone_number,
-            force_zone_letter=self.zone_letter,
+            self.ANTI_OBSTACLE_TAGS,
+            self._obstacle_radius,
+            self.zone_number,
+            self.zone_letter,
         )
 
         self.roads_list, self.footways_list, parsed_barriers = separate_ways(
@@ -392,21 +369,10 @@ class MapData:
         """
         Remove every road/footway *rules* declares non-traversable.
 
-        The classification is stored in the ``.mapdata`` file as OSM tagged it,
-        so ways a robot must not drive on (stairs, muddy shortcuts, bridges on
-        some maps) have to be removed at use time rather than at parse time —
-        the viewer must still show them. The crossroads are recomputed from the
-        remaining footways, so junctions that only existed because of a removed
-        way disappear with it.
-
-        The per-reason counts are logged and also kept in
-        :attr:`traversability_removed` for callers that report them (the ROS
-        nodes log them through their own logger).
-
-        Parameters
-        ----------
-        rules : TraversabilityRules
-            The rule set; one with no rules is a no-op.
+        Done at use time, not parse time, because the ``.mapdata`` keeps OSM's
+        classification for the viewer. Crossroads are recomputed from the
+        remaining ways; per-reason counts are logged and kept in
+        :attr:`traversability_removed`.
 
         Returns
         -------
@@ -432,9 +398,7 @@ class MapData:
             setattr(self, lst_name, kept)
         self.traversability_removed = counts
         if removed:
-            self.crossroads_list = self.parse_intersections(
-                {w.id: w for w in self.footways_list + self.roads_list},
-            )
+            self.recompute_crossroads()
             for reason, count in counts.items():
                 logger.info("Removed %d way(s): %s", count, reason)
             logger.info(
@@ -448,16 +412,10 @@ class MapData:
         """
         Rebuild a way's unbuffered centre line in UTM from its node ids.
 
-        ``footways_list``/``roads_list`` hold the *buffered* geometry (a 3 m
-        wide footway, a 7 m wide road), so the stored ``line`` cannot be used
-        to find where two ways cross: a line intersected with a corridor gives
-        the run inside it, not a crossing point. The node ids survive in
-        ``nodes_cache``, so the true centre line can be rebuilt from them.
-
-        A way that still carries an unbuffered ``LineString`` (a raw parse, an
-        annotation's own centre line) is already what is wanted and is returned
-        as-is. Returns ``None`` when the way has fewer than two known nodes, in
-        which case the caller has to fall back to the stored geometry.
+        Stored road/footway geometry is buffered, so it cannot locate where two
+        ways cross. A way that still holds a ``LineString`` is returned as-is.
+        Returns ``None`` when a node is missing from ``nodes_cache`` or fewer
+        than two distinct points remain.
         """
         if way.line is not None and way.line.geom_type == "LineString":
             return way.line
@@ -478,22 +436,12 @@ class MapData:
 
     def parse_intersections(self, ways_dict: dict[Any, Way]) -> list[Way]:
         """
-        Identify the routable nodes where ways actually branch, as crossroad Ways.
+        Return a crossroad Way at every footway/road node where the ways branch.
 
-        Every footway *and* road is considered: the robot may be routed over
-        roads (``highway_types`` includes ``road``), and a footway meeting a
-        service road is as much a junction as two footways meeting. Ways that
-        are neither (barriers, untagged areas) are ignored, so the whole
-        ``ways_dict`` of a fresh parse can be passed in.
-
-        A node is a crossroad when more than two *distinct* neighbouring nodes
-        leave it. Counting the ways that use the node instead — the obvious
-        reading of "shared by several ways" — reports a junction wherever the
-        same corridor is mapped twice, which is common: a cycleway or an
-        annotated path drawn along an existing footway reuses its node ids and
-        would otherwise turn every node of the shared run into a crossroad. Two
-        ways that run through a node between the same neighbours are the same
-        path, not a fork; three directions out of a node are.
+        A node is a crossroad when more than two distinct neighbouring nodes
+        leave it, not when several ways share it: a corridor mapped twice (a
+        cycleway drawn along a footway) shares every node without forking.
+        Ways that are neither footway nor road are ignored.
         """
         neighbours: dict[int, set[int]] = {}
         way_count: dict[int, int] = {}
@@ -529,7 +477,7 @@ class MapData:
                         id=node_id,
                         is_area=True,
                         tags={"type": "footway_intersection", "count": str(count)},
-                        line=geometry.Point(e, n).buffer(1.5),
+                        line=geometry.Point(e, n).buffer(CROSSROAD_RADIUS),
                     ),
                 )
         return crossroads
@@ -542,32 +490,24 @@ class MapData:
         """
         Detect crossroads geometrically for ways that share no OSM node ids.
 
-        Used for manually annotated paths: a crossroad is created where an
-        annotated centre line crosses another way's centre line, where the two
-        stop running together, or where one of its endpoints lies within
-        ``TOUCH_TOLERANCE`` metres of another way (a T-junction).
-
-        Both sides must be **centre lines**. The geometry stored on a parsed
-        ``Way`` is the way buffered to its width, and intersecting a line with
-        a 3 m wide corridor yields the stretch of line inside it rather than a
-        crossing: a path merely running alongside a footway then reports a
-        junction it never reaches, and a real crossing is reported half a
-        corridor away from where it happens. :meth:`centre_line` rebuilds the
-        unbuffered line from a way's node ids for exactly this.
+        A crossroad is placed where an annotated centre line crosses another
+        way's, at both ends of a stretch where they run together, and at an
+        endpoint within ``TOUCH_TOLERANCE`` m of another way. Both sides should
+        be centre lines (:meth:`centre_line`): against buffered geometry a path
+        running alongside a way reports a junction it never reaches.
 
         Parameters
         ----------
         lines : list of (Way, LineString)
-            Annotated ways with their (unbuffered) centre lines, in UTM.
+            Annotated ways with their centre lines, in UTM.
         others : list of (Way, BaseGeometry)
-            Ways to test against, each with its centre line (the annotated way
-            itself is skipped). A way whose centre line could not be rebuilt
-            may be passed with its stored geometry, at the cost above.
+            Ways to test against with their centre lines; a way in *lines* is
+            not tested against itself.
 
         Returns
         -------
         list of Way
-            Crossroad ways (``type: annotation_intersection``) with negative ids.
+            ``annotation_intersection`` crossroads with negative ids.
         """
         crossroads: list[Way] = []
         seen: list[geometry.Point] = []
@@ -628,20 +568,8 @@ class MapData:
     # ------------------------------------------------------------------
 
     def run_all(self, *, save: bool = True) -> None:
-        """
-        Download OSM data, parse it, and optionally save the result.
-
-        Convenience wrapper that calls :meth:`run_queries`, :meth:`run_parse`,
-        and :meth:`save` in sequence.
-
-        Parameters
-        ----------
-        save : bool
-            If ``True`` (default), write a ``.mapdata`` file after successful
-            parsing.
-
-        """
-        self.run_queries()
+        """Download (bypassing the cache), parse and, if *save*, save the map."""
+        self.run_queries(use_cache=False)
         if self.run_parse() == 0 and save:
             self.save()
 
@@ -652,9 +580,8 @@ class MapData:
         Parameters
         ----------
         path : str, optional
-            Output file path. Defaults to the source GPX filename with its
-            extension replaced by ``.mapdata``. Logs an error and returns
-            without writing if no path can be determined.
+            Defaults to the source GPX path with a ``.mapdata`` suffix; without
+            either, logs an error and writes nothing.
 
         """
         if path is None:
@@ -669,25 +596,10 @@ class MapData:
     @classmethod
     def load(cls, path: str) -> "MapData":
         """
-        Load a previously saved ``.mapdata`` file.
+        Load a ``.mapdata`` file.
 
-        The node-based crossroads are recomputed rather than trusted: they are
-        derived from the ways, and a file written by an older version carries
-        the junctions its detector found (footways only, one per node of a
-        corridor mapped twice). Crossroads that cannot be recomputed from node
-        ids, the ``annotation_intersection`` ones a drawn path contributes, are
-        kept as they were saved.
-
-        Parameters
-        ----------
-        path : str
-            Path to the ``.mapdata`` file to load.
-
-        Returns
-        -------
-        MapData
-            Restored instance with all way lists populated.
-
+        Node-based crossroads are recomputed from the ways rather than read from
+        the file; saved ``annotation_intersection`` crossroads are kept.
         """
         md = load_mapdata(cls, path)
         md.recompute_crossroads()
@@ -727,21 +639,7 @@ class MapData:
         )
 
     def get_points(self, z: float = 0.0) -> dict[int, np.ndarray]:
-        """
-        Return all cached OSM nodes as a dictionary of UTM coordinates.
-
-        Parameters
-        ----------
-        z : float
-            Z-coordinate to assign to every node (default ``0.0``).
-
-        Returns
-        -------
-        dict of {int: np.ndarray}
-            Mapping of OSM node ID → column vector of shape ``(3, 1)``
-            containing ``[easting, northing, z]``.
-
-        """
+        """Map every cached node id to a ``(3, 1)`` ``[easting, northing, z]`` column."""
         if not self.nodes_cache:
             return {}
         node_ids = list(self.nodes_cache.keys())
@@ -756,16 +654,7 @@ class MapData:
         }
 
     def get_ways(self) -> dict[str, list[Way]]:
-        """
-        Return all parsed way lists grouped by category.
-
-        Returns
-        -------
-        dict of {str: list of Way}
-            Keys are ``"roads"``, ``"footways"``, ``"barriers"``, and
-            ``"crossroads"``.
-
-        """
+        """Way lists keyed ``"roads"``, ``"footways"``, ``"barriers"``, ``"crossroads"``."""
         return {
             "roads": self.roads_list,
             "footways": self.footways_list,

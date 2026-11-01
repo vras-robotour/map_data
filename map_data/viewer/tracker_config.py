@@ -21,6 +21,8 @@ from typing import Any
 
 import yaml
 
+from map_data.utils.serialization import atomic_write_text
+
 NODE_NAME = "map_data_tracker"
 DEFAULT_CONFIG_NAME = "tracker.yaml"
 
@@ -98,7 +100,7 @@ SETTINGS: tuple[Setting, ...] = (
 SETTING_DEFAULTS: dict[str, str] = {s.name: s.default for s in SETTINGS}
 
 # Parameters only the config file sets (not editable in the web app)
-TUNING_DEFAULTS: dict[str, float | int | bool] = {
+TUNING_DEFAULTS: dict[str, str | float | int | bool] = {
     "battery_low_voltage": 22.0,
     "tf_static_only": True,
     "stale_after": 3.0,
@@ -106,6 +108,7 @@ TUNING_DEFAULTS: dict[str, float | int | bool] = {
     "trail_min_step": 0.5,
     "intersection_enter_threshold": 5.0,
     "intersection_exit_threshold": 6.0,
+    "planner_node": "/route_planner",
 }
 
 DEFAULTS: dict[str, Any] = {**SETTING_DEFAULTS, **TUNING_DEFAULTS}
@@ -114,13 +117,6 @@ DEFAULTS: dict[str, Any] = {**SETTING_DEFAULTS, **TUNING_DEFAULTS}
 def settings_metadata() -> list[dict[str, Any]]:
     """The editable settings as JSON-ready dicts, in display order."""
     return [{**asdict(s), "choices": list(s.choices)} for s in SETTINGS]
-
-
-def topic_type(name: str, settings: Mapping[str, str]) -> str:
-    """Message type TrackerNode subscribes to setting ``name`` with."""
-    if name == "heading_topic":
-        return HEADING_TYPES.get(settings.get("heading_type", ""), "")
-    return next((s.msg_type for s in SETTINGS if s.name == name), "")
 
 
 def validate_settings(values: Any) -> dict[str, str]:
@@ -345,7 +341,5 @@ def save_tracker_config(path: str | Path, settings: Mapping[str, Any]) -> Path:
         raise TrackerConfigError(f"could not set {', '.join(wrong)} in {target}; edit it by hand")
 
     target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f".{target.name}.tmp")
-    tmp.write_text(new_text)
-    tmp.replace(target)
+    atomic_write_text(target, new_text)
     return target

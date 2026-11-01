@@ -1,10 +1,16 @@
 """Shared fixtures and canned data for the test suite."""
 
 import json
+import logging
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import overpy
 import pytest
+
+# ROS's launch_testing pytest plugin imports launch, whose logger class sets
+# propagate=False, so caplog never sees map_data's loggers.
+logging.setLoggerClass(logging.Logger)
 
 # One footway way between two nodes — the canonical mocked Overpass response.
 # The nodes sit just inside a 50.000-50.001 / 14.000-14.001 bbox so the same
@@ -21,7 +27,33 @@ FOOTWAY_WAYS_JSON = json.dumps(
     },
 )
 
+#: A crop of the Stromovka map (OpenStreetMap, ODbL) with a small annotation store beside it.
+STROMOVKA_FIXTURE = Path(__file__).parent / "data" / "stromovka.mapdata"
+
 EMPTY_OSM_JSON = json.dumps({"version": 0.6, "elements": []})
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _stop_viewer_ros():
+    """Stop the tracker node a viewer test started under ROS; its executor thread aborts exit."""
+    yield
+    from map_data.viewer.app import stop_ros
+
+    stop_ros()
+
+
+@pytest.fixture(autouse=True)
+def _csrf_header(monkeypatch):
+    """Send X-Requested-With from every Flask test client, as the browser UI does."""
+    from flask.testing import FlaskClient
+
+    init = FlaskClient.__init__
+
+    def init_with_header(self, *args, **kwargs):
+        init(self, *args, **kwargs)
+        self.environ_base["HTTP_X_REQUESTED_WITH"] = "pytest"
+
+    monkeypatch.setattr(FlaskClient, "__init__", init_with_header)
 
 
 @pytest.fixture

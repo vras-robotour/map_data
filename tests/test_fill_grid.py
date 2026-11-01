@@ -13,9 +13,7 @@ _E0, _N0 = 458000.0, 5550500.0
 
 
 def _make_md_with_footway():
-    """
-    MapData with a 16m footway running along the grid midline.
-    """
+    """MapData with a 16m footway running along the grid midline."""
     waypoints = np.array([[_E0, _N0], [_E0 + 20, _N0 + 20]])
     md = MapData([waypoints, _ZN, _ZL], coords_type="array")
 
@@ -54,14 +52,14 @@ def test_fill_grid_cells_on_footway_have_low_cost():
     assert grid_2d is not None
 
     # Footway is at n0+10 → y_idx ≈ floor(10 / 0.5) = 20 out of 40
-    # Footway x midpoint n0+10 → x_idx ≈ 20
+    # Footway x midpoint e0+10 → x_idx ≈ 20
     y_idx = int(10 / args["cell_size"])
     x_idx = int(10 / args["cell_size"])
     # cap at grid bounds
     y_idx = min(y_idx, grid_2d.shape[0] - 1)
     x_idx = min(x_idx, grid_2d.shape[1] - 1)
 
-    assert grid_2d[y_idx, x_idx] < rp.DEFAULT_OFF_PATH_COST
+    assert grid_2d[y_idx, x_idx] < rp.default_off_path_cost
 
 
 def test_fill_grid_cells_far_from_footway_have_high_cost():
@@ -74,7 +72,7 @@ def test_fill_grid_cells_far_from_footway_have_high_cost():
     # Far from footway: n0+0 → y_idx=0, far from any path
     corner_cost = grid_2d[0, 0]
     assert not np.isinf(corner_cost)
-    assert corner_cost >= rp.DEFAULT_OFF_PATH_COST - 0.05  # allow tiny float tolerance
+    assert corner_cost >= rp.default_off_path_cost - 0.05  # allow tiny float tolerance
 
 
 # ── barrier obstacles ─────────────────────────────────────────────────────────
@@ -115,6 +113,18 @@ def test_fill_grid_cells_outside_barrier_not_inf():
 # ── grid shape ────────────────────────────────────────────────────────────────
 
 
+def test_fill_grid_footway_just_outside_the_grid_lowers_its_edge_cells():
+    # The footway runs 1 m below the grid: only its influence reaches in.
+    md = _make_md_with_footway()
+    rp = ReplanPath([], **_make_args((_E0, _N0 + 11), (_E0 + 20, _N0 + 20)))
+    rp.fill_grid(md)
+
+    grid_2d = rp.path_grid.grid_2d_cache
+    assert grid_2d[0, 20] < rp.default_off_path_cost  # centre 1.25 m from it
+    assert grid_2d[3, 20] == pytest.approx(rp.default_off_path_cost)  # 2.75 m, beyond max_path_dist
+    assert grid_2d[-1, 20] == pytest.approx(rp.default_off_path_cost)  # top edge: no wrap-around
+
+
 def test_fill_grid_produces_2d_cache():
     md = _make_md_with_footway()
     args = _make_args((_E0, _N0), (_E0 + 20, _N0 + 20))
@@ -125,17 +135,10 @@ def test_fill_grid_produces_2d_cache():
     assert rp.path_grid.grid_2d_cache.ndim == 2
 
 
-# ── regression: no stray zero-cost cells off any way ────────────────────────
+# ── no stray zero-cost cells off any way ────────────────────────────────────
 #
-# create_empty_grid (np.arange) and get_grid_2d (np.ceil-based dims + floor
-# indexing) must agree on how many cells the grid has and where each point
-# lands, otherwise some grid_2d cells never get written to. PathGrid.get_grid_2d
-# initializes with default_off_path_cost precisely so a mismatch like that
-# would silently leave cost 0.0 (from stale/never-hit entries) instead of the
-# off-path cost — which a planner would read as "free to drive through",
-# including deep inside solid obstacles or far off any path. This test walks
-# every cell explicitly (rather than sampling one or two coordinates like the
-# tests above) so a discretization regression anywhere in the grid gets caught.
+# fill() must write every grid_2d cell, or a planner reads the unwritten ones as
+# free. Walks every cell, not just a few coordinates.
 
 
 def test_fill_grid_no_zero_cost_cells_off_path():
@@ -151,10 +154,8 @@ def test_fill_grid_no_zero_cost_cells_off_path():
     footway_line = md.footways_list[0].line
 
     num_y, num_x = grid_2d.shape
-    # PathGrid.fill samples the way every `cell_size`, so a point on the line
-    # can be up to ~cell_size away from the nearest sampled path point that
-    # was actually fed into the cKDTree query. Pad the "definitely off-path"
-    # threshold so we never mistake a near-path cell for an off-path one.
+    # PathGrid.fill samples the way every cell_size, so pad the off-path
+    # threshold by one cell to never count a near-path cell as off-path.
     off_path_threshold = max_path_dist + cell_size
 
     off_path_cells = 0
@@ -171,17 +172,13 @@ def test_fill_grid_no_zero_cost_cells_off_path():
                     f"cell ({ix},{iy}) at ({x},{y}), {dist_to_way:.2f}m from the "
                     f"footway, has stray zero cost"
                 )
-                assert cost == pytest.approx(rp.DEFAULT_OFF_PATH_COST)
+                assert cost == pytest.approx(rp.default_off_path_cost)
 
     # Sanity check that the test actually exercised off-path cells.
     assert off_path_cells > 0
 
 
-# ── regression: cells are sampled at their centers, not the lower-left corner ─
-#
-# Obstacle membership used to be decided at each cell's lower-left corner,
-# which shifted burned regions ~cell_size/2 toward -x/-y and let sub-cell
-# obstacles sitting in the middle of a cell escape burning entirely.
+# ── cells are sampled at their centers, not the lower-left corner ───────────
 
 
 def _make_path_grid(cell_size=1.0, low=(0.0, 0.0), high=(10.0, 10.0)):
@@ -196,19 +193,24 @@ def _make_path_grid(cell_size=1.0, low=(0.0, 0.0), high=(10.0, 10.0)):
     )
 
 
-def test_create_empty_grid_points_are_cell_centers():
+def test_fill_samples_cell_centers_and_keeps_no_flat_grid():
+    from types import SimpleNamespace
+
     pg = _make_path_grid()
-    # First point is the center of cell (0, 0), not its lower-left corner
-    assert np.allclose(pg.grid[0, :2], [0.5, 0.5])
-    # x varies fastest: second point is the center of cell (1, 0)
-    assert np.allclose(pg.grid[1, :2], [1.5, 0.5])
+    assert pg.grid_2d_cache is None
+    md = SimpleNamespace(get_points=lambda: {}, footways_list=[], roads_list=[])
+    pg.fill(md, [geom.box(0.1, 0.1, 0.9, 0.9)])
+    # Obstacle in cell (x=0, y=0) only: the cell centre (0.5, 0.5) is inside it
+    assert pg.grid_2d_cache.shape == (10, 10)
+    assert np.isinf(pg.grid_2d_cache[0, 0])
+    assert np.isinf(pg.grid_2d_cache).sum() == 1
+    assert not hasattr(pg, "grid")
 
 
 def test_burn_obstacles_sub_cell_obstacle_centered_in_cell_burns_it():
     pg = _make_path_grid()
-    # Sub-cell obstacle centered on the center of cell (x=4, y=4); it does not
-    # touch the cell's lower-left corner (4.0, 4.0), so corner sampling would
-    # miss it entirely.
+    # Sub-cell obstacle at the center of cell (x=4, y=4), clear of its
+    # lower-left corner (4.0, 4.0).
     obstacle = geom.box(4.3, 4.3, 4.7, 4.7)
 
     grid_2d = np.full((10, 10), 0.5, dtype=np.float32)
@@ -224,10 +226,8 @@ def test_burn_obstacles_sub_cell_obstacle_centered_in_cell_burns_it():
 
 def test_burn_obstacles_region_not_shifted_toward_origin():
     pg = _make_path_grid()
-    # Obstacle exactly covering cells x in {2, 3}, y in {2, 3}. With corner
-    # sampling the burned region used to extend one cell too far towards +x/+y
-    # (corners at 4.0 lie on the boundary) while membership was evaluated half
-    # a cell off-center.
+    # Obstacle exactly covering cells x in {2, 3}, y in {2, 3}; cells whose
+    # lower-left corner lies on its 4.0 boundary stay unburned.
     obstacle = geom.box(2.0, 2.0, 4.0, 4.0)
 
     grid_2d = np.full((10, 10), 0.5, dtype=np.float32)

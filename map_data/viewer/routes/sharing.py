@@ -13,6 +13,7 @@ from typing import Any
 
 from flask import (
     Response,
+    abort,
     jsonify,
     request,
 )
@@ -21,6 +22,7 @@ from flask.typing import ResponseReturnValue
 from map_data.utils.qr import geo_uri, qr_png, qr_svg
 
 from .common import (
+    _json_object,
     bp,
 )
 
@@ -65,11 +67,19 @@ def get_qr() -> ResponseReturnValue:
     try:
         text, scale, caption = _qr_request()
     except (KeyError, ValueError) as e:
-        return jsonify({"error": f"lat/lon required: {e}"}), 400
+        abort(400, f"lat/lon required: {e}")
     if request.path.endswith(".svg"):
         svg = qr_svg(text, scale=scale, caption=caption)
         return _qr_response(svg, "image/svg+xml", text, ".svg")
     return _qr_response(qr_png(text, scale=scale, caption=caption), "image/png", text, ".png")
+
+
+#: Most ``wormhole send`` subprocesses alive at once; more answer 429.
+MAX_ACTIVE_TRANSFERS = 4
+
+
+class TooManyTransfers(RuntimeError):
+    """Raised by :meth:`WormholeManager.create_transfer` when :data:`MAX_ACTIVE_TRANSFERS` run."""
 
 
 class WormholeManager:
@@ -87,28 +97,32 @@ class WormholeManager:
     def __init__(self) -> None:
         """Initialize with no active transfers, warning once if the ``wormhole`` CLI is missing."""
         self.active_transfers: dict[str, dict[str, Any]] = {}
+        self._create_lock = threading.Lock()
         if shutil.which("wormhole") is None:
-            # We don't want to crash the whole app if wormhole is missing,
-            # just log it and the endpoints will fail gracefully.
+            # Not fatal: only the sharing endpoints fail.
             logger.warning("'wormhole' command not found. magic-wormhole is required for sharing.")
 
     def create_transfer(self, gpx_data: str) -> str:
         """
         Start a ``wormhole send`` subprocess for *gpx_data* and return its transfer ID.
 
-        Writes *gpx_data* to a fresh temp directory, spawns ``wormhole
-        send`` on it, and starts :meth:`_capture_wormhole_code_thread` in
-        the background to scrape the resulting wormhole code from the
-        process's output. The temp directory lives until
-        :meth:`_cleanup_transfer` runs, once the background thread observes
-        the process finish; it is removed immediately if the subprocess
-        fails to even start.
+        *gpx_data* is written to a temp directory that lives until the
+        process exits (:meth:`_capture_wormhole_code_thread`).
 
         Raises
         ------
+        TooManyTransfers
+            If :data:`MAX_ACTIVE_TRANSFERS` transfers are already running.
         RuntimeError
             If the ``wormhole`` subprocess fails to start.
         """
+        with self._create_lock:
+            if len(self.active_transfers) >= MAX_ACTIVE_TRANSFERS:
+                raise TooManyTransfers("Too many wormhole transfers running, try again later")
+            return self._start_transfer(gpx_data)
+
+    def _start_transfer(self, gpx_data: str) -> str:
+        """Spawn the subprocess and its capture thread; :meth:`create_transfer` holds the lock."""
         transfer_id = str(uuid.uuid4())
         temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         file_path = Path(temp_dir.name) / "path.gpx"
@@ -150,8 +164,9 @@ class WormholeManager:
         Reads the subprocess's output until the ``"Wormhole code is: ..."``
         line, records it on ``active_transfers[transfer_id]["code"]`` and
         sets its ``"code_ready"`` event (waking up :meth:`get_transfer_code`),
-        then waits (up to 60s) for the process to exit. Always calls
-        :meth:`_cleanup_transfer` on exit (success, failure, or exception).
+        then waits (up to 600 s, then kills it) for the process to exit.
+        Always calls :meth:`_cleanup_transfer` on exit (success, failure, or
+        exception).
         """
         transfer_info = self.active_transfers.get(transfer_id)
         if not transfer_info:
@@ -167,7 +182,10 @@ class WormholeManager:
                     break
                 if line.strip():
                     logger.warning("Wormhole output (%s): %s", transfer_id, line.strip())
-            process.wait(timeout=60)
+            process.wait(timeout=600)  # the receiver may take minutes to type the code
+        except subprocess.TimeoutExpired:
+            logger.info("Wormhole transfer %s not received in time, stopping it", transfer_id)
+            process.kill()
         except Exception:
             logger.exception("Error in wormhole thread for %s", transfer_id)
             if process.poll() is None:
@@ -221,61 +239,47 @@ wormhole_manager = WormholeManager()
 @bp.route("/api/create_wormhole", methods=["POST"])
 def create_wormhole() -> ResponseReturnValue:
     """
-    Start sending a GPX path to a companion app via ``magic-wormhole``.
+    Start sending the body's ``gpx`` text to a companion app via ``magic-wormhole``.
 
-    Blocks up to 15s waiting for the wormhole code to be captured (see
-    :meth:`WormholeManager.get_transfer_code`); if it isn't ready in
-    time, the transfer is cancelled and an error is returned rather than
-    leaving an orphaned transfer running.
-
-    Parameters (JSON body)
-    -----------------------
-    gpx : str
-        Raw GPX file contents to send.
-
-    Returns
-    -------
-    Response
-        JSON ``{"success": true, "code": ..., "transfer_id": ...}`` on
-        success (status 200); on failure, ``{"success": false,
-        "message": ...}`` with status 400 (missing ``gpx``) or 500
-        (wormhole code not captured in time, or an internal error).
-
+    Waits up to 15 s for the wormhole code, cancelling the transfer if it
+    does not come. Returns ``{"success": true, "code": ..., "transfer_id": ...}``;
+    400 if ``gpx`` is missing or not a string, 429 if :data:`MAX_ACTIVE_TRANSFERS`
+    transfers run, 500 if no code came in time or on an error.
     """
-    gpx_data = (request.get_json(silent=True) or {}).get("gpx")
+    gpx_data = _json_object().get("gpx")
     if not gpx_data:
-        return jsonify({"success": False, "message": "No GPX data provided"}), 400
+        abort(400, "No GPX data provided")
+    if not isinstance(gpx_data, str):
+        abort(400, "gpx must be a string")
 
     try:
         transfer_id = wormhole_manager.create_transfer(gpx_data)
         code = wormhole_manager.get_transfer_code(transfer_id, timeout=15)
-        if code:
-            return jsonify({"success": True, "code": code, "transfer_id": transfer_id})
-        wormhole_manager.cancel_transfer(transfer_id)
-        return jsonify(
-            {"success": False, "message": "Failed to capture wormhole code in time"},
-        ), 500
+    except TooManyTransfers as e:
+        abort(429, str(e))
     except Exception:
         logger.exception("Error creating wormhole")
-        return jsonify({"success": False, "message": "Internal server error"}), 500
+        abort(500, "Internal server error")
+    if not code:
+        wormhole_manager.cancel_transfer(transfer_id)
+        abort(500, "Failed to capture wormhole code in time")
+    return jsonify({"success": True, "code": code, "transfer_id": transfer_id})
 
 
 @bp.route("/api/cancel_wormhole", methods=["POST"])
 def cancel_wormhole() -> ResponseReturnValue:
     """
-    Cancel an in-progress ``magic-wormhole`` GPX transfer.
+    Cancel the wormhole transfer with the body's ``transfer_id``.
 
-    Returns
-    -------
-    ResponseReturnValue
-        JSON ``{"success": ..., "message": ...}`` per
-        :meth:`WormholeManager.cancel_transfer`; ``{"success": false,
-        "message": ...}`` with status 400 if the request body is not
-        JSON or lacks ``transfer_id``.
-
+    Returns ``{"success": true, "message": ...}``; 400 if the body is not
+    JSON or ``transfer_id`` is missing or not a string, 404 if the transfer is unknown.
     """
-    transfer_id = (request.get_json(silent=True) or {}).get("transfer_id")
+    transfer_id = _json_object().get("transfer_id")
     if not transfer_id:
-        return jsonify({"success": False, "message": "No transfer_id provided"}), 400
+        abort(400, "No transfer_id provided")
+    if not isinstance(transfer_id, str):
+        abort(400, "transfer_id must be a string")
     success, message = wormhole_manager.cancel_transfer(transfer_id)
-    return jsonify({"success": success, "message": message})
+    if not success:
+        abort(404, message)
+    return jsonify({"success": True, "message": message})

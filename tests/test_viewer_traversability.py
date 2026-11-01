@@ -64,6 +64,9 @@ def test_blocked_follows_file_rules_stairs_and_allowed_ways(client):
     c, _ = client
     assert set(_blocked(c)) == {3, 4}
     assert set(_blocked(c, allowed_ways=["footway", "road"])) == {3}
+    # Empty or null means the planner's default, footways only.
+    assert set(_blocked(c, allowed_ways=[])) == {3, 4}
+    assert set(_blocked(c, allowed_ways=None)) == {3, 4}
 
 
 def test_blocked_uses_unsaved_rules_from_the_body(client):
@@ -80,6 +83,16 @@ def test_save_validates_before_writing(client):
     assert c.put("/api/traversability", json={"traversability": GRASS_RULES}).status_code == 200
     assert rules_file.read_text() == GRASS_RULES
     assert 2 in _blocked(c)
+
+
+def test_save_replaces_the_file_atomically(client):
+    c, rules_file = client
+    rules_file.chmod(0o644)
+    inode = rules_file.stat().st_ino
+    assert c.put("/api/traversability", json={"traversability": GRASS_RULES}).status_code == 200
+    # A new inode means a temp file was renamed over it, never truncated in place.
+    assert rules_file.stat().st_ino != inode
+    assert rules_file.stat().st_mode & 0o777 == 0o644
 
 
 def test_replan_uses_rules_from_the_body(client):

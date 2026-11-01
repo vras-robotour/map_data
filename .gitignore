@@ -9,18 +9,19 @@ venv/
 .mypy_cache/
 .coverage
 htmlcov/
-.python-version
-uv.lock
 
 # Generated data
-*.png
 paths/*
+/*.png
 *.mapdata
 *.annotations.json
 site
 _demo_out/
 graphify-out/
 build/
+
+# Tools
+.claude/
 
 # Local working datasets (keep the directory, not its contents)
 data/*
@@ -29,6 +30,10 @@ data/*
 # Committed demo dataset (served by the static docs demo)
 !demo/*.mapdata
 !demo/*.annotations.json
+
+# Committed test fixture
+!tests/data/*.mapdata
+!tests/data/*.annotations.json
 
 # OS
 .DS_Store

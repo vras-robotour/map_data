@@ -267,3 +267,207 @@ def test_plan_route_reuses_a_prebuilt_planner(footway_network_mapdata):
     assert reused.length_m == pytest.approx(fresh.length_m)
     assert again.latlon == reused.latlon
     assert reused.snap_distances == pytest.approx(fresh.snap_distances)
+
+
+def test_plan_route_cell_size_defaults_to_planner_defaults(footway_network_mapdata, monkeypatch):
+    from map_data.pathsolver import replan
+
+    monkeypatch.setattr(replan, "load_config", lambda name: {"cell_size": 0.01})
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    with pytest.raises(RoutePlanningError) as e:
+        plan_route(
+            md,
+            [_latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 60.0, 0.0)],
+            algorithm="astar",
+        )
+    assert e.value.reason == "grid_too_large"
+    assert "cell_size=0.01" in e.value.message
+
+
+def test_viewer_uses_the_planner_grid_cell_budget():
+    from map_data.pathsolver import route
+    from map_data.viewer.routes import common
+
+    assert common.MAX_GRID_CELLS is route.MAX_GRID_CELLS
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"algorithm": "Graph"},
+        {"algorithm": "dijkstra"},
+        {"algorithm": "rrt", "sub_algorithm": "bfs"},
+        {"algorithm": "astar", "cell_size": 0.0},
+        {"algorithm": "astar", "cell_size": -0.5},
+        {"algorithm": "astar", "cell_size": float("inf")},
+        # A negative inflation would shrink the obstacles (buffer(-x)).
+        {"algorithm": "astar", "inflate_obstacles": -1.0},
+        {"algorithm": "astar", "inflate_obstacles": float("nan")},
+        {"algorithm": "astar", "inflate_obstacles": float("inf")},
+        # Would densify a few hundred metres into millions of points.
+        {"spacing": 1e-5},
+        {"spacing": float("nan")},
+        {"spacing": float("inf")},
+    ],
+)
+def test_plan_route_rejects_bad_parameters(footway_network_mapdata, kwargs):
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    with pytest.raises(RoutePlanningError) as e:
+        plan_route(md, [_latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 60.0, 0.0)], **kwargs)
+    assert e.value.reason == "bad_parameter"
+
+
+def test_plan_route_too_many_points_fails_with_route_too_long(footway_network_mapdata, monkeypatch):
+    from map_data.pathsolver import route
+
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    pts = [_latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 200.0, 0.0)]
+    monkeypatch.setattr(route, "MAX_ROUTE_POINTS", 50)  # 200 m at 3 m spacing: ~67 points
+    with pytest.raises(RoutePlanningError) as e:
+        plan_route(md, pts, spacing=3.0)
+    assert e.value.reason == "route_too_long"
+    monkeypatch.setattr(route, "MAX_ROUTE_POINTS", 2)  # also without spacing
+    with pytest.raises(RoutePlanningError) as e:
+        plan_route(md, pts)
+    assert e.value.reason == "route_too_long"
+
+
+@pytest.mark.parametrize("bad", [(91.0, 14.0), (float("nan"), 14.0), (50.0, float("inf"))])
+def test_plan_route_rejects_unprojectable_waypoints(footway_network_mapdata, bad):
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    with pytest.raises(RoutePlanningError) as e:
+        plan_route(md, [(lat0, lon0), bad])
+    assert e.value.reason == "bad_parameter"
+
+
+def test_plan_route_reports_a_blocked_goal(footway_network_mapdata):
+    from shapely.geometry import box
+
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    e0, n0, _, _ = utm.from_latlon(lat0, lon0)
+    block = box(e0 + 40.0, n0 + 40.0, e0 + 80.0, n0 + 80.0)
+    md.barriers_list.append(Way(id=9, is_area=True, nodes=[], tags={}, line=block, in_out=""))
+    start, goal = _latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 60.0, 60.0)
+    with pytest.raises(RoutePlanningError) as e:
+        plan_route(md, [start, goal], algorithm="astar", cell_size=1.0)
+    assert e.value.reason == "goal_blocked"
+
+
+# ── PlanRoute goal -> plan_route kwargs ─────────────────────────────────────
+
+NODE_DEFAULTS = {
+    "algorithm": "graph",
+    "highway_types": ["footway"],
+    "spacing": 3.0,
+    "max_snap_distance": 100.0,
+    "cell_size": 0.25,
+    "inflate_obstacles": 0.25,
+    "simplify_path": True,
+    "smooth_path": True,
+}
+
+
+def _goal(**fields):
+    from types import SimpleNamespace
+
+    empty = {
+        "algorithm": "",
+        "highway_types": [],
+        "spacing": 0.0,
+        "max_snap_distance": 0.0,
+        "cell_size": 0.0,
+        "inflate_obstacles": 0.0,
+        "simplify_path": False,
+        "smooth_path": False,
+    }
+    return SimpleNamespace(**{**empty, **fields})
+
+
+def test_empty_goal_fields_take_the_node_defaults_but_bools_are_used_as_sent():
+    from map_data.pathsolver.route import goal_plan_kwargs
+
+    kwargs = goal_plan_kwargs(_goal(), NODE_DEFAULTS)
+    expected = {**NODE_DEFAULTS, "simplify_path": False, "smooth_path": False}
+    assert kwargs == expected
+
+
+def test_goal_fields_override_the_node_defaults():
+    from map_data.pathsolver.route import goal_plan_kwargs
+
+    goal = _goal(
+        algorithm="astar",
+        highway_types=["road"],
+        spacing=-1.0,
+        max_snap_distance=5.0,
+        cell_size=0.5,
+        inflate_obstacles=1.0,
+        simplify_path=True,
+        smooth_path=True,
+    )
+    assert goal_plan_kwargs(goal, NODE_DEFAULTS) == {
+        "algorithm": "astar",
+        "highway_types": ["road"],
+        "spacing": 0.0,  # negative = the planner's own vertices
+        "max_snap_distance": 5.0,
+        "cell_size": 0.5,
+        "inflate_obstacles": 1.0,
+        "simplify_path": True,
+        "smooth_path": True,
+    }
+
+
+@pytest.mark.parametrize("snap", [float("nan"), float("inf"), 1e9])
+def test_goal_max_snap_distance_above_the_default_takes_the_default(snap):
+    from map_data.pathsolver.route import goal_plan_kwargs
+
+    kwargs = goal_plan_kwargs(_goal(max_snap_distance=snap), NODE_DEFAULTS)
+    assert kwargs["max_snap_distance"] == NODE_DEFAULTS["max_snap_distance"]
+
+
+def test_nan_max_snap_distance_rejects_instead_of_disabling_the_check(footway_network_mapdata):
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    pts = [_latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 200.0, 0.0)]
+    with pytest.raises(RoutePlanningError) as e:
+        plan_route(md, pts, max_snap_distance=float("nan"))
+    assert e.value.reason == "snap_too_far"
+
+
+# ── File names from PlanRoute goals ────────────────────────────────────────
+
+
+@pytest.mark.parametrize("name", ["/etc/cron.d/x.gpx", "../x.gpx", "sub/x.gpx", "x.txt", "-.sh"])
+def test_save_gpx_outside_the_mission_dir_or_not_gpx_is_refused(tmp_path, name):
+    from map_data.utils.gpx import mission_gpx_path
+
+    assert mission_gpx_path(name, tmp_path / "missions") is None
+
+
+def test_save_gpx_through_a_symlink_out_of_the_mission_dir_is_refused(tmp_path):
+    from map_data.utils.gpx import mission_gpx_path
+
+    mission = tmp_path / "missions"
+    mission.mkdir()
+    (mission / "link.gpx").symlink_to(tmp_path / "elsewhere.gpx")
+    assert mission_gpx_path("link.gpx", mission) is None
+    assert mission_gpx_path("route_1.gpx", mission) == (mission / "route_1.gpx").resolve()
+
+
+def test_goal_mapdata_file_must_stay_in_the_data_dir(tmp_path):
+    from map_data.utils.config import resolve_client_data_file
+
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "a.mapdata").write_text("")
+    (tmp_path / "secret.mapdata").write_text("")
+    # colcon --symlink-install links the installed maps out of the data dir
+    (data / "link.mapdata").symlink_to(tmp_path / "secret.mapdata")
+    assert resolve_client_data_file("a.mapdata", data) == (data / "a.mapdata").resolve()
+    assert resolve_client_data_file("link.mapdata", data) == data.resolve() / "link.mapdata"
+    for name in (str(tmp_path / "secret.mapdata"), "../secret.mapdata", "missing.mapdata"):
+        assert resolve_client_data_file(name, data) is None

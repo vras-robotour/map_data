@@ -1,26 +1,25 @@
-# Interactive Viewer
+# Interactive viewer
 
 `map_data_viewer` launches a local Flask web server with a Leaflet-based map UI.
 It lets you inspect and edit parsed features, view their OSM tags, draw manual annotations,
-and plan paths — without needing ROS2.
+and plan paths — without needing ROS 2.
 
 !!! tip "Live demo"
     A read-only demo of the viewer (Buchlovice dataset) runs at
-    <https://vras-robotour.github.io/map_data/demo/> — no install needed.
-    It is rebuilt automatically from the current code on every push.
-    Editing, OSM fetching, path planning, and the tracker require running
-    `map_data_viewer` locally.
+    <https://vras-robotour.github.io/map_data/demo/> — no installation needed.
+    The demo is read-only: editing, OSM fetching, path planning, and tracker
+    telemetry are disabled in static demo mode. Running `map_data_viewer` locally provides full functionality.
 
-## Running the Viewer
+## Running the viewer
 
 ```bash
-# After colcon build and sourcing the workspace:
+# Sourced ROS 2 workspace:
 map_data_viewer
 
 # Explicit data directory and port:
 map_data_viewer --data-dir /path/to/data --port 8080
 
-# Standalone (outside a colcon workspace):
+# Standalone Python environment:
 python -m map_data.viewer.app --data-dir ./data
 ```
 
@@ -29,76 +28,58 @@ Then open `http://127.0.0.1:5000` in a browser.
 !!! warning "Trusted networks only"
     By default the viewer has no authentication and its API can read and write files in
     the data directory. Keep the default `--host 127.0.0.1`; only bind to other interfaces
-    (e.g. `--host 0.0.0.0`) on networks where you trust every machine, and see
-    [Deployment Security](#deployment-security) below for options to lock it down further.
+    (such as `--host 0.0.0.0`) on networks where you trust every machine, and see
+    [Deployment security](#deployment-security) below for options to lock it down further.
 
-### Command-line Flags
+### Command-line flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--data-dir <path>` | package `data/` folder | Directory to load `.mapdata`/`.gpx` files from and save new ones to |
+| `--data-dir <path>` | package `data/` folder | Directory containing `.mapdata` and `.gpx` files |
 | `--host <address>` | `127.0.0.1` | Address the Flask server binds to |
 | `--port <port>` | `5000` | Port the Flask server binds to |
-| `--telemetry-rate <Hz>` | `2.0` | Tracker telemetry broadcast rate; see [Tracker](viewer_tracker.md) |
-| `--config <path>` | package `config/tracker.yaml` | Tracker topics (ROS 2 parameter file); the web app saves topic changes to it. See [Tracker](viewer_tracker.md#config-file) |
+| `--telemetry-rate <Hz>` | `2.0` | Tracker telemetry broadcast rate in Hz; see [Tracker](viewer_tracker.md) |
+| `--config <path>` | package `config/tracker.yaml` | Tracker topics: a ROS 2 parameter file with a `map_data_tracker` section. See [Tracker](viewer_tracker.md#config-file) |
 
-### Deployment Security
+### API error handling and file safety
 
-The viewer is safe by default: it binds to `127.0.0.1` (loopback only), rejects file paths
-that try to escape the data directory, and never unpickles untrusted data. When you run it
-with `--host 0.0.0.0` (or any other non-loopback address) so a robot or a teammate's machine
-can reach it, keep in mind that **anyone who can reach the port has full use of the API** —
-no authentication is required by default. Concretely, that surface includes:
+- **JSON error format:** All API error responses return JSON `{"error": "<message>"}` with the corresponding HTTP status code.
+- **No file overwriting:** Map uploads (`/api/upload_mapdata`, `/api/upload_gpx`) and OSM area fetching (`/api/fetch_area`) never overwrite an existing `.mapdata` file. If a file with that name already exists in the data directory, a numerical suffix (`_1`, `_2`, etc.) is appended automatically.
+- **Corrupt annotation store recovery:** If an annotation sidecar file (`<stem>.annotations.json`) cannot be loaded (due to corruption or invalid JSON), it is moved aside to `<path>.corrupt-<timestamp>` and answered with HTTP `409 Conflict`, preserving the damaged file for recovery without losing edits.
 
-- Creating/overwriting files in the data directory (`/api/fetch_area`, `/api/upload_gpx`,
-  `/api/upload_mapdata`, and annotation/edit endpoints).
-- Spawning a `wormhole send` subprocess (`/api/create_wormhole`).
-- Triggering outbound Overpass API queries on your behalf (`/api/fetch_area`, `.gpx` loads).
+### Deployment security
 
-Only bind to `0.0.0.0` on networks you trust (e.g. an isolated robot LAN). For extra
-protection on top of that, two environment variables are available:
+The viewer binds to `127.0.0.1` (loopback only) by default, rejects file paths that attempt
+directory traversal outside the data directory, and avoids deserializing untrusted data.
+When bound to any other address (e.g. `--host 0.0.0.0`) without `MAP_DATA_ACCESS_TOKEN`,
+the viewer uses a token kept in `~/.config/map_data/access_token` (`$XDG_CONFIG_HOME`
+respected; created with mode 0600 on first start) and logs the
+`http://<host>:<port>/?access_token=<token>` URL to open. The token stays the same across
+restarts; delete the file to issue a new one.
+
+Two environment variables provide access control:
 
 | Variable | Default | Effect |
 |----------|---------|--------|
-| `MAP_DATA_ACCESS_TOKEN` | unset (auth disabled) | When set, every HTTP request and SocketIO connection must supply this exact token, or it's rejected with `401`. |
-| `MAP_DATA_CORS_ORIGINS` | unset (same-origin only) | Controls which origins may open a SocketIO connection to the server. |
+| `MAP_DATA_ACCESS_TOKEN` | unset: no auth on loopback, the token file otherwise | When set, every HTTP request and Socket.IO connection must supply this token, or it is rejected with `401`. |
+| `MAP_DATA_CORS_ORIGINS` | unset (same-origin only) | Controls which origins may open a Socket.IO connection to the server. |
 
-**`MAP_DATA_ACCESS_TOKEN`** — opt-in, off by default so existing setups and tests are
-unaffected. When set, the token can be supplied any of three ways:
+**`MAP_DATA_ACCESS_TOKEN`** can be supplied in three ways:
 
-- Header: `X-Access-Token: <token>` (the natural choice for headless/robot API clients).
-- Query parameter: `http://host:5000/?access_token=<token>`.
-- Cookie: `map_data_access_token`, set automatically after a request authenticates via the
-  query parameter above — this lets the browser UI authenticate once by visiting the URL
-  with `?access_token=...` and have the browser carry that cookie on all subsequent
-  same-origin page, static asset, API, and SocketIO requests. No login UI is involved.
+- Header: `X-Access-Token: <token>` (for automated clients and robots).
+- Query parameter: `http://host:5000/?access_token=<token>`. The viewer sets the cookie and redirects to the same URL without the token.
+- Cookie: `map_data_access_token`, set automatically when authenticating via the query parameter above.
 
-**CSRF threat model.** The browser attaches the cookie to requests automatically, so a
-cookie by itself doesn't prove a request originated from the viewer's own page — a
-malicious page could otherwise trigger state-changing requests with your session. To
-prevent that, the cookie alone only authenticates *read* requests (`GET`/`HEAD`/`OPTIONS`,
-plus SocketIO traffic, which is separately protected by the same-origin CORS check below).
-State-changing requests (`POST`/`PUT`/`DELETE`) must either supply the token via the
-`X-Access-Token` header or query parameter, or carry the cookie *together with* an
-`X-Requested-With` header. The viewer's own JavaScript adds that header to every API call
-automatically, and cross-site pages can't set custom headers without a CORS preflight the
-server never grants — so the browser UI keeps working unchanged while forged cross-site
-writes are rejected with `401`. Headless API clients are unaffected as long as they send
-the token in the `X-Access-Token` header. Request bodies (uploads included) are also
-capped at 100 MB, so a single oversized `POST` can't exhaust disk or memory.
+**CSRF protection:** state-changing requests (`POST`/`PUT`/`DELETE`) must carry an
+`X-Requested-With` header (any value) or the `X-Access-Token` header, with or without a
+token configured; otherwise they are rejected with `403`. The viewer's frontend attaches
+the header automatically; scripts add it, e.g. `curl -H 'X-Requested-With: curl'`.
+Uploads are capped at 100 MB, JSON bodies at 10 MB.
 
-The cookie is set without `Secure` (so it also works over plain HTTP on a LAN) — if the
-network itself isn't trusted, put a TLS-terminating reverse proxy in front of the viewer
-rather than relying on the token alone.
+**`MAP_DATA_CORS_ORIGINS`** sets Socket.IO's allowed origins. Left unset, only the request's
+own origin is accepted. Set to a comma-separated list of origins or `*` to widen access.
 
-**`MAP_DATA_CORS_ORIGINS`** — controls SocketIO's `cors_allowed_origins`. Left unset, only
-the request's own origin is allowed (safe default, and it works out of the box for local
-dev regardless of which port you pick, since it's derived per-request rather than
-hardcoded). Set it to a comma-separated list of allowed origins to widen access (e.g. when
-serving the frontend from a different host/port), or to `*` to explicitly allow any origin.
-`*` is never the default — it must be requested explicitly.
-
-Example hardened robot deployment:
+Example hardened deployment:
 
 ```bash
 export MAP_DATA_ACCESS_TOKEN=$(openssl rand -hex 32)
@@ -106,37 +87,28 @@ export MAP_DATA_CORS_ORIGINS=http://192.168.1.50:5000
 map_data_viewer --host 0.0.0.0 --data-dir /path/to/data
 ```
 
-### Tile Layer API Keys
+### Base layers
 
-The index page reads `THUNDERFOREST_API_KEY` and `SEZNAM_API_KEY` from the environment and makes
-them available to the page for the corresponding optional basemap tile layers. Export the
-relevant variable before launching the viewer to enable it:
+The layer control (bottom left) switches between OpenStreetMap and Esri satellite imagery; neither needs an API key. The choice is remembered in the browser.
 
-```bash
-export THUNDERFOREST_API_KEY=your_key_here
-export SEZNAM_API_KEY=your_key_here
-map_data_viewer
-```
+## Loading map data
 
-Both are optional — without them the viewer still works, using the built-in OpenStreetMap and
-Satellite base layers (see [Viewer](viewer_view.md#layers-panel)).
+The file selector lists the `.mapdata` files in the data directory; opening one needs no network access except for the base layer tiles.
 
-## Loading Map Data
+New maps come from:
 
-The viewer loads files from its data directory (default: the package `data/` folder,
-overridable with `--data-dir`). Supported file formats:
+- **GPX import** (`G`, or the GPX button): uploads a track, downloads the OSM data around it and saves a new `.mapdata` (`/api/upload_gpx`).
+- **Fetch area**: downloads a drawn box of up to 25 km² in the background (`/api/fetch_area`).
+- **Drag and drop**: a `.mapdata` file is uploaded as is; a `.gpx` file builds a new map, or in Planner mode loads its points as waypoints.
 
-- **`.mapdata`** — pre-parsed map files created by `create_mapdata`. Loaded immediately with no network request.
-- **`.gpx`** — raw GPS tracks. The viewer parses them on load by fetching OSM data for the track bounds.
-
-You can also drag and drop a `.gpx` file directly onto the map.
+`.gpx` files in the data directory are not opened by the viewer.
 
 ## Modes
 
-The viewer has three modes, switched via the tabs in the top-right corner:
+The viewer provides three modes via the tabs in the top-right corner:
 
 | Mode | Description |
 |------|-------------|
-| [**Viewer**](viewer_view.md) | Inspect features, manage layers, draw manual annotations. |
-| [**Planner**](viewer_planner.md) | Design missions and plan paths using graph-based or all-terrain algorithms. |
-| [**Tracker**](viewer_tracker.md) | Monitor a live robot via ROS2 telemetry. Requires a running ROS2 context. |
+| [**Viewer**](viewer_view.md) | Inspect features, manage layer visibility, draw annotations, and edit ways. Supports [keyboard shortcuts](viewer_view.md#keyboard-shortcuts). |
+| [**Planner**](viewer_planner.md) | Design missions and plan paths using graph-based or all-terrain grid algorithms. |
+| [**Tracker**](viewer_tracker.md) | Monitor a live robot via ROS 2 telemetry. Requires a running ROS 2 context. |

@@ -18,18 +18,14 @@ map.on('baselayerchange', e => localStorage.setItem('baseLayer', e.name));
 
 drawnItems.addTo(map);
 
-// Restore the canonical draw order after any layer is toggled back on.
-// bringToFront() on a GeoJSON/FeatureGroup re-queues all its sub-layers at
-// the end of the canvas renderer's draw list (later = drawn on top).
-// Iterating in the desired bottom→top order leaves each successive layer
-// on top of the previous one, reproducing the initial load order.
+// Restore the canonical draw order after a layer is toggled back on.
+// bringToFront() re-queues a group's sub-layers at the end of the canvas draw
+// list, so calling it bottom→top reproduces the initial load order.
 function _enforceLayerOrder() {
     ['road', 'footway', 'barrier', 'crossroad', 'waypoint'].forEach(cat => {
         const layer = geoLayers[cat];
         if (layer && map.hasLayer(layer)) layer.bringToFront();
     });
-    // Ensure robot is on top
-    trackerMode.showRobot();
     if (map.hasLayer(drawnItems)) drawnItems.bringToFront();
 }
 
@@ -61,7 +57,6 @@ function setMode(newMode, commit = true) {
         try { pathLineDraw.disable(); } catch (_) { }
     }
 
-    // Update button highlight
     document.querySelectorAll('.mode-btn').forEach(btn =>
         btn.classList.toggle('active', btn.dataset.mode === newMode)
     );
@@ -70,7 +65,6 @@ function setMode(newMode, commit = true) {
     const cursors = { view: '', edit: 'move', add: 'crosshair', delete: 'pointer', fetch: 'crosshair' };
     map.getContainer().style.cursor = cursors[newMode] ?? '';
 
-    // Activate new mode
     if (newMode === 'add') {
         initDrawControl();
         drawControl.addTo(map);
@@ -111,29 +105,19 @@ function setMode(newMode, commit = true) {
 async function initApp() {
     deleteHandler = new L.EditToolbar.Delete(map, { featureGroup: drawnItems });
     setupDrawEvents();
-    const data = await fetchFileList();
-    const sel = document.getElementById('file-select');
-    if (sel) {
-        data.mapdata.forEach(f => {
-            if (![...sel.options].some(o => o.value === f)) {
-                sel.appendChild(new Option(f, f));
-            }
-        });
-    }
 
-    // Event Listeners
     document.getElementById('load-btn')?.addEventListener('click', () => {
         const file = document.getElementById('file-select').value;
         if (file) loadMapData(file);
     });
 
-  document.getElementById('clear-btn')?.addEventListener('click', () => {
-    clearMapData();
-  });
+    document.getElementById('clear-btn')?.addEventListener('click', () => {
+        clearMapData();
+    });
 
-  document.getElementById('feature-search')?.addEventListener('input', e => {
-    filterLayers(e.target.value);
-  });
+    document.getElementById('feature-search')?.addEventListener('input', e => {
+        filterLayers(e.target.value);
+    });
 
     // [data-mode]: #gpx-create-btn is styled as a .mode-btn but opens a file picker
     document.querySelectorAll('.mode-btn[data-mode]').forEach(btn => {
@@ -170,7 +154,7 @@ async function initApp() {
             document.getElementById('area-name-input').focus();
             return;
         }
-        bootstrap.Modal.getInstance(document.getElementById('fetch-area-modal')).hide();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('fetch-area-modal')).hide();
         setStatus('Fetching & parsing OSM data…', 'text-warning');
 
         try {
@@ -212,6 +196,27 @@ async function initApp() {
         });
     });
 
+    document.querySelectorAll('.layer-row:not(summary)').forEach(row => {
+        row.addEventListener('click', e => {
+            if (e.target.tagName === 'INPUT') return;
+            const cb = row.querySelector('input[type="checkbox"]');
+            if (cb) {
+                cb.checked = !cb.checked;
+                cb.dispatchEvent(new Event('change'));
+            }
+        });
+        row.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                const cb = row.querySelector('input[type="checkbox"]');
+                if (cb) {
+                    cb.checked = !cb.checked;
+                    cb.dispatchEvent(new Event('change'));
+                }
+            }
+        });
+    });
+
     map.on('click', () => {
         if (currentMode === 'view') {
             deselectCurrent();
@@ -224,7 +229,7 @@ async function initApp() {
 
     document.getElementById('ann-detail-save')?.addEventListener('click', async () => {
         const { type, props } = _collectAnnForm();
-        bootstrap.Modal.getInstance(document.getElementById('ann-detail-modal')).hide();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('ann-detail-modal')).hide();
 
         if (editingAnnId) {
             const ann = annotations.find(a => a.id === editingAnnId);
@@ -288,6 +293,10 @@ async function initApp() {
             }
             case 'e': case 'E': {
                 if (currentAppMode !== 'viewer') return;
+                if (STATIC_BASE) {
+                    setStatus('Editing is disabled in the static demo', 'text-warning');
+                    return;
+                }
                 const prevLayer = currentClickedLayer;
                 const prevFeature = currentClickedFeature;
                 setMode('edit');
@@ -300,6 +309,10 @@ async function initApp() {
             }
             case 'g': case 'G':
                 if (currentAppMode === 'viewer') {
+                    if (STATIC_BASE) {
+                        setStatus('Editing is disabled in the static demo', 'text-warning');
+                        return;
+                    }
                     document.getElementById('gpx-create-input')?.click();
                 }
                 break;
@@ -309,7 +322,11 @@ async function initApp() {
             case 'h': case 'H':
                 if (currentAppMode === 'viewer' && currentMode === 'view' && currentClickedFeature &&
                     ['road', 'footway', 'barrier'].includes(currentClickedFeature.properties.category)) {
-                    if (hiddenWayIds.has(currentClickedFeature.properties.id))
+                    if (STATIC_BASE) {
+                        setStatus('Editing is disabled in the static demo', 'text-warning');
+                        return;
+                    }
+                    if (_wayHidden(currentClickedFeature.properties.id))
                         showWay(currentClickedFeature.properties.id);
                     else
                         hideCurrentWay();
@@ -327,6 +344,10 @@ async function initApp() {
             case 'Delete':
             case 'Backspace':
                 if (currentAppMode === 'viewer') {
+                    if (STATIC_BASE) {
+                        setStatus('Editing is disabled in the static demo', 'text-warning');
+                        return;
+                    }
                     if (currentMode === 'edit') {
                         e.preventDefault();
                         deleteSelectedAnnotation();
@@ -350,6 +371,20 @@ async function initApp() {
                 break;
         }
     });
+
+    try {
+        const data = await fetchFileList();
+        const sel = document.getElementById('file-select');
+        if (sel && data && Array.isArray(data.mapdata)) {
+            data.mapdata.forEach(f => {
+                if (![...sel.options].some(o => o.value === f)) {
+                    sel.appendChild(new Option(f, f));
+                }
+            });
+        }
+    } catch (err) {
+        setStatus(`Failed to fetch file list: ${err.message}`, 'text-danger');
+    }
 
     if (STATIC_BASE) await initStaticDemo();
 }

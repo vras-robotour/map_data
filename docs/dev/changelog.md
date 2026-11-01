@@ -1,6 +1,108 @@
 # Changelog
 
-## [Unreleased]
+## [4.0.0] — 2026-11-01
+
+Regenerate `.mapdata` files built by an earlier version: relation and fence parsing changed (see *Fixed*). Python 3.12 or newer is required.
+
+### Added
+
+- `scripts/setup_ws.sh`: symlinks the nested `map_data_interfaces` package into the colcon workspace
+- `scripts/ros_smoke.sh`: ROS 2 runtime smoke test of `route_planner`, `osm_cloud` and the viewer on the demo map
+- CI job that builds and tests in a `ros:jazzy` container and runs the smoke test; the docs build runs on pull requests
+- `uv.lock`, `.python-version` (3.12) and a `dev` dependency group: `uv sync` installs the tools
+- `parameters/anti_obstacle_tags.csv` is loaded: listed node tags never become obstacles
+- Grid planner failure reasons `start_blocked`, `goal_blocked`, `cancelled` and `bad_parameter` (unknown algorithm, non-positive cell size)
+- `map_data.edits`: annotation store IO and the way-edit pipeline, usable without the viewer
+- `edit_mapdata()`: merge annotations and traversability rules into a map built from a GPX file
+- Tracker setting `planner_node` (default `/route_planner`): the viewer's planner toggles start from that node's parameters; `/api/planner_defaults` reports `source` and `node`
+- `create_mapdata --cache` to reuse the OSM response cache
+- Small Stromovka `.mapdata` test fixture under `tests/data/` (OSM data, ODbL)
+- Viewer accessibility: labels on inputs and icon buttons, keyboard-operable rows, higher text contrast
+
+### Changed
+
+- `map_data_viewer` bound beyond loopback without `MAP_DATA_ACCESS_TOKEN` uses a persistent token from `~/.config/map_data/access_token` and logs the URL to open; state-changing requests need `X-Requested-With` (or `X-Access-Token`) even without a token (`403` otherwise)
+- Tracker telemetry sends paths, intersections and waypoints only when they change and the trail as appends, with coordinates rounded to 7 decimals (a 500-fix trail plus a route: ~45 KB per message down to a few KB); a connecting browser gets the full state. The viewer warns at startup when `simple-websocket` is missing (long-polling fallback)
+- PlanRoute goal `simplify_path` and `smooth_path` are used as sent; `false` now turns them off. The node's parameters apply to `~/goal` goals only
+- `route_planner` reads its planner parameters on every goal, so `ros2 param set` applies to the next one
+- `config/planner_defaults.yaml` is the single source of grid planner defaults (`grid_defaults()`) for `ReplanPath`, `plan_route`, `map_data_plan`, `route_planner` and the viewer
+- Viewer errors are JSON `{"error": message}` on every endpoint
+- Viewer fetch and uploads never overwrite a map or reuse a leftover annotation store: they save under the next free name (`<name>_1.mapdata`, ...)
+- An unreadable annotation store is moved aside and answered with 409 instead of being overwritten
+- `osm_cloud` without `mapdata_file` or `gpx_file` logs an error and idles instead of exiting; GPX input gets the same annotation and traversability steps as `route_planner`
+- `osm_cloud` builds grid cells only near the ways and deletes old intersection markers before re-publishing
+- The OSM cache expires after 30 days or when the query changes; `create_mapdata` no longer uses it by default
+- Planning grids snap a blocked start or goal to free space within 2 m and fail fast when they lie in disconnected regions
+- A cancel that arrives before its plan starts still aborts it; cancelling a PlanRoute goal stops its grid search
+- Viewer `create_replan` reports `status: "cancelled"` only for a cancel; invalid parameters are 400
+- The viewer strips `access_token` from the URL after setting the cookie and shuts down cleanly on SIGINT/SIGTERM
+- Atomic writes keep the file mode and fsync the file and its directory; used for traversability and tracker settings saves
+- The tracker trail takes one GPS source (the filtered fix when enabled) and ignores no-fix messages
+- `ReplanPath` cost attributes are lowercase: `highway_costs`, `surface_costs`, `path_cost_cap`, `default_off_path_cost`
+- Store IO and the way-edit pipeline moved from `map_data.viewer.helpers` to `map_data.edits`
+- Python >= 3.12 is declared in `pyproject.toml` and `setup.py`
+- The coverage gate (72 %) runs in CI only; plain `pytest` and `colcon test` need no `pytest-cov`
+- `package.xml` lists the launch, interface and message dependencies the nodes use
+- `route_planner` fails a PlanRoute goal that arrives while another plan runs with reason `busy` instead of queueing it, so cancels and GNSS fixes always get a thread; a `~/goal` still waits its turn
+- `map_data_plan`, `create_mapdata` and `route_planner` resolve map file names the same way: a path, then `data/`, then `demo/`
+- The viewer's cost-grid overlay and blocked-ways list follow the *Plan on Footways/Roads* checkboxes (`allowed_ways`); empty means footways, as in the planner
+- A wormhole transfer waits up to 10 minutes for the receiver
+- The annotations of a map in a subfolder are stored next to the map, where the ROS nodes read them
+- Pre-commit runs ruff and mypy from the locked uv environment
+- `demo/buchlovice.mapdata` regenerated from current OSM data
+- Faster planning: grid A* 1.3–1.9× per goal, RRT* about 1.5×, first graph build 18–37% (same routes); see `PERF.md`
+- Viewer: the map reloads 2–4× faster after an edit (GeoJSON cached per geometry, crossroads recomputed once per edit pass)
+- Viewer: large maps open faster: the changes panel builds 100 rows at a time, edit handles share one SVG renderer, mapdata and annotations load in parallel
+- `osm_cloud` builds its point cloud about 35% faster with less peak memory; OSM parsing projects coordinates in one batch
+- `scripts/bench/` benchmarks (planner, map loading, viewer API, frontend) with `--quick` runs, and `PERF.md` logs every kept and reverted attempt
+
+### Fixed
+
+- `fetch_area` applies the 25 km² limit to the downloaded box, margin included
+- `create_mapdata` finds its default demo GPX in a source checkout
+- Relation parsing: route relations are no longer merged into one way, relation tags only go to untagged outer members, and self-intersecting outers keep their holes
+- Closed fences, walls, hedges, guard rails, kerbs, handrails, chains, ropes and cable or jersey barriers are rings, not filled areas
+- The map's lat/lon box covers all four UTM corners; the UTM zone check compares zone letters correctly
+- Tag overrides apply before the traversability rules
+- Grid paths no longer cut through an obstacle on the leg from a requested point to the first grid cell
+- RRT\* samples traversable cells at their centers
+- Tracker collision action names match nav2's `CollisionMonitorState` (`DO_NOTHING`, `STOP`, `SLOWDOWN`, `APPROACH`, `LIMIT`)
+- `helhest_jr.yaml`: `osm_cloud` `grid_topic` is `osm_grid`, matching the launch file
+- The GPX upload writes its OSM cache next to the saved map, not into the working directory
+- Overpass truncated reads are retried; `map_data_info` survives an unreadable annotation sidecar
+- Viewer: stale responses are ignored, failed node moves roll back, only changed annotations are saved, a deleted added node re-anchors the nodes after it, tag overrides and hiding of split ways use the original way ID, and map text is escaped before it reaches the HTML
+- The cost grid overlay shows the planner's own grid
+- An empty multipolygon member role counts as `outer`
+- Viewer annotations with a geometry other than `LineString`, `Polygon` or `MultiPolygon` (e.g. `Point`) are rejected with 400
+- `plan_route` (and so a PlanRoute goal) rejects a negative or non-finite `inflate_obstacles` with `bad_parameter` instead of shrinking the obstacles
+- `osm_cloud`: a rejected parameter change keeps the previously published grid and intersections
+- Viewer way edits (split, add node, move nodes) reject an unknown way with 404 and a node not on the way with 400 instead of storing them
+- Viewer: saving a dragged annotation no longer reports failure and rolls back after a successful save
+- Closed fences, walls and hedges keep their closing side; moving or deleting one of their nodes no longer fills the enclosure
+- Deleting the first or last node of a closed way keeps its node list closed for routing and the point cloud
+- `create_mapdata` without `-d` re-saves to the file it loaded
+- Way deletions, node moves and tag overrides keep the crossroads of drawn paths
+- No false "multiple UTM zones" warning where two latitude bands meet
+- An out-of-range or non-finite waypoint, or a `spacing` below 0.1 m, fails with `bad_parameter` instead of crashing `route_planner` or the CLI
+- Viewer: a way's segment list no longer returns deleted segments or ways
+- Viewer: a running fetch or GPX upload reserves its file name, so a concurrent upload cannot be overwritten
+- Viewer: a non-ASCII access token works; a wrong one gets 401 instead of 500
+- Viewer: search and Revert keep working after a split, node add, undo or redo; re-segmented ways respect hidden ways and filters
+- Viewer: no stray node markers or planner waypoints left on the map, no edit handles after a View-mode split, and the robot stays hidden when its layer is off
+- Viewer hardening: a node ID from a `.mapdata` file can no longer inject script (a non-integer one fails to load, 400 on upload); at most 4 wormhole transfers and 2 Overpass fetches run at once (429); JSON bodies over 10 MB get 413; an uploaded `.mapdata` is validated before it appears; responses carry `X-Frame-Options`, `nosniff`, `no-referrer` and `frame-ancestors 'none'`; the token-strip redirect stays on the site; the request log redacts `access_token`; a non-string `gpx` or `transfer_id` is 400. python-engineio 4.15.1, python-socketio 5.17.1, werkzeug 3.1.9 and mkdocs-material 9.8.0 for known advisories (mkdocstrings 1.0.8 for its pymdown-extensions 12)
+- The packaging test checks undeclared imports (it could never fail)
+- Docs pull-request builds no longer cancel a pending gh-pages deploy
+- `route_planner` and `osm_cloud` refuse untrusted input: a goal may only read `.mapdata` from `data_dir` and write `.gpx` into `mission_dir`, at most 100 waypoints, non-finite or oversized values and transforms are rejected (`route_too_long`, `internal_error` instead of a crash), and `route_planner` respawns
+
+### Removed
+
+- `THUNDERFOREST_API_KEY` / `SEZNAM_API_KEY` are no longer read; no basemap used them (the viewer offers OpenStreetMap and Esri satellite)
+- `map_data.viewer.tracker_config.topic_type`
+- `data/*` is no longer installed into `share/map_data/data`, only the `demo/` map is: point `data_dir` or `mapdata_path` at the robot's maps
+- `docs/dev/node_move_detach.md`; the node-move behavior is in [Data formats](data_formats.md)
+- `PathGrid.grid`, `create_empty_grid`, `get_grid_2d`, `grid_segment_blocked` and `grid_astar(simplify_path=...)`
+- `create_mapdata --no-cache` (the cache is opt-in with `--cache`), the `config_file` argument of `osm_cloud.launch.py` and the `osm_cloud` block of `helhest_jr.yaml`
+- The OSM cache's separate bounding-box check (the query hash covers it)
 
 ## [3.2.0] — 2026-10-16
 

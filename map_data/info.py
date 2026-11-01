@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import math
 from pathlib import Path
@@ -17,12 +18,9 @@ def _footway_centerline_length(way: Way, md: MapData) -> float:
     """
     Length of a footway's centerline in metres.
 
-    By save time footways have been buffered into Polygons, so ``line.length``
-    is the buffer's *perimeter* (~2x the walked distance plus the end caps),
-    not the walked distance. Prefer the centerline rebuilt from the way's
-    node coordinates (:meth:`MapData.centre_line`); fall back to inverting the
-    round-capped buffer formulas (perimeter ``P = 2L + pi*w``, area
-    ``A = L*w + pi*w^2/4`` give ``L = sqrt(P^2 - 4*pi*A) / 2``).
+    Saved footways are buffered, so ``line.length`` is a perimeter. Uses
+    :meth:`MapData.centre_line`, else inverts the round-capped buffer formulas
+    (``P = 2L + pi*w``, ``A = L*w + pi*w^2/4`` give ``L = sqrt(P^2 - 4*pi*A) / 2``).
     """
     line = way.line
     if line is None:
@@ -38,9 +36,7 @@ def _footway_centerline_length(way: Way, md: MapData) -> float:
 
 
 def _footway_components(footways: list[Way]) -> int:
-    """
-    Count connected components of the footway network (ways joined by shared nodes).
-    """
+    """Connected components of the footway network (ways joined by shared nodes)."""
     node_ids = [set(w.nodes) for w in footways]
     parent = list(range(len(footways)))
 
@@ -61,11 +57,7 @@ def _footway_components(footways: list[Way]) -> int:
 
 
 def validate_mapdata(md: MapData) -> list[str]:
-    """
-    Check a loaded MapData object for common structural issues.
-
-    Returns a list of human-readable issue descriptions (empty = no issues).
-    """
+    """Human-readable structural issues of *md* (empty when none)."""
     issues = []
 
     for field in _METADATA_FIELDS:
@@ -157,14 +149,15 @@ def get_stats(path: str) -> None:
     total_footway_len = sum(_footway_centerline_length(w, md) for w in md.footways_list)
     print(f"Total Footway Distance: {total_footway_len:.1f} m")
 
-    # Check for annotations sidecar
     ann_path = annotation_path_for(path)
     if ann_path.is_file():
-        import json
-
-        with ann_path.open() as f:
-            ann_data = json.load(f)
-            anns = ann_data.get("annotations", [])
+        try:
+            with ann_path.open() as f:
+                ann_data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.warning("Could not read annotations sidecar %s: %s", ann_path, e)
+        else:
+            anns = ann_data.get("annotations", []) if isinstance(ann_data, dict) else []
             print(f"Annotations: {len(anns)} (manual edits)")
 
     print("=" * 40)

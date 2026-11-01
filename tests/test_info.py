@@ -109,6 +109,16 @@ def test_get_stats_reports_annotations_sidecar(tmp_path, monkeypatch, capsys):
     assert _stat(out, "Annotations") == "2 (manual edits)"
 
 
+def test_get_stats_corrupt_annotations_sidecar_does_not_crash(tmp_path, monkeypatch, capsys):
+    md = _make_mapdata()
+    sidecar = tmp_path / "site.annotations.json"
+    sidecar.write_text("{broken")
+
+    out = _run_stats(tmp_path, monkeypatch, capsys, md)
+
+    assert "Annotations" not in out
+
+
 def test_get_stats_missing_file_prints_nothing(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(
         info,

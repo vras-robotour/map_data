@@ -1,7 +1,9 @@
 // ── Layers Management ───────────────────────────────────────────────────────
 
 function _wayHidden(id) {
-    return hiddenWayIds.has(id) || (currentAppMode === 'planner' && plannerBlockedIds.has(id));
+    const origId = String(id).split(':')[0];
+    return hiddenWayIds.has(id) || hiddenWayIds.has(origId) || hiddenWayIds.has(Number(origId))
+        || (currentAppMode === 'planner' && (plannerBlockedIds.has(id) || plannerBlockedIds.has(origId) || plannerBlockedIds.has(Number(origId))));
 }
 
 function setSubtypeVisible(cat, subtype, visible) {
@@ -46,12 +48,16 @@ function addAnnotationToLayer(ann) {
 }
 
 function renderAnnotationLayer() {
+    if (currentMode === 'edit') disableAnnotationEditMode(); // unbind handles from the layers being dropped
     drawnItems.clearLayers();
     annotations.forEach(addAnnotationToLayer);
     const cb = document.querySelector(`[data-layer="annotation"]`);
     if (cb) {
         if (!cb.checked) map.removeLayer(drawnItems);
         else if (!map.hasLayer(drawnItems)) drawnItems.addTo(map);
+    }
+    if (typeof currentMode !== 'undefined' && currentMode === 'edit' && typeof enableAnnotationEditMode === 'function') {
+        enableAnnotationEditMode();
     }
 }
 
@@ -170,8 +176,8 @@ function updateWayWithSegments(originalWayId, segments) {
         const layerGroup = geoLayers[cat];
         if (!layerGroup) return;
 
-        // Check if ID matches original or starts with "original:". Hidden or
-        // filtered-out layers are only in subtypeLayers, so search both.
+        // Match the way and its "<id>:n" segments. Hidden or filtered-out
+        // layers are only in subtypeLayers, so search both.
         const toRemove = new Set();
         const match = l => {
             const sid = String(l._featureId || '');
@@ -183,7 +189,6 @@ function updateWayWithSegments(originalWayId, segments) {
         toRemove.forEach(l => removeWayLayer(cat, l));
     });
 
-    // Add new segments
     let firstLayer = null;
     segments.forEach(f => {
         const cat = f.properties.category;
@@ -198,14 +203,12 @@ function updateWayWithSegments(originalWayId, segments) {
             }
         }).eachLayer(l => l.addTo(layerGroup)); // Add individual layers, not the group
     });
+    filterLayers(document.getElementById('feature-search')?.value || '');
     return firstLayer;
 }
 
 // ── Annotation-store metadata parsing ───────────────────────────────────────
-// The /api/annotations response is parsed into deletedWays/deletedNodes/
-// tagOverrides/hiddenWays/changeLog the same way everywhere it's consumed
-// (initial load, a metadata-only refresh, or a single-way reload) — this is
-// that shared parsing, applied directly to the matching globals.
+// Shared by initial load, metadata refresh and single-way reload.
 
 function _parseWayList(list) {
     return (list || []).map(d => typeof d === 'object' ? d : { id: d, category: 'unknown', label: '' });
@@ -220,7 +223,7 @@ function _parseDeletedNodes(dn) {
 function _parseTagOverrides(annData) {
     const tagOvMap = annData.tag_overrides || {};
     const tagOvMeta = annData.tag_override_meta || {};
-    // Use string keys downstream: server stores tag ids as strings, tagOverrides.id is a number (+sid)
+    // Server keys overrides by string way id; tagOverrides.id is numeric, so compare via String(id).
     return Object.entries(tagOvMap).map(([sid, tags]) => ({
         id: +sid,
         category: tagOvMeta[sid]?.category || 'unknown',
@@ -268,10 +271,9 @@ function _buildChangeLog(annData, deletedWaysList, deletedNodesList, tagOverride
     ];
 }
 
-// Parses deleted/hidden ways & nodes, tag overrides, and (unless
-// `withChangeLog` is false) the change log out of an /api/annotations
-// response into the matching globals. Does not touch `annotations` itself —
-// callers that need it set it (and call snapshotAnnBaselines()) separately.
+// Parses an /api/annotations response into deletedWays/deletedNodes/
+// tagOverrides/hiddenWays (and changeLog unless `withChangeLog` is false).
+// Leaves `annotations` alone; see applyAnn.
 function applyAnnData(annData, { withChangeLog = true } = {}) {
     deletedWays = _parseWayList(annData.deleted_ways);
     deletedNodes = _parseDeletedNodes(annData.deleted_nodes);
@@ -284,13 +286,11 @@ function applyAnnData(annData, { withChangeLog = true } = {}) {
 }
 
 // applyAnnData plus `annotations` itself, its baselines and the side panels.
-function applyAnn(annData, { refreshAnnotations = false } = {}) {
+function applyAnn(annData) {
     annotations = annData.annotations || [];
     snapshotAnnBaselines();
     applyAnnData(annData);
-    if (refreshAnnotations) {
-        renderAnnotationLayer();
-    }
+    renderAnnotationLayer();
     renderAnnotationList();
     renderChangesPanel();
     renderHiddenPanel();
@@ -298,19 +298,27 @@ function applyAnn(annData, { refreshAnnotations = false } = {}) {
 
 async function refreshMetadata(filename) {
     try {
-        applyAnn(await fetchAnnotations(filename));
+        // Way edits don't touch annotations; keep their layers and _layer refs.
+        applyAnnData(await fetchAnnotations(filename));
+        renderAnnotationList();
+        renderChangesPanel();
+        renderHiddenPanel();
     } catch (err) {
         console.error('Failed to refresh metadata:', err);
     }
 }
 
+let _mapDataToken = 0;
+
 async function loadMapData(filename, { preserveView = false, silent = false } = {}) {
+    deselectCurrent();
+    const token = ++_mapDataToken;
     if (!silent) setStatus('Loading…', 'text-warning');
     redoStack = [];
 
     try {
-        const geojson = await fetchMapData(filename);
-        const annData = await fetchAnnotations(filename);
+        const [geojson, annData] = await Promise.all([fetchMapData(filename), fetchAnnotations(filename)]);
+        if (token !== _mapDataToken) return;
 
         const oldGeoLayers = { ...geoLayers };
 
@@ -324,7 +332,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         });
 
         // Pre-compute hidden way IDs before building layers
-        const _loadHiddenIds = new Set(_parseWayList(annData.hidden_ways).map(d => d.id));
+        const hiddenIds = new Set(_parseWayList(annData.hidden_ways).map(d => String(d.id).split(':')[0]));
 
         // Reset subtype state for fresh load
         ['road', 'footway', 'barrier', 'crossroad'].forEach(cat => {
@@ -335,6 +343,16 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         // Remove old layers before adding new ones
         Object.values(oldGeoLayers).forEach(l => l && map.removeLayer(l));
         drawnItems.clearLayers();
+        document.getElementById('planner-show-grid').checked = false; // its overlay was just removed
+
+        // Fit before the layers go on the map, so each is projected once, not at the old zoom and again here.
+        if (!preserveView) {
+            const bounds = L.latLngBounds([]);
+            const walk = c => typeof c[0] === 'number' ? bounds.extend([c[1], c[0]]) : c.forEach(walk);
+            [...byCategory.road, ...byCategory.footway, ...byCategory.waypoint]
+                .forEach(f => walk(f.geometry.coordinates));
+            if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] });
+        }
 
         ['road', 'footway', 'barrier', 'crossroad'].forEach(cat => {
             const features = cat === 'barrier'
@@ -350,10 +368,13 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
             };
 
             geoLayers[cat] = L.geoJSON({ type: 'FeatureCollection', features }, layerOpts);
-            if (_loadHiddenIds.size > 0) {
-                const _toHide = [];
-                geoLayers[cat].eachLayer(l => { if (_loadHiddenIds.has(l._featureId)) _toHide.push(l); });
-                _toHide.forEach(l => geoLayers[cat].removeLayer(l));
+            if (hiddenIds.size > 0) {
+                const toHide = [];
+                geoLayers[cat].eachLayer(l => {
+                    const origId = String(l._featureId).split(':')[0];
+                    if (hiddenIds.has(origId) || hiddenIds.has(String(l._featureId))) toHide.push(l);
+                });
+                toHide.forEach(l => geoLayers[cat].removeLayer(l));
             }
             const cb = document.querySelector(`[data-layer="${cat}"]`);
             if (cb && cb.checked) geoLayers[cat].addTo(map);
@@ -383,17 +404,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         const wpCb = document.querySelector(`[data-layer="waypoint"]`);
         if (wpCb && wpCb.checked) geoLayers.waypoint.addTo(map);
 
-        if (!preserveView) {
-            const allFeatures = [...byCategory.road, ...byCategory.footway, ...byCategory.waypoint];
-            if (allFeatures.length > 0) {
-                map.fitBounds(
-                    L.geoJSON({ type: 'FeatureCollection', features: allFeatures }).getBounds(),
-                    { padding: [20, 20] }
-                );
-            }
-        }
-
-        applyAnn(annData, { refreshAnnotations: true });
+        applyAnn(annData);
 
         currentFile = filename;
         document.getElementById('export-btn').disabled = false;
@@ -407,60 +418,61 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
 }
 
 function clearMapData() {
-  deselectCurrent();
-  clearNodes();
-  if (plannerMode) plannerMode.clearAll();
+    deselectCurrent();
+    if (plannerMode) plannerMode.clearAll();
 
-  currentFile = "";
-  
-  // Clear all geo layers from map and reset state
-  Object.values(geoLayers).forEach(l => {
-    if (l) {
-      map.removeLayer(l);
+    if (geoLayers.costGrid) {
+        map.removeLayer(geoLayers.costGrid);
+        geoLayers.costGrid = null;
     }
-  });
-  drawnItems.clearLayers();
-  
-  // Reset layers state
-  ['road', 'footway', 'barrier', 'crossroad', 'waypoint'].forEach(cat => {
-    geoLayers[cat] = null;
-    if (cat !== 'waypoint') {
-      subtypeLayers[cat] = {};
-      subtypeFilters[cat] = {};
-      renderSubtypeFilters(cat);
-    }
-  });
+    const showGridCheckbox = document.getElementById('planner-show-grid');
+    if (showGridCheckbox) showGridCheckbox.checked = false;
 
-  // Reset data state
-  annotations = [];
-  annBaselineGeoms = {};
-  deletedWays = [];
-  deletedNodes = [];
-  tagOverrides = [];
-  hiddenWays = [];
-  hiddenWayIds.clear();
-  changeLog = [];
-  redoStack = [];
+    currentFile = "";
 
-  // Reset UI elements
-  document.getElementById('file-select').value = "";
-  document.getElementById('export-btn').disabled = true;
-  document.getElementById('export-geojson-btn').disabled = true;
-  document.getElementById('feature-search').value = "";
-  
-  renderAnnotationList();
-  renderChangesPanel();
-  renderHiddenPanel();
+    Object.values(geoLayers).forEach(l => {
+        if (l) {
+            map.removeLayer(l);
+        }
+    });
+    drawnItems.clearLayers();
 
-  setStatus('Map cleared', 'text-secondary');
+    ['road', 'footway', 'barrier', 'crossroad', 'waypoint'].forEach(cat => {
+        geoLayers[cat] = null;
+        if (cat !== 'waypoint') {
+            subtypeLayers[cat] = {};
+            subtypeFilters[cat] = {};
+            renderSubtypeFilters(cat);
+        }
+    });
+
+    annotations = [];
+    annBaselineGeoms = {};
+    deletedWays = [];
+    deletedNodes = [];
+    tagOverrides = [];
+    hiddenWays = [];
+    hiddenWayIds.clear();
+    changeLog = [];
+    redoStack = [];
+
+    document.getElementById('file-select').value = "";
+    document.getElementById('export-btn').disabled = true;
+    document.getElementById('export-geojson-btn').disabled = true;
+    document.getElementById('feature-search').value = "";
+    
+    renderAnnotationList();
+    renderChangesPanel();
+    renderHiddenPanel();
+
+    setStatus('Map cleared', 'text-secondary');
 }
 
 async function _reloadWay(wayId) {
     if (!currentFile) return;
 
-    // Always use the segments endpoint so that split segments are removed and
-    // re-added atomically — the old non-split path used strict id equality which
-    // failed to remove virtual "id:n" layers when the original numeric id was given.
+    // Reload via the segments endpoint so all "<id>:n" segment layers of a
+    // split way are replaced together.
     const originalWayId = String(wayId).split(':')[0];
 
     try {
@@ -471,7 +483,7 @@ async function _reloadWay(wayId) {
         clearNodes();
         await _refreshAnnotationsState();
 
-        // Try the exact id first, then the bare original id, then any segment
+        // Try the exact id, then the original id, then its first ten segments
         let reselected = _reselectFeature(wayId);
         if (!reselected) reselected = _reselectFeature(originalWayId);
         if (!reselected) {
@@ -499,8 +511,9 @@ async function _refreshAnnotationsState() {
     renderHiddenPanel();
 }
 
+// Highlights and shows the visible layer for `wayId`; returns it, or null.
 function _reselectFeature(wayId) {
-    for (const cat of ['road', 'footway', 'barrier']) {
+    for (const cat of ['road', 'footway', 'barrier', 'crossroad']) {
         const catLayer = geoLayers[cat];
         if (!catLayer) continue;
         let found = null;
@@ -508,8 +521,8 @@ function _reselectFeature(wayId) {
         if (found) {
             _highlight(found, cat);
             showProps(found._featureRef.properties, found._featureRef);
-            return true;
+            return found;
         }
     }
-    return false;
+    return null;
 }

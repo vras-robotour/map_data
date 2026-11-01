@@ -3,7 +3,6 @@ import shapely.geometry as sh
 
 from map_data.pathsolver.grid_astar import (
     grid_astar,
-    grid_segment_blocked,
     simplify_path_checked,
 )
 from map_data.pathsolver.replan import ReplanPath
@@ -85,7 +84,7 @@ class MockMapData:
         self.roads_list = []
 
     def get_points(self):
-        # ReplanPath._split_ways uses points[node_id]
+        # PathGrid.fill looks up points[node_id]
         points = {}
         for way in self.footways_list:
             for node_id, coord in zip(
@@ -103,14 +102,11 @@ def test_astar_grid_with_obstacle_and_path():
     wall = sh.Polygon([(0, 4), (10, 4), (10, 6), (0, 6)])
     obstacles = [wall]
 
-    # Create a path that goes through the wall
-    # Way expects a LineString or Polygon in its 'line' attribute
-    # We'll use a simple LineString for the nodes part and buffer it for the 'line' part
+    # A footway through the wall: two nodes, with the buffered corridor as its line
     path_coords = [(5.0, 0.0), (5.0, 10.0)]
     path_line = sh.LineString(path_coords).buffer(1.5)
     from map_data.utils.way import Way
 
-    # Give it some nodes so _split_ways doesn't fail
     footway = Way(id=1, nodes=[100, 101], tags={"highway": "footway"}, line=path_line)
 
     replanner = ReplanPath(obstacles, **args)
@@ -259,7 +255,6 @@ def test_grid_astar_weighted_prefers_low_cost_corridor():
         (10.5, 2.5),
         (0.0, 0.0),
         1.0,
-        simplify_path=False,
         grid_cost_weight=5.0,
     )
 
@@ -284,7 +279,6 @@ def test_grid_astar_negligible_weight_takes_short_corridor():
         (10.5, 2.5),
         (0.0, 0.0),
         1.0,
-        simplify_path=False,
         grid_cost_weight=1e-9,
     )
 
@@ -293,11 +287,7 @@ def test_grid_astar_negligible_weight_takes_short_corridor():
     assert all(pt[1] == 2.5 for pt in path), "uniform costs should keep the path in the direct row"
 
 
-# ── regression: simplification must not chord through obstacles ──────────────
-#
-# Path simplification used to run *after* collision checking without being
-# collision-checked itself, so a Douglas-Peucker shortcut could cut straight
-# through an obstacle the planner had carefully routed around.
+# ── simplification must not chord through obstacles ──────────────────────────
 
 
 def _staircase_scenario():
@@ -315,6 +305,15 @@ def _staircase_scenario():
     return grid, path
 
 
+def grid_segment_blocked(grid, p1, p2, low, cs):
+    """Whether the segment p1->p2 touches an ``inf`` cell (sampled, cells ``cs`` from ``low``)."""
+    for t in np.linspace(0.0, 1.0, 100):
+        x, y = p1 + (p2 - p1) * t
+        if np.isinf(grid[int((y - low[1]) // cs), int((x - low[0]) // cs)]):
+            return True
+    return False
+
+
 def test_simplify_path_checked_keeps_vertices_when_chord_is_blocked():
     grid, path = _staircase_scenario()
 
@@ -329,7 +328,7 @@ def test_simplify_path_checked_keeps_vertices_when_chord_is_blocked():
         lambda p1, p2: grid_segment_blocked(grid, p1, p2, (0.0, 0.0), 1.0),
     )
 
-    # The colliding shortcut was rejected: the original vertices survive and
+    # The colliding shortcut is rejected: the original vertices survive and
     # no resulting segment crosses a blocked cell.
     assert np.allclose(result, path)
     for i in range(len(result) - 1):
@@ -350,25 +349,6 @@ def test_simplify_path_checked_still_simplifies_free_space():
     assert len(result) == 2
     assert np.allclose(result[0], path[0])
     assert np.allclose(result[-1], path[-1])
-
-
-def test_grid_astar_simplified_path_stays_off_blocked_cells():
-    """
-    End-to-end: the path through the diagonal-wall gap survives simplification.
-
-    The near-diagonal path through the gap is almost collinear, so unchecked
-    DP simplification would chord straight through the wall.
-    """
-    grid = _diagonal_wall_grid()
-    grid[5, 5] = 0.0
-
-    path = grid_astar(grid, (8.5, 1.5), (1.5, 8.5), (0.0, 0.0), 1.0, simplify_path=True)
-
-    assert path is not None
-    for i in range(len(path) - 1):
-        assert not grid_segment_blocked(grid, path[i], path[i + 1], (0.0, 0.0), 1.0), (
-            f"simplified segment {path[i]} -> {path[i + 1]} crosses the wall"
-        )
 
 
 def test_post_process_path_simplification_does_not_chord_into_obstacle():

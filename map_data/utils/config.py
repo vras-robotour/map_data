@@ -1,9 +1,4 @@
-"""
-Configuration loading utilities for map_data.
-
-This module provides helpers for loading YAML configuration files from
-the package's config directory, with ROS2 integration.
-"""
+"""Locate package data (ament share or source tree) and load YAML configs."""
 
 import logging
 from pathlib import Path
@@ -32,18 +27,44 @@ def package_share(subdir: str) -> Path:
         return (Path(__file__).parent / ".." / ".." / subdir).resolve()
 
 
+def resolve_data_file(name: str, data_dir: str | Path | None = None) -> Path | None:
+    """
+    Find the data file *name*, or ``None`` when there is none.
+
+    *name* as a path (absolute, or relative to the cwd), else in *data_dir*
+    (default: the package ``data/``), else in the package ``demo/`` (a source
+    checkout; an install copies the demo into ``data/``).
+    """
+    p = Path(name).expanduser()
+    if p.is_absolute() or p.is_file():
+        return p.resolve() if p.is_file() else None
+    base = Path(data_dir).expanduser() if data_dir else package_share("data")
+    return next((c for c in (base / name, package_share("demo") / name) if c.is_file()), None)
+
+
+def resolve_client_data_file(name: str, data_dir: str | Path | None = None) -> Path | None:
+    """
+    :func:`resolve_data_file` for a *name* from a remote client, which may not leave the
+    data directories: only a relative path without ``..`` inside *data_dir* (default: the
+    package ``data/``) or the package ``demo/``. Symlinks there are followed, wherever they
+    point: a colcon ``--symlink-install`` links the installed maps to the source tree.
+    """
+    if Path(name).is_absolute() or ".." in Path(name).parts:
+        return None
+    base = Path(data_dir).expanduser() if data_dir else package_share("data")
+    for d in (base.resolve(), package_share("demo").resolve()):
+        if (d / name).is_file():
+            return d / name
+    return None
+
+
 def config_path(filename: str) -> Path:
     """Where a config file of the package would live (need not exist)."""
     return package_share("config") / filename
 
 
 def load_config(filename: str) -> dict[str, Any]:
-    """
-    Load a YAML configuration file from the package's config directory.
-
-    Attempts to find the file via ROS2 resource index, falling back to
-    relative path from this file.
-    """
+    """Load ``config/<filename>``; ``{}`` when it is missing or unreadable."""
     config_path_ = config_path(filename)
 
     if config_path_.exists():

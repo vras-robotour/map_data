@@ -8,6 +8,7 @@ from conftest import EMPTY_OSM_JSON as _EMPTY_JSON
 from conftest import FOOTWAY_WAYS_JSON as _WAYS_JSON
 from shapely.geometry import LineString
 
+from map_data.create_mapdata import process_map_data
 from map_data.map_data import MapData
 from map_data.utils.serialization import FORMAT_VERSION
 from map_data.utils.way import Way
@@ -116,7 +117,7 @@ def test_saved_mapdata_carries_format_version(tmp_path):
 
 
 def test_legacy_mapdata_without_version_loads(tmp_path):
-    """Files written before the marker existed stay readable."""
+    """A file without a format_version marker still loads."""
     md = _make_md()
     path = tmp_path / "test.mapdata"
     md.save(str(path))
@@ -165,7 +166,7 @@ def test_save_mapdata_failure_preserves_existing_file(tmp_path, monkeypatch):
     with pytest.raises(OSError, match="disk full"):
         md.save(str(path))
 
-    # The previously good file is untouched and no temp files are left behind.
+    # The existing file is untouched and no temp files are left behind.
     assert path.read_text() == good_content
     assert not list(tmp_path.glob("*.tmp"))
 
@@ -210,6 +211,8 @@ def test_osm_cache_roundtrip(tmp_path):
     loaded = md._load_osm_cache()
 
     assert loaded == _WAYS_JSON
+    # The bbox is part of the hashed query, so it is not stored separately.
+    assert "bbox" not in json.loads((tmp_path / "test.osm_cache.json").read_text())
 
 
 def test_osm_cache_bbox_mismatch_returns_none(tmp_path):
@@ -218,10 +221,102 @@ def test_osm_cache_bbox_mismatch_returns_none(tmp_path):
 
     md._save_osm_cache(_EMPTY_JSON)
 
-    # Shift the stored bounding box by more than the 1e-6 tolerance
+    # A moved bounding box changes the query, hence its hash.
     md.min_lat += 1.0
     result = md._load_osm_cache()
     assert result is None
+
+
+def test_osm_cache_query_hash_mismatch_returns_none(tmp_path, monkeypatch):
+    md = _make_md()
+    md.coords_file = str(tmp_path / "test.gpx")
+    md._save_osm_cache(_WAYS_JSON)
+    monkeypatch.setattr(md, "_osm_query_hash", lambda: "changed")
+
+    assert md._load_osm_cache() is None
+
+
+def test_osm_cache_stale_returns_none(tmp_path, monkeypatch):
+    md = _make_md()
+    md.coords_file = str(tmp_path / "test.gpx")
+    md._save_osm_cache(_WAYS_JSON)
+    path = tmp_path / "test.osm_cache.json"
+    data = json.loads(path.read_text())
+    data["created"] -= 31 * 24 * 60 * 60
+    path.write_text(json.dumps(data))
+
+    assert md._load_osm_cache() is None
+
+
+def test_mapdata_bbox_covers_all_utm_corners():
+    e, n, zn, zl = utm.from_latlon(_LAT, _LON)
+    md = MapData(
+        [np.array([[e, n], [e + 100_000, n + 100_000]]), int(zn), zl],
+        coords_type="array",
+    )
+
+    corners = [
+        utm.to_latlon(x, y, md.zone_number, md.zone_letter)
+        for x in (md.min_x, md.max_x)
+        for y in (md.min_y, md.max_y)
+    ]
+
+    assert md.min_lat == pytest.approx(min(lat for lat, _ in corners), abs=1e-8)
+    assert md.min_long == pytest.approx(min(lon for _, lon in corners), abs=1e-8)
+    assert md.max_lat == pytest.approx(max(lat for lat, _ in corners), abs=1e-8)
+    assert md.max_long == pytest.approx(max(lon for _, lon in corners), abs=1e-8)
+
+
+def test_mapdata_zone_check_ignores_band_letters():
+    e, n, zn, _ = utm.from_latlon(_LAT, _LON)
+    md = MapData([np.array([[e, n]]), int(zn), "X"], coords_type="array")
+
+    md._check_utm_zone_boundary()
+
+
+def test_mapdata_zone_check_ignores_a_latitude_band_boundary(caplog):
+    e, n, zn, zl = utm.from_latlon(48.0, 16.0)  # bands T and U meet at 48°N
+
+    MapData([np.array([[e, n]]), int(zn), zl], coords_type="array")
+
+    assert "multiple UTM zones" not in caplog.text
+
+
+def test_create_mapdata_ignores_the_cache_by_default(tmp_path, monkeypatch, mock_overpass_client):
+    gpx = tmp_path / "map.gpx"
+    gpx.write_text('<gpx><wpt lat="50.0" lon="14.0"/><wpt lat="50.001" lon="14.001"/></gpx>')
+    (tmp_path / "map.osm_cache.json").write_text("{}")
+
+    process_map_data(str(gpx), download=True)
+
+    mock_overpass_client.query_raw.assert_called_once()
+
+
+def test_create_mapdata_resaves_to_the_loaded_file(tmp_path):
+    path = tmp_path / "map.mapdata"
+    _make_md().save(str(path))  # no source GPX: coords_file is None
+    data = json.loads(path.read_text())
+    data["stale"] = True
+    path.write_text(json.dumps(data))
+
+    process_map_data(str(path), download=False)
+
+    assert "stale" not in json.loads(path.read_text())
+
+
+def test_create_mapdata_finds_a_bare_name_in_the_demo_dir(
+    tmp_path, monkeypatch, mock_overpass_client
+):
+    (tmp_path / "data").mkdir()
+    (tmp_path / "demo").mkdir()
+    gpx = tmp_path / "demo" / "map.gpx"
+    gpx.write_text('<gpx><wpt lat="50.0" lon="14.0"/><wpt lat="50.001" lon="14.001"/></gpx>')
+    monkeypatch.setattr("map_data.utils.config.package_share", lambda d: tmp_path / d)
+    monkeypatch.chdir(tmp_path)
+
+    process_map_data("map.gpx", download=True)
+
+    assert (tmp_path / "demo" / "map.mapdata").is_file()
 
 
 def test_save_osm_cache_failure_preserves_existing_cache(tmp_path, monkeypatch):
@@ -234,7 +329,7 @@ def test_save_osm_cache_failure_preserves_existing_cache(tmp_path, monkeypatch):
     md._save_osm_cache(_EMPTY_JSON)
     monkeypatch.undo()
 
-    # The previously good cache is untouched and no temp files remain.
+    # The existing cache is untouched and no temp files remain.
     assert md._load_osm_cache() == _WAYS_JSON
     assert not list(tmp_path.glob("*.tmp"))
 

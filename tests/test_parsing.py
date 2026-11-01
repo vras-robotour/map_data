@@ -3,7 +3,8 @@ import logging
 
 import overpy
 import pytest
-from shapely.geometry import LineString
+from shapely.errors import GEOSException
+from shapely.geometry import LineString, Point, Polygon
 
 from map_data.map_data import MapData
 from map_data.utils.parsing import (
@@ -108,6 +109,54 @@ def test_parse_osm_ways_area_polygon():
     assert w.is_area
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "fence",
+        "guard_rail",
+        "kerb",
+        "handrail",
+        "cable_barrier",
+        "jersey_barrier",
+        "chain",
+        "rope",
+    ],
+)
+def test_parse_osm_ways_closed_barrier_is_a_ring(value):
+    data = _api().parse_json(
+        json.dumps(
+            {
+                "version": 0.6,
+                "elements": [
+                    {"type": "node", "id": 80, "lat": _LAT, "lon": _LON},
+                    {"type": "node", "id": 81, "lat": _LAT + 0.001, "lon": _LON},
+                    {"type": "node", "id": 82, "lat": _LAT + 0.001, "lon": _LON + 0.001},
+                    {
+                        "type": "way",
+                        "id": 113,
+                        "nodes": [80, 81, 82, 80],
+                        "tags": {"barrier": value},
+                    },
+                ],
+            }
+        )
+    )
+
+    way = parse_osm_ways(data, {})[113]
+
+    assert not way.is_area
+    assert way.line.geom_type == "LineString"
+    assert way.line.is_closed
+    # The side from the last node back to the first is blocked too.
+    (x0, y0), _, (x2, y2) = way.line.coords[:3]
+    _, _, (barrier,) = separate_ways({113: way}, {"barrier": ["*"]}, {}, {})
+    assert barrier.line.covers(Point((x0 + x2) / 2, (y0 + y2) / 2))
+
+
+def test_parse_osm_ways_of_an_area_without_ways():
+    assert parse_osm_ways(overpy.Result(), {}) == {}
+
+
 def test_parse_osm_ways_populates_nodes_cache():
     data = _api().parse_json(_FOOTWAY_JSON)
     nodes_cache = {}
@@ -190,7 +239,7 @@ def test_separate_ways_road_buffered_wider_than_footway():
 def test_parse_osm_nodes_obstacle_creates_barrier():
     data = _api().parse_json(_OBSTACLE_NODES_JSON)
     obstacle_tags = {"barrier": ["block"]}
-    barriers = parse_osm_nodes(data, {}, set(), obstacle_tags, {})
+    barriers = parse_osm_nodes(data, {}, set(), obstacle_tags, {}, {})
     assert len(barriers) == 1
     b = barriers[0]
     assert b.id == 10
@@ -202,7 +251,7 @@ def test_parse_osm_nodes_non_obstacle_excluded():
     data = _api().parse_json(_OBSTACLE_NODES_JSON)
     # Only "barrier: block" is an obstacle; node 11 has "name: bench"
     obstacle_tags = {"barrier": ["block"]}
-    barriers = parse_osm_nodes(data, {}, set(), obstacle_tags, {})
+    barriers = parse_osm_nodes(data, {}, set(), obstacle_tags, {}, {})
     assert all(b.id == 10 for b in barriers)
 
 
@@ -210,16 +259,41 @@ def test_parse_osm_nodes_way_node_id_skipped():
     data = _api().parse_json(_OBSTACLE_NODES_JSON)
     obstacle_tags = {"barrier": ["block"]}
     # node 10 is in way_node_ids → should be skipped even though it would be an obstacle
-    barriers = parse_osm_nodes(data, {}, {10}, obstacle_tags, {})
+    barriers = parse_osm_nodes(data, {}, {10}, obstacle_tags, {}, {})
     assert len(barriers) == 0
 
 
 def test_parse_osm_nodes_populates_cache():
     data = _api().parse_json(_OBSTACLE_NODES_JSON)
     nodes_cache = {}
-    parse_osm_nodes(data, nodes_cache, set(), {}, {})
+    parse_osm_nodes(data, nodes_cache, set(), {}, {}, {})
     assert 10 in nodes_cache
     assert 11 in nodes_cache
+
+
+def test_parse_osm_nodes_anti_obstacle_wins():
+    data = _api().parse_json(
+        json.dumps(
+            {
+                "version": 0.6,
+                "elements": [
+                    {
+                        "type": "node",
+                        "id": 12,
+                        "lat": _LAT,
+                        "lon": _LON,
+                        "tags": {"barrier": "gate", "access": "yes"},
+                    }
+                ],
+            }
+        )
+    )
+
+    barriers = parse_osm_nodes(
+        data, {}, set(), {"barrier": ["gate"]}, {}, {"access": ["yes"]}, 1.0, 33, "U"
+    )
+
+    assert barriers == []
 
 
 # ── combine_ways: disconnected MultiLineString ──────────────────────────────
@@ -227,12 +301,9 @@ def test_parse_osm_nodes_populates_cache():
 
 def test_combine_ways_disconnected_members_kept_unmerged():
     """
-    Ways that share an endpoint *node id* but whose geometries don't
-    actually touch (e.g. bad/duplicated OSM node coordinates) make
-    shapely.ops.linemerge return a MultiLineString instead of a single
-    LineString. combine_ways must not crash on that — it should fall back
-    to leaving the member ways unmerged rather than building a Way whose
-    `.line` is a MultiLineString.
+    Ways sharing an endpoint node id whose geometries do not touch (bad OSM
+    coordinates) make linemerge return a MultiLineString; combine_ways then
+    leaves the members unmerged instead of building a MultiLineString way.
     """
     # Node id 11 is shared, but the line geometries have a gap between them
     # so linemerge cannot join them into one continuous LineString.
@@ -255,9 +326,7 @@ def test_combine_ways_disconnected_members_kept_unmerged():
 
 # A multipolygon relation (id 200, natural=water) whose single outer member way
 # (id 104) is a closed area carrying NO tags of its own — the classifying tag
-# lives only on the relation. This is the common OSM pattern for lakes/forests
-# and is exactly what the tag-filtered Overpass ways query must still deliver
-# via relation recursion.
+# lives only on the relation, the common OSM pattern for lakes and forests.
 _MULTIPOLYGON_JSON = json.dumps(
     {
         "version": 0.6,
@@ -287,6 +356,16 @@ def test_parse_osm_rels_stamps_tags_onto_untagged_member_ways():
 
     # The relation's natural=water tag is stamped onto the (formerly untagged)
     # outer member way, and it is marked as an outer ring.
+    assert ways[104].tags.get("natural") == "water"
+    assert ways[104].in_out == "outer"
+
+
+def test_parse_osm_rels_empty_role_is_legacy_outer():
+    # An empty multipolygon member role is the legacy spelling of "outer".
+    data = _MULTIPOLYGON_JSON.replace('"role": "outer"', '"role": ""')
+    ways = _ways_from_json(data)
+    parse_osm_rels(_api().parse_json(data), ways)
+
     assert ways[104].tags.get("natural") == "water"
     assert ways[104].in_out == "outer"
 
@@ -355,12 +434,69 @@ def test_parse_osm_rels_inner_ring_cut_from_outer():
     assert ways[106].in_out == "inner"
 
 
+def test_parse_osm_rels_invalid_outer_ring_keeps_parse_alive():
+    bowtie = [
+        (0.0, 0.0),
+        (4.0, 4.0),
+        (4.0, 0.0),
+        (0.0, 4.0),
+        (0.0, 0.0),
+    ]
+    ways = {
+        140: Way(
+            id=140,
+            is_area=True,
+            nodes=[1, 2, 3, 1],
+            tags={"type": "multipolygon", "building": "yes"},
+            line=Polygon(bowtie),
+        )
+    }
+
+    parse_osm_rels(_api().parse_json(_COURTYARD_JSON), ways)
+
+    assert ways[140].line.geom_type in ("Polygon", "MultiPolygon")
+
+
+def test_parse_osm_rels_hole_failure_only_skips_holes(monkeypatch, caplog):
+    outer = Way(
+        id=141,
+        is_area=True,
+        nodes=[1, 2, 3, 1],
+        tags={"type": "multipolygon", "building": "yes"},
+        line=Polygon([(0, 0), (4, 0), (0, 4), (0, 0)]),
+    )
+    ways = {
+        141: outer,
+        142: Way(
+            id=142,
+            is_area=True,
+            nodes=[4, 5, 6, 4],
+            tags={},
+            line=Polygon([(1, 1), (2, 1), (1, 2), (1, 1)]),
+        ),
+    }
+    data = _api().parse_json(_COURTYARD_JSON)
+    data.relations[0].members = [
+        overpy.RelationWay(role="outer", ref=141),
+        overpy.RelationWay(role="inner", ref=142),
+    ]
+    monkeypatch.setattr(
+        "map_data.utils.parsing.unary_union",
+        lambda holes: (_ for _ in ()).throw(GEOSException("bad")),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="map_data.utils.parsing"):
+        parse_osm_rels(data, ways)
+
+    assert ways[141].line.equals(Polygon([(0, 0), (4, 0), (0, 4), (0, 0)]))
+    assert "Could not subtract holes" in caplog.text
+
+
 # ── parse_osm_rels: merged members not classified twice ─────────────────────
 
 
-# Two barrier-tagged member ways that merge into one relation way. Before the
-# fix the consumed members stayed in the ways dict and separate_ways emitted
-# the barrier geometry twice (members + merged way).
+# Two barrier-tagged outer members of one multipolygon relation. Tagged members
+# are not merged, so each must come out of separate_ways exactly once.
 _TAGGED_MEMBER_REL_JSON = json.dumps(
     {
         "version": 0.6,
@@ -393,6 +529,33 @@ _TAGGED_MEMBER_REL_JSON = json.dumps(
     },
 )
 
+_MIXED_MEMBER_REL_JSON = json.dumps(
+    {
+        "version": 0.6,
+        "elements": [
+            {"type": "node", "id": 70, "lat": _LAT, "lon": _LON},
+            {"type": "node", "id": 71, "lat": _LAT + 0.001, "lon": _LON},
+            {"type": "node", "id": 72, "lat": _LAT + 0.002, "lon": _LON},
+            {
+                "type": "way",
+                "id": 130,
+                "nodes": [70, 71],
+                "tags": {"highway": "footway", "access": "no"},
+            },
+            {"type": "way", "id": 131, "nodes": [71, 72]},
+            {
+                "type": "relation",
+                "id": 303,
+                "members": [
+                    {"type": "way", "ref": 130, "role": "outer"},
+                    {"type": "way", "ref": 131, "role": "outer"},
+                ],
+                "tags": {"type": "multipolygon", "natural": "water"},
+            },
+        ],
+    }
+)
+
 
 def test_parse_osm_rels_merged_members_not_classified_twice():
     ways = _ways_from_json(_TAGGED_MEMBER_REL_JSON)
@@ -400,16 +563,40 @@ def test_parse_osm_rels_merged_members_not_classified_twice():
 
     _, _, barriers = separate_ways(ways, {"barrier": ["*"]}, {}, {})
 
-    # Only the merged relation way remains — no duplicated member geometry.
-    assert len(barriers) == 1
-    assert barriers[0].id < 0
+    # Each member is one barrier, with no duplicated geometry.
+    assert sorted(w.id for w in barriers) == [107, 108]
+
+
+def test_parse_osm_rels_tagged_members_stay_separate():
+    ways = _ways_from_json(_MIXED_MEMBER_REL_JSON)
+
+    parse_osm_rels(_api().parse_json(_MIXED_MEMBER_REL_JSON), ways)
+
+    assert ways[130].tags == {"highway": "footway", "access": "no"}
+    assert ways[130].in_out == "outer"
+    assert ways[131].tags == {"type": "multipolygon", "natural": "water"}
+    assert ways[131].in_out == "outer"
+
+
+def test_parse_osm_rels_empty_role_boundary_members_are_ignored():
+    ways = _ways_from_json(_MIXED_MEMBER_REL_JSON)
+    data = _api().parse_json(_MIXED_MEMBER_REL_JSON)
+    data.relations[0].tags["type"] = "boundary"
+    data.relations[0].members[0].role = ""
+    data.relations[0].members[1].role = ""
+
+    parse_osm_rels(data, ways)
+
+    assert ways[130].in_out == ""
+    assert ways[131].in_out == ""
+    assert ways[131].tags == {}
 
 
 # ── parse_osm_rels: route relations are not merged ──────────────────────────
 
 
-# A hiking route over two footways, one of them a bridge. Merging it as if it
-# were a multipolygon produced one way with both ways' tags, bridge=yes included.
+# A hiking route over two footways, one of them a bridge. Merged like a
+# multipolygon, it would become one way carrying bridge=yes along its whole length.
 _ROUTE_REL_JSON = json.dumps(
     {
         "version": 0.6,
@@ -456,9 +643,10 @@ _DEGENERATE_WAYS_JSON = json.dumps(
             {"type": "node", "id": 50, "lat": _LAT, "lon": _LON},
             {"type": "node", "id": 51, "lat": _LAT + 0.001, "lon": _LON},
             # 1-node way: LineString would raise
-            {"type": "way", "id": 110, "nodes": [50], "tags": {"highway": "footway"}},
-            # closed 3-coordinate way [a, b, a]: Polygon would raise
-            {"type": "way", "id": 111, "nodes": [50, 51, 50], "tags": {"barrier": "wall"}},
+            {"type": "way", "id": 110, "nodes": [50, 50], "tags": {"highway": "footway"}},
+            # a degenerate closed footway: its 2 coordinates cannot form a
+            # LineString after the closing point is dropped
+            {"type": "way", "id": 111, "nodes": [50, 51, 50], "tags": {"highway": "footway"}},
             # valid way that must survive the degenerate ones
             {"type": "way", "id": 112, "nodes": [50, 51], "tags": {"highway": "footway"}},
         ],
@@ -471,8 +659,8 @@ def test_parse_osm_ways_skips_degenerate_ways(caplog):
     with caplog.at_level(logging.WARNING, logger="map_data.utils.parsing"):
         ways = parse_osm_ways(data, {})
 
-    assert 110 not in ways  # 1-node way skipped
-    assert 111 not in ways  # [a, b, a] closed way skipped
+    assert 110 not in ways  # closed two-node way skipped
+    assert 111 not in ways  # [a, b, a] closed footway skipped
     assert 112 in ways  # valid way still parsed
     assert ways[112].line.geom_type == "LineString"
     assert caplog.text.count("Skipping degenerate way") == 2

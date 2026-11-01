@@ -12,13 +12,7 @@ from map_data.utils.launch import given, resolve_config_file, way_types
 
 
 def _resolve_data_file(name: str, mapdata_path: str) -> str:
-    """Resolve a map-data filename against ``mapdata_path``.
-
-    Empty values and absolute paths are returned unchanged; a bare filename is
-    joined onto ``mapdata_path`` (the data directory) when the resulting file
-    exists, otherwise it is passed through untouched so downstream error
-    handling can report the missing file.
-    """
+    """Join a relative *name* onto ``mapdata_path`` if that file exists, else return it as is."""
     if not name:
         return name
     candidate = Path(name)
@@ -29,19 +23,15 @@ def _resolve_data_file(name: str, mapdata_path: str) -> str:
 
 
 def launch_setup(context, *args, **kwargs):
-    config_file = resolve_config_file(LaunchConfiguration("config_file").perform(context))
     osm_grid_params = resolve_config_file(LaunchConfiguration("osm_grid_params").perform(context))
 
-    # Resolve mapdata_file / gpx_file against the mapdata_path data directory
-    # when they are given as bare filenames.
     mapdata_path = LaunchConfiguration("mapdata_path").perform(context)
     mapdata_file = _resolve_data_file(
         LaunchConfiguration("mapdata_file").perform(context), mapdata_path
     )
     gpx_file = _resolve_data_file(LaunchConfiguration("gpx_file").perform(context), mapdata_path)
 
-    # Frame / placement / traversability overrides: only forwarded when set, so the
-    # yaml values apply otherwise (later parameter sources win in ROS 2).
+    # Forwarded only when set, so the yaml values apply otherwise (later sources win).
     optional_overrides = {
         **given(context, "local_frame"),
         **given(context, "utm_frame"),
@@ -51,7 +41,6 @@ def launch_setup(context, *args, **kwargs):
         **given(context, "highway_types", cast=way_types),
     }
 
-    # Define the osm_cloud node
     osm_cloud_node = Node(
         package="map_data",
         executable="osm_cloud",
@@ -60,14 +49,12 @@ def launch_setup(context, *args, **kwargs):
         respawn=True,
         respawn_delay=1.0,
         parameters=[
-            config_file,
             osm_grid_params,
             {
                 "mapdata_file": mapdata_file,
                 "gpx_file": gpx_file,
                 "grid_topic": LaunchConfiguration("grid_topic"),
-                # Always forwarded (default "auto"), so it wins over the yaml files:
-                # set it on the launch line to plan and publish on the unedited map.
+                # Always forwarded (default "auto"), so it overrides the yaml files.
                 "annotations": LaunchConfiguration("annotations"),
                 **optional_overrides,
             },
@@ -143,11 +130,6 @@ def generate_launch_description():
                 default_value="",
                 description="Way types the grid is drawn from: footway, road, or both "
                 '("footway,road"); empty = the value from osm_grid_params. Match route_planner\'s.',
-            ),
-            DeclareLaunchArgument(
-                "config_file",
-                default_value="helhest_jr.yaml",
-                description="Path or name (in config/) of the yaml file with topic names.",
             ),
             DeclareLaunchArgument(
                 "osm_grid_params",

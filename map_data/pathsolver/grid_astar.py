@@ -7,12 +7,10 @@ from collections.abc import Callable, Iterator
 import numpy as np
 from shapely.geometry import LineString
 
-from map_data.utils.config import load_config
-
 logger = logging.getLogger(__name__)
 
-_DEFAULTS = load_config("planner_defaults.yaml")
-GRID_COST_WEIGHT = _DEFAULTS.get("grid_cost_weight", 5.0)
+#: Fallback for a direct call; ReplanPath passes planner_defaults.yaml's grid_cost_weight.
+GRID_COST_WEIGHT = 5.0
 
 
 def _bresenham_cells(
@@ -49,26 +47,35 @@ def _bresenham_cells(
     yield (x1, y1)
 
 
-def grid_segment_blocked(
+def nearest_free_cell(
     grid: np.ndarray,
-    p1: np.ndarray,
-    p2: np.ndarray,
+    point: np.ndarray,
     low: tuple[float, float],
     cs: float,
-) -> bool:
+    radius: float,
+) -> np.ndarray | None:
     """
-    Return ``True`` if the world-coordinate segment *p1*→*p2* crosses a blocked cell.
-
-    The segment is rasterized onto *grid* (cell size *cs*, origin *low*) with
-    Bresenham; any traversed cell with an ``inf`` cost blocks the segment.
+    *point* if its cell is free, else the centre of the nearest finite cell within
+    *radius* metres of it, or ``None`` when every cell in reach is blocked.
     """
     ny, nx = grid.shape
-    c1 = (int(np.floor((p1[0] - low[0]) / cs)), int(np.floor((p1[1] - low[1]) / cs)))
-    c2 = (int(np.floor((p2[0] - low[0]) / cs)), int(np.floor((p2[1] - low[1]) / cs)))
-    for px, py in _bresenham_cells(c1, c2):
-        if 0 <= px < nx and 0 <= py < ny and np.isinf(grid[py, px]):
-            return True
-    return False
+    ix = int(np.floor((point[0] - low[0]) / cs))
+    iy = int(np.floor((point[1] - low[1]) / cs))
+    if 0 <= ix < nx and 0 <= iy < ny and np.isfinite(grid[iy, ix]):
+        return np.asarray(point, dtype=float)
+    r = int(np.ceil(radius / cs))
+    x0, x1 = max(ix - r, 0), min(ix + r + 1, nx)
+    y0, y1 = max(iy - r, 0), min(iy + r + 1, ny)
+    if x0 >= x1 or y0 >= y1:
+        return None
+    ys, xs = np.nonzero(np.isfinite(grid[y0:y1, x0:x1]))
+    cx = (xs + x0 + 0.5) * cs + low[0]
+    cy = (ys + y0 + 0.5) * cs + low[1]
+    d2 = (cx - point[0]) ** 2 + (cy - point[1]) ** 2
+    if not len(d2) or d2.min() > radius**2:
+        return None
+    k = int(np.argmin(d2))
+    return np.array([cx[k], cy[k]])
 
 
 def simplify_path_checked(
@@ -138,36 +145,34 @@ def grid_astar(
     low: tuple[float, float],
     cs: float,
     *,
-    simplify_path: bool = True,
     grid_cost_weight: float = GRID_COST_WEIGHT,
 ) -> np.ndarray | None:
     """
-    Optimized A* search on a 2D grid.
+    8-connected A* over a cost grid; a step costs ``length * (1 + cost * grid_cost_weight)``.
 
     Parameters
     ----------
     grid : np.ndarray
-        2D grid of costs (Y, X). ``inf`` means blocked.
+        ``(Y, X)`` cell costs, ``inf`` is blocked.
     start_utm : tuple or np.ndarray
-        Starting point in UTM coordinates.
+        Start coordinates (easting, northing) in UTM.
     goal_utm : tuple or np.ndarray
-        Goal point in UTM coordinates.
-    low : tuple
-        ``(min_x, min_y)`` of the grid in UTM metres.
+        Goal coordinates (easting, northing) in UTM.
+    low : tuple of float
+        ``(min_x, min_y)`` of the grid in UTM.
     cs : float
-        Cell size of the grid in metres.
-    simplify_path : bool
-        Whether to simplify the resulting path with Douglas-Peucker.
+        Cell size (m).
+    grid_cost_weight : float, optional
+        Weight multiplier for non-zero cell costs (default 5.0).
 
     Returns
     -------
     np.ndarray or None
-        Found path as UTM coordinate array, or ``None`` if no path exists.
+        Path of cell centers in world coordinates, or ``None`` if there is none.
 
     """
     ny, nx = grid.shape
 
-    # Convert UTM to grid indices
     def to_idx(p: tuple[float, float] | np.ndarray) -> tuple[int, int]:
         ix = int(np.floor((p[0] - low[0]) / cs))
         iy = int(np.floor((p[1] - low[1]) / cs))
@@ -186,104 +191,135 @@ def grid_astar(
     if start_ix == goal_ix and start_iy == goal_iy:
         return np.array([start_utm, goal_utm])
 
-    # Pre-calculate costs and pad with infinity to avoid boundary checks
-    # grid is assumed to be 0.0 near paths, 1.0 away from paths.
-    # Base traversal cost is 1.0 + grid_value * grid_cost_weight
-    costs = 1.0 + grid * grid_cost_weight
-    padded_costs = np.full((ny + 2, nx + 2), np.inf, dtype=np.float32)
-    padded_costs[1:-1, 1:-1] = costs
-
-    # Flattened grid size with padding
+    # Pad with inf so neighbour lookups need no bounds checks. Cells are numbered
+    # column-major, (ix + 1) * p_ny + (iy + 1), so ordering by the flat index breaks
+    # heap ties by (ix, iy).
     p_nx = nx + 2
     p_ny = ny + 2
+    padded_costs = np.full((p_nx, p_ny), np.inf, dtype=np.float32)
+    padded_costs[1:-1, 1:-1] = (1.0 + grid * grid_cost_weight).T
+    flat_costs = padded_costs.ravel().tolist()
+    # A diagonal step's cost, sqrt(2) * cost, as float32 like every g score below.
+    diag_costs = array.array("f", (np.float32(math.sqrt(2)) * padded_costs).tobytes())
+    # Straight-line heuristic of every cell, in cells.
+    hx = (np.arange(p_nx) - 1 - goal_ix) ** 2
+    hy = (np.arange(p_ny) - 1 - goal_iy) ** 2
+    heuristic = array.array("d", np.sqrt((hx[:, None] + hy[None, :]).astype(float)).tobytes())
 
-    # Plain Python floats: numpy scalar arithmetic dominates this inner loop.
-    # The costs are float32, and every g score is rounded back to float32 through
-    # _f32 so the expansion order (and the path) stays bit-identical to the
-    # previous all-numpy version.
+    # Plain Python floats: numpy scalar arithmetic would dominate this inner loop.
+    # Every g score is still rounded to float32 through _f32, so the expansion
+    # order matches float32 arithmetic on the float32 costs.
     _f32 = array.array("f", [0.0])
     g_scores = array.array("f", [math.inf]) * (p_ny * p_nx)
-    parents = np.full(p_ny * p_nx, -1, dtype=np.int32)
+    parents = array.array("i", [-1]) * (p_ny * p_nx)
 
-    start_flat = (start_iy + 1) * p_nx + (start_ix + 1)
-    goal_flat = (goal_iy + 1) * p_nx + (goal_ix + 1)
+    start_flat = (start_ix + 1) * p_ny + (start_iy + 1)
+    goal_flat = (goal_ix + 1) * p_ny + (goal_iy + 1)
     g_scores[start_flat] = 0.0
 
-    # Priority queue: (f_score, g_score, ix, iy)
-    h0 = math.sqrt((start_ix - goal_ix) ** 2 + (start_iy - goal_iy) ** 2)
-    pq = [(h0, 0.0, start_ix, start_iy)]
-
-    # Neighbor offsets in flattened padded grid (dy * p_nx + dx, dist, ortho_offsets).
-    # For diagonal moves, ortho_offsets are the two edge-adjacent cells the move
-    # passes between; both must be traversable so the path cannot cut through
-    # the corner where two blocked cells touch diagonally.
-    neighbors_data = []
-    for dy in [-1, 0, 1]:
-        for dx in [-1, 0, 1]:
-            if dx == 0 and dy == 0:
-                continue
-            ortho_offsets = (dy * p_nx, dx) if dx != 0 and dy != 0 else ()
-            dist = float(np.float32(math.sqrt(dx**2 + dy**2)))
-            neighbors_data.append((dy * p_nx + dx, dist, ortho_offsets))
-
-    flat_costs = padded_costs.ravel().tolist()
+    # Priority queue: (f_score, g_score, flat index)
+    pq = [(heuristic[start_flat], 0.0, start_flat)]
+    inf = math.inf
+    heappush, heappop = heapq.heappush, heapq.heappop
 
     while pq:
-        _f, g_pushed, ix, iy = heapq.heappop(pq)
+        _f, g_pushed, u = heappop(pq)
 
-        u_flat = (iy + 1) * p_nx + (ix + 1)
-        if g_scores[u_flat] < g_pushed - 1e-4:
+        g = g_scores[u]
+        if g < g_pushed - 1e-4:
             continue
 
-        if u_flat == goal_flat:
-            # Path found, reconstruct
+        if u == goal_flat:
             path_indices = []
-            curr = u_flat
+            curr = u
             while curr != -1:
-                c_iy, c_ix = divmod(curr, p_nx)
+                c_ix, c_iy = divmod(curr, p_ny)
                 path_indices.append((c_ix - 1, c_iy - 1))
                 curr = parents[curr]
             path_indices.reverse()
 
-            # Convert back to UTM (cell centers, matching the grid's
-            # cell-center sampling convention)
+            # Cell centers, matching the grid's sampling convention.
             path = np.array(
                 [[(ix + 0.5) * cs + low[0], (iy + 0.5) * cs + low[1]] for ix, iy in path_indices],
             )
-
-            # Simplify path, collision-checking every shortcut against the grid
-            if simplify_path and len(path) > 2:
-                path = simplify_path_checked(
-                    path,
-                    cs / 2.0,
-                    lambda p1, p2: grid_segment_blocked(grid, p1, p2, low, cs),
-                )
             return path
 
-        current_g = g_scores[u_flat]
-
-        for offset, dist, ortho_offsets in neighbors_data:
-            v_flat = u_flat + offset
-            cost_val = flat_costs[v_flat]
-
-            if cost_val == math.inf:
-                continue
-
-            # Diagonal moves must not slip between two corner-touching
-            # blocked cells: both edge-adjacent cells have to be free.
-            if ortho_offsets:
-                o1, o2 = ortho_offsets
-                if flat_costs[u_flat + o1] == math.inf or flat_costs[u_flat + o2] == math.inf:
-                    continue
-
-            _f32[0] = dist * cost_val
-            _f32[0] = current_g + _f32[0]
+        down, up, left, right = u - 1, u + 1, u - p_ny, u + p_ny
+        c_down, c_up = flat_costs[down], flat_costs[up]
+        c_left, c_right = flat_costs[left], flat_costs[right]
+        # Rounding to float32 is monotonic: a step that is no shorter in float64 cannot
+        # be shorter rounded, which skips the rounding for most (already reached) cells.
+        # An inf cost fails the first test on its own.
+        # Unrolled: a loop over the eight neighbours costs ~10% of the search.
+        if g + c_down < g_scores[down]:
+            _f32[0] = g + c_down
             new_g = _f32[0]
-            if new_g < g_scores[v_flat]:
-                g_scores[v_flat] = new_g
-                parents[v_flat] = u_flat
-                v_iy, v_ix = divmod(v_flat, p_nx)
-                h = math.sqrt((v_ix - 1 - goal_ix) ** 2 + (v_iy - 1 - goal_iy) ** 2)
-                heapq.heappush(pq, (new_g + h, new_g, v_ix - 1, v_iy - 1))
+            if new_g < g_scores[down]:
+                g_scores[down] = new_g
+                parents[down] = u
+                heappush(pq, (new_g + heuristic[down], new_g, down))
+        if g + c_up < g_scores[up]:
+            _f32[0] = g + c_up
+            new_g = _f32[0]
+            if new_g < g_scores[up]:
+                g_scores[up] = new_g
+                parents[up] = u
+                heappush(pq, (new_g + heuristic[up], new_g, up))
+        if g + c_left < g_scores[left]:
+            _f32[0] = g + c_left
+            new_g = _f32[0]
+            if new_g < g_scores[left]:
+                g_scores[left] = new_g
+                parents[left] = u
+                heappush(pq, (new_g + heuristic[left], new_g, left))
+        if g + c_right < g_scores[right]:
+            _f32[0] = g + c_right
+            new_g = _f32[0]
+            if new_g < g_scores[right]:
+                g_scores[right] = new_g
+                parents[right] = u
+                heappush(pq, (new_g + heuristic[right], new_g, right))
+        # Diagonal moves must not slip between two corner-touching blocked
+        # cells: both edge-adjacent cells have to be free.
+        if c_left != inf and c_down != inf:
+            v = left - 1
+            cost = diag_costs[v]
+            if g + cost < g_scores[v]:
+                _f32[0] = g + cost
+                new_g = _f32[0]
+                if new_g < g_scores[v]:
+                    g_scores[v] = new_g
+                    parents[v] = u
+                    heappush(pq, (new_g + heuristic[v], new_g, v))
+        if c_left != inf and c_up != inf:
+            v = left + 1
+            cost = diag_costs[v]
+            if g + cost < g_scores[v]:
+                _f32[0] = g + cost
+                new_g = _f32[0]
+                if new_g < g_scores[v]:
+                    g_scores[v] = new_g
+                    parents[v] = u
+                    heappush(pq, (new_g + heuristic[v], new_g, v))
+        if c_right != inf and c_down != inf:
+            v = right - 1
+            cost = diag_costs[v]
+            if g + cost < g_scores[v]:
+                _f32[0] = g + cost
+                new_g = _f32[0]
+                if new_g < g_scores[v]:
+                    g_scores[v] = new_g
+                    parents[v] = u
+                    heappush(pq, (new_g + heuristic[v], new_g, v))
+        if c_right != inf and c_up != inf:
+            v = right + 1
+            cost = diag_costs[v]
+            if g + cost < g_scores[v]:
+                _f32[0] = g + cost
+                new_g = _f32[0]
+                if new_g < g_scores[v]:
+                    g_scores[v] = new_g
+                    parents[v] = u
+                    heappush(pq, (new_g + heuristic[v], new_g, v))
 
     return None

@@ -1,19 +1,19 @@
 ## Description
 
-Provide a brief summary of the changes.
+What changed and why.
 
-## Related Issue
+## Related issue
 
-Fixes # (issue number)
+Fixes #
 
-## Testing Performed
+## Testing
 
-Briefly describe how you tested this (e.g., ran `pytest`, tested in the viewer app, ran via ROS2 launch).
+How you tested it (`uv run python -m pytest`, the viewer, a ROS 2 launch, `scripts/ros_smoke.sh`).
 
 ## Checklist
 
-- [ ] My code follows the style guidelines of this project
-- [ ] I have performed a self-review of my own code
-- [ ] I have added tests that prove my fix is effective or that my feature works
-- [ ] Existing tests (`pytest`) pass locally
-- [ ] I have updated the documentation (`docs/`) accordingly
+- [ ] `uv run pre-commit run --all-files` passes (ruff, mypy)
+- [ ] `uv run python -m pytest` passes; new code has tests (CI enforces 72 % coverage)
+- [ ] `uv.lock` is updated if dependencies changed
+- [ ] Docs (`docs/`) updated; `uv run mkdocs build --strict` passes
+- [ ] Changelog *Unreleased* section updated

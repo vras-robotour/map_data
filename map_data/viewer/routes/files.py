@@ -4,7 +4,6 @@ import copy
 import io
 import json
 import logging
-import os
 import re
 import tempfile
 import threading
@@ -27,21 +26,19 @@ from flask import (
 from flask.typing import ResponseReturnValue
 from werkzeug.exceptions import HTTPException
 
-from map_data.annotations import apply_way_edits
+from map_data.annotations import apply_way_and_tag_edits
+from map_data.edits import load_annotations
 from map_data.map_data import MapData
 from map_data.utils.serialization import map_data_to_dict
 
 from ..cache import load_mapdata_cached, mapdata_geojson_cached
-from ..helpers import (
-    load_annotations,
-    mapdata_to_geojson,
-)
+from ..helpers import mapdata_to_geojson
 from .common import (
     MAX_FETCH_AREA_KM2,
     _annotation_path,
-    _apply_tag_override,
     _bbox_area_km2,
     _get_data_dir,
+    _json_object,
     _mapdata_path,
     _require_args,
     _validated_bbox,
@@ -54,14 +51,8 @@ logger = logging.getLogger(__name__)
 
 @bp.route("/")
 def index() -> str:
-    """Render the viewer's single-page HTML shell, injecting tile-provider API keys."""
-    api_key_thunderforest = os.getenv("THUNDERFOREST_API_KEY")
-    api_key_seznam = os.getenv("SEZNAM_API_KEY")
-    return render_template(
-        "index.html",
-        apikey_thunderforest=api_key_thunderforest,
-        apikey_seznam=api_key_seznam,
-    )
+    """Render the viewer's single-page HTML shell."""
+    return render_template("index.html")
 
 
 @bp.route("/api/files")
@@ -93,61 +84,26 @@ def _merged_mapdata_geojson(path: Path, store: dict[str, Any]) -> dict[str, Any]
     """
     Build the ``/api/mapdata`` FeatureCollection for a mapdata *path* edited by *store*.
 
-    Loads the cached ``MapData``, takes a shallow ``copy.copy`` (see the
-    :mod:`~map_data.viewer.routes.common` docstring's "MapData copy semantics" section -- this is
-    safe because :func:`apply_way_edits` never mutates a ``Way`` object shared
-    with the cache), applies deletions/splits/moves via
-    :func:`apply_way_edits`, converts to GeoJSON, and finally merges in
-    any tag overrides (re-deriving each affected feature's ``road``/
-    ``footway`` category from the merged ``highway`` tag).
-
-    Split out of :func:`get_mapdata` so that all of it -- the copy, the
-    re-applied edits and the rebuild -- sits behind the one call to
-    :func:`~map_data.viewer.cache.mapdata_geojson_cached`.
+    Way edits and tag overrides only; freehand annotations are drawn by the
+    client. A shallow copy of the cached map suffices: both passes rebind
+    the map's attributes and never mutate a shared ``Way``.
     """
     map_data = copy.copy(load_mapdata_cached(str(path)))
 
-    apply_way_edits(map_data, store)
-
-    geojson = mapdata_to_geojson(map_data)
-    tag_overrides = store.get("tag_overrides", {})
-    if tag_overrides:
-        for f in geojson["features"]:
-            ov = tag_overrides.get(str(f["properties"].get("id", "")))
-            if ov:
-                f["properties"]["tags"], f["properties"]["category"] = _apply_tag_override(
-                    f["properties"].get("tags") or {},
-                    ov,
-                    f["properties"].get("category"),
-                )
-    return geojson
+    apply_way_and_tag_edits(map_data, store)
+    return mapdata_to_geojson(map_data)
 
 
 @bp.route("/api/mapdata")
 def get_mapdata() -> ResponseReturnValue:
     """
-    Return a mapdata file, with the user's recorded edits applied, as GeoJSON.
+    Return a mapdata file, with its way edits applied, as a GeoJSON FeatureCollection.
 
-    The document is built by :func:`_merged_mapdata_geojson` and cached,
-    already serialized, by :func:`~map_data.viewer.cache.mapdata_geojson_cached`
-    under the map file's signature and the annotation store's digest -- so
-    panning around an unchanged map costs a stat and a store read, not
-    another ``parse_intersections`` plus FeatureCollection rebuild. The
-    same key doubles as the ``ETag``: a client that sends it back in
-    ``If-None-Match`` gets a 304 and no body at all.
-
-    Returns
-    -------
-    Response
-        A GeoJSON ``FeatureCollection`` (see
-        :func:`~map_data.viewer.helpers.mapdata_to_geojson`), or 304 if the
-        client's copy is still current.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing. 404 if the file doesn't exist.
-
+    Query: ``file``. The serialized document is cached by
+    :func:`~map_data.viewer.cache.mapdata_geojson_cached` under the map's
+    signature and the store's digest, which is also the ``ETag``: a matching
+    ``If-None-Match`` gets a 304. 400 if ``file`` is missing, 404 if the file
+    doesn't exist.
     """
     filename = _require_args("file")
     path = _mapdata_path(filename)
@@ -165,7 +121,44 @@ def get_mapdata() -> ResponseReturnValue:
     return resp.make_conditional(request)
 
 
+# Paths picked by a running fetch or GPX upload that has not written its map yet.
+_reserved_paths: set[Path] = set()
+_reserved_paths_lock = threading.Lock()
+
+
+def _free_mapdata_path(data_dir: Path, stem: str, *, reserve: bool = False) -> Path:
+    """
+    Return ``<stem>.mapdata`` in *data_dir*, or ``<stem>_1.mapdata``, ``_2``, ... if taken.
+
+    A name is taken by an existing map, a leftover annotation store (which
+    would otherwise be applied to the new map) or a path in
+    :data:`_reserved_paths`. With *reserve*, the returned path is added there;
+    the caller must discard it once the map is written or abandoned.
+    """
+    dest, counter = data_dir / f"{stem}.mapdata", 1
+    with _reserved_paths_lock:
+        while (
+            dest.exists()
+            or (data_dir / f"{dest.stem}.annotations.json").exists()
+            or dest in _reserved_paths
+        ):
+            dest = data_dir / f"{stem}_{counter}.mapdata"
+            counter += 1
+        if reserve:
+            _reserved_paths.add(dest)
+    return dest
+
+
+def _release_mapdata_path(path: Path) -> None:
+    """Drop *path* from :data:`_reserved_paths` (no-op if absent)."""
+    with _reserved_paths_lock:
+        _reserved_paths.discard(path)
+
+
 _fetch_tasks: dict[str, dict[str, Any]] = {}
+
+# Overpass fetches (fetch_area threads and upload_gpx) running at once; more answer 429.
+_overpass_slots = threading.BoundedSemaphore(2)
 
 #: How long a terminal ("done"/"failed") fetch task is retained, in seconds,
 #: before it is evicted -- either by a poll in :func:`fetch_area_status` or by
@@ -175,14 +168,10 @@ FETCH_TASK_RETENTION_S = 60.0
 
 def _stamp_or_evict_if_stale(task_id: str, task: dict[str, Any], now: float) -> None:
     """
-    Stamp a terminal task's retention clock, or evict it once expired.
+    Stamp a terminal task's ``completed_at``, or evict it once it is older than the retention.
 
-    A non-terminal *task* is never touched. A terminal one without a
-    ``completed_at`` yet gets stamped with *now*, starting its retention
-    clock; once more than :data:`FETCH_TASK_RETENTION_S` has passed since
-    then, it's popped from ``_fetch_tasks`` -- though *task* itself (the
-    caller's reference) is left intact, so a caller that already holds it
-    can still return its final state this one last time.
+    Non-terminal tasks are left alone. Eviction only pops it from
+    ``_fetch_tasks``, so a caller holding *task* can still return it once.
     """
     if task.get("status") not in ("done", "failed"):
         return
@@ -209,16 +198,8 @@ def _query_parse_save(
     """
     Query Overpass, parse the result into *md*, and save it to *out_path*.
 
-    Shared by :func:`_run_fetch_task` (async, progress-reporting) and
-    :func:`upload_gpx` (synchronous, no progress reporting).
-
-    Parameters
-    ----------
-    progress_cb : callable, optional
-        Passed through to ``md.run_queries``.
-    on_parse_start : callable, optional
-        Called (with no arguments) once querying succeeds, before parsing
-        starts.
+    *progress_cb* goes to ``md.run_queries``; *on_parse_start* is called
+    once querying succeeds.
 
     Returns
     -------
@@ -248,64 +229,17 @@ def _query_parse_save(
     }
 
 
-def _run_fetch_task(
-    task_id: str,
-    waypoints: Any,
-    zone_number: Any,
-    zone_letter: Any,
-    out_path: Path,
-    grid_margin: Any,
-    obstacle_radius: Any,
-    buffer_widths: Any,
-) -> None:
+def _run_fetch_task(task_id: str, md: MapData, out_path: Path) -> None:
     """
-    Download, parse, and save OSM data for a bounding box, in a background thread.
+    Fetch, parse, and save OSM data for a bounding box; the target of :func:`fetch_area`'s thread.
 
-    Run via a daemon ``threading.Thread`` started by :func:`fetch_area`
-    (which returns immediately with a task ID); progress and the outcome
-    are recorded in the module-level ``_fetch_tasks`` dict, keyed by
-    *task_id*, for :func:`fetch_area_status` to poll. Any exception is
-    caught, logged, and reported as a generic "Internal server error"
-    task failure rather than propagating (there is no request context to
-    propagate it to).
-
-    Parameters
-    ----------
-    task_id : str
-        Key into ``_fetch_tasks`` to update with progress/results.
-    waypoints : np.ndarray
-        ``(4, 2)`` array of UTM easting/northing corner coordinates
-        defining the query bounding box.
-    zone_number : int
-        UTM zone number of *waypoints*.
-    zone_letter : str
-        UTM zone letter of *waypoints*.
-    out_path : Path
-        Destination ``.mapdata`` file path.
-    grid_margin : float or None
-        Passed through to :class:`~map_data.map_data.MapData`.
-    obstacle_radius : float or None
-        Passed through to :class:`~map_data.map_data.MapData`.
-    buffer_widths : dict or None
-        Passed through to :class:`~map_data.map_data.MapData`.
-
-    Side Effects
-    ------------
-    Writes *out_path* on success. Updates ``_fetch_tasks[task_id]`` as work
-    progresses: ``"querying"`` (plus a ``"detail"`` string naming the
-    Overpass mirror/attempt in flight) while the Overpass request is out,
-    then ``"parsing"``, then a terminal ``"failed"`` (plus an ``"error"``
-    message) or ``"done"`` (plus a ``"result"`` summary).
-
+    *md* is the unqueried map of the box. Progress goes to
+    ``_fetch_tasks[task_id]``: ``"querying"`` (with a ``"detail"``),
+    ``"parsing"``, then ``"done"`` (with ``"result"``) or ``"failed"`` (with
+    ``"error"``). Exceptions are recorded as failures, never raised: there is
+    no request to report them to.
     """
     try:
-        md = MapData(
-            (waypoints, zone_number, zone_letter),
-            coords_type="array",
-            grid_margin=grid_margin,
-            obstacle_radius=obstacle_radius,
-            buffer_widths=buffer_widths,
-        )
 
         def _report(detail: str) -> None:
             _fetch_tasks[task_id] = {"status": "querying", "detail": detail}
@@ -324,27 +258,24 @@ def _run_fetch_task(
     except Exception:
         logger.exception("fetch task %s failed", task_id)
         _fetch_tasks[task_id] = {"status": "failed", "error": "Internal server error"}
+    finally:
+        _release_mapdata_path(out_path)
+        _overpass_slots.release()
 
 
 @bp.route("/api/fetch_area", methods=["POST"])
 def fetch_area() -> Response:
     """
-    Start an async OSM fetch-and-parse job for a lat/lon bounding box.
-
-    Validates and sanitizes the request, computes the UTM bounding box,
-    and starts :func:`_run_fetch_task` in a background thread; the
-    response returns immediately with a task ID for
-    :func:`fetch_area_status` to poll.
+    Start a background OSM fetch for a lat/lon bounding box; poll :func:`fetch_area_status`.
 
     Parameters (JSON body)
     -----------------------
     min_lat, min_lon, max_lat, max_lon : float
-        Bounding box corners (WGS84 degrees); min must be strictly less
-        than max on each axis.
+        WGS84 box, min < max on each axis, at most
+        :data:`~map_data.viewer.routes.common.MAX_FETCH_AREA_KM2`.
     name : str
-        Output filename stem; sanitized to ``[A-Za-z0-9_-]`` (aborts if
-        that leaves nothing). The mapdata is saved to
-        ``<data_dir>/<name>.mapdata``.
+        Output stem, sanitized to ``[A-Za-z0-9_-]``; saved as
+        ``<name>.mapdata`` or the next free name (:func:`_free_mapdata_path`).
     grid_margin, obstacle_radius, buffer_widths : optional
         Passed through to :class:`~map_data.map_data.MapData`.
 
@@ -356,11 +287,11 @@ def fetch_area() -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if a required field is missing, a corner isn't a finite in-range number,
-        the box is degenerate/inverted, or ``name`` sanitizes to empty.
+        400 if a field is missing or invalid, the box is too large, or
+        ``name`` sanitizes to empty. 429 if two Overpass fetches already run.
 
     """
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     for field in ("min_lat", "min_lon", "max_lat", "max_lon", "name"):
         if field not in body:
             abort(400, f"Missing field: {field}")
@@ -368,14 +299,6 @@ def fetch_area() -> Response:
     min_lat, min_lon, max_lat, max_lon = _validated_bbox(
         body["min_lat"], body["min_lon"], body["max_lat"], body["max_lon"]
     )
-
-    area_km2 = _bbox_area_km2(min_lat, min_lon, max_lat, max_lon)
-    if area_km2 > MAX_FETCH_AREA_KM2:
-        abort(
-            400,
-            f"Requested area is {area_km2:.1f} km², which exceeds the "
-            f"{MAX_FETCH_AREA_KM2:.0f} km² limit for a single fetch. Draw a smaller area.",
-        )
 
     name = re.sub(r"[^a-zA-Z0-9_\-]", "_", str(body["name"]).strip())
     if not name:
@@ -387,7 +310,6 @@ def fetch_area() -> Response:
 
     data_dir = _get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
-    out_path = data_dir / f"{name}.mapdata"
 
     corners = np.array(
         [
@@ -398,55 +320,55 @@ def fetch_area() -> Response:
         ],
     )
     easting, northing, zone_number, zone_letter = utm.from_latlon(corners[:, 0], corners[:, 1])
-    waypoints = np.column_stack([easting, northing])
+    try:
+        md = MapData(
+            (np.column_stack([easting, northing]), zone_number, zone_letter),
+            coords_type="array",
+            grid_margin=grid_margin,
+            obstacle_radius=obstacle_radius,
+            buffer_widths=buffer_widths,
+        )
+    except (TypeError, ValueError) as e:
+        abort(400, f"Invalid parse options: {e}")
+    # The download is the box plus grid_margin, so the limit applies to that.
+    area_km2 = _bbox_area_km2(md.min_lat, md.min_long, md.max_lat, md.max_long)
+    if area_km2 > MAX_FETCH_AREA_KM2:
+        abort(
+            400,
+            f"Requested area with its margin is {area_km2:.1f} km², which exceeds the "
+            f"{MAX_FETCH_AREA_KM2:.0f} km² limit for a single fetch. Draw a smaller area.",
+        )
 
-    # Evict stale terminal tasks here too, so ones whose client never polled them
-    # to completion (what normally evicts them, in fetch_area_status) can't pile up.
+    if not _overpass_slots.acquire(blocking=False):
+        abort(429, "Too many OSM fetches running, try again later")
+    # Also evict here, or tasks whose client stopped polling would pile up.
     now = time.time()
     for stale_id, task in list(_fetch_tasks.items()):
         _stamp_or_evict_if_stale(stale_id, task, now)
     task_id = str(uuid.uuid4())
     _fetch_tasks[task_id] = {"status": "pending"}
-    threading.Thread(
-        target=_run_fetch_task,
-        args=(
-            task_id,
-            waypoints,
-            zone_number,
-            zone_letter,
-            out_path,
-            grid_margin,
-            obstacle_radius,
-            buffer_widths,
-        ),
-        daemon=True,
-    ).start()
+    # Reserved, as the map is only written when the background task finishes.
+    out_path = _free_mapdata_path(data_dir, name, reserve=True)
+    try:
+        threading.Thread(
+            target=_run_fetch_task,
+            args=(task_id, md, out_path),
+            daemon=True,
+        ).start()
+    except BaseException:
+        _release_mapdata_path(out_path)
+        _overpass_slots.release()
+        raise
     return jsonify({"task_id": task_id})
 
 
 @bp.route("/api/fetch_area/<task_id>", methods=["GET"])
 def fetch_area_status(task_id: str) -> Response:
     """
-    Poll the status of an async fetch job started by :func:`fetch_area`.
+    Return the task record of a :func:`fetch_area` job (see :func:`_run_fetch_task`).
 
-    Once a task reaches a terminal state (``"done"``/``"failed"``), it is
-    kept around for :data:`FETCH_TASK_RETENTION_S` seconds after first
-    being observed as terminal (to give the client a chance to see the
-    final status), then evicted from ``_fetch_tasks`` on the next poll
-    (or by the sweep :func:`fetch_area` runs on each new fetch).
-
-    Returns
-    -------
-    Response
-        JSON task record (``{"status": ..., "result": ...}`` or
-        ``{"status": ..., "error": ...}``).
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        404 if *task_id* is unknown (never existed, or was already
-        evicted after completing).
-
+    A finished task is kept for :data:`FETCH_TASK_RETENTION_S` after it is
+    first seen finished; 404 for an unknown or evicted *task_id*.
     """
     task = _fetch_tasks.get(task_id)
     if task is None:
@@ -458,38 +380,32 @@ def fetch_area_status(task_id: str) -> Response:
 @bp.route("/api/upload_gpx", methods=["POST"])
 def upload_gpx() -> Response:
     """
-    Upload a GPX track, fetch its surrounding OSM data, parse, and save it.
+    Build and save a map around an uploaded GPX track, synchronously.
 
-    Synchronous (unlike :func:`fetch_area`'s background-thread version):
-    the GPX is saved to a temp directory (never persisted in the data
-    directory), a :class:`~map_data.map_data.MapData` is built from it,
-    Overpass is queried and parsed, and the result is saved as
-    ``<name>.mapdata``. The temp directory is always removed afterward.
+    The GPX itself is only kept in a temp directory. The map is saved as
+    ``<name>.mapdata`` or the next free name (:func:`_free_mapdata_path`).
 
     Parameters (multipart form)
     -----------------------------
     file : file
         The GPX track.
     name : str, optional
-        Output filename stem; sanitized to ``[A-Za-z0-9_-]``. Defaults to
-        the uploaded file's stem if omitted.
+        Output stem, sanitized to ``[A-Za-z0-9_-]``; default the upload's stem.
     options : str, optional
-        JSON-encoded dict with optional ``grid_margin``,
-        ``obstacle_radius``, ``buffer_widths`` keys, passed through to
-        :class:`~map_data.map_data.MapData`.
+        JSON object with optional ``grid_margin``, ``obstacle_radius`` and
+        ``buffer_widths``, passed through to :class:`~map_data.map_data.MapData`.
 
     Returns
     -------
     Response
-        JSON summary: ``{"filename", "roads", "footways", "barriers",
-        "crossroads"}`` (counts of parsed ways/crossroads).
+        JSON ``{"filename", "roads", "footways", "barriers", "crossroads"}``.
 
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if no file/empty filename, or ``name`` sanitizes to empty.
-        503 if the Overpass API is unreachable. 500 if parsing fails or
-        an unexpected error occurs.
+        400 if the file, ``name`` or ``options`` is invalid or the area is
+        too large. 429 if two Overpass fetches already run. 503 if Overpass is
+        unreachable. 500 if parsing fails or on an unexpected error.
 
     """
     if "file" not in request.files:
@@ -506,7 +422,12 @@ def upload_gpx() -> Response:
     if not name:
         abort(400, "name is empty after sanitizing")
 
-    parse_opts = json.loads(request.form.get("options", "{}"))
+    try:
+        parse_opts = json.loads(request.form.get("options", "{}"))
+    except ValueError:
+        abort(400, "options must be JSON")
+    if not isinstance(parse_opts, dict):
+        abort(400, "options must be a JSON object")
     grid_margin = parse_opts.get("grid_margin")
     obstacle_radius = parse_opts.get("obstacle_radius")
     buffer_widths = parse_opts.get("buffer_widths")
@@ -514,7 +435,6 @@ def upload_gpx() -> Response:
     data_dir = _get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Use a temporary directory to avoid saving the GPX to the data directory
     with tempfile.TemporaryDirectory() as tmp_dir:
         gpx_tmp_path = Path(tmp_dir) / "upload.gpx"
         file.save(gpx_tmp_path)
@@ -527,9 +447,6 @@ def upload_gpx() -> Response:
                 obstacle_radius=obstacle_radius,
                 buffer_widths=buffer_widths,
             )
-            # Restore the original filename for metadata purposes
-            md.coords_file = file.filename
-
             area_km2 = _bbox_area_km2(md.min_lat, md.min_long, md.max_lat, md.max_long)
             if area_km2 > MAX_FETCH_AREA_KM2:
                 abort(
@@ -538,12 +455,19 @@ def upload_gpx() -> Response:
                     f"{MAX_FETCH_AREA_KM2:.0f} km² limit for a single fetch.",
                 )
 
-            out_path = data_dir / f"{name}.mapdata"
+            if not _overpass_slots.acquire(blocking=False):
+                abort(429, "Too many OSM fetches running, try again later")
+            out_path = _free_mapdata_path(data_dir, name, reserve=True)
+            # MapData caches the OSM response next to coords_file: keep it beside the map
+            md.coords_file = str(out_path.with_suffix(".gpx"))
             try:
                 result = _query_parse_save(md, out_path)
             except _FetchFailed as e:
                 logger.warning("GPX upload fetch failed at %s: %s", e.stage, e)
                 abort(503 if e.stage == "query" else 500, str(e))
+            finally:
+                _release_mapdata_path(out_path)
+                _overpass_slots.release()
 
             return jsonify(result)
         except Exception as e:
@@ -556,25 +480,13 @@ def upload_gpx() -> Response:
 @bp.route("/api/upload_mapdata", methods=["POST"])
 def upload_mapdata() -> Response:
     """
-    Upload a pre-built ``.mapdata`` file to the data directory.
+    Save an uploaded ``.mapdata`` file to the data directory.
 
-    Saves the upload under its original basename, disambiguating with a
-    ``_1``, ``_2``, ... suffix if a file of that name already exists, then
-    validates it by attempting to load it; an unloadable file is deleted
-    again rather than left behind.
-
-    Returns
-    -------
-    Response
-        JSON ``{"filename": ...}`` (the name actually saved under, which
-        may differ from the upload's name if disambiguated).
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if no file was given or it doesn't have a ``.mapdata``
-        extension, or if it fails to load as a valid ``MapData`` file.
-
+    Saved as ``<stem>.mapdata`` (lower-case extension, as the file list matches it
+    case-sensitively) or the next free name (:func:`_free_mapdata_path`);
+    it is validated under a temp name, so an unloadable file never appears in the
+    list. Returns ``{"filename": ...}``, the name saved under; 400 for a missing,
+    misnamed or unloadable file.
     """
     if "file" not in request.files:
         abort(400, "No file part")
@@ -585,22 +497,19 @@ def upload_mapdata() -> Response:
     data_dir = _get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    safe_name = Path(file.filename).name
-    dest = data_dir / safe_name
-    stem, suffix = dest.stem, dest.suffix
-    counter = 1
-    while dest.exists():
-        dest = data_dir / f"{stem}_{counter}{suffix}"
-        counter += 1
-
-    file.save(dest)
-
+    dest = _free_mapdata_path(data_dir, Path(file.filename).stem, reserve=True)
+    tmp = dest.with_name(f"{dest.name}.{uuid.uuid4().hex}.tmp")
     try:
-        MapData.load(str(dest))
-    except Exception as e:
-        logger.warning("Rejected uploaded .mapdata %s: %r", dest.name, e)
-        dest.unlink(missing_ok=True)
-        abort(400, "Invalid .mapdata file")
+        file.save(tmp)
+        try:
+            MapData.load(str(tmp))
+        except Exception as e:
+            logger.warning("Rejected uploaded .mapdata %s: %r", dest.name, e)
+            abort(400, "Invalid .mapdata file")
+        tmp.replace(dest)
+    finally:
+        tmp.unlink(missing_ok=True)
+        _release_mapdata_path(dest)
 
     return jsonify({"filename": dest.name})
 
@@ -619,25 +528,10 @@ def _download(
 @bp.route("/api/export")
 def export_mapdata() -> Response:
     """
-    Download a mapdata file, with all recorded edits baked in, as JSON.
+    Download a mapdata file with all its edits applied as ``<stem>.exported.mapdata``.
 
-    Side Effects
-    ------------
-    None (does not write to the data directory; the merged data is
-    streamed directly to the client).
-
-    Returns
-    -------
-    Response
-        The serialized (via
-        :func:`~map_data.utils.serialization.map_data_to_dict`) mapdata
-        as a downloadable attachment named ``<stem>.exported.mapdata``.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing. 404 if the file doesn't exist.
-
+    Query: ``file``. Nothing is written to the data directory. 400 if
+    ``file`` is missing, 404 if the file doesn't exist.
     """
     filename = _require_args("file")
 
@@ -652,32 +546,9 @@ def export_mapdata() -> Response:
 @bp.route("/api/export/geojson")
 def export_geojson() -> Response:
     """
-    Download a mapdata file, with all recorded edits baked in, as GeoJSON.
+    Download a mapdata file with all its edits applied as ``<stem>.geojson``, for GIS tools.
 
-    Unlike :func:`export_mapdata` (which dumps the native ``.mapdata``
-    schema), this converts the fully-merged ``MapData`` to a GeoJSON
-    ``FeatureCollection`` via
-    :func:`~map_data.viewer.helpers.mapdata_to_geojson`, for use in GIS
-    tools such as QGIS or geojson.io.
-
-    Side Effects
-    ------------
-    None (does not write to the data directory; the merged data is
-    streamed directly to the client).
-
-    Returns
-    -------
-    Response
-        The GeoJSON ``FeatureCollection`` (see
-        :func:`~map_data.viewer.helpers.mapdata_to_geojson`) as a
-        downloadable attachment named ``<stem>.geojson``, with
-        ``Content-Type: application/geo+json``.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing. 404 if the file doesn't exist.
-
+    Query: ``file``. 400 if ``file`` is missing, 404 if the file doesn't exist.
     """
     filename = _require_args("file")
 

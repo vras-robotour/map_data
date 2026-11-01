@@ -1,5 +1,7 @@
 """Way-editing routes: tag overrides, delete/hide/restore, splits, node add/delete/move."""
 
+import copy
+from dataclasses import dataclass
 from typing import Any
 
 import utm
@@ -7,13 +9,14 @@ from flask import (
     Response,
     abort,
     jsonify,
-    request,
 )
 
-from ..cache import load_mapdata_cached
-from ..helpers import (
+from map_data.annotations import _CAT_FOR_LIST
+from map_data.edits import (
     annotation_store,
-    geom_to_geojson,
+    apply_added_nodes,
+    apply_node_position_overrides,
+    edited_nodes_cache,
     get_deleted_node_ids,
     get_deleted_way_ids,
     get_detached_node_ids,
@@ -21,54 +24,251 @@ from ..helpers import (
     get_split_node_ids,
     load_annotations,
     next_synthetic_node_id,
+    rebuild_way_without_nodes,
     split_way,
     update_segment_annotations_for_split_change,
-    way_feature,
 )
+from map_data.map_data import MapData
+from map_data.utils.way import FOOTWAY_VALUES
+
+from ..cache import load_mapdata_cached
+from ..helpers import geom_to_geojson, way_feature
 from .common import (
+    _MAX_LAT,
+    _MAX_LON,
+    _MIN_LAT,
+    _MIN_LON,
     _annotation_path,
-    _apply_segment_deletions,
-    _apply_tag_override,
+    _int_param,
+    _json_object,
     _log_add,
     _log_remove,
     _mapdata_path,
-    _original_way_id,
     _parse_way_id,
     _require_args,
-    _resolve_way,
-    _select_segment,
+    _split_way_id,
+    _validated_number,
     bp,
 )
+
+
+@dataclass
+class _ResolvedWay:
+    """
+    Result of :func:`_resolve_way`.
+
+    Attributes
+    ----------
+    way : Way or None
+        The edited way; ``None`` if not found or deleted down to nothing.
+    category : str or None
+        ``"road"``, ``"footway"`` or ``"barrier"``; ``None`` only when no way
+        has the ID, which tells "not found" from "deleted down to nothing".
+    effective_nodes_cache : dict
+        ``md``'s nodes cache plus this way's added nodes and detached split
+        ends, with its node moves applied (see
+        :func:`~map_data.edits.edited_nodes_cache`); the raw cache
+        when ``way`` is ``None``.
+
+    """
+
+    way: Any
+    category: str | None
+    effective_nodes_cache: dict[int, dict[str, Any]]
+
+
+def _resolve_way(
+    md: MapData,
+    store: dict[str, Any],
+    search_id: int,
+    *,
+    added_nodes_before_overrides: bool = False,
+) -> _ResolvedWay:
+    """
+    Find a way by its original OSM ID and apply its node deletions, added nodes and moves.
+
+    The way is a ``copy.copy`` of the cached one, which is never mutated.
+    Splitting is left to the callers, which pass the returned
+    ``effective_nodes_cache`` to :func:`~map_data.edits.split_way`.
+    A way deleted down to nothing skips the added-node and move steps.
+
+    Parameters
+    ----------
+    added_nodes_before_overrides : bool, default False
+        Apply added nodes before node moves, so that a move of an added node
+        is applied to the geometry (:func:`~map_data.viewer.routes.ways.get_way`);
+        otherwise moves come first.
+
+    """
+    nodes_cache = getattr(md, "nodes_cache", {})
+
+    way, category = next(
+        (
+            (copy.copy(w), cat)
+            for lst_name, cat in _CAT_FOR_LIST.items()
+            for w in getattr(md, lst_name)
+            if w.id == search_id
+        ),
+        (None, None),
+    )
+
+    if way is None:
+        return _ResolvedWay(way=None, category=None, effective_nodes_cache=nodes_cache)
+
+    zn, zl = md.zone_number, md.zone_letter
+
+    del_nids = get_deleted_node_ids(store, search_id)
+    if del_nids:
+        way = rebuild_way_without_nodes(way, del_nids, zn, zl, nodes_cache, category=category)
+
+    effective_nc = nodes_cache
+    if way is not None:
+        pos_overrides = get_node_position_overrides(store, search_id)
+
+        def _apply_overrides(w: Any) -> Any:
+            if not pos_overrides:
+                return w
+            return (
+                apply_node_position_overrides(
+                    w, pos_overrides, zn, zl, nodes_cache, category=category
+                )
+                or w
+            )
+
+        if added_nodes_before_overrides:
+            way = _apply_overrides(apply_added_nodes(way, store, zn, zl))
+        else:
+            way = apply_added_nodes(_apply_overrides(way), store, zn, zl)
+
+        effective_nc = edited_nodes_cache(store, nodes_cache, search_id)
+
+    return _ResolvedWay(way=way, category=category, effective_nodes_cache=effective_nc)
+
+
+def _way_node_ids(md: MapData, store: dict[str, Any], way_id: int) -> list[int]:
+    """
+    Return the node IDs of way *way_id* with its node deletions and added nodes applied.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        404 if the map has no way *way_id*.
+
+    """
+    resolved = _resolve_way(md, store, way_id)
+    if resolved.category is None:
+        abort(404, f"Way {way_id} not found")
+    return list(resolved.way.nodes) if resolved.way is not None else []
+
+
+def _apply_segment_deletions(
+    seg: Any,
+    seg_id: str,
+    store: dict[str, Any],
+    zn: int,
+    zl: str,
+    nodes_cache: dict[int, dict[str, Any]],
+    category: str | None,
+) -> Any:
+    """Rebuild *seg* without its segment-specific deleted nodes (keyed by *seg_id*), if any."""
+    seg_del_nids = get_deleted_node_ids(store, seg_id)
+    if not seg_del_nids:
+        return seg
+    return rebuild_way_without_nodes(seg, seg_del_nids, zn, zl, nodes_cache, category=category)
+
+
+def _select_segment(
+    way: Any,
+    way_id: str,
+    search_id: int,
+    store: dict[str, Any],
+    zn: int,
+    zl: str,
+    nodes_cache: dict[int, dict[str, Any]],
+    category: str | None,
+) -> Any:
+    """
+    Narrow *way* down to the single segment named by a virtual *way_id*.
+
+    Shared by :func:`~map_data.viewer.routes.ways.get_way_nodes` and
+    :func:`~map_data.viewer.routes.ways.get_way`. A no-op (returns *way* unchanged) if *way_id*
+    carries no ``":<index>"`` suffix or the way has no recorded splits.
+
+    Returns
+    -------
+    Any or None
+        The resolved segment (with its segment-specific node deletions
+        applied), or ``None`` if those deletions reduced it to nothing --
+        callers differ on how to report that, so it's left to them.
+
+    Raises
+    ------
+    werkzeug.exceptions.HTTPException
+        400 for an invalid segment suffix. 404 for an out-of-range segment
+        index.
+
+    """
+    _, segment_idx = _split_way_id(way_id)
+    if segment_idx is None:
+        return way
+
+    split_nids = get_split_node_ids(store, search_id)
+    if not split_nids:
+        return way
+
+    segments = split_way(
+        way, split_nids, zn, zl, nodes_cache, get_detached_node_ids(store, search_id)
+    )
+    if segment_idx >= len(segments):
+        abort(404, "Segment not found")
+
+    return _apply_segment_deletions(
+        segments[segment_idx], way_id, store, zn, zl, nodes_cache, category
+    )
+
+
+def _apply_tag_override(
+    tags: dict[str, Any],
+    ov: dict[str, Any] | None,
+    category: str | None,
+) -> tuple[dict[str, Any], str | None]:
+    """
+    Merge a tag override into *tags* and re-derive a road/footway *category*.
+
+    Returns *tags*/*category* unchanged if *ov* is falsy. Otherwise merges
+    *ov* over *tags* and, if *category* is ``"road"`` or ``"footway"``,
+    recomputes it from the merged ``highway`` tag (any other category is
+    left alone).
+    """
+    if not ov:
+        return tags, category
+    merged = {**tags, **ov}
+    if category in ("road", "footway"):
+        hw = merged.get("highway", "")
+        category = "footway" if hw in FOOTWAY_VALUES else "road"
+    return merged, category
 
 
 @bp.route("/api/way_nodes")
 def get_way_nodes() -> Response:
     """
-    Return the resolved node list (id/lat/lon/tags) for a way or way segment.
+    Return the edited node list of a way or (``"<id>:<index>"``) way segment.
 
-    Resolves ``way_id`` (an original OSM way ID, or a virtual
-    ``"<id>:<segment_index>"`` produced by :func:`split_way_endpoint`)
-    through :func:`~map_data.viewer.routes.common._resolve_way`, then, if virtual, narrows down to
-    the requested segment. Node positions prefer the effective nodes cache
-    (including any user-added synthetic nodes), falling back to the way's
-    own geometry coordinates and, if the way has no nodes at all, to a
-    single centroid point.
+    Query: ``file``, ``way_id``. Positions come from the edited nodes cache,
+    else the way's geometry; a way without nodes yields its centroid.
 
     Returns
     -------
     Response
-        JSON ``{"way_id": ..., "nodes": [{"id", "lat", "lon", "tags"}, ...]}``.
-        ``nodes`` is ``[]`` (with a 200 status, not a 404) if node
-        deletions reduced the way -- or the requested segment -- to
-        nothing.
+        JSON ``{"way_id": ..., "nodes": [{"id", "lat", "lon", "tags"}, ...]}``;
+        ``nodes`` is ``[]`` (200) if deletions reduced the way or segment
+        to nothing.
 
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``file``/``way_id`` is missing, ``way_id`` isn't a valid
-        (possibly virtual) integer ID, or the virtual ID's segment suffix
-        isn't a valid integer. 404 if the file or the original way
-        doesn't exist, or the requested segment index is out of range.
+        400 if ``file``/``way_id`` is missing or ``way_id`` is invalid. 404
+        if the file or way doesn't exist or the segment index is out of range.
 
     """
     filename, way_id = _require_args("file", "way_id")
@@ -77,7 +277,7 @@ def get_way_nodes() -> Response:
     md = load_mapdata_cached(str(path))
     store = load_annotations(str(_annotation_path(filename)))
 
-    search_id = _original_way_id(way_id)
+    search_id, _ = _split_way_id(way_id)
 
     resolved = _resolve_way(md, store, search_id)
     if resolved.category is None:
@@ -97,15 +297,13 @@ def get_way_nodes() -> Response:
 
     nodes = []
     geom_latlon = None
-    for i, nid_obj in enumerate(way.nodes):
-        nid = getattr(nid_obj, "id", nid_obj)
+    for i, nid in enumerate(way.nodes):
         if nid in effective_nc:
             nd = effective_nc[nid]
             nodes.append(
                 {"id": nid, "lat": nd["lat"], "lon": nd["lon"], "tags": nd.get("tags", {})}
             )
         else:
-            # Fallback to geometry
             if geom_latlon is None:
                 geom = way.line
                 raw = list(geom.exterior.coords if hasattr(geom, "exterior") else geom.coords)
@@ -114,13 +312,11 @@ def get_way_nodes() -> Response:
                 lat, lon = geom_latlon[i]
                 nodes.append({"id": nid, "lat": lat, "lon": lon, "tags": {}})
 
-    # centroid fallback
     if not nodes and way.line:
         centroid = way.line.centroid
         lat, lon = utm.to_latlon(centroid.x, centroid.y, zn, zl)
         nodes = [{"id": search_id, "lat": lat, "lon": lon, "tags": {}}]
 
-    # Ensure position overrides are applied to the resulting nodes list
     if pos_overrides:
         for n in nodes:
             if n["id"] in pos_overrides:
@@ -133,34 +329,18 @@ def get_way_nodes() -> Response:
 @bp.route("/api/ways/<way_id>")
 def get_way(way_id: str) -> Response:
     """
-    Return a single way (or way segment) as a GeoJSON Feature.
+    Return an edited way or (``"<id>:<index>"``) way segment as a GeoJSON Feature.
 
-    Resolves ``way_id`` (an original OSM way ID, or a virtual
-    ``"<id>:<segment_index>"`` produced by :func:`split_way_endpoint`)
-    through :func:`~map_data.viewer.routes.common._resolve_way` -- passing
-    ``added_nodes_before_overrides=True``, unlike
-    :func:`get_way_nodes`/:func:`_get_way_segments_geojson`, so that a recorded position override
-    for a user-added node is picked up by ``apply_node_position_overrides`` -- then, if virtual,
-    narrows down to the requested segment and applies any tag overrides recorded for the
-    original way.
-
-    Returns
-    -------
-    Response
-        A GeoJSON ``Feature`` with ``properties`` including ``id``,
-        ``category``, ``is_node`` (true for a barrier with no OSM nodes,
-        i.e. a synthesized point obstacle), ``tags`` (merged with any tag
-        override), and ``in_out``.
+    Query: ``file``. Tags and category include the way's tag override; see
+    :func:`~map_data.viewer.helpers.way_feature` for the properties.
 
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing, ``way_id`` isn't a valid (possibly
-        virtual) integer ID, or its segment suffix isn't a valid integer.
-        404 if the file or the original way doesn't exist, node deletions
-        reduced the way (or requested segment) to nothing, or the
-        requested segment index is out of range. 500 if the resolved
-        geometry can't be converted to GeoJSON.
+        400 if ``file`` is missing or ``way_id`` is invalid. 404 if the file
+        or way doesn't exist, deletions reduced it (or the segment) to
+        nothing, or the segment index is out of range. 500 if the geometry
+        can't be converted to GeoJSON.
 
     """
     filename = _require_args("file")
@@ -169,7 +349,7 @@ def get_way(way_id: str) -> Response:
     md = load_mapdata_cached(str(path))
     store = load_annotations(str(_annotation_path(filename)))
 
-    search_id = _original_way_id(way_id)
+    search_id, _ = _split_way_id(way_id)
 
     resolved = _resolve_way(md, store, search_id, added_nodes_before_overrides=True)
     if resolved.category is None:
@@ -205,34 +385,18 @@ def get_way(way_id: str) -> Response:
 @bp.route("/api/ways/<way_id>", methods=["DELETE"])
 def delete_way(way_id: str) -> Response:
     """
-    Mark a way (or a single split segment) as deleted.
+    Mark a way, or one ``"<id>:<index>"`` segment of it, as deleted (idempotent).
 
-    Records ``way_id`` in ``store["deleted_ways"]`` (idempotent -- a
-    second delete of the same ID is a no-op) and appends a
-    ``change_log`` entry. A virtual segment ID (``"<id>:<index>"``) is
-    stored as-is (a string), so only that segment is suppressed on
-    reload; a plain numeric ID is stored as an ``int`` and suppresses the
-    whole way.
-
-    Returns
-    -------
-    Response
-        Empty body, status 204.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing or ``way_id`` isn't a valid plain or
-        virtual way ID (see :func:`~map_data.viewer.routes.common._parse_way_id`).
-
+    Query: ``file``; optional JSON body ``category``/``label`` for the
+    change log. A segment ID is stored as a string, so only that segment is
+    deleted; a plain ID as an ``int``, deleting the whole way. Returns 204;
+    400 if ``file`` is missing or ``way_id`` is invalid.
     """
     filename = _require_args("file")
 
-    # Segments (virtual IDs like "123:0") are stored as strings so that only the
-    # specific segment is suppressed on reload, not the whole original way.
     stored_id = _parse_way_id(way_id)
 
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         if stored_id not in get_deleted_way_ids(store):
@@ -250,33 +414,21 @@ def delete_way(way_id: str) -> Response:
 @bp.route("/api/ways/<way_id>/tags", methods=["PUT"])
 def update_way_tags(way_id: str) -> Response:
     """
-    Replace the tag-override dict recorded for a way's original OSM ID.
+    Replace the tag override of a way with the body's ``tags`` (str -> str).
 
-    Overrides are keyed by the *original* way ID (a virtual segment ID's
-    ``":<index>"`` suffix is stripped), so overrides apply to every
-    segment of a split way uniformly. Overwrites any previous override
-    for this way wholesale (not merged with the new *tags*).
-
-    Returns
-    -------
-    Response
-        Empty body, status 204.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing or the request body has no ``tags``
-        dict.
-
+    Query: ``file``; JSON body ``tags`` and optional ``category``/``label``.
+    Keyed by the original way ID, so it applies to every segment. Returns
+    204; 400 if ``file`` is missing or ``tags`` is not a dict of strings.
     """
     filename = _require_args("file")
 
-    original_way_id_str = str(way_id).split(":")[0]
+    original_way_id_str = str(_split_way_id(way_id)[0])
 
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     tags = body.get("tags")
-    if not isinstance(tags, dict):
-        abort(400, "Request body must include 'tags' dict")
+    # OSM tags are str -> str; anything else breaks the category lookup on every load.
+    if not isinstance(tags, dict) or not all(isinstance(v, str) for v in tags.values()):
+        abort(400, "Request body must include a 'tags' dict of strings")
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         store.setdefault("tag_overrides", {})[original_way_id_str] = tags
@@ -291,31 +443,18 @@ def update_way_tags(way_id: str) -> Response:
 @bp.route("/api/ways/<way_id>/tags", methods=["DELETE"])
 def delete_way_tags(way_id: str) -> Response:
     """
-    Remove the tag override recorded for a way.
+    Remove the tag override of a way's original ID (no-op if none).
 
-    Unlike :func:`update_way_tags`, this looks the override up by
-    ``way_id`` verbatim rather than stripping a ``":<index>"`` segment
-    suffix first -- passing a virtual segment ID here will not remove an
-    override that was recorded under the original way ID. A missing
-    override is not an error (no-op removal).
-
-    Returns
-    -------
-    Response
-        Empty body, status 204.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing.
-
+    Query: ``file``. Returns 204; 400 if ``file`` is missing or ``way_id``
+    is invalid.
     """
     filename = _require_args("file")
+    original_way_id_str = str(_split_way_id(way_id)[0])
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
-        store.get("tag_overrides", {}).pop(str(way_id), None)
-        store.get("tag_override_meta", {}).pop(str(way_id), None)
-        _log_remove(store, "tag", id=way_id)
+        store.get("tag_overrides", {}).pop(original_way_id_str, None)
+        store.get("tag_override_meta", {}).pop(original_way_id_str, None)
+        _log_remove(store, "tag", id=original_way_id_str)
     return Response("", 204)
 
 
@@ -324,68 +463,33 @@ def get_way_segments(way_id: str) -> Response:
     """
     Return every segment of a (possibly split) way as GeoJSON Features.
 
-    Thin wrapper around :func:`_get_way_segments_geojson`; unlike
-    :func:`get_way`, this always computes *all* segments regardless of
-    whether ``way_id`` carries a ``":<index>"`` suffix (any suffix is
-    stripped and ignored).
-
-    Returns
-    -------
-    Response
-        JSON ``{"segments": [Feature, ...]}``. ``segments`` is ``[]`` if
-        the file, the way, or every remaining segment doesn't exist --
-        this endpoint never 404s on a missing way.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing or invalid. 404 if the file doesn't exist.
-
+    Query: ``file``; a ``":<index>"`` suffix on ``way_id`` is ignored.
+    Returns ``{"segments": [Feature, ...]}``, ``[]`` for a missing or fully
+    deleted way. 400 if ``file`` is missing or invalid, 404 if the file
+    doesn't exist.
     """
     filename = _require_args("file")
-    original_way_id = str(way_id).split(":")[0]
+    original_way_id = str(_split_way_id(way_id)[0])
     segments = _get_way_segments_geojson(filename, original_way_id)
     return jsonify({"segments": segments})
 
 
 def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[str, Any]]:
     """
-    Resolve a way's edits and split it into GeoJSON Feature segments.
+    Return the current segments of a way, with all its edits, as GeoJSON Features.
 
-    Shared by :func:`get_way_segments`, :func:`split_way_endpoint`, and
-    :func:`undo_way_split` -- all three want the *current* full set of
-    segments for a way after a split-point change. Resolves
-    ``original_way_id`` via :func:`~map_data.viewer.routes.common._resolve_way` (default
-    ``added_nodes_before_overrides=False``, matching :func:`get_way_nodes`),
-    then always calls :func:`~map_data.viewer.helpers.split_way` (even if
-    the way has no recorded splits, in which case it returns the way
-    unchanged as the sole "segment"), and applies segment-specific node
-    deletions and the way's tag overrides to each resulting segment.
-
-    Parameters
-    ----------
-    filename : str
-        Mapdata filename, resolved and validated via
-        :func:`~map_data.viewer.routes.common._mapdata_path`.
-    original_way_id : str
-        Original (non-virtual) OSM way ID, as a string.
-
-    Returns
-    -------
-    list of dict
-        One GeoJSON ``Feature`` per segment (``[]`` if the way doesn't
-        exist, was deleted down to nothing, or ``original_way_id`` can't
-        be parsed as an int -- the latter raises ``ValueError`` instead,
-        uncaught, since callers are expected to have already validated it).
-
+    An unsplit way is one Feature. ``[]`` if the way doesn't exist or was
+    deleted down to nothing. *original_way_id* must already be validated:
+    a non-integer raises ``ValueError``.
     """
     path = _mapdata_path(filename)
     md = load_mapdata_cached(str(path))
     store = load_annotations(str(_annotation_path(filename)))
 
     search_id = int(original_way_id)
+    deleted = get_deleted_way_ids(store)
     resolved = _resolve_way(md, store, search_id)
-    if resolved.category is None or resolved.way is None:
+    if resolved.category is None or resolved.way is None or search_id in deleted:
         return []
 
     way = resolved.way
@@ -404,16 +508,16 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
 
     for i, seg in enumerate(segments):
         virtual_id = f"{original_way_id}:{i}"
+        # An unsplit way keeps its plain id, the one /api/mapdata and its deletions use.
+        seg_id = virtual_id if len(segments) > 1 else int(original_way_id)
+        if seg_id in deleted:
+            continue
 
         seg = _apply_segment_deletions(seg, virtual_id, store, zn, zl, effective_nc, category)
         if seg is None:
             continue
 
         tags, feat_cat = _apply_tag_override(seg.tags or {}, ov, category)
-
-        # An unsplit way keeps its plain id, the one /api/mapdata uses; a
-        # "<id>:0" here gets deleted as a segment the full load never applies.
-        seg_id = virtual_id if len(segments) > 1 else int(original_way_id)
         features.append(way_feature(seg, seg_id, feat_cat, tags, geom_to_geojson(seg.line, zn, zl)))
     return features
 
@@ -421,26 +525,13 @@ def _get_way_segments_geojson(filename: str, original_way_id: str) -> list[dict[
 @bp.route("/api/ways/split", methods=["POST"])
 def split_way_endpoint() -> Response:
     """
-    Record a split point on a way and return its resulting segments.
+    Record a split point on a way and return its segments.
 
-    Adds *node_id* to ``store["split_ways"][original_way_id]`` (a way may
-    have several split points, producing more than two segments) and
-    then recomputes every segment via :func:`_get_way_segments_geojson`
-    so the client can immediately render the result.
-
-    The split detaches the segments: the one after the split starts at a new
-    synthetic copy of *node_id* (``store["detached_nodes"]``, inheriting any
-    move of the node), so both ends can be moved independently and the
-    planner does not route across the split.
-
-    Parameters (JSON body)
-    -----------------------
-    way_id : int or str
-        Way ID to split (a virtual segment ID's suffix is stripped, so
-        splitting always applies to the original way).
-    node_id : int
-        Node ID to split at (must be interior to the way; see
-        :func:`~map_data.viewer.helpers.split_way`).
+    Query: ``file``; JSON body ``way_id`` (a segment suffix is ignored) and
+    ``node_id`` (an interior node). The segment after the split starts at a
+    new synthetic copy of the node (``store["detached_nodes"]``, inheriting
+    its move), so both ends move independently and the planner does not
+    route across the split.
 
     Returns
     -------
@@ -450,28 +541,22 @@ def split_way_endpoint() -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing or ``way_id``/``node_id`` aren't
-        valid.
+        400 if ``file`` is missing, ``way_id``/``node_id`` is invalid or
+        ``node_id`` is not an interior node of the way. 404 if the file or
+        way doesn't exist.
 
     """
     filename = _require_args("file")
-    body = request.get_json(force=True) or {}
-    way_id = body.get("way_id")
-    node_id = body.get("node_id")
+    body = _json_object()
+    # A virtual way_id (e.g. 123:0) splits the original way.
+    original_way_id = str(_split_way_id(body.get("way_id"))[0])
+    node_id_int = _int_param(body.get("node_id"), "node_id")
 
-    try:
-        way_id_val = str(way_id)
-        # node_id may be None (missing from body); int(None) raises TypeError,
-        # which is caught below -- not a genuine unguarded None deref.
-        node_id_int = int(node_id)  # type: ignore[arg-type]
-    except (ValueError, TypeError):
-        abort(400, "Invalid way_id or node_id")
-
-    # If way_id is virtual (e.g. 123:0), get original ID
-    original_way_id = way_id_val.split(":", maxsplit=1)[0]
-
+    md = load_mapdata_cached(str(_mapdata_path(filename)))
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
+        if node_id_int not in _way_node_ids(md, store, int(original_way_id))[1:-1]:
+            abort(400, f"Node {node_id_int} is not an interior node of way {original_way_id}")
         splits = store.setdefault("split_ways", {})
         way_splits = splits.setdefault(original_way_id, [])
 
@@ -488,9 +573,6 @@ def split_way_endpoint() -> Response:
             if str(node_id_int) in way_ov:
                 way_ov[str(detached_id)] = dict(way_ov[str(node_id_int)])
 
-            # Re-map segment references
-            path = _mapdata_path(filename)
-            md = load_mapdata_cached(str(path))
             resolved = _resolve_way(md, store, int(original_way_id))
             if resolved.way is not None:
                 update_segment_annotations_for_split_change(
@@ -506,37 +588,28 @@ def split_way_endpoint() -> Response:
 @bp.route("/api/ways/split", methods=["DELETE"])
 def undo_way_split() -> Response:
     """
-    Remove a single recorded split point from a way and return its (new) segments.
+    Remove one split point from a way and return its segments.
 
-    The way still ends up split if other split points remain on it;
-    removing the last one collapses ``split_ways`` back to a single
-    unsplit way.
-
-    The split node is restored as it was in the map: its detached copy is
-    dropped along with any deletion of it, and the moves of both ends are
-    discarded (the way's ``move`` change-log entry goes too once no moved
-    node is left).
+    Query: ``file``, ``way_id``, ``node_id``. The split node is restored as
+    in the map: its detached copy and any deletion of that copy are dropped
+    and the moves of both ends discarded (with the way's ``move`` change-log
+    entry once no moved node is left).
 
     Returns
     -------
     Response
-        JSON ``{"segments": [Feature, ...]}`` for the way's current
-        segments (a one-element list, containing the whole way, if no
-        splits remain).
+        JSON ``{"segments": [Feature, ...]}``.
 
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``file``/``way_id``/``node_id`` is missing or not a valid
-        integer.
+        400 if a parameter is missing or not an integer. 404 if the file
+        doesn't exist.
 
     """
     filename, way_id, node_id = _require_args("file", "way_id", "node_id")
-    try:
-        way_id_int = int(way_id)
-        node_id_int = int(node_id)
-    except (ValueError, TypeError):
-        abort(400, "way_id and node_id must be integers")
+    way_id_int = _int_param(way_id, "way_id")
+    node_id_int = _int_param(node_id, "node_id")
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         splits = store.get("split_ways", {})
@@ -582,30 +655,18 @@ def undo_way_split() -> Response:
 @bp.route("/api/ways/<way_id>/hide", methods=["PUT"])
 def hide_way(way_id: str) -> Response:
     """
-    Mark a way as hidden (a lighter-weight, purely-client-side visibility toggle than deletion).
+    Hide a whole way in the viewer (idempotent); export and planning ignore it.
 
-    Recorded in ``store["hidden_ways"]`` by the way's original ID (any
-    segment suffix is stripped, so hiding applies to the whole way);
-    idempotent. Unlike :func:`delete_way`, this has no ``change_log``
-    entry -- hiding is not treated as an edit for undo/history purposes.
-
-    Returns
-    -------
-    Response
-        Empty body, status 204.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing or ``way_id``'s non-segment part isn't
-        a valid integer.
-
+    Query: ``file``; optional JSON body ``category``/``label``. Recorded in
+    ``store["hidden_ways"]`` by original ID, with no ``change_log`` entry:
+    hiding is not an edit. Returns 204; 400 if ``file`` is missing or
+    ``way_id`` is invalid.
     """
     filename = _require_args("file")
 
-    way_id_int = _original_way_id(way_id)
+    way_id_int, _ = _split_way_id(way_id)
 
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         hw = store.setdefault("hidden_ways", [])
@@ -624,25 +685,14 @@ def hide_way(way_id: str) -> Response:
 @bp.route("/api/ways/<way_id>/show", methods=["PUT"])
 def show_way(way_id: str) -> Response:
     """
-    Undo :func:`hide_way`: remove a way from ``store["hidden_ways"]``.
+    Undo :func:`hide_way` (no-op if not hidden).
 
-    Not being hidden is not an error (no-op removal).
-
-    Returns
-    -------
-    Response
-        Empty body, status 204.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing or ``way_id``'s non-segment part isn't
-        a valid integer.
-
+    Query: ``file``. Returns 204; 400 if ``file`` is missing or ``way_id``
+    is invalid.
     """
     filename = _require_args("file")
 
-    way_id_int = _original_way_id(way_id)
+    way_id_int, _ = _split_way_id(way_id)
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
@@ -654,23 +704,10 @@ def show_way(way_id: str) -> Response:
 @bp.route("/api/ways/<way_id>/restore", methods=["PUT"])
 def restore_way(way_id: str) -> Response:
     """
-    Undo :func:`delete_way`: remove a way (or segment) from ``deleted_ways``.
+    Undo :func:`delete_way` for the same way or segment ID (no-op if not deleted).
 
-    Mirrors :func:`delete_way`'s stored-ID convention -- a virtual
-    segment ID restores only that segment, a plain way ID restores the
-    whole way. Not being deleted is not an error (no-op removal).
-
-    Returns
-    -------
-    Response
-        Empty body, status 204.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file`` is missing or ``way_id`` isn't a valid plain or
-        virtual way ID (see :func:`~map_data.viewer.routes.common._parse_way_id`).
-
+    Query: ``file``. Returns 204; 400 if ``file`` is missing or ``way_id``
+    is invalid.
     """
     filename = _require_args("file")
 
@@ -687,21 +724,12 @@ def restore_way(way_id: str) -> Response:
 @bp.route("/api/way_node", methods=["POST"])
 def add_way_node() -> Response:
     """
-    Insert a new synthetic node into a way, immediately after an existing node.
+    Insert a new synthetic node into a way after an existing node.
 
-    Assigns the new node a fresh negative ID (one less than the smallest
-    existing synthetic ID recorded for this file, or ``-1`` if none),
-    since real OSM node IDs are always positive; recorded in
-    ``store["added_nodes"]`` and consumed by
-    :func:`~map_data.viewer.helpers.apply_added_nodes`.
-
-    Parameters (JSON body)
-    -----------------------
-    after_node_id : int
-        Existing node ID (may itself be a previously-added synthetic
-        node) the new node should be spliced in after.
-    lat, lon : float
-        Position of the new node.
+    Query: ``file``, ``way_id``; JSON body ``after_node_id`` (may itself be
+    synthetic), ``lat``, ``lon``. The node gets the next free negative ID
+    (:func:`~map_data.edits.next_synthetic_node_id`; OSM IDs are
+    positive) and is recorded in ``store["added_nodes"]``.
 
     Returns
     -------
@@ -711,27 +739,26 @@ def add_way_node() -> Response:
     Raises
     ------
     werkzeug.exceptions.HTTPException
-        400 if ``file``/``way_id`` is missing, ``way_id``'s non-segment
-        part isn't a valid integer, or the body is missing
-        ``after_node_id``/``lat``/``lon`` or ``after_node_id`` isn't an integer.
+        400 if a parameter is missing or invalid, ``lat``/``lon`` is out
+        of range, or ``after_node_id`` is not on the way. 404 if the file
+        or way doesn't exist.
 
     """
     filename, way_id = _require_args("file", "way_id")
-    way_id_int = _original_way_id(way_id)
+    way_id_int, _ = _split_way_id(way_id)
 
-    body = request.get_json(force=True) or {}
-    after_node_id = body.get("after_node_id")
-    lat = body.get("lat")
-    lon = body.get("lon")
-    if after_node_id is None or lat is None or lon is None:
+    body = _json_object()
+    if any(body.get(k) is None for k in ("after_node_id", "lat", "lon")):
         abort(400, "Request body must include after_node_id, lat, lon")
-    try:
-        after_node_id = int(after_node_id)
-    except (ValueError, TypeError):
-        abort(400, "after_node_id must be an integer")
+    after_node_id = _int_param(body["after_node_id"], "after_node_id")
+    lat = _validated_number(body["lat"], "lat", _MIN_LAT, _MAX_LAT)
+    lon = _validated_number(body["lon"], "lon", _MIN_LON, _MAX_LON)
 
+    md = load_mapdata_cached(str(_mapdata_path(filename)))
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
+        if after_node_id not in _way_node_ids(md, store, way_id_int):
+            abort(400, f"Node {after_node_id} is not on way {way_id_int}")
         synth_id = next_synthetic_node_id(store)
 
         store.setdefault("added_nodes", []).append(
@@ -739,62 +766,48 @@ def add_way_node() -> Response:
                 "id": synth_id,
                 "way_id": way_id_int,
                 "after_node_id": after_node_id,
-                "lat": float(lat),
-                "lon": float(lon),
+                "lat": lat,
+                "lon": lon,
             }
         )
         _log_add(store, "add_node", {"way_id": way_id_int, "node_id": synth_id})
-    return jsonify({"id": synth_id, "lat": float(lat), "lon": float(lon)})
+    return jsonify({"id": synth_id, "lat": lat, "lon": lon})
 
 
 @bp.route("/api/way_node", methods=["DELETE"])
 def delete_way_node() -> Response:
     """
-    Delete a node from a way (or a specific split segment).
+    Delete a node from a way, or from one ``"<id>:<index>"`` segment of it.
 
-    Synthetic nodes (negative ``node_id``, previously created by
-    :func:`add_way_node`) are removed outright from ``added_nodes`` (plus
-    any position override for them) rather than recorded as a deletion,
-    since they don't exist independently of that record. Real (positive
-    ID) OSM nodes are instead recorded in ``store["deleted_nodes"]``,
-    keyed by the *given* ``way_id`` (which may be a virtual segment ID,
-    for a deletion that should apply to only that segment, or a plain
-    way ID for a deletion applying to every segment).
-
-    Returns
-    -------
-    Response
-        Empty body, status 204.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if a required parameter is missing, or ``way_id``'s
-        non-segment part / ``node_id`` isn't a valid integer.
-
+    Query: ``file``, ``way_id``, ``node_id``. A node added by
+    :func:`add_way_node` is removed from ``added_nodes`` together with its
+    move. Any other node, including a detached split end, is recorded in
+    ``store["deleted_nodes"]`` under the given ``way_id``, so a segment ID
+    deletes it from that segment only. Returns 204; 400 if a parameter is
+    missing or invalid.
     """
     filename, way_id, node_id_arg = _require_args("file", "way_id", "node_id")
 
-    # Use the full way_id (could be virtual like "123:0") to allow segment-specific
-    # deletion; _parse_way_id validates the segment suffix so raw strings never
-    # reach the store.
+    # The full (possibly segment) way_id keys the deletion.
     target_id = _parse_way_id(way_id)
-    way_id_int = _original_way_id(target_id)
-    try:
-        node_id = int(node_id_arg)
-    except (ValueError, TypeError):
-        abort(400, "node_id must be an integer")
+    way_id_int, _ = _split_way_id(way_id)
+    node_id = _int_param(node_id_arg, "node_id")
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
         # Added nodes (negative IDs) live in added_nodes, not in the OSM node list;
         # a detached split end is deleted per segment like a real node.
         if node_id < 0 and node_id not in get_detached_node_ids(store, way_id_int).values():
-            store["added_nodes"] = [
-                a
-                for a in store.get("added_nodes", [])
-                if not (a.get("way_id") == way_id_int and a.get("id") == node_id)
-            ]
+            added = store.get("added_nodes", [])
+            removed = next(
+                (a for a in added if a.get("way_id") == way_id_int and a.get("id") == node_id), None
+            )
+            if removed is not None:
+                added.remove(removed)
+                # Nodes added after this one would lose their anchor and vanish.
+                for a in added:
+                    if a.get("way_id") == way_id_int and a.get("after_node_id") == node_id:
+                        a["after_node_id"] = removed["after_node_id"]
             pos_ov = store.get("node_position_overrides", {}).get(str(way_id_int), {})
             pos_ov.pop(str(node_id), None)
             _log_remove(store, "add_node", way_id=way_id_int, node_id=node_id)
@@ -810,35 +823,16 @@ def delete_way_node() -> Response:
 @bp.route("/api/way_node/restore", methods=["PUT"])
 def restore_way_node() -> Response:
     """
-    Undo :func:`delete_way_node` for a real (non-synthetic) node.
+    Undo :func:`delete_way_node` for a node recorded in ``deleted_nodes`` (no-op if absent).
 
-    Only handles the ``deleted_nodes`` record path -- there is no
-    counterpart here for restoring a synthetic node that was outright
-    removed by ``delete_way_node`` (that node is gone for good; the user
-    would re-add it via :func:`add_way_node`). Not being deleted is not
-    an error (no-op removal).
-
-    Returns
-    -------
-    Response
-        Empty body, status 204.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if a required parameter is missing, or ``way_id``'s
-        non-segment part / ``node_id`` isn't a valid integer.
-
+    Query: ``file``, ``way_id`` (the same, possibly segment, ID), ``node_id``.
+    A removed added node cannot be restored. Returns 204; 400 if a parameter
+    is missing or invalid.
     """
     filename, way_id, node_id_arg = _require_args("file", "way_id", "node_id")
 
-    # Use the full way_id to match the deletion record; validated the same way
-    # as in delete_way_node.
     target_id = _parse_way_id(way_id)
-    try:
-        node_id = int(node_id_arg)
-    except (ValueError, TypeError):
-        abort(400, "node_id must be an integer")
+    node_id = _int_param(node_id_arg, "node_id")
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
@@ -855,50 +849,49 @@ def restore_way_node() -> Response:
 @bp.route("/api/way_nodes/move", methods=["PUT"])
 def move_way_nodes() -> Response:
     """
-    Record new positions for one or more nodes of a way.
+    Record new positions for nodes of a way.
 
-    Overrides are merged into ``store["node_position_overrides"][original_way_id]``
-    (existing overrides for other nodes on the same way are preserved,
-    not replaced wholesale); each entry in *nodes* overwrites any
-    previous override for that specific node ID. Applies uniformly to
-    every segment of a split way, since it's keyed by the original way
-    ID.
-
-    Parameters (JSON body)
-    -----------------------
-    nodes : list of dict
-        ``[{"id": node_id, "lat": ..., "lon": ...}, ...]`` new positions.
-
-    Returns
-    -------
-    Response
-        Empty body, status 204.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file``/``way_id`` is missing, ``way_id``'s non-segment
-        part isn't a valid integer, or the body has no ``nodes`` list.
-
+    Query: ``file``, ``way_id``; JSON body ``nodes``
+    (``[{"id", "lat", "lon"}, ...]``) and optional ``category``/``label``.
+    Merged per node into ``store["node_position_overrides"]`` under the
+    original way ID, so every segment shares them. Returns 204; 400 if a
+    parameter is missing or invalid, a position is out of range or a node
+    is not on the way (its split ends included); 404 if the file or way
+    doesn't exist.
     """
     filename, way_id = _require_args("file", "way_id")
-    way_id_int = _original_way_id(way_id)
+    way_id_int, _ = _split_way_id(way_id)
 
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     nodes = body.get("nodes")
-    if not isinstance(nodes, list):
-        abort(400, "Request body must include 'nodes' list")
+    if not isinstance(nodes, list) or not all(isinstance(n, dict) for n in nodes):
+        abort(400, "Request body must include a 'nodes' list of objects")
+    # Validate every node before touching the store: one bad entry would break the file.
+    moves = {
+        str(_int_param(n.get("id"), "node id")): {
+            "lat": _validated_number(n.get("lat"), "lat", _MIN_LAT, _MAX_LAT),
+            "lon": _validated_number(n.get("lon"), "lon", _MIN_LON, _MAX_LON),
+        }
+        for n in nodes
+    }
+    md = load_mapdata_cached(str(_mapdata_path(filename)))
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:
+        node_ids = _way_node_ids(md, store, way_id_int)
+        # A way without nodes (a point barrier) is moved under its own ID, see get_way_nodes.
+        on_way = (
+            {*node_ids, *get_detached_node_ids(store, way_id_int).values()}
+            if node_ids
+            else {way_id_int}
+        )
+        off_way = sorted(int(nid) for nid in moves if int(nid) not in on_way)
+        if off_way:
+            abort(400, f"Nodes {off_way} are not on way {way_id_int}")
         overrides = store.setdefault("node_position_overrides", {})
         way_key = str(way_id_int)
         if way_key not in overrides:
             overrides[way_key] = {}
-        for n in nodes:
-            overrides[way_key][str(n["id"])] = {
-                "lat": float(n["lat"]),
-                "lon": float(n["lon"]),
-            }
+        overrides[way_key].update(moves)
         _log_add(
             store,
             "move",
@@ -912,26 +905,13 @@ def move_way_nodes() -> Response:
 @bp.route("/api/way_nodes/move", methods=["DELETE"])
 def undo_move_way_nodes() -> Response:
     """
-    Undo :func:`move_way_nodes`: discard *all* node position overrides for a way.
+    Undo :func:`move_way_nodes`: discard every node move of a way (no per-node undo).
 
-    Unlike deletion/split undo, this clears every overridden node on the
-    way at once (there is no per-node undo). Not having any overrides is
-    not an error (no-op removal).
-
-    Returns
-    -------
-    Response
-        Empty body, status 204.
-
-    Raises
-    ------
-    werkzeug.exceptions.HTTPException
-        400 if ``file``/``way_id`` is missing or ``way_id``'s non-segment
-        part isn't a valid integer.
-
+    Query: ``file``, ``way_id``. Returns 204; 400 if a parameter is missing
+    or invalid.
     """
     filename, way_id = _require_args("file", "way_id")
-    way_id_int = _original_way_id(way_id)
+    way_id_int, _ = _split_way_id(way_id)
 
     ann_path = str(_annotation_path(filename))
     with annotation_store(ann_path) as store:

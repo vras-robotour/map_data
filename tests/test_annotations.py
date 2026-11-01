@@ -2,24 +2,27 @@
 
 import copy
 import json
-from pathlib import Path
 
 import pytest
 import utm
+from conftest import STROMOVKA_FIXTURE
 from shapely.geometry import LineString
 
 from map_data.annotations import (
     NO_ANNOTATIONS,
     annotation_path_for,
     apply_store,
+    apply_tag_overrides,
+    apply_way_and_tag_edits,
+    apply_way_edits,
     load_mapdata_with_annotations,
 )
+from map_data.edits import load_annotations
 from map_data.map_data import MapData
 from map_data.pathsolver.graph_planner import GraphPlanner
 from map_data.pathsolver.route import RoutePlanningError, plan_route
 from map_data.traversability import TraversabilityRules, load_traversability
 from map_data.utils.way import Way
-from map_data.viewer.helpers import load_annotations
 
 
 def _latlon(lat0, lon0, dx, dy):
@@ -37,6 +40,17 @@ def test_load_without_store_is_plain_map(footway_network_mapdata):
     assert isinstance(md, MapData)
     assert store == {"version": 1, "annotations": []}
     assert len(md.footways_list) == 3
+
+
+def test_unreadable_store_is_logged_and_ignored(footway_network_mapdata, caplog):
+    path, _, _ = footway_network_mapdata
+    ann = annotation_path_for(path)
+    ann.write_text("{not json")
+    md, store = load_mapdata_with_annotations(path)
+    assert store == {"version": 1, "annotations": []}
+    assert len(md.footways_list) == 3
+    assert "unreadable annotation store" in caplog.text
+    assert ann.read_text() == "{not json"
 
 
 def test_annotated_path_bridges_a_gap(footway_network_mapdata):
@@ -79,6 +93,31 @@ def test_annotated_path_bridges_a_gap(footway_network_mapdata):
     assert res.length_m == pytest.approx(450.0, abs=10.0)
 
 
+def test_loader_keeps_annotation_crossroads_after_traversability(footway_network_mapdata):
+    path, lat0, lon0 = footway_network_mapdata
+    a = _latlon(lat0, lon0, 200.0, 0.0)
+    b = _latlon(lat0, lon0, 400.0, 0.0)
+    store = {
+        "version": 1,
+        "annotations": [
+            {
+                "id": "ann-1",
+                "type": "path",
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[a[1], a[0]], [b[1], b[0]]],
+                },
+                "properties": {"highway": "footway", "width": 2.0},
+            }
+        ],
+    }
+    annotation_path_for(path).write_text(json.dumps(store))
+
+    md, _ = load_mapdata_with_annotations(path)
+
+    assert any(w.tags.get("type") == "annotation_intersection" for w in md.crossroads_list)
+
+
 def test_deleted_way_is_removed(footway_network_mapdata):
     path, lat0, lon0 = footway_network_mapdata
     annotation_path_for(path).write_text(
@@ -107,10 +146,18 @@ def test_tag_override_moves_a_footway_to_roads(footway_network_mapdata):
     assert [w.id for w in md.roads_list] == [3]
 
 
-# ── excluded way types ─────────────────────────────────────────────────────
+def test_tag_override_applies_before_traversability(footway_network_mapdata):
+    path, _, _ = footway_network_mapdata
+    annotation_path_for(path).write_text(
+        json.dumps({"version": 1, "annotations": [], "tag_overrides": {"2": {"surface": "grass"}}})
+    )
 
-#: The Stromovka map used on the robot; not committed (data/*.mapdata is ignored).
-KRALOVSKA = Path(__file__).resolve().parents[1] / "data" / "kralovska_obora.mapdata"
+    md, _ = load_mapdata_with_annotations(path, traversability=_grass_rules())
+
+    assert [w.id for w in md.footways_list] == [1, 3]
+
+
+# ── excluded way types ─────────────────────────────────────────────────────
 
 
 def _add_stairway(md, lat0, lon0):
@@ -175,14 +222,13 @@ def test_loader_excludes_stairs_by_default(footway_network_mapdata):
     assert len(kept.footways_list) == 4
 
 
-@pytest.mark.skipif(not KRALOVSKA.is_file(), reason="kralovska_obora.mapdata is not in the repo")
 def test_exclude_ways_on_the_stromovka_map():
-    md = MapData.load(str(KRALOVSKA))
+    md = MapData.load(str(STROMOVKA_FIXTURE))
     n_crossroads = len(md.crossroads_list)
 
     removed = md.apply_traversability(TraversabilityRules().extend({"steps"}))
 
-    assert removed == 15  # the 15 stairways of the Královská obora map
+    assert removed == 7  # the stairways of the fixture
     assert not any(w.tags.get("highway") == "steps" for w in md.footways_list)
     assert len(md.crossroads_list) < n_crossroads
 
@@ -241,6 +287,47 @@ def test_apply_traversability_recomputes_the_crossroads(footway_network_mapdata)
     md.apply_traversability(_grass_rules())
 
     assert len(md.crossroads_list) == plain_crossroads
+
+
+def test_apply_traversability_keeps_annotation_crossroads(footway_network_mapdata):
+    path, _, _ = footway_network_mapdata
+    md = MapData.load(str(path))
+    ann = Way(
+        id=-1,
+        is_area=True,
+        nodes=[],
+        tags={"type": "annotation_intersection", "count": "2"},
+        line=LineString([(0, 0), (1, 1)]).buffer(1.5),
+    )
+    md.crossroads_list = [ann]
+
+    md.apply_traversability(_grass_rules())
+
+    assert ann in md.crossroads_list
+
+
+@pytest.mark.parametrize(
+    "store",
+    [
+        {"deleted_ways": [{"id": 3}]},
+        {"node_position_overrides": {"3": {"202": {"lat": 50.0, "lon": 14.01}}}},
+        {"tag_overrides": {"3": {"surface": "gravel"}}},
+    ],
+    ids=["deleted way", "moved node", "tag override"],
+)
+def test_way_edits_keep_annotation_crossroads(footway_network_mapdata, store):
+    path, _, _ = footway_network_mapdata
+    md = MapData.load(str(path))
+    ann = Way(
+        id=-1,
+        is_area=True,
+        nodes=[],
+        tags={"type": "annotation_intersection", "count": "2"},
+        line=LineString([(0, 0), (1, 1)]).buffer(1.5),
+    )
+    md.crossroads_list.append(ann)
+
+    assert ann in apply_store(md, {"version": 1, **store}).crossroads_list
 
 
 def test_apply_traversability_without_rules_is_a_noop(footway_network_mapdata):
@@ -320,7 +407,7 @@ def test_added_node_is_routable(footway_network_mapdata):
 
 
 def test_detached_split_disconnects_the_segments(footway_network_mapdata):
-    """Way 1 split at 102 with the far end detached: 103 is no longer reachable from 101."""
+    """Way 1 split at 102 with the far end detached: 103 is unreachable from 101."""
     path, lat0, lon0 = footway_network_mapdata
     split = {"split_ways": {"1": [102]}}
     detached = {**split, "detached_nodes": [{"way_id": 1, "node_id": 102, "id": -1}]}
@@ -526,14 +613,13 @@ def test_drawn_path_baked_into_an_export_survives_a_split_and_a_new_path(footway
     ]
 
 
-@pytest.mark.skipif(not KRALOVSKA.is_file(), reason="kralovska_obora.mapdata is not in the repo")
 def test_shipped_rules_on_the_stromovka_map():
     """
-    The counts the comments in ``config/traversability.yaml`` quote. They are
-    what the operator sees in the node log, so a rule that silently stops
-    matching (an OSM retag, a typo) shows up here.
+    Ways the shipped rules remove from Stromovka, counted by reason as the node
+    logs them, so a rule that silently stops matching (an OSM retag, a typo)
+    shows up here.
     """
-    md = MapData.load(str(KRALOVSKA))
+    md = MapData.load(str(STROMOVKA_FIXTURE))
     rules = load_traversability()
 
     counts: dict[str, int] = {}
@@ -542,11 +628,11 @@ def test_shipped_rules_on_the_stromovka_map():
         if not verdict.traversable:
             counts[verdict.reason] = counts.get(verdict.reason, 0) + 1
 
-    assert counts == {"stairs": 15, "soft surface": 6, "bridge": 13, "rough surface": 1}
+    assert counts == {"stairs": 7, "soft surface": 2, "bridge": 2, "rough surface": 1}
 
 
-#: Start/goal of the two routes the robot drove in Stromovka on 2026-09-08
-#: (first and last point of field_sync/2026-09-08/missions/route_*.gpx).
+#: Start/goal of a route the robot drove in Stromovka, and the start of a second one with a
+#: goal inside the fixture (first and last points of the recorded mission GPX files).
 FIELD_ROUTES = {
     "route_20260908-103357": (
         (50.104521772138874, 14.428430322399514),
@@ -554,7 +640,7 @@ FIELD_ROUTES = {
     ),
     "route_20260908-105547": (
         (50.10674062206266, 14.42576494185599),
-        (50.109685402615185, 14.417962599968284),
+        (50.10518, 14.42189),
     ),
 }
 #: A rule that lengthens a driven route by more than this is not shipped enabled.
@@ -563,7 +649,7 @@ MAX_DETOUR_FACTOR = 1.3
 
 def _plan_field_routes(rules, **kwargs):
     """``{name: length_m}`` for :data:`FIELD_ROUTES` on the Stromovka map."""
-    md, _ = load_mapdata_with_annotations(KRALOVSKA, NO_ANNOTATIONS, traversability=rules)
+    md, _ = load_mapdata_with_annotations(STROMOVKA_FIXTURE, NO_ANNOTATIONS, traversability=rules)
     return {
         name: plan_route(
             md,
@@ -578,12 +664,11 @@ def _plan_field_routes(rules, **kwargs):
     }
 
 
-@pytest.mark.skipif(not KRALOVSKA.is_file(), reason="kralovska_obora.mapdata is not in the repo")
 def test_shipped_rules_keep_the_driven_routes_plannable():
     """
-    The defaults must not cut Stromovka in two. Both 2026-09-08 routes have to
-    plan, and neither may grow by more than a third against the plain shortest
-    path — the reason the ``tunnel`` rule is shipped commented out.
+    The shipped rules do not cut Stromovka in two: both field routes plan, and
+    neither grows past MAX_DETOUR_FACTOR times the plain shortest path (why the
+    ``tunnel`` rule is shipped commented out).
     """
     plain = _plan_field_routes(TraversabilityRules(), highway_costs={}, surface_costs={})
     shipped = _plan_field_routes(load_traversability())
@@ -596,9 +681,6 @@ def test_shipped_rules_keep_the_driven_routes_plannable():
 
 
 # ── apply_store copies, it does not deep-copy ──────────────────────────────
-
-#: The full Stromovka map with the robot's real annotation store next to it.
-STROMOVKA = Path(__file__).resolve().parents[1] / "data" / "stromovka.mapdata"
 
 
 def _snapshot(md):
@@ -614,15 +696,13 @@ def _snapshot(md):
     )
 
 
-@pytest.mark.skipif(not STROMOVKA.is_file(), reason="stromovka.mapdata is not in the repo")
 def test_apply_store_leaves_the_original_map_untouched():
     """
-    ``apply_store`` shallow-copies (deep-copying a whole map cost ~370 ms of
-    every load), so the caller's ``MapData`` and its ``Way`` objects must come
-    out of a merge exactly as they went in.
+    ``apply_store`` shallow-copies, yet the caller's ``MapData`` and its ``Way``
+    objects come out of a merge exactly as they went in.
     """
-    md = MapData.load(str(STROMOVKA))
-    store = load_annotations(str(annotation_path_for(STROMOVKA)))
+    md = MapData.load(str(STROMOVKA_FIXTURE))
+    store = load_annotations(str(annotation_path_for(STROMOVKA_FIXTURE)))
     assert store["deleted_ways"], "expected the shipped store to delete ways"
     # The shipped store has no tag overrides; retag a surviving way so that pass runs too.
     deleted = {str(d["id"]) for d in store["deleted_ways"]}
@@ -651,3 +731,31 @@ def test_apply_store_leaves_the_original_map_untouched():
 
     # No state leaks into the original, so a second merge gives the same map.
     assert _snapshot(apply_store(md, store)) == _snapshot(merged)
+
+
+def test_way_and_tag_edits_recompute_the_crossroads_once(monkeypatch):
+    md = MapData.load(str(STROMOVKA_FIXTURE))
+    store = load_annotations(str(annotation_path_for(STROMOVKA_FIXTURE)))
+    deleted = {str(d["id"]) for d in store["deleted_ways"]}
+    victim = next(w for w in md.footways_list if str(w.id) not in deleted)
+    store["tag_overrides"] = {str(victim.id): {"highway": "residential"}}
+
+    separate = copy.copy(md)
+    apply_way_edits(separate, store)
+    apply_tag_overrides(separate, store)
+
+    calls = []
+    original = MapData.recompute_crossroads
+    monkeypatch.setattr(
+        MapData, "recompute_crossroads", lambda self: (calls.append(1), original(self))[1]
+    )
+    together = copy.copy(md)
+    apply_way_and_tag_edits(together, store)
+
+    assert len(calls) == 1
+    assert [str(w.id) for w in together.crossroads_list] == [
+        str(w.id) for w in separate.crossroads_list
+    ]
+    assert [w.line.wkb for w in together.crossroads_list] == [
+        w.line.wkb for w in separate.crossroads_list
+    ]

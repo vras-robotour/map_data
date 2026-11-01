@@ -9,8 +9,9 @@ The settings live on the running :class:`~map_data.viewer.ros_node.TrackerNode`
 from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, Response, abort, current_app, jsonify, request
+from flask import Blueprint, Response, abort, current_app, jsonify
 
+from .routes.common import _json_object
 from .tracker_config import (
     DEFAULTS,
     HEADING_TYPES,
@@ -89,7 +90,7 @@ def put_tracker_settings() -> Response:
     With ``"save": true`` the tracker's settings are also written to its config file,
     comments kept. Returns ``{"changed": bool, "path": str | null}``.
     """
-    body = request.get_json(force=True) or {}
+    body = _json_object()
     node = _tracker_node()
     try:
         changed = node.apply_settings(body.get("settings"))

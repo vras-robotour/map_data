@@ -1,24 +1,22 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.6 # keep in sync with the ruff pin in pyproject.toml [dev]
+  - repo: local
     hooks:
-      - id: ruff
-        args: [--fix]
+      - id: ruff-check
+        name: ruff check
+        language: system
+        entry: uv run ruff check
+        files: ^(map_data|tests)/.*\.py$
       - id: ruff-format
+        name: ruff format
+        language: system
+        entry: uv run ruff format --check
+        files: ^(map_data|tests)/.*\.py$
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v2.3.0
+  - repo: local
     hooks:
       - id: mypy
-        # Config (target version, ignore_missing_imports) lives in pyproject.toml.
-        # additional_dependencies mirrors [project.dependencies]: without Flask
-        # installed in the hook's isolated env, `abort()` resolves to Any instead
-        # of NoReturn, which breaks the `if x is None: abort(...)` narrowing used
-        # throughout viewer/routes.py and produces dozens of false union-attr /
-        # arg-type errors. rclpy/overpy/flask_socketio still fall back to
-        # ignore_missing_imports (no wheels available off-ROS / no stubs).
-        additional_dependencies:
-          - flask
-        args: [--config-file=pyproject.toml]
+        name: mypy
+        language: system
+        entry: uv run mypy map_data
         pass_filenames: false
-        files: ^map_data/
+        files: ^map_data/.*\.py$
