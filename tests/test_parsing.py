@@ -153,6 +153,10 @@ def test_parse_osm_ways_closed_barrier_is_a_ring(value):
     assert barrier.line.covers(Point((x0 + x2) / 2, (y0 + y2) / 2))
 
 
+def test_parse_osm_ways_of_an_area_without_ways():
+    assert parse_osm_ways(overpy.Result(), {}) == {}
+
+
 def test_parse_osm_ways_populates_nodes_cache():
     data = _api().parse_json(_FOOTWAY_JSON)
     nodes_cache = {}

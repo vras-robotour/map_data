@@ -465,7 +465,9 @@ def test_goal_mapdata_file_must_stay_in_the_data_dir(tmp_path):
     data.mkdir()
     (data / "a.mapdata").write_text("")
     (tmp_path / "secret.mapdata").write_text("")
+    # colcon --symlink-install links the installed maps out of the data dir
     (data / "link.mapdata").symlink_to(tmp_path / "secret.mapdata")
     assert resolve_client_data_file("a.mapdata", data) == (data / "a.mapdata").resolve()
-    for name in (str(tmp_path / "secret.mapdata"), "../secret.mapdata", "link.mapdata"):
+    assert resolve_client_data_file("link.mapdata", data) == data.resolve() / "link.mapdata"
+    for name in (str(tmp_path / "secret.mapdata"), "../secret.mapdata", "missing.mapdata"):
         assert resolve_client_data_file(name, data) is None

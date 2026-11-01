@@ -115,6 +115,19 @@ def test_plan_fails_busy_instead_of_waiting_for_the_running_plan():
     assert node._lock.locked()  # still the running plan's
 
 
+def test_a_topic_goal_waits_for_the_running_plan(footway_network_mapdata):
+    """~/goal has no retry, so it waits (e.g. for the startup preload) instead of failing."""
+    path, lat0, lon0 = footway_network_mapdata
+    md, _ = load_mapdata_with_annotations(path)
+    node = _plan_node(md, path)
+    node._lock.acquire()
+    threading.Timer(0.2, node._lock.release).start()
+    goal = _goal(_latlon(lat0, lon0, 0.0, 0.0), _latlon(lat0, lon0, 200.0, 50.0))
+    result = route_planner.RoutePlanner._plan(node, goal, None, wait=True)
+    assert result.reason == "snap_too_far"  # planned, past the lock
+    assert not node._lock.locked()
+
+
 def test_plan_goal_too_far_from_any_footway_fails_with_snap_too_far(footway_network_mapdata):
     path, lat0, lon0 = footway_network_mapdata
     md, _ = load_mapdata_with_annotations(path)

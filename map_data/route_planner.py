@@ -67,7 +67,8 @@ the next one, and their names are a stable interface for clients such as the vie
 Cancelling a PlanRoute goal stops its grid search (the goal UUID is its
 ``transfer_id``); the goal ends as canceled with reason ``cancelled``.
 
-Besides the :mod:`~map_data.pathsolver.route` reasons, a goal fails with ``busy``,
+Besides the :mod:`~map_data.pathsolver.route` reasons, a goal fails with ``busy`` (a
+PlanRoute goal during another plan; a ``~/goal`` waits for it instead),
 ``no_fix``, ``file_not_found`` or ``internal_error`` (a bug, logged with its traceback).
 A goal may only name files inside ``data_dir`` (``mapdata_file``) and ``mission_dir``
 (``save_gpx``); one with more than :data:`MAX_GOAL_WAYPOINTS` waypoints is rejected.
@@ -88,7 +89,7 @@ from geographic_msgs.msg import GeoPath, GeoPointStamped, GeoPoseStamped
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path as PathMsg
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
-from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSProfile, qos_profile_sensor_data
@@ -214,7 +215,12 @@ class RoutePlanner(Node):
             NavSatFix, self.gps_fix_topic, self._fix_cb, qos_profile_sensor_data, callback_group=cbg
         )
         self.create_subscription(
-            GeoPointStamped, self.goal_topic, self._goal_topic_cb, latched, callback_group=cbg
+            GeoPointStamped,
+            self.goal_topic,
+            self._goal_topic_cb,
+            latched,
+            # Its own exclusive group: a topic goal waits for the lock, holding one thread at most.
+            callback_group=MutuallyExclusiveCallbackGroup(),
         )
         if self.preload and self.mapdata_file:
             self._preload_timer = self.create_timer(0.1, self._preload_once)
@@ -263,7 +269,8 @@ class RoutePlanner(Node):
                 f"Goal on {self.goal_topic}: "
                 f"{msg.position.latitude:.7f}, {msg.position.longitude:.7f}"
             )
-            result = self._plan(goal, feedback=None)
+            # Waits for a running plan or the startup preload; the topic has no retry.
+            result = self._plan(goal, feedback=None, wait=True)
             self._log_result(result)
         except Exception:  # an exception here would stop the executor
             self.get_logger().error(f"Goal on {self.goal_topic} failed:\n{traceback.format_exc()}")
@@ -404,6 +411,7 @@ class RoutePlanner(Node):
         feedback,
         transfer_id: str | None = None,
         cancel_requested=lambda: False,
+        wait: bool = False,
     ) -> PlanRoute.Result:
         res = PlanRoute.Result()
         res.route.header.frame_id = WGS84_FRAME
@@ -416,9 +424,9 @@ class RoutePlanner(Node):
             self._publish_status(f"FAILED {reason}: {message}")
             return res
 
-        # Never wait for the lock: a blocked callback holds an executor thread, and enough of
-        # them leave none for cancels and GNSS fixes.
-        if not self._lock.acquire(blocking=False):
+        # Action goals never wait for the lock: a blocked callback holds an executor thread,
+        # and enough of them leave none for cancels and GNSS fixes.
+        if not self._lock.acquire(blocking=wait):
             return fail("busy", "another plan is running; try again when it has finished")
         try:
             path = self._resolve_mapdata(goal.mapdata_file)

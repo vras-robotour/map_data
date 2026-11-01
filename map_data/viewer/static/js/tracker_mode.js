@@ -63,7 +63,8 @@ const trackerMode = (() => {
                 Math.max(0, pos.trail_append.length - (pos.trail_total - trailTotal)));
             trail = trail.concat(fresh).slice(-pos.trail_length);
         }
-        trailTotal = pos.trail_total;
+        // A delta older than the connect snapshot must not move the count back
+        trailTotal = pos.trail ? pos.trail_total : Math.max(trailTotal, pos.trail_total);
         pos.trail = trail;
     }
 

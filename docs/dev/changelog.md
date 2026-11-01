@@ -43,7 +43,7 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 - Python >= 3.12 is declared in `pyproject.toml` and `setup.py`
 - The coverage gate (72 %) runs in CI only; plain `pytest` and `colcon test` need no `pytest-cov`
 - `package.xml` lists the launch, interface and message dependencies the nodes use
-- `route_planner` fails a plan that arrives while another runs with reason `busy` instead of queueing it, so cancels and GNSS fixes always get a thread
+- `route_planner` fails a PlanRoute goal that arrives while another plan runs with reason `busy` instead of queueing it, so cancels and GNSS fixes always get a thread; a `~/goal` still waits its turn
 - `map_data_plan`, `create_mapdata` and `route_planner` resolve map file names the same way: a path, then `data/`, then `demo/`
 - The viewer's cost-grid overlay and blocked-ways list follow the *Plan on Footways/Roads* checkboxes (`allowed_ways`); empty means footways, as in the planner
 - A wormhole transfer waits up to 10 minutes for the receiver
@@ -98,7 +98,7 @@ Regenerate `.mapdata` files built by an earlier version: relation and fence pars
 
 - `THUNDERFOREST_API_KEY` / `SEZNAM_API_KEY` are no longer read; no basemap used them (the viewer offers OpenStreetMap and Esri satellite)
 - `map_data.viewer.tracker_config.topic_type`
-- `data/*` is no longer installed into `share/map_data/data`; the `demo/` map is
+- `data/*` is no longer installed into `share/map_data/data`, only the `demo/` map is: point `data_dir` or `mapdata_path` at the robot's maps
 - `docs/dev/node_move_detach.md`; the node-move behavior is in [Data formats](data_formats.md)
 - `PathGrid.grid`, `create_empty_grid`, `get_grid_2d`, `grid_segment_blocked` and `grid_astar(simplify_path=...)`
 - `create_mapdata --no-cache` (the cache is opt-in with `--cache`), the `config_file` argument of `osm_cloud.launch.py` and the `osm_cloud` block of `helhest_jr.yaml`

@@ -45,12 +45,14 @@ def parse_osm_ways(
     force_zone_number: int | None = None,
     force_zone_letter: str | None = None,
 ) -> dict[int, Way]:
-    ways = {}
+    ways: dict[int, Way] = {}
     lats: list[float] = []
     lons: list[float] = []
     for way in osm_ways_data.ways:
         lats.extend(float(n.lat) for n in way.nodes)
         lons.extend(float(n.lon) for n in way.nodes)
+    if not lats:  # utm.from_latlon rejects empty arrays
+        return ways
     eastings, northings, _, _ = utm.from_latlon(
         np.array(lats),
         np.array(lons),

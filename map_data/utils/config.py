@@ -45,16 +45,16 @@ def resolve_data_file(name: str, data_dir: str | Path | None = None) -> Path | N
 def resolve_client_data_file(name: str, data_dir: str | Path | None = None) -> Path | None:
     """
     :func:`resolve_data_file` for a *name* from a remote client, which may not leave the
-    data directories: only a relative path without ``..`` that resolves inside *data_dir*
-    (default: the package ``data/``) or the package ``demo/``.
+    data directories: only a relative path without ``..`` inside *data_dir* (default: the
+    package ``data/``) or the package ``demo/``. Symlinks there are followed, wherever they
+    point: a colcon ``--symlink-install`` links the installed maps to the source tree.
     """
     if Path(name).is_absolute() or ".." in Path(name).parts:
         return None
     base = Path(data_dir).expanduser() if data_dir else package_share("data")
     for d in (base.resolve(), package_share("demo").resolve()):
-        p = (d / name).resolve()
-        if p.is_relative_to(d) and p.is_file():
-            return p
+        if (d / name).is_file():
+            return d / name
     return None
 
 
