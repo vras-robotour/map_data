@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="ROS2 tools to work with OSM data and perform path planning.">
+        <meta name="description" content="ROS 2 tools to work with OSM data and perform path planning.">
       
       
         <meta name="author" content="Jan Vlk">
@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -31,10 +31,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -274,7 +274,7 @@
           
   
   
-  API Reference
+  API reference
 
         </a>
       </li>
@@ -315,7 +315,7 @@
           
   
   
-  Developer Guide
+  Developer guide
 
         </a>
       </li>
@@ -528,7 +528,7 @@
   <span class="md-ellipsis">
     
   
-    Interactive Viewer
+    Interactive viewer
   
 
     
@@ -544,7 +544,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Interactive Viewer
+    Interactive viewer
   
 
           </label>
@@ -684,7 +684,7 @@
   <span class="md-ellipsis">
     
   
-    Path Planning
+    Path planning
   
 
     
@@ -737,7 +737,7 @@
   <span class="md-ellipsis">
     
   
-    API Reference
+    API reference
   
 
     
@@ -753,7 +753,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    API Reference
+    API reference
   
 
           </label>
@@ -830,6 +830,62 @@
     
   
     Pathsolvers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/annotations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Annotations and edits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/traversability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Traversability
   
 
     
@@ -940,7 +996,7 @@
   <span class="md-ellipsis">
     
   
-    Developer Guide
+    Developer guide
   
 
     
@@ -956,7 +1012,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Developer Guide
+    Developer guide
   
 
           </label>
@@ -1004,7 +1060,7 @@
   <span class="md-ellipsis">
     
   
-    Tag Configuration
+    Tag configuration
   
 
     
@@ -1032,7 +1088,7 @@
   <span class="md-ellipsis">
     
   
-    Planner Configuration
+    Planner configuration
   
 
     
@@ -1060,7 +1116,7 @@
   <span class="md-ellipsis">
     
   
-    Data Formats
+    Data formats
   
 
     
@@ -1152,10 +1208,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#getting-the-code" class="md-nav__link">
+  <a href="#setup" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Getting the code
+        Setup
       
     </span>
   </a>
@@ -1163,32 +1219,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#setting-up-the-development-environment" class="md-nav__link">
+  <a href="#checks" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Setting up the development environment
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#running-the-tests" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Running the tests
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#running-the-docs-locally" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Running the docs locally
+        Checks
       
     </span>
   </a>
@@ -1200,17 +1234,6 @@
     <span class="md-ellipsis">
       
         Code style
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#type-checking" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Type checking
       
     </span>
   </a>
@@ -1272,34 +1295,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../node_move_detach/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Moving a Shared Node
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../todo/" class="md-nav__link">
         
   
@@ -1307,7 +1302,7 @@
   <span class="md-ellipsis">
     
   
-    Known Issues & Backlog
+    Known issues and backlog
   
 
     
@@ -1421,10 +1416,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#getting-the-code" class="md-nav__link">
+  <a href="#setup" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Getting the code
+        Setup
       
     </span>
   </a>
@@ -1432,32 +1427,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#setting-up-the-development-environment" class="md-nav__link">
+  <a href="#checks" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Setting up the development environment
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#running-the-tests" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Running the tests
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#running-the-docs-locally" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Running the docs locally
+        Checks
       
     </span>
   </a>
@@ -1469,17 +1442,6 @@
     <span class="md-ellipsis">
       
         Code style
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#type-checking" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Type checking
       
     </span>
   </a>
@@ -1520,63 +1482,41 @@
 <h1 id="contributing">Contributing</h1>
 <h2 id="prerequisites">Prerequisites</h2>
 <ul>
-<li>Python 3.12+</li>
-<li><a href="https://docs.astral.sh/uv/"><code>uv</code></a> (preferred) or plain <code>pip</code></li>
-<li>ROS2 Jazzy or later — <strong>optional</strong>; only needed for the <code>osm_cloud</code> node</li>
+<li>Python 3.12 (pinned in <code>.python-version</code>; ROS 2 Jazzy's Python)</li>
+<li><a href="https://docs.astral.sh/uv/"><code>uv</code></a></li>
+<li>ROS 2 Jazzy, only for the ROS nodes (<code>osm_cloud</code>, <code>route_planner</code>, the viewer's Tracker)</li>
 </ul>
-<h2 id="getting-the-code">Getting the code</h2>
+<h2 id="setup">Setup</h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/vras-robotour/map_data.git
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>map_data
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>uv<span class="w"> </span>sync<span class="w">                  </span><span class="c1"># runtime + the dev dependency group, from uv.lock</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>uv<span class="w"> </span>run<span class="w"> </span>pre-commit<span class="w"> </span>install
 </span></code></pre></div>
-<h2 id="setting-up-the-development-environment">Setting up the development environment</h2>
-<p>Install the package in editable mode together with the documentation and tooling dependencies:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">".[dev]"</span>
+<p><code>uv sync</code> installs the locked versions in <code>uv.lock</code>. After changing dependencies in <code>pyproject.toml</code>, run <code>uv lock</code> and commit <code>uv.lock</code>.</p>
+<p>For a ROS 2 workspace, clone into <code>&lt;ws&gt;/src/map_data</code> and run <code>scripts/setup_ws.sh</code>; it symlinks the nested <code>map_data_interfaces</code> package into <code>&lt;ws&gt;/src</code> so <code>colcon</code> finds it. See <a href="../../#with-ros-2-colcon">Installation</a>.</p>
+<h2 id="checks">Checks</h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w">       </span><span class="c1"># tests, see Testing</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>--fix<span class="w"> </span>.
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>format<span class="w"> </span>.
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>uv<span class="w"> </span>run<span class="w"> </span>mypy<span class="w"> </span>map_data/
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>uv<span class="w"> </span>run<span class="w"> </span>mkdocs<span class="w"> </span>build<span class="w"> </span>--strict<span class="w">  </span><span class="c1"># docs; mkdocs serve for a live preview</span>
 </span></code></pre></div>
-<div class="admonition warning">
-<p class="admonition-title">Use <code>uv pip</code>, not plain <code>pip</code></p>
-<p>The project uses <code>uv</code> for package management. Plain <code>pip</code> may install into the wrong interpreter on machines with multiple Python environments.</p>
-</div>
-<h2 id="running-the-tests">Running the tests</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pytest<span class="w"> </span>tests/<span class="w"> </span>-v
-</span></code></pre></div>
-<p>All tests are standalone — no ROS2 context or network access is required. See the <a href="../testing/">Testing</a> page for a full breakdown of test files, design principles, and guidance on adding new tests.</p>
-<h2 id="running-the-docs-locally">Running the docs locally</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>mkdocs<span class="w"> </span>serve
-</span></code></pre></div>
-<p>The site is served at <code>http://127.0.0.1:8000</code> with live reload.</p>
-<p>To build a static copy:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>mkdocs<span class="w"> </span>build
-</span></code></pre></div>
+<p>The pre-commit hook runs ruff and mypy on every commit. CI runs the same checks, the test suite with a 72 % coverage gate and a ROS 2 build with the smoke test; see <a href="../testing/#ci">Testing</a>.</p>
+<p>Tool versions are pinned: ruff in <code>pyproject.toml</code> (dev group) and <code>RUFF_VERSION</code> in <code>.github/workflows/ci.yml</code>; mypy in <code>pyproject.toml</code>. Pre-commit delegates to the <code>uv</code>-managed environment.</p>
 <h2 id="code-style">Code style</h2>
-<p>The project uses <a href="https://docs.astral.sh/ruff/">Ruff</a> for both formatting and linting. Configuration lives in <code>pyproject.toml</code>.</p>
-<p>Before submitting a pull request, run:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>ruff<span class="w"> </span>check<span class="w"> </span>--fix<span class="w"> </span>.
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>ruff<span class="w"> </span>format<span class="w"> </span>.
-</span></code></pre></div>
-<p>Key style rules enforced:</p>
+<p>Configuration lives in <code>pyproject.toml</code>.</p>
 <ul>
-<li><strong>Line length</strong> — 100 characters.</li>
-<li><strong>Import order</strong> — isort-compatible, <code>map_data</code> is treated as first-party.</li>
-<li><strong>Type annotations</strong> — modern PEP 585/604 style (<code>list[str]</code>, <code>X | None</code>). Add return annotations to all new functions; parameter annotations are required for public API methods.</li>
-<li><strong>Docstrings</strong> — public methods use NumPy-style docstrings (matches the <code>mkdocstrings</code> configuration). Internal helpers can omit docstrings when the name is self-explanatory.</li>
-<li><strong>Comments</strong> — only add a comment when the <em>why</em> is non-obvious. Do not annotate what the code does.</li>
+<li><strong>Line length</strong>: 100.</li>
+<li><strong>Types</strong>: PEP 585/604 annotations (<code>list[str]</code>, <code>X | None</code>); return annotations on new functions. Third-party modules without stubs are in mypy's <code>ignore_missing_imports</code>; a remaining <code># type: ignore[&lt;code&gt;]</code> carries a short reason.</li>
+<li><strong>Docstrings</strong>: NumPy style on public API (rendered by mkdocstrings); state what the code does, not its history.</li>
+<li><strong>Comments</strong>: only for a non-obvious <em>why</em>.</li>
 </ul>
-<div class="admonition tip">
-<p class="admonition-title">Editor integration</p>
-<p>If you use Neovim with LazyVim, enable the <code>lazyvim.plugins.extras.lang.python</code> extra and add a <code>conform.nvim</code> plugin spec with <code>ruff_format</code> to get format-on-save automatically.</p>
-</div>
-<h2 id="type-checking">Type checking</h2>
-<p>The project uses <a href="https://mypy-lang.org/">mypy</a> for static type checking. Configuration lives in <code>pyproject.toml</code> under <code>[tool.mypy]</code>.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mypy<span class="w"> </span>map_data/
-</span></code></pre></div>
-<p>Third-party libraries without complete type stubs (numpy, shapely, overpy, flask_socketio, rclpy, etc.) are covered by <code>ignore_missing_imports</code>. A small number of remaining false positives — mostly from numpy/shapely returning loosely-typed values, or from patterns mypy can't narrow (e.g. Flask's <code>nonlocal</code>-captured variables) — are silenced with targeted <code># type: ignore[&lt;code&gt;]</code> comments that include a short reason. New code should be fully typed rather than relying on ignores.</p>
 <h2 id="submitting-changes">Submitting changes</h2>
 <ol>
-<li>Create a feature branch from <code>master</code>.</li>
-<li>Make your changes and add or update tests where relevant.</li>
-<li>Run <code>pytest tests/</code> and ensure all tests pass.</li>
-<li>Run <code>ruff check . &amp;&amp; ruff format --check .</code> and <code>mypy map_data/</code> and ensure both are clean.</li>
-<li>Open a pull request against <code>master</code> with a clear description of what changed and why.</li>
+<li>Branch from <code>master</code>.</li>
+<li>Add or update tests and docs with the change; add a line to the <em>Unreleased</em> section of the <a href="../changelog/">changelog</a>.</li>
+<li>Make sure the checks above pass.</li>
+<li>Open a pull request against <code>master</code>.</li>
 </ol>
 
 
@@ -1637,10 +1577,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
   </body>

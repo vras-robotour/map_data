@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="ROS2 tools to work with OSM data and perform path planning.">
+        <meta name="description" content="ROS 2 tools to work with OSM data and perform path planning.">
       
       
         <meta name="author" content="Jan Vlk">
@@ -23,18 +23,18 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
-        <title>Path Planning - map_data</title>
+        <title>Path planning - map_data</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Path Planning
+              Path planning
             
           </span>
         </div>
@@ -276,7 +276,7 @@
           
   
   
-  API Reference
+  API reference
 
         </a>
       </li>
@@ -315,7 +315,7 @@
           
   
   
-  Developer Guide
+  Developer guide
 
         </a>
       </li>
@@ -534,7 +534,7 @@
   <span class="md-ellipsis">
     
   
-    Interactive Viewer
+    Interactive viewer
   
 
     
@@ -550,7 +550,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Interactive Viewer
+    Interactive viewer
   
 
           </label>
@@ -699,7 +699,7 @@
   <span class="md-ellipsis">
     
   
-    Path Planning
+    Path planning
   
 
     
@@ -717,7 +717,7 @@
   <span class="md-ellipsis">
     
   
-    Path Planning
+    Path planning
   
 
     
@@ -743,15 +743,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#offline-route-planning-map_data_plan-and-the-route_planner-action" class="md-nav__link">
+  <a href="#offline-route-planning-map_data_plan-and-route_planner" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Offline route planning: map_data_plan and the route_planner action
+        Offline route planning: map_data_plan and route_planner
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Offline route planning: map_data_plan and the route_planner action">
+    <nav class="md-nav" aria-label="Offline route planning: map_data_plan and route_planner">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -766,10 +766,50 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#command-line" class="md-nav__link">
+  <a href="#command-line-map_data_plan" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Command line
+        Command line: map_data_plan
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Command line: map_data_plan">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#command-line-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Command-line options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ros-2-action-server-route_planner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ROS 2 action server: route_planner
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ROS 2 action server: route_planner">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#launch-arguments-route_plannerlaunchpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Launch arguments (route_planner.launch.py)
       
     </span>
   </a>
@@ -777,10 +817,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#ros-2-action-server" class="md-nav__link">
+  <a href="#ros-2-parameters-route_planner" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ROS 2 action server
+        ROS 2 parameters (route_planner)
       
     </span>
   </a>
@@ -788,10 +828,37 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#library" class="md-nav__link">
+  <a href="#goal-execution-gpx-saving-and-waypoint-spacing" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Library
+        Goal execution, GPX saving, and waypoint spacing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#action-failure-reasons" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Action failure reasons
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#python-library-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python library usage
       
     </span>
   </a>
@@ -815,61 +882,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#python-library" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Python Library
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Python Library">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#graphplanner" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        GraphPlanner
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#replanpath" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        ReplanPath
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#available-algorithms" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Available Algorithms
+        Available algorithms
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Available Algorithms">
+    <nav class="md-nav" aria-label="Available algorithms">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#graph-planning" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Graph Planning
+        Graph planning
       
     </span>
   </a>
@@ -1034,7 +1062,7 @@
   <span class="md-ellipsis">
     
   
-    API Reference
+    API reference
   
 
     
@@ -1050,7 +1078,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    API Reference
+    API reference
   
 
           </label>
@@ -1127,6 +1155,62 @@
     
   
     Pathsolvers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/annotations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Annotations and edits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/traversability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Traversability
   
 
     
@@ -1234,7 +1318,7 @@
   <span class="md-ellipsis">
     
   
-    Developer Guide
+    Developer guide
   
 
     
@@ -1250,7 +1334,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Developer Guide
+    Developer guide
   
 
           </label>
@@ -1298,7 +1382,7 @@
   <span class="md-ellipsis">
     
   
-    Tag Configuration
+    Tag configuration
   
 
     
@@ -1326,7 +1410,7 @@
   <span class="md-ellipsis">
     
   
-    Planner Configuration
+    Planner configuration
   
 
     
@@ -1354,7 +1438,7 @@
   <span class="md-ellipsis">
     
   
-    Data Formats
+    Data formats
   
 
     
@@ -1431,34 +1515,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../dev/node_move_detach/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Moving a Shared Node
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../dev/todo/" class="md-nav__link">
         
   
@@ -1466,7 +1522,7 @@
   <span class="md-ellipsis">
     
   
-    Known Issues & Backlog
+    Known issues and backlog
   
 
     
@@ -1569,15 +1625,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#offline-route-planning-map_data_plan-and-the-route_planner-action" class="md-nav__link">
+  <a href="#offline-route-planning-map_data_plan-and-route_planner" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Offline route planning: map_data_plan and the route_planner action
+        Offline route planning: map_data_plan and route_planner
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Offline route planning: map_data_plan and the route_planner action">
+    <nav class="md-nav" aria-label="Offline route planning: map_data_plan and route_planner">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1592,10 +1648,50 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#command-line" class="md-nav__link">
+  <a href="#command-line-map_data_plan" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Command line
+        Command line: map_data_plan
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Command line: map_data_plan">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#command-line-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Command-line options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ros-2-action-server-route_planner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ROS 2 action server: route_planner
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ROS 2 action server: route_planner">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#launch-arguments-route_plannerlaunchpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Launch arguments (route_planner.launch.py)
       
     </span>
   </a>
@@ -1603,10 +1699,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#ros-2-action-server" class="md-nav__link">
+  <a href="#ros-2-parameters-route_planner" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ROS 2 action server
+        ROS 2 parameters (route_planner)
       
     </span>
   </a>
@@ -1614,10 +1710,37 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#library" class="md-nav__link">
+  <a href="#goal-execution-gpx-saving-and-waypoint-spacing" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Library
+        Goal execution, GPX saving, and waypoint spacing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#action-failure-reasons" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Action failure reasons
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#python-library-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python library usage
       
     </span>
   </a>
@@ -1641,61 +1764,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#python-library" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Python Library
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Python Library">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#graphplanner" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        GraphPlanner
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#replanpath" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        ReplanPath
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#available-algorithms" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Available Algorithms
+        Available algorithms
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Available Algorithms">
+    <nav class="md-nav" aria-label="Available algorithms">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#graph-planning" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Graph Planning
+        Graph planning
       
     </span>
   </a>
@@ -1832,205 +1916,504 @@
   
 
 
-<h1 id="path-planning">Path Planning</h1>
-<p>The <code>pathsolver</code> module provides standalone planning capabilities — no ROS2 context is required.
-Use the <code>map_data_plan</code> CLI to process waypoints against a <code>.mapdata</code> file, or import the
-planners directly as a Python library.</p>
-<h2 id="offline-route-planning-map_data_plan-and-the-route_planner-action">Offline route planning: <code>map_data_plan</code> and the <code>route_planner</code> action</h2>
-<p>The viewer's <em>Planner</em> screen (<code>POST /api/create_replan</code>), the <code>map_data_plan</code>
-command line tool and the <code>route_planner</code> ROS 2 action server all call the same
-function, <code>map_data.pathsolver.route.plan_route</code>, on the same map: the <code>.mapdata</code>
-file with its <code>&lt;stem&gt;.annotations.json</code> merged in
-(<code>map_data.annotations.load_mapdata_with_annotations</code>). Whatever is drawn, deleted or
-split in the viewer is therefore what the robot plans on. Both tools take an explicit
-annotation choice: <code>--annotations auto|none|FILE</code> on the command line, the <code>annotations</code>
-parameter (launch argument) on the node. <code>none</code> plans on the unedited OSM map, which is
-the right choice when the store was pruned for a different area than the one you are
-planning in (a heavily edited store can delete the very paths you need; the node logs the
-footway count and the number of deleted ways it applied).</p>
+<h1 id="path-planning">Path planning</h1>
+<p>The <code>pathsolver</code> module provides standalone planning capabilities — no ROS 2 context is required.
+Use the <code>map_data_plan</code> CLI to process waypoints against a <code>.mapdata</code> file, import the
+planners directly as a Python library, or run the <code>route_planner</code> ROS 2 action server.</p>
+<h2 id="offline-route-planning-map_data_plan-and-route_planner">Offline route planning: <code>map_data_plan</code> and <code>route_planner</code></h2>
+<p>The viewer's Planner screen (<code>POST /api/create_replan</code>), the <code>map_data_plan</code> command-line
+tool, and the <code>route_planner</code> ROS 2 action server all call <code>map_data.pathsolver.route.plan_route</code>
+on the same map data: the <code>.mapdata</code> file with its <code>&lt;stem&gt;.annotations.json</code> sidecar merged in
+(<code>map_data.annotations.load_mapdata_with_annotations</code>). Whatever is drawn, deleted, or split
+in the viewer is therefore reflected during planning.</p>
+<p>Both tools support an explicit annotation choice: <code>--annotations auto|none|FILE</code> on the command
+line, or the <code>annotations</code> parameter on the node. <code>none</code> plans on the unedited OSM map, which
+is useful when an annotation store was pruned for another area.</p>
+<p>Planner defaults come from <code>config/planner_defaults.yaml</code> (<code>cell_size</code>, <code>inflate_obstacles</code>,
+<code>simplify_path</code>, <code>smooth_path</code>, <code>max_path_dist</code>, <code>grid_cost_weight</code>). <code>route_planner</code> exposes
+the first four as ROS 2 parameters, re-read on every goal.</p>
 <h3 id="goal-qr-codes-planner-screen">Goal QR codes (Planner screen)</h3>
-<p>Robotour hands goals over as QR codes with a <code>geo:lat,lon</code> payload. In the Planner screen,
+<p>Robotour provides goals as QR codes with a <code>geo:lat,lon</code> payload. In the Planner screen,
 right-click any waypoint and choose <em>QR code</em>, or press <em>QR goal</em> for the last waypoint:
 the code opens full screen on a white background (size slider) so a laptop or tablet can be
 held to the robot camera, with <em>Download SVG</em> (or <em>PNG</em>) for printing and <em>Copy geo text</em> for typing the
-goal in with <code>qr_goal_send</code>. The code comes from <code>GET /api/qr.svg?lat=…&amp;lon=…[&amp;scale=12]
-[&amp;download=1][&amp;caption=]</code> as vector art, so it stays sharp at any size and the caption under it
-is real text rather than pixels; <code>GET /api/qr?…</code> serves the same code as a PNG for anything that
-needs a bitmap (OpenCV <code>QRCodeEncoder</code>, <code>map_data.utils.qr</code>). An empty <code>caption=</code> leaves the
-caption off - the viewer draws its own as HTML text under the code.</p>
-<h3 id="command-line">Command line</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Try it on the bundled demo map (the two waypoints of demo/buchlovice.gpx, ~420 m)</span>
+goal in with <code>qr_goal_send</code>. The code comes from <code>GET /api/qr.svg?lat=…&amp;lon=…[&amp;scale=12][&amp;download=1][&amp;caption=]</code>
+as vector art, so it stays sharp at any size; <code>GET /api/qr?…</code> serves the same code as a PNG.</p>
+<h3 id="command-line-map_data_plan">Command line: <code>map_data_plan</code></h3>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Bundled demo map (the two waypoints of demo/buchlovice.gpx, ~420 m)</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>map_data_plan<span class="w"> </span>-f<span class="w"> </span>demo/buchlovice.mapdata<span class="w"> </span>--start<span class="w"> </span><span class="m">49</span>.084416,17.336309<span class="w"> </span>--goal<span class="w"> </span><span class="m">49</span>.083106,17.338527
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Paths only (graph planner on footways), 3 m waypoint spacing, saved as a GPX track</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>map_data_plan<span class="w"> </span>-f<span class="w"> </span>stromovka.mapdata<span class="w"> </span>--start<span class="w"> </span><span class="m">50</span>.1038,14.4294<span class="w"> </span>--goal<span class="w"> </span>geo:50.1067,14.4193<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>map_data_plan<span class="w"> </span>-f<span class="w"> </span>coords.mapdata<span class="w"> </span>--start<span class="w"> </span><span class="m">50</span>.1038,14.4294<span class="w"> </span>--goal<span class="w"> </span>geo:50.1067,14.4193<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span>--spacing<span class="w"> </span><span class="m">3</span><span class="w"> </span>--save<span class="w"> </span>route.gpx
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="c1"># All terrain (grid A*) through several points, printed as JSON</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>map_data_plan<span class="w"> </span>-f<span class="w"> </span>stromovka.mapdata<span class="w"> </span>-p<span class="w"> </span><span class="m">50</span>.1038,14.4294<span class="w"> </span>-p<span class="w"> </span><span class="m">50</span>.1050,14.4250<span class="w"> </span>-p<span class="w"> </span><span class="m">50</span>.1067,14.4193<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="c1"># All-terrain (grid A*) through intermediate via points, printed as JSON</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>map_data_plan<span class="w"> </span>-f<span class="w"> </span>coords.mapdata<span class="w"> </span>-p<span class="w"> </span><span class="m">50</span>.1038,14.4294<span class="w"> </span>-p<span class="w"> </span><span class="m">50</span>.1050,14.4250<span class="w"> </span>-p<span class="w"> </span><span class="m">50</span>.1067,14.4193<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">    </span>--algorithm<span class="w"> </span>astar<span class="w"> </span>--cell-size<span class="w"> </span><span class="m">0</span>.5<span class="w"> </span>--json
 </span></code></pre></div>
-<p><code>--traversability FILE</code> plans with another rule file than the package's
-<code>config/traversability.yaml</code> and <code>--no-traversability</code> with none at all (stairs are still
-excluded); see <a href="#traversability-rules">Traversability rules</a>.</p>
-<p><code>--goal</code> accepts the <code>geo:lat,lon</code> URI printed on a Robotour QR code. Failures are
-reported with a reason: <code>start_outside_map</code> / <code>goal_outside_map</code> (the first / last point
-lies more than 100 m outside the map's downloaded area; for the start nearly always the
-wrong map file),
-<code>snap_too_far</code> (a point is farther than <code>--max-snap-distance</code>
-from every allowed way), <code>unreachable</code> (disconnected network), <code>no_path</code>,
-<code>grid_too_large</code>, <code>too_few_points</code>.</p>
-<p>The graph planner returns on-network vertices only: a requested point that sits
-beside a path appears in the route as its projection onto that path, not as an
-extra vertex off to the side. (<code>start_from_robot</code> is the one exception, below.)
-The reported <code>snap_distances</code> say how far each request was moved.</p>
-<h3 id="ros-2-action-server">ROS 2 action server</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>ros2<span class="w"> </span>launch<span class="w"> </span>map_data<span class="w"> </span>route_planner.launch.py<span class="w"> </span>mapdata_file:<span class="o">=</span>stromovka.mapdata
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>ros2<span class="w"> </span>launch<span class="w"> </span>map_data<span class="w"> </span>route_planner.launch.py<span class="w"> </span>mapdata_file:<span class="o">=</span>KN.mapdata<span class="w"> </span>highway_types:<span class="o">=</span>footway,road
+<h4 id="command-line-options">Command-line options</h4>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-h, --help</code></td>
+<td></td>
+<td>Show help message and exit</td>
+</tr>
+<tr>
+<td><code>-f FILE, --file FILE</code></td>
+<td><em>required</em></td>
+<td><code>.mapdata</code> file path or filename in <code>data/</code> (or the source checkout's <code>demo/</code>)</td>
+</tr>
+<tr>
+<td><code>--annotations auto\|none\|FILE</code></td>
+<td><code>auto</code></td>
+<td>Annotation store to merge: <code>auto</code> (<code>&lt;file&gt;.annotations.json</code>), <code>none</code>, or explicit file</td>
+</tr>
+<tr>
+<td><code>--start START</code></td>
+<td></td>
+<td>Start coordinates as <code>lat,lon</code></td>
+</tr>
+<tr>
+<td><code>--goal GOAL</code></td>
+<td></td>
+<td>Goal coordinates as <code>lat,lon</code> or <code>geo:lat,lon</code></td>
+</tr>
+<tr>
+<td><code>-p POINTS, --point POINTS</code></td>
+<td></td>
+<td>Intermediate via point <code>lat,lon</code> (repeat for multiple points between start and goal)</td>
+</tr>
+<tr>
+<td><code>--algorithm {graph,astar,rrt}</code></td>
+<td><code>graph</code></td>
+<td>Planning algorithm: <code>graph</code> (on ways only), <code>astar</code> or <code>rrt</code> (all-terrain grid)</td>
+</tr>
+<tr>
+<td><code>--ways TYPE [TYPE ...]</code></td>
+<td><code>footway</code></td>
+<td>Allowed way types: <code>footway</code>, <code>road</code>, or both (<code>--ways footway road</code>)</td>
+</tr>
+<tr>
+<td><code>--traversability FILE</code></td>
+<td>package default</td>
+<td>Tag rule file determining drivable ways and costs (<code>config/traversability.yaml</code>)</td>
+</tr>
+<tr>
+<td><code>--no-traversability</code></td>
+<td><code>false</code></td>
+<td>Ignore traversability rules entirely (stairs remain excluded)</td>
+</tr>
+<tr>
+<td><code>--spacing SPACING</code></td>
+<td><code>0.0</code></td>
+<td>Maximum meters between output waypoints (<code>0.0</code> keeps planner vertices)</td>
+</tr>
+<tr>
+<td><code>--max-snap-distance DIST</code></td>
+<td><code>100.0</code></td>
+<td>Graph: reject waypoints farther than this (m) from every allowed way</td>
+</tr>
+<tr>
+<td><code>--cell-size CELL_SIZE</code></td>
+<td><code>0.25</code></td>
+<td>Grid: cell resolution in meters</td>
+</tr>
+<tr>
+<td><code>--inflate-obstacles DIST</code></td>
+<td><code>0.25</code></td>
+<td>Grid: barrier inflation margin in meters</td>
+</tr>
+<tr>
+<td><code>--simplify</code>, <code>--no-simplify</code></td>
+<td><code>--simplify</code></td>
+<td>Grid: simplify path vertices using Douglas-Peucker (<code>--no-simplify</code> retains all cells)</td>
+</tr>
+<tr>
+<td><code>--smooth</code>, <code>--no-smooth</code></td>
+<td><code>--no-smooth</code></td>
+<td>Grid: smooth path using gradient-descent optimization</td>
+</tr>
+<tr>
+<td><code>--save SAVE</code></td>
+<td></td>
+<td>Write route to GPX file</td>
+</tr>
+<tr>
+<td><code>--wpt</code></td>
+<td><code>false</code></td>
+<td>Write GPX <code>&lt;wpt&gt;</code> elements instead of a <code>&lt;trk&gt;</code> track</td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td><code>false</code></td>
+<td>Print planning result as JSON</td>
+</tr>
+<tr>
+<td><code>-v, --verbose</code></td>
+<td><code>false</code></td>
+<td>Enable verbose debug logging</td>
+</tr>
+</tbody>
+</table>
+<h3 id="ros-2-action-server-route_planner">ROS 2 action server: <code>route_planner</code></h3>
+<p>The <code>route_planner</code> node exposes an action server on <code>/route_planner/plan_route</code> (<code>map_data_interfaces/action/PlanRoute</code>).</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>ros2<span class="w"> </span>launch<span class="w"> </span>map_data<span class="w"> </span>route_planner.launch.py<span class="w"> </span>mapdata_file:<span class="o">=</span>coords.mapdata
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>ros2<span class="w"> </span>launch<span class="w"> </span>map_data<span class="w"> </span>route_planner.launch.py<span class="w"> </span>mapdata_file:<span class="o">=</span>coords.mapdata<span class="w"> </span>highway_types:<span class="o">=</span>footway,road
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>ros2<span class="w"> </span>action<span class="w"> </span>send_goal<span class="w"> </span>/route_planner/plan_route<span class="w"> </span>map_data_interfaces/action/PlanRoute<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="s2">"{waypoints: [{latitude: 50.1067, longitude: 14.4193}], start_from_robot: true}"</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="s2">&quot;{waypoints: [{latitude: 50.1067, longitude: 14.4193}], start_from_robot: true}&quot;</span>
 </span></code></pre></div>
-<p>The node preloads its <code>mapdata_file</code> and keeps one graph planner per map, allowed-way set and
-snap distance (a few MB each, four at most), so a request plans in milliseconds; set
-<code>preload:=false</code> to load lazily. <code>highway_types:=</code> takes the way types as one comma- or
-space-separated string (<code>footway</code>, <code>road</code> or <code>footway,road</code>); a map with roads only plans
-nothing until roads are allowed.</p>
-<p>Every parameter below lives in <code>config/route_planner.yaml</code>,
-which the launch file loads by default; <code>params_file:=</code> takes an absolute path or another
-file name in <code>config/</code>. The launch arguments (<code>mapdata_file</code>, <code>mapdata_path</code>, <code>annotations</code>,
-<code>traversability</code>, <code>preload</code>, <code>algorithm</code>, <code>highway_types</code>, <code>spacing</code>, <code>mission_dir</code>,
-<code>gps_fix_topic</code>, <code>earth_frame</code>, <code>local_frame</code>) are applied on top of that file, so an argument left unset
-keeps the file's value and the rest of the parameters are only reachable through the file.
-Not to be confused with <code>config/planner_defaults.yaml</code>, which holds the routing cost tables
-used by the planners themselves.</p>
-<p><code>map_data_interfaces/action/PlanRoute</code> takes the file, the ordered waypoints and the
-planner parameters (empty/zero fields use the node's defaults). With
-<code>start_from_robot</code> the latest fix on <code>gps_fix_topic</code> becomes the first waypoint, so a
-single goal is enough; that fix is kept verbatim as the route's first point (the robot
-is where it is), and the leading leg is its way onto the network. The goal is kept
-verbatim too (<code>keep_goal</code>), so the route ends at the requested coordinate and its last
-leg leaves the network; a goal farther than <code>goal_max_snap_distance</code> from every allowed
-way fails with <code>snap_too_far</code> rather than being planned to somewhere else. A start or goal
-more than <code>outside_map_tolerance</code> outside the map's area fails first (any algorithm) with
-<code>start_outside_map</code> / <code>goal_outside_map</code>, the message naming the loaded map file. The result carries
-the route as <code>geographic_msgs/GeoPath</code>, the
-same route as <code>nav_msgs/Path</code> in <code>local_frame</code> (through the <code>earth_frame -&gt; local_frame</code>
-transform, exactly as <code>osm_cloud</code> places the map), the length, the snap distances and the
-path of the GPX track written to <code>mission_dir</code>. The route is also published latched on
-<code>~/route</code> (GeoPath) and <code>~/route_path</code> (Path) and a status string on <code>~/status</code>. A
-<code>geographic_msgs/GeoPointStamped</code> published on <code>~/goal</code> triggers the same planning from the
-robot's position with the default parameters.</p>
+<h4 id="launch-arguments-route_plannerlaunchpy">Launch arguments (<code>route_planner.launch.py</code>)</h4>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>params_file</code></td>
+<td><code>route_planner.yaml</code></td>
+<td>Parameter file: absolute path or filename in <code>config/</code></td>
+</tr>
+<tr>
+<td><code>mapdata_file</code></td>
+<td><code>""</code></td>
+<td>Default <code>.mapdata</code> filename or path</td>
+</tr>
+<tr>
+<td><code>mapdata_path</code></td>
+<td><code>""</code></td>
+<td>Directory where bare <code>.mapdata</code> names are resolved (default: package share <code>data</code>)</td>
+</tr>
+<tr>
+<td><code>annotations</code></td>
+<td><code>""</code></td>
+<td>Annotation store: <code>auto</code>, <code>none</code>, or explicit file path</td>
+</tr>
+<tr>
+<td><code>traversability</code></td>
+<td><code>""</code></td>
+<td>Tag rule file deciding traversable ways (empty = from <code>params_file</code>)</td>
+</tr>
+<tr>
+<td><code>mission_dir</code></td>
+<td><code>""</code></td>
+<td>Directory where GPX routes are saved</td>
+</tr>
+<tr>
+<td><code>gps_fix_topic</code></td>
+<td><code>""</code></td>
+<td>Topic for <code>sensor_msgs/NavSatFix</code></td>
+</tr>
+<tr>
+<td><code>earth_frame</code></td>
+<td><code>""</code></td>
+<td>ECEF frame name for exact TF transform</td>
+</tr>
+<tr>
+<td><code>local_frame</code></td>
+<td><code>""</code></td>
+<td>Local frame name for <code>nav_msgs/Path</code></td>
+</tr>
+<tr>
+<td><code>algorithm</code></td>
+<td><code>""</code></td>
+<td>Default algorithm: <code>graph</code>, <code>astar</code>, or <code>rrt</code></td>
+</tr>
+<tr>
+<td><code>highway_types</code></td>
+<td><code>""</code></td>
+<td>Allowed way types: <code>footway</code>, <code>road</code>, or <code>footway,road</code></td>
+</tr>
+<tr>
+<td><code>spacing</code></td>
+<td><code>""</code></td>
+<td>Meters between output waypoints (0 = raw)</td>
+</tr>
+<tr>
+<td><code>preload</code></td>
+<td><code>""</code></td>
+<td>Load map and graph at startup (<code>true</code> or <code>false</code>)</td>
+</tr>
+<tr>
+<td><code>use_sim_time</code></td>
+<td><code>false</code></td>
+<td>Use simulation time</td>
+</tr>
+</tbody>
+</table>
+<h4 id="ros-2-parameters-route_planner">ROS 2 parameters (<code>route_planner</code>)</h4>
+<p>Parameters in <code>PLANNER_PARAMETERS</code> (<code>algorithm</code>, <code>highway_types</code>, <code>spacing</code>, <code>max_snap_distance</code>,
+<code>cell_size</code>, <code>inflate_obstacles</code>, <code>simplify_path</code>, <code>smooth_path</code>) are re-read on every goal,
+allowing dynamic updates via <code>ros2 param set</code>.</p>
 <table>
 <thead>
 <tr>
 <th>Parameter</th>
 <th>Default</th>
-<th>Meaning</th>
+<th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>mapdata_file</code></td>
 <td><code>""</code></td>
-<td>default <code>.mapdata</code> (name in <code>data_dir</code> or absolute path)</td>
+<td>Default <code>.mapdata</code> filename or absolute path</td>
 </tr>
 <tr>
 <td><code>data_dir</code></td>
-<td>package <code>share/map_data/data</code></td>
-<td>where file names are resolved</td>
+<td>package share <code>data</code></td>
+<td>Directory where bare <code>.mapdata</code> filenames are resolved (then the package <code>demo/</code>)</td>
 </tr>
 <tr>
-<td><code>mission_dir</code></td>
-<td><code>~/missions</code></td>
-<td>GPX output directory</td>
-</tr>
-<tr>
-<td><code>gps_fix_topic</code></td>
-<td><code>/fixposition/odometry_llh</code></td>
-<td><code>NavSatFix</code> for <code>start_from_robot</code></td>
-</tr>
-<tr>
-<td><code>earth_frame</code>, <code>local_frame</code></td>
-<td><code>FP_ECEF</code>, <code>FP_ENU0</code></td>
-<td>frames of <code>route_local</code></td>
-</tr>
-<tr>
-<td><code>algorithm</code></td>
-<td><code>graph</code></td>
-<td><code>graph</code>, <code>astar</code> or <code>rrt</code></td>
-</tr>
-<tr>
-<td><code>highway_types</code></td>
-<td><code>["footway"]</code></td>
-<td>allowed way types: <code>footway</code>, <code>road</code> or both</td>
-</tr>
-<tr>
-<td><code>spacing</code></td>
-<td><code>3.0</code></td>
-<td>max metres between output waypoints (0 = planner vertices)</td>
-</tr>
-<tr>
-<td><code>max_snap_distance</code></td>
-<td><code>100.0</code></td>
-<td>graph: waypoint-to-way limit (m), the start's own</td>
-</tr>
-<tr>
-<td><code>goal_max_snap_distance</code></td>
-<td><code>30.0</code></td>
-<td>graph: the goal's limit (m); farther fails with <code>snap_too_far</code></td>
-</tr>
-<tr>
-<td><code>outside_map_tolerance</code></td>
-<td><code>100.0</code></td>
-<td>m a start or goal may lie outside the map's area; farther fails with <code>start_outside_map</code> / <code>goal_outside_map</code></td>
-</tr>
-<tr>
-<td><code>keep_goal</code></td>
-<td><code>true</code></td>
-<td>end the route at the goal coordinate, not at its projection</td>
+<td><code>annotations</code></td>
+<td><code>auto</code></td>
+<td>Annotation store merged into the map: <code>auto</code>, <code>none</code>, or file path</td>
 </tr>
 <tr>
 <td><code>exclude_highway</code></td>
 <td><code>["steps"]</code></td>
-<td><code>highway=</code> values never routed over (stairs)</td>
+<td>Non-routable highway types excluded from graph and map</td>
 </tr>
 <tr>
 <td><code>traversability_file</code></td>
 <td><code>""</code></td>
-<td>tag rule file deciding what may be driven on (<code>""</code> = the package's <code>config/traversability.yaml</code>, see <a href="#traversability-rules">Traversability rules</a>); launch argument <code>traversability:=</code></td>
+<td>Tag rule file (<code>""</code> = package <code>config/traversability.yaml</code>). <a href="#traversability-rules">Traversability rules warning</a></td>
 </tr>
 <tr>
-<td><code>cell_size</code>, <code>inflate_obstacles</code></td>
-<td><code>0.25</code>, <code>0.25</code></td>
-<td>grid planners</td>
+<td><code>preload</code></td>
+<td><code>true</code></td>
+<td>Load map and build graph at startup</td>
+</tr>
+<tr>
+<td><code>mission_dir</code></td>
+<td><code>~/missions</code></td>
+<td>Directory where planned GPX tracks are saved</td>
+</tr>
+<tr>
+<td><code>gps_fix_topic</code></td>
+<td><code>/fixposition/odometry_llh</code></td>
+<td><code>NavSatFix</code> topic for <code>start_from_robot</code></td>
+</tr>
+<tr>
+<td><code>goal_topic</code></td>
+<td><code>~/goal</code></td>
+<td><code>GeoPointStamped</code> topic that triggers planning from current robot fix</td>
+</tr>
+<tr>
+<td><code>route_topic</code></td>
+<td><code>~/route</code></td>
+<td>Latched <code>geographic_msgs/GeoPath</code> topic</td>
+</tr>
+<tr>
+<td><code>route_path_topic</code></td>
+<td><code>~/route_path</code></td>
+<td>Latched <code>nav_msgs/Path</code> topic in <code>local_frame</code></td>
+</tr>
+<tr>
+<td><code>status_topic</code></td>
+<td><code>~/status</code></td>
+<td>Latched <code>std_msgs/String</code> status topic</td>
+</tr>
+<tr>
+<td><code>earth_frame</code></td>
+<td><code>FP_ECEF</code></td>
+<td>ECEF frame name for exact coordinate conversion</td>
+</tr>
+<tr>
+<td><code>local_frame</code></td>
+<td><code>FP_ENU0</code></td>
+<td>Target local frame for <code>route_path</code></td>
 </tr>
 <tr>
 <td><code>fix_max_age</code></td>
 <td><code>10.0</code></td>
-<td>s after which the last fix is stale</td>
+<td>Maximum age (s) before GPS fix is considered stale</td>
+</tr>
+<tr>
+<td><code>algorithm</code></td>
+<td><code>graph</code></td>
+<td>Fallback algorithm (<code>graph</code>, <code>astar</code>, <code>rrt</code>)</td>
+</tr>
+<tr>
+<td><code>highway_types</code></td>
+<td><code>["footway"]</code></td>
+<td>Fallback way types (<code>footway</code>, <code>road</code>, or both)</td>
+</tr>
+<tr>
+<td><code>spacing</code></td>
+<td><code>3.0</code></td>
+<td>Fallback waypoint spacing in meters</td>
+</tr>
+<tr>
+<td><code>max_snap_distance</code></td>
+<td><code>100.0</code></td>
+<td>Maximum snap distance (m) from start to nearest way</td>
+</tr>
+<tr>
+<td><code>goal_max_snap_distance</code></td>
+<td><code>30.0</code></td>
+<td>Maximum snap distance (m) for goal; farther fails with <code>snap_too_far</code></td>
+</tr>
+<tr>
+<td><code>outside_map_tolerance</code></td>
+<td><code>100.0</code></td>
+<td>Allowed distance (m) endpoints may lie outside map bounds</td>
+</tr>
+<tr>
+<td><code>keep_goal</code></td>
+<td><code>true</code></td>
+<td>End route at exact goal coordinate rather than projected point</td>
+</tr>
+<tr>
+<td><code>cell_size</code></td>
+<td><code>0.25</code></td>
+<td>Grid cell size (m), defaults from <code>planner_defaults.yaml</code></td>
+</tr>
+<tr>
+<td><code>inflate_obstacles</code></td>
+<td><code>0.25</code></td>
+<td>Obstacle inflation buffer (m), defaults from <code>planner_defaults.yaml</code></td>
+</tr>
+<tr>
+<td><code>simplify_path</code></td>
+<td><code>true</code></td>
+<td>Simplify grid path, defaults from <code>planner_defaults.yaml</code></td>
+</tr>
+<tr>
+<td><code>smooth_path</code></td>
+<td><code>false</code></td>
+<td>Smooth grid path, defaults from <code>planner_defaults.yaml</code></td>
 </tr>
 </tbody>
 </table>
-<h3 id="library">Library</h3>
+<h4 id="goal-execution-gpx-saving-and-waypoint-spacing">Goal execution, GPX saving, and waypoint spacing</h4>
+<ul>
+<li><strong>Cancellable goals:</strong> Action goals can be cancelled during execution. When cancelled, the action returns status <code>CANCELLED</code> and failure reason <code>cancelled</code>.</li>
+<li><strong>Boolean goal fields:</strong> Goal booleans (<code>simplify_path</code>, <code>smooth_path</code>) are evaluated as sent without falling back to node defaults.</li>
+<li><strong><code>save_gpx</code> field:</strong><ul>
+<li>Empty string (<code>""</code>): automatically writes a timestamped track to <code>mission_dir/route_&lt;timestamp&gt;.gpx</code>.</li>
+<li><code>"-"</code>: disables GPX file output.</li>
+<li>A <code>.gpx</code> file name: writes <code>mission_dir/&lt;name&gt;</code>. A path, <code>..</code> or another suffix is refused (logged, nothing saved), since any host on the network can send goals.</li>
+</ul>
+</li>
+<li><strong><code>spacing</code> semantics:</strong><ul>
+<li><code>spacing &gt; 0</code>: resamples the path so consecutive waypoints are at most <code>spacing</code> meters apart. Below <code>0.1</code> fails with <code>bad_parameter</code>.</li>
+<li><code>spacing == 0</code>: uses the node's default spacing (<code>3.0 m</code>).</li>
+<li>Negative spacing (<code>spacing &lt; 0</code>, e.g. <code>-1.0</code>): preserves raw planner vertices without densification.</li>
+</ul>
+</li>
+</ul>
+<h4 id="action-failure-reasons">Action failure reasons</h4>
+<p>When route planning fails, <code>PlanRoute.Result</code> sets <code>success = false</code> and provides a machine-readable <code>reason</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Reason</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bad_parameter</code></td>
+<td>Unknown <code>algorithm</code> or <code>sub_algorithm</code>, non-positive or non-finite <code>cell_size</code>, negative or non-finite <code>inflate_obstacles</code>, a positive <code>spacing</code> below <code>0.1</code> or infinite, or a waypoint UTM cannot express (latitude outside -80..84, non-finite)</td>
+</tr>
+<tr>
+<td><code>start_blocked</code></td>
+<td>Grid start coordinate lies inside an obstacle and cannot be snapped to free space</td>
+</tr>
+<tr>
+<td><code>goal_blocked</code></td>
+<td>Grid goal coordinate lies inside an obstacle and cannot be snapped to free space</td>
+</tr>
+<tr>
+<td><code>cancelled</code></td>
+<td>Planning request was cancelled</td>
+</tr>
+<tr>
+<td><code>busy</code></td>
+<td>Another plan is still running; the goal is not queued, send it again</td>
+</tr>
+<tr>
+<td><code>start_outside_map</code></td>
+<td>Start coordinate lies farther than <code>outside_map_tolerance</code> outside the map area</td>
+</tr>
+<tr>
+<td><code>goal_outside_map</code></td>
+<td>Goal coordinate lies farther than <code>outside_map_tolerance</code> outside the map area</td>
+</tr>
+<tr>
+<td><code>snap_too_far</code></td>
+<td>Waypoint exceeds maximum snap distance to the nearest allowed way</td>
+</tr>
+<tr>
+<td><code>unreachable</code></td>
+<td>Graph planner found no connection between endpoints in the way network</td>
+</tr>
+<tr>
+<td><code>no_path</code></td>
+<td>Grid planner found no collision-free path between endpoints</td>
+</tr>
+<tr>
+<td><code>grid_too_large</code></td>
+<td>Requested bounding area exceeds <code>max_grid_cells</code></td>
+</tr>
+<tr>
+<td><code>route_too_long</code></td>
+<td>The route would have more than 200 000 waypoints (<code>MAX_ROUTE_POINTS</code>)</td>
+</tr>
+<tr>
+<td><code>too_few_points</code></td>
+<td>Fewer than two waypoints supplied without <code>start_from_robot</code></td>
+</tr>
+<tr>
+<td><code>file_not_found</code></td>
+<td>Map data file could not be found or loaded; a goal's <code>mapdata_file</code> must be a relative name inside <code>data_dir</code></td>
+</tr>
+<tr>
+<td><code>internal_error</code></td>
+<td>A bug in the planner; the node logs the traceback and keeps running</td>
+</tr>
+<tr>
+<td><code>no_fix</code></td>
+<td><code>start_from_robot</code> requested but no recent GNSS fix was received on <code>gps_fix_topic</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="python-library-usage">Python library usage</h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.annotations</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_mapdata_with_annotations</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.pathsolver.route</span><span class="w"> </span><span class="kn">import</span> <span class="n">RoutePlanningError</span><span class="p">,</span> <span class="n">plan_route</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.utils.gpx</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_gpx_track</span>
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">md</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">load_mapdata_with_annotations</span><span class="p">(</span><span class="s2">"data/stromovka.mapdata"</span><span class="p">)</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">md</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">load_mapdata_with_annotations</span><span class="p">(</span><span class="s2">&quot;demo/buchlovice.mapdata&quot;</span><span class="p">)</span>
 </span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="k">try</span><span class="p">:</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="n">route</span> <span class="o">=</span> <span class="n">plan_route</span><span class="p">(</span><span class="n">md</span><span class="p">,</span> <span class="p">[(</span><span class="mf">50.1038</span><span class="p">,</span> <span class="mf">14.4294</span><span class="p">),</span> <span class="p">(</span><span class="mf">50.1067</span><span class="p">,</span> <span class="mf">14.4193</span><span class="p">)],</span> <span class="n">spacing</span><span class="o">=</span><span class="mf">3.0</span><span class="p">)</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="n">route</span> <span class="o">=</span> <span class="n">plan_route</span><span class="p">(</span><span class="n">md</span><span class="p">,</span> <span class="p">[(</span><span class="mf">49.084416</span><span class="p">,</span> <span class="mf">17.336309</span><span class="p">),</span> <span class="p">(</span><span class="mf">49.083106</span><span class="p">,</span> <span class="mf">17.338527</span><span class="p">)],</span> <span class="n">spacing</span><span class="o">=</span><span class="mf">3.0</span><span class="p">)</span>
 </span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="k">except</span> <span class="n">RoutePlanningError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">reason</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">message</span><span class="p">)</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Planning failed (</span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">reason</span><span class="si">}</span><span class="s2">): </span><span class="si">{</span><span class="n">e</span><span class="o">.</span><span class="n">message</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="k">else</span><span class="p">:</span>
-</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="nb">open</span><span class="p">(</span><span class="s2">"route.gpx"</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">create_gpx_track</span><span class="p">(</span><span class="n">route</span><span class="o">.</span><span class="n">latlon</span><span class="p">))</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s2">&quot;route.gpx&quot;</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">create_gpx_track</span><span class="p">(</span><span class="n">route</span><span class="o">.</span><span class="n">latlon</span><span class="p">))</span>
 </span></code></pre></div>
 <h2 id="traversability-rules">Traversability rules</h2>
 <p>Which OSM ways the robot may drive on is decided from their tags by
-<code>config/traversability.yaml</code>, the one file to edit when the answer changes. The rules are
-applied when a map is loaded for planning (<code>load_mapdata_with_annotations</code>), so the route
-planner, the <code>osm_cloud</code> cost cloud and the intersection rings all describe the same
-network; the saved <code>.mapdata</code> and the viewer keep showing everything.</p>
+<code>config/traversability.yaml</code>, the single file to edit when routing rules change. The rules are
+applied when a map is loaded for planning (<code>load_mapdata_with_annotations</code>), ensuring that
+<code>route_planner</code>, <code>osm_cloud</code>, and intersection generation all observe the same network.</p>
+<div class="admonition warning">
+<p class="admonition-title">Keep traversability rules in sync between nodes</p>
+<p>Both <code>route_planner</code> and <code>osm_cloud</code> must be configured with the same traversability file. If they differ, <code>osm_cloud</code> may publish intersection rings and cost clouds for ways that <code>route_planner</code> refuses to route over. <code>route_planner</code> detects rule file modifications automatically on each new goal, whereas <code>osm_cloud</code> reads the rule file once at startup and must be restarted after edits.</p>
+</div>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">default</span><span class="p">:</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">traversable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="nt">cost</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
@@ -2038,170 +2421,74 @@ network; the saved <code>.mapdata</code> and the viewer keep showing everything.
 </span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">match</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">highway</span><span class="p">:</span><span class="w"> </span><span class="nv">steps</span><span class="p p-Indicator">}</span><span class="w">          </span><span class="c1"># exact value</span>
 </span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="nt">traversable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 </span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">    </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">stairs</span>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">match</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">surface</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">grass</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">mud</span><span class="p p-Indicator">]}</span><span class="w">   </span><span class="c1"># any of these values</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">match</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">surface</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">grass</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">mud</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">sand</span><span class="p p-Indicator">]}</span><span class="w">   </span><span class="c1"># any of these values</span>
 </span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">    </span><span class="nt">traversable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 </span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">    </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">soft surface</span>
-</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">match</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">bridge</span><span class="p">:</span><span class="w"> </span><span class="s">"*"</span><span class="p p-Indicator">}</span><span class="w">             </span><span class="c1"># the tag is present, whatever its value</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">match</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">bridge</span><span class="p">:</span><span class="w"> </span><span class="nv">boardwalk</span><span class="p p-Indicator">}</span><span class="w">       </span><span class="c1"># boardwalk bridges refused</span>
 </span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">    </span><span class="nt">traversable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
 </span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">    </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bridge</span>
-</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">match</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">highway</span><span class="p">:</span><span class="w"> </span><span class="nv">path</span><span class="p p-Indicator">,</span><span class="nt"> informal</span><span class="p">:</span><span class="w"> </span><span class="nv">yes</span><span class="p p-Indicator">}</span><span class="w">   </span><span class="c1"># several keys: all must match (AND)</span>
-</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="w">    </span><span class="nt">cost</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
-</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="w">    </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">informal path</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">match</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">smoothness</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">bad</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">very_bad</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">horrible</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">very_horrible</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">impassable</span><span class="p p-Indicator">]}</span>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="w">    </span><span class="nt">traversable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="w">    </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">rough surface</span>
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">match</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">access</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">no</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">private</span><span class="p p-Indicator">]}</span>
+</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a><span class="w">    </span><span class="nt">traversable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a><span class="w">    </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">no access</span>
+</span><span id="__span-3-20"><a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">match</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">highway</span><span class="p">:</span><span class="w"> </span><span class="nv">path</span><span class="p p-Indicator">,</span><span class="nt"> informal</span><span class="p">:</span><span class="w"> </span><span class="nv">yes</span><span class="p p-Indicator">}</span><span class="w">   </span><span class="c1"># multiple keys: all must match (AND)</span>
+</span><span id="__span-3-21"><a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a><span class="w">    </span><span class="nt">cost</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+</span><span id="__span-3-22"><a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a><span class="w">    </span><span class="nt">reason</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">informal path</span>
 </span></code></pre></div>
 <ul>
-<li>Rules are tried in order and the <strong>first match wins</strong>, so an allow rule placed before a
-  deny rule is the way to make an exception (<code>{bridge: boardwalk} traversable: true</code> above
-  <code>{bridge: "*"} traversable: false</code>). A way no rule matches gets <code>default</code>.</li>
-<li><code>traversable: false</code> removes the way: it is never routed over, its junctions get no
-  intersection ring, and it is off-road in the <code>osm_cloud</code> cost cloud.</li>
-<li><code>cost:</code> is optional and <strong>additive on top of</strong> the <code>highway</code>/<code>surface</code> cost from
-  <code>config/planner_defaults.yaml</code>: the graph planner weighs the way's edges
-  <code>(1 + way cost + rule cost) × length</code>. Surfaces and way types are already priced by
-  those tables, so use it only for tags they know nothing about (<code>informal=yes</code>). The
-  reported route length is always the geometric one.</li>
-<li><code>reason:</code> is what the load log prints next to the count of removed ways.</li>
-<li>YAML parses a bare <code>yes</code>/<code>no</code> as a boolean, but rule and tag values are compared as the
-  strings OSM uses, so <code>informal: yes</code> and <code>informal: "yes"</code> are the same rule — quoting is
-  never needed.</li>
-<li>The file is validated on load: an unknown key, a negative <code>cost</code> or a non-boolean
-  <code>traversable</code> is an error naming the file and the rule.</li>
+<li>Rules are evaluated in order and the <strong>first match wins</strong>. A way that matches no rule receives <code>default</code>.</li>
+<li><code>traversable: false</code> removes the way: it is never routed over, its junctions receive no intersection rings, and it is excluded from <code>osm_cloud</code>.</li>
+<li><code>cost:</code> is optional and <strong>additive on top of</strong> <code>highway</code>/<code>surface</code> costs from <code>config/planner_defaults.yaml</code>: graph edge weights are <code>(1 + way cost + rule cost) × length</code>.</li>
+<li>Rule and tag values are compared as strings (<code>informal: yes</code> matches <code>informal: "yes"</code>).</li>
+<li>Shipped defaults refuse stairs, soft surfaces (<code>grass</code>, <code>mud</code>, <code>sand</code>), boardwalk bridges (<code>bridge: boardwalk</code>), rough surfaces, and non-accessible ways.</li>
 </ul>
-<p>The shipped defaults refuse stairs, grass/mud/sand surfaces, bridges, <code>smoothness=bad</code> or
-worse and <code>access=no|private</code>. Measured on the Stromovka map (<code>kralovska_obora.mapdata</code>,
-289 ways) they remove 15 stairways, 6 soft-surface ways, 13 bridges and 1 rough way, and
-leave both routes driven there on 2026-09-08 exactly as they were. A <code>tunnel</code> rule is
-shipped <strong>commented out</strong>: the covered alley at Šlechtova is the only short way west, and
-removing the two tunnels turned a 751 m route into 2495 m.</p>
-<p>Where the file is chosen:</p>
-<table>
-<thead>
-<tr>
-<th></th>
-<th></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>route_planner</code>, <code>osm_cloud</code></td>
-<td>parameter <code>traversability_file</code> (<code>""</code> = the package file)</td>
-</tr>
-<tr>
-<td>launch files</td>
-<td><code>traversability:=&lt;file&gt;</code> (forwarded only when non-empty)</td>
-</tr>
-<tr>
-<td><code>map_data_plan</code></td>
-<td><code>--traversability FILE</code>, <code>--no-traversability</code></td>
-</tr>
-<tr>
-<td>library</td>
-<td><code>load_mapdata_with_annotations(..., traversability=...)</code>, <code>plan_route(..., traversability=...)</code>, <code>GraphPlanner(..., traversability=...)</code> — a <code>TraversabilityRules</code>, a path, or <code>None</code> for the package file</td>
-</tr>
-</tbody>
-</table>
-<p><code>route_planner</code> includes the file's mtime in its map and planner caches, so an edit is
-picked up by the next goal. <code>osm_cloud</code> reads it once at startup: edit the file, restart
-that node. Both nodes must be given the same file,
-or <code>osm_cloud</code> publishes rings on ways the planner refuses.</p>
-<h2 id="python-library">Python Library</h2>
-<p>All planners work standalone — no ROS2 context required.</p>
-<h3 id="graphplanner">GraphPlanner</h3>
-<p>Plans a route constrained to the OSM road and footway network using A*.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.map_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">MapData</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.pathsolver.graph_planner</span><span class="w"> </span><span class="kn">import</span> <span class="n">GraphPlanner</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">md</span> <span class="o">=</span> <span class="n">MapData</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"coords.mapdata"</span><span class="p">)</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="n">start</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">md</span><span class="o">.</span><span class="n">min_x</span> <span class="o">+</span> <span class="mi">10</span><span class="p">,</span> <span class="n">md</span><span class="o">.</span><span class="n">min_y</span> <span class="o">+</span> <span class="mi">10</span><span class="p">])</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="n">goal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">md</span><span class="o">.</span><span class="n">max_x</span> <span class="o">-</span> <span class="mi">10</span><span class="p">,</span> <span class="n">md</span><span class="o">.</span><span class="n">max_y</span> <span class="o">-</span> <span class="mi">10</span><span class="p">])</span>
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="n">planner</span> <span class="o">=</span> <span class="n">GraphPlanner</span><span class="p">(</span><span class="n">md</span><span class="p">,</span> <span class="n">highway_types</span><span class="o">=</span><span class="p">[</span><span class="s2">"footway"</span><span class="p">,</span> <span class="s2">"road"</span><span class="p">])</span>
-</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="n">result</span> <span class="o">=</span> <span class="n">planner</span><span class="o">.</span><span class="n">plan</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">start</span><span class="p">,</span> <span class="n">goal</span><span class="p">]))</span>  <span class="c1"># np.ndarray or None</span>
-</span></code></pre></div>
-<h3 id="replanpath">ReplanPath</h3>
-<p>Grid-based local replanning around OSM barriers. See the <a href="../api/pathsolver/#replanpath">ReplanPath API reference</a> for full details.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.map_data</span><span class="w"> </span><span class="kn">import</span> <span class="n">MapData</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.pathsolver.replan</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReplanPath</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.utils.parsing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ways_to_shapely</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">md</span> <span class="o">=</span> <span class="n">MapData</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"coords.mapdata"</span><span class="p">)</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">replanner</span> <span class="o">=</span> <span class="n">ReplanPath</span><span class="p">(</span>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>    <span class="n">ways_to_shapely</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">barriers_list</span><span class="p">),</span>
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>    <span class="n">low</span><span class="o">=</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">min_x</span><span class="p">,</span> <span class="n">md</span><span class="o">.</span><span class="n">min_y</span><span class="p">),</span>
-</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>    <span class="n">high</span><span class="o">=</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">max_x</span><span class="p">,</span> <span class="n">md</span><span class="o">.</span><span class="n">max_y</span><span class="p">),</span>
-</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>    <span class="n">cell_size</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span>
-</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    <span class="n">inflate_obstacles</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span>
-</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>    <span class="n">simplify_path</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>    <span class="n">smooth_path</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="p">)</span>
-</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="n">replanner</span><span class="o">.</span><span class="n">fill_grid</span><span class="p">(</span><span class="n">md</span><span class="p">,</span> <span class="n">highway_types</span><span class="o">=</span><span class="p">[</span><span class="s2">"footway"</span><span class="p">],</span> <span class="n">max_path_dist</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
-</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>
-</span><span id="__span-5-19"><a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a><span class="n">start</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">md</span><span class="o">.</span><span class="n">min_x</span> <span class="o">+</span> <span class="mi">10</span><span class="p">,</span> <span class="n">md</span><span class="o">.</span><span class="n">min_y</span> <span class="o">+</span> <span class="mi">10</span><span class="p">])</span>
-</span><span id="__span-5-20"><a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a><span class="n">goal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">md</span><span class="o">.</span><span class="n">max_x</span> <span class="o">-</span> <span class="mi">10</span><span class="p">,</span> <span class="n">md</span><span class="o">.</span><span class="n">max_y</span> <span class="o">-</span> <span class="mi">10</span><span class="p">])</span>
-</span><span id="__span-5-21"><a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="n">new_path</span> <span class="o">=</span> <span class="n">replanner</span><span class="o">.</span><span class="n">replan</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">start</span><span class="p">,</span> <span class="n">goal</span><span class="p">]),</span> <span class="n">algorithm</span><span class="o">=</span><span class="s2">"astar"</span><span class="p">)</span>
-</span></code></pre></div>
-<h2 id="available-algorithms">Available Algorithms</h2>
-<h3 id="graph-planning">Graph Planning</h3>
+<h2 id="available-algorithms">Available algorithms</h2>
+<h3 id="graph-planning">Graph planning</h3>
 <p>Plans a path by searching the OSM road and footway network using A*. The route is constrained
-to follow existing ways, making it suitable for on-road or on-path navigation where staying on
-designated routes is required. This algorithm is fast and produces geometrically clean results,
-but cannot leave the road network to avoid obstacles. Its edge weights are
-<code>length × (1 + way cost)</code> with the same <code>highway_costs</code>/<code>surface_costs</code> tables the cost
-grid uses, plus any extra cost from the <a href="#traversability-rules">traversability rules</a>, so
-a gravel shortcut loses to a slightly longer paved way; the reported route length stays
-geometric.</p>
+to follow existing ways, making it suitable for on-road navigation. Its edge weights are
+<code>length × (1 + way cost)</code> using <code>highway_costs</code>/<code>surface_costs</code> tables plus any additive cost
+from <a href="#traversability-rules">traversability rules</a>.</p>
 <p>Walkable areas — closed <code>area=yes</code> (or multipolygon) ways such as pedestrian squares — are
-crossed, not walked around. Their entries are the network nodes on, inside or within 1 m of
-the area; between two entries the planner takes the shortest path inside the polygon,
-bending round concave corners and holes. These crossings are worked out per area when the
-search first reaches it and are never added to the graph. A waypoint inside an area stays
-where it is (its snap distance is 0) instead of moving to the area's rim.</p>
+crossed directly rather than circumnavigated. The planner computes the shortest line-of-sight
+path within the polygon boundary between entry and exit points.</p>
 <h3 id="grid-a">Grid A*</h3>
 <p>Discretizes the area around the route into a uniform grid and runs A* on it.
-Each cell is marked free or occupied based on OSM barrier polygons (optionally inflated).
-Grid A* is the recommended all-terrain algorithm: it is complete (finds a path if one exists),
-produces near-optimal paths, and has predictable runtime behavior. Grid resolution and obstacle
-inflation are tunable via <code>--cell_size</code> and <code>--inflate_obstacles</code>.</p>
+Each cell carries a cost (see <a href="#cost-grid">Cost grid</a>); cells inside barrier polygons are impassable.
+Grid A* is complete (finds a path if one exists) and provides predictable runtime. Resolution
+and obstacle inflation are tuned via <code>--cell-size</code> and <code>--inflate-obstacles</code>.</p>
 <h3 id="rrt">RRT*</h3>
 <p>Rapidly-exploring Random Tree Star is a sampling-based planner that builds a tree of
-collision-free waypoints by randomly sampling the free space. It is asymptotically optimal —
-given enough iterations it converges to the shortest path — and handles irregular obstacle
-shapes well. RRT* is best suited for large open areas or when the grid resolution required
-for Grid A* would be prohibitively expensive. It gives up after a fixed iteration budget,
-so when it finds no path for a leg, Grid A* is run on the same grid instead (unless the
-run was cancelled).</p>
+collision-free waypoints by randomly sampling the free space. RRT* is well suited for large
+open areas. If RRT* exceeds its iteration budget without finding a path, Grid A* runs on the
+same grid as a fallback.</p>
 <hr />
 <h2 id="cost-grid">Cost grid</h2>
 <p><code>ReplanPath.fill_grid()</code> converts OSM map data into a 2-D NumPy array of floating-point costs,
-one value per grid cell. Each cell represents a <code>cell_size × cell_size</code> metre patch of ground.</p>
+one value per grid cell representing a <code>cell_size × cell_size</code> meter patch.</p>
 <p><strong>Cell cost assignment:</strong></p>
 <ol>
-<li>Barrier polygons (inflated by <code>inflate_obstacles</code>) are rasterised as impassable (<code>cost = inf</code>).</li>
-<li>For every remaining cell, the distance to the nearest way centre-line is calculated.</li>
+<li>Barrier polygons (inflated by <code>inflate_obstacles</code>, minus the ways of <code>highway_types</code> that cross them, such as a footway through a gate) are rasterized as impassable (<code>cost = inf</code>).</li>
+<li>For each remaining cell, the distance to the nearest way centerline is computed.</li>
 <li>
-<p>If that distance is ≤ <code>max_path_dist</code>, the cell receives a blended cost:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>cost = way_cost + (default_off_path_cost − way_cost) × (dist / max_path_dist)²
-</span></code></pre></div>
-<p>where <code>way_cost = min(path_cost_cap, highway_cost + surface_cost)</code>.</p>
+<p>If that distance is $\le$ <code>max_path_dist</code>, the cell receives a blended cost:</p>
+<p>$$\text{cost} = \text{way_cost} + (\text{default_off_path_cost} - \text{way_cost}) \times \left(\frac{\text{dist}}{\text{max_path_dist}}\right)^2$$</p>
+<p>where $\text{way_cost} = \min(\text{path_cost_cap}, \text{highway_cost} + \text{surface_cost})$.</p>
 </li>
 <li>
 <p>Cells beyond <code>max_path_dist</code> from any way receive <code>default_off_path_cost</code> (default <code>0.9</code>).</p>
 </li>
 </ol>
-<p>Costs run from <code>0.0</code> (freely preferred, e.g. a pedestrian footway on asphalt) to <code>1.0</code>
-(impassable). The planner treats cells with cost <code>≥ 1.0</code> as obstacles. See
-<a href="../dev/planner_config/">Planner Configuration</a> for the full cost tables.</p>
-<p><strong>Traversability threshold.</strong> Both Grid A* and RRT* consider a cell passable if its cost is
-<code>&lt; 1.0</code>. There is no separate traversability threshold parameter — adjust <code>inflate_obstacles</code> to
-shrink or expand the impassable zone around physical barriers, and adjust <code>default_off_path_cost</code>
-to make off-path terrain more or less discouraged.</p>
+<p><strong>Obstacle thresholds:</strong></p>
+<ul>
+<li>In <strong>Grid A*</strong>, only cells with cost <code>inf</code> (<code>np.isinf</code>) are treated as impassable obstacles. Cells with finite costs (even $\ge 1.0$) are traversable with weighted traversal cost.</li>
+<li>In <strong>RRT*</strong>, cells with cost $\ge$ <code>traversability_threshold</code> (default <code>10.0</code>) or <code>inf</code> are treated as obstacles.</li>
+</ul>
 <hr />
 <h2 id="performance-tuning">Performance tuning</h2>
 <h3 id="grid-resolution-cell_size">Grid resolution (<code>cell_size</code>)</h3>
-<p><code>cell_size</code> is the dominant factor in both memory use and planning time.</p>
+<p><code>cell_size</code> is the dominant factor in memory consumption and planning time.</p>
 <table>
 <thead>
 <tr>
@@ -2219,29 +2506,24 @@ to make off-path terrain more or less discouraged.</p>
 <tr>
 <td><code>0.25 m</code></td>
 <td>1 600</td>
-<td>Default — good balance for urban pedestrian routes</td>
+<td>Default — balanced resolution for pedestrian routes</td>
 </tr>
 <tr>
 <td><code>0.1 m</code></td>
 <td>10 000</td>
-<td>Tight corridors, narrow gates</td>
+<td>Narrow gates, tight corridors</td>
 </tr>
 </tbody>
 </table>
-<p>Halving <code>cell_size</code> quadruples the number of cells and roughly doubles planning time. For routes
-longer than a few hundred metres, prefer <code>0.25 m</code> or <code>0.5 m</code> and rely on <code>inflate_obstacles</code> to
-enforce clearance rather than resolving every surface detail at fine resolution.</p>
 <h3 id="obstacle-inflation-inflate_obstacles">Obstacle inflation (<code>inflate_obstacles</code>)</h3>
-<p>Increasing <code>inflate_obstacles</code> adds a safety margin around barriers at the cost of blocking
-routes through narrow gaps. If the planner returns <code>False</code> (no path found), try reducing this
-value before increasing grid resolution.</p>
+<p>Increasing <code>inflate_obstacles</code> adds a safety margin around barriers at the expense of
+potentially closing narrow corridors. If planning returns <code>None</code>, consider reducing this
+value.</p>
 <h3 id="path-post-processing">Path post-processing</h3>
-<p><code>simplify_path</code> (Douglas-Peucker) is cheap and almost always beneficial — it reduces the
-waypoint count without noticeably changing the path shape. Enable it for any path that will be
-sent to a navigation stack.</p>
-<p><code>smooth_path</code> applies gradient-descent smoothing. It rounds sharp corners but can shift
-waypoints slightly off the low-cost cells produced by the planner. Use it when the downstream
-controller benefits from smooth curvature and the small positional deviation is acceptable.</p>
+<ul>
+<li><code>simplify_path</code> (Douglas-Peucker) drops collinear and redundant vertices, reducing waypoint count without altering path geometry.</li>
+<li><code>smooth_path</code> applies gradient-descent smoothing to round sharp corners.</li>
+</ul>
 <h3 id="algorithm-choice">Algorithm choice</h3>
 <table>
 <thead>
@@ -2252,49 +2534,45 @@ controller benefits from smooth curvature and the small positional deviation is 
 </thead>
 <tbody>
 <tr>
-<td>Well-mapped pedestrian network, path must stay on ways</td>
-<td><code>GraphPlanner</code></td>
+<td>Mapped pedestrian or road network, robot must stay on ways</td>
+<td>Graph planning</td>
 </tr>
 <tr>
-<td>Urban route, obstacles well-defined by OSM barriers</td>
+<td>Urban route with well-defined barrier obstacles</td>
 <td>Grid A*</td>
 </tr>
 <tr>
 <td>Large open area, sparse obstacles</td>
 <td>RRT*</td>
 </tr>
-<tr>
-<td>Very large area where a fine Grid A* grid is too expensive</td>
-<td>RRT*</td>
-</tr>
 </tbody>
 </table>
 <hr />
-<h2 id="using-astar_search-directly">Using <code>astar_search</code> directly</h2>
-<p><code>astar_search</code> is the generic A* implementation that powers both <code>GraphPlanner</code> and
-<code>grid_astar</code>. You can use it directly to build a custom planner for any graph-like problem.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.pathsolver.astar</span><span class="w"> </span><span class="kn">import</span> <span class="n">astar_search</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># Example: plan over a simple weighted grid</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">neighbors</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">r</span><span class="p">,</span> <span class="n">c</span> <span class="o">=</span> <span class="n">node</span>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="n">candidates</span> <span class="o">=</span> <span class="p">[(</span><span class="n">r</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">c</span><span class="p">),</span> <span class="p">(</span><span class="n">r</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">c</span><span class="p">),</span> <span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">c</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">c</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="k">return</span> <span class="p">[(</span><span class="n">n</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">candidates</span> <span class="k">if</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">n</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">10</span> <span class="ow">and</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">n</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">]</span>
-</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
-</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>
-</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">heuristic</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
-</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>    <span class="n">goal</span> <span class="o">=</span> <span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">9</span><span class="p">)</span>
-</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>    <span class="k">return</span> <span class="nb">abs</span><span class="p">(</span><span class="n">node</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">goal</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">+</span> <span class="nb">abs</span><span class="p">(</span><span class="n">node</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">goal</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
-</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>
-</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>
-</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="n">path</span> <span class="o">=</span> <span class="n">astar_search</span><span class="p">(</span>
-</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>    <span class="n">start_node</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
-</span><span id="__span-7-18"><a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>    <span class="n">goal_node</span><span class="o">=</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">9</span><span class="p">),</span>
-</span><span id="__span-7-19"><a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a>    <span class="n">get_neighbors_func</span><span class="o">=</span><span class="n">neighbors</span><span class="p">,</span>
-</span><span id="__span-7-20"><a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a>    <span class="n">heuristic_func</span><span class="o">=</span><span class="n">heuristic</span><span class="p">,</span>
-</span><span id="__span-7-21"><a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a><span class="p">)</span>
-</span><span id="__span-7-22"><a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a><span class="c1"># path is a list of (row, col) tuples from start to goal, or None if unreachable</span>
+<h2 id="using-astar_search-directly">Using astar_search directly</h2>
+<p><code>astar_search</code> is the generic A* implementation <code>GraphPlanner</code> uses (<code>grid_astar</code> has its
+own array-based loop). You can use it directly to build a custom planner for any graph-like problem.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">map_data.pathsolver.astar</span><span class="w"> </span><span class="kn">import</span> <span class="n">astar_search</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Example: plan over a simple weighted grid</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">neighbors</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="n">r</span><span class="p">,</span> <span class="n">c</span> <span class="o">=</span> <span class="n">node</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="n">candidates</span> <span class="o">=</span> <span class="p">[(</span><span class="n">r</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">c</span><span class="p">),</span> <span class="p">(</span><span class="n">r</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">c</span><span class="p">),</span> <span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">c</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">c</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="k">return</span> <span class="p">[(</span><span class="n">n</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">candidates</span> <span class="k">if</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">n</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">10</span> <span class="ow">and</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">n</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">]</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="k">def</span><span class="w"> </span><span class="nf">heuristic</span><span class="p">(</span><span class="n">node</span><span class="p">):</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>    <span class="n">goal</span> <span class="o">=</span> <span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">9</span><span class="p">)</span>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>    <span class="k">return</span> <span class="nb">abs</span><span class="p">(</span><span class="n">node</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">goal</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">+</span> <span class="nb">abs</span><span class="p">(</span><span class="n">node</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">goal</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="n">path</span> <span class="o">=</span> <span class="n">astar_search</span><span class="p">(</span>
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>    <span class="n">start_node</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>    <span class="n">goal_node</span><span class="o">=</span><span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">9</span><span class="p">),</span>
+</span><span id="__span-4-19"><a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>    <span class="n">get_neighbors_func</span><span class="o">=</span><span class="n">neighbors</span><span class="p">,</span>
+</span><span id="__span-4-20"><a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>    <span class="n">heuristic_func</span><span class="o">=</span><span class="n">heuristic</span><span class="p">,</span>
+</span><span id="__span-4-21"><a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a><span class="p">)</span>
+</span><span id="__span-4-22"><a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="c1"># path is a list of (row, col) tuples from start to goal, or None if unreachable</span>
 </span></code></pre></div>
 <p><code>get_neighbors_func</code> must return an iterable of <code>(neighbor_node, edge_cost)</code> tuples.
 <code>heuristic_func</code> must be admissible (never overestimate the true cost to the goal) for A* to
@@ -2358,10 +2636,10 @@ return an optimal path.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "search.suggest", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "search.suggest", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
   </body>

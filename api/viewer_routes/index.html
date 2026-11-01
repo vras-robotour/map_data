@@ -6,14 +6,14 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="ROS2 tools to work with OSM data and perform path planning.">
+        <meta name="description" content="ROS 2 tools to work with OSM data and perform path planning.">
       
       
         <meta name="author" content="Jan Vlk">
       
       
       
-        <link rel="prev" href="../pathsolver/">
+        <link rel="prev" href="../traversability/">
       
       
         <link rel="next" href="../../troubleshooting/">
@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -31,10 +31,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -276,7 +276,7 @@
           
   
   
-  API Reference
+  API reference
 
         </a>
       </li>
@@ -315,7 +315,7 @@
           
   
   
-  Developer Guide
+  Developer guide
 
         </a>
       </li>
@@ -528,7 +528,7 @@
   <span class="md-ellipsis">
     
   
-    Interactive Viewer
+    Interactive viewer
   
 
     
@@ -544,7 +544,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Interactive Viewer
+    Interactive viewer
   
 
           </label>
@@ -684,7 +684,7 @@
   <span class="md-ellipsis">
     
   
-    Path Planning
+    Path planning
   
 
     
@@ -740,7 +740,7 @@
   <span class="md-ellipsis">
     
   
-    API Reference
+    API reference
   
 
     
@@ -756,7 +756,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    API Reference
+    API reference
   
 
           </label>
@@ -850,6 +850,62 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../annotations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Annotations and edits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../traversability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Traversability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -913,15 +969,26 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#file-management" class="md-nav__link">
+  <a href="#conventions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        File Management
+        Conventions
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="File Management">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Files
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Files">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -958,10 +1025,32 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#get-apifetch_areatask_id" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/fetch_area/&lt;task_id&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#post-apiupload_gpx" class="md-nav__link">
     <span class="md-ellipsis">
       
         POST /api/upload_gpx
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apiupload_mapdata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/upload_mapdata
       
     </span>
   </a>
@@ -1008,10 +1097,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#get-apiannotationsfilename" class="md-nav__link">
+  <a href="#get-apiannotations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        GET /api/annotations?file=&lt;name&gt;
+        GET /api/annotations
       
     </span>
   </a>
@@ -1019,10 +1108,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#post-apiannotationsfilename" class="md-nav__link">
+  <a href="#post-apiannotations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        POST /api/annotations?file=&lt;name&gt;
+        POST /api/annotations
       
     </span>
   </a>
@@ -1030,10 +1119,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#put-apiannotationsann_idfilename" class="md-nav__link">
+  <a href="#put-apiannotationsann_id" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PUT /api/annotations/&lt;ann_id&gt;?file=&lt;name&gt;
+        PUT /api/annotations/&lt;ann_id&gt;
       
     </span>
   </a>
@@ -1041,10 +1130,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#delete-apiannotationsann_idfilename" class="md-nav__link">
+  <a href="#delete-apiannotationsann_id" class="md-nav__link">
     <span class="md-ellipsis">
       
-        DELETE /api/annotations/&lt;ann_id&gt;?file=&lt;name&gt;
+        DELETE /api/annotations/&lt;ann_id&gt;
       
     </span>
   </a>
@@ -1069,10 +1158,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#get-apiwaysway_idfilename" class="md-nav__link">
+  <a href="#get-apiwaysway_id" class="md-nav__link">
     <span class="md-ellipsis">
       
-        GET /api/ways/&lt;way_id&gt;?file=&lt;name&gt;
+        GET /api/ways/&lt;way_id&gt;
       
     </span>
   </a>
@@ -1080,10 +1169,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#delete-apiwaysway_idfilename" class="md-nav__link">
+  <a href="#delete-apiwaysway_id" class="md-nav__link">
     <span class="md-ellipsis">
       
-        DELETE /api/ways/&lt;way_id&gt;?file=&lt;name&gt;
+        DELETE /api/ways/&lt;way_id&gt;
       
     </span>
   </a>
@@ -1091,10 +1180,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#put-apiwaysway_idtagsfilename" class="md-nav__link">
+  <a href="#put-apiwaysway_idrestore" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PUT /api/ways/&lt;way_id&gt;/tags?file=&lt;name&gt;
+        PUT /api/ways/&lt;way_id&gt;/restore
       
     </span>
   </a>
@@ -1102,10 +1191,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#delete-apiwaysway_idtagsfilename" class="md-nav__link">
+  <a href="#put-apiwaysway_idtags" class="md-nav__link">
     <span class="md-ellipsis">
       
-        DELETE /api/ways/&lt;way_id&gt;/tags?file=&lt;name&gt;
+        PUT /api/ways/&lt;way_id&gt;/tags
       
     </span>
   </a>
@@ -1113,10 +1202,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#put-apiwaysway_idhidefilename" class="md-nav__link">
+  <a href="#delete-apiwaysway_idtags" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PUT /api/ways/&lt;way_id&gt;/hide?file=&lt;name&gt;
+        DELETE /api/ways/&lt;way_id&gt;/tags
       
     </span>
   </a>
@@ -1124,10 +1213,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#put-apiwaysway_idshowfilename" class="md-nav__link">
+  <a href="#put-apiwaysway_idhide-put-apiwaysway_idshow" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PUT /api/ways/&lt;way_id&gt;/show?file=&lt;name&gt;
+        PUT /api/ways/&lt;way_id&gt;/hide, PUT /api/ways/&lt;way_id&gt;/show
       
     </span>
   </a>
@@ -1135,10 +1224,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#put-apiwaysway_idrestorefilename" class="md-nav__link">
+  <a href="#get-apiwaysway_idsegments" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PUT /api/ways/&lt;way_id&gt;/restore?file=&lt;name&gt;
+        GET /api/ways/&lt;way_id&gt;/segments
       
     </span>
   </a>
@@ -1146,10 +1235,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#get-apiwaysway_idsegmentsfilename" class="md-nav__link">
+  <a href="#post-apiwayssplit" class="md-nav__link">
     <span class="md-ellipsis">
       
-        GET /api/ways/&lt;way_id&gt;/segments?file=&lt;name&gt;
+        POST /api/ways/split
       
     </span>
   </a>
@@ -1157,21 +1246,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#post-apiwayssplitfilename" class="md-nav__link">
+  <a href="#delete-apiwayssplitway_ididnode_idid" class="md-nav__link">
     <span class="md-ellipsis">
       
-        POST /api/ways/split?file=&lt;name&gt;
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#delete-apiwayssplitfilenameway_ididnode_idid" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        DELETE /api/ways/split?file=&lt;name&gt;&amp;way_id=&lt;id&gt;&amp;node_id=&lt;id&gt;
+        DELETE /api/ways/split?way_id=&lt;id&gt;&amp;node_id=&lt;id&gt;
       
     </span>
   </a>
@@ -1196,10 +1274,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#get-apiway_nodesfilenameway_idid" class="md-nav__link">
+  <a href="#get-apiway_nodes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        GET /api/way_nodes?file=&lt;name&gt;&amp;way_id=&lt;id&gt;
+        GET /api/way_nodes
       
     </span>
   </a>
@@ -1207,10 +1285,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#delete-apiway_nodefilename" class="md-nav__link">
+  <a href="#post-apiway_node" class="md-nav__link">
     <span class="md-ellipsis">
       
-        DELETE /api/way_node?file=&lt;name&gt;
+        POST /api/way_node
       
     </span>
   </a>
@@ -1218,10 +1296,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#put-apiway_noderestorefilename" class="md-nav__link">
+  <a href="#delete-apiway_nodenode_idid" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PUT /api/way_node/restore?file=&lt;name&gt;
+        DELETE /api/way_node?node_id=&lt;id&gt;
       
     </span>
   </a>
@@ -1229,10 +1307,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#put-apiway_nodesmovefilename" class="md-nav__link">
+  <a href="#put-apiway_noderestorenode_idid" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PUT /api/way_nodes/move?file=&lt;name&gt;
+        PUT /api/way_node/restore?node_id=&lt;id&gt;
       
     </span>
   </a>
@@ -1240,10 +1318,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#delete-apiway_nodesmovefilenameway_idid" class="md-nav__link">
+  <a href="#put-apiway_nodesmove" class="md-nav__link">
     <span class="md-ellipsis">
       
-        DELETE /api/way_nodes/move?file=&lt;name&gt;&amp;way_id=&lt;id&gt;
+        PUT /api/way_nodes/move
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-apiway_nodesmove" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/way_nodes/move
       
     </span>
   </a>
@@ -1256,15 +1345,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#path-planning" class="md-nav__link">
+  <a href="#planning" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Path Planning
+        Planning
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Path Planning">
+    <nav class="md-nav" aria-label="Planning">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1272,17 +1361,6 @@
     <span class="md-ellipsis">
       
         GET /api/planner_defaults
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#get-apicost_gridfilenamemin_latmin_lonmax_latmax_lon" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        GET /api/cost_grid?file=&lt;name&gt;&amp;min_lat=&amp;min_lon=&amp;max_lat=&amp;max_lon=
       
     </span>
   </a>
@@ -1305,6 +1383,100 @@
     <span class="md-ellipsis">
       
         POST /api/cancel_replan
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-apicost_grid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/cost_grid
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-apitraversability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/traversability
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apitraversability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/traversability
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apitraversabilityblocked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/traversability/blocked
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sharing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sharing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sharing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-apiqr-get-apiqrsvg" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/qr, GET /api/qr.svg
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apicreate_wormhole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/create_wormhole
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apicancel_wormhole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/cancel_wormhole
       
     </span>
   </a>
@@ -1355,45 +1527,6 @@
     <span class="md-ellipsis">
       
         DELETE /api/tracker/trail
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#wormhole-robot-file-transfer" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Wormhole (Robot File Transfer)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Wormhole (Robot File Transfer)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#post-apicreate_wormhole" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        POST /api/create_wormhole
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#post-apicancel_wormhole" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        POST /api/cancel_wormhole
       
     </span>
   </a>
@@ -1480,7 +1613,7 @@
   <span class="md-ellipsis">
     
   
-    Developer Guide
+    Developer guide
   
 
     
@@ -1496,7 +1629,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Developer Guide
+    Developer guide
   
 
           </label>
@@ -1544,7 +1677,7 @@
   <span class="md-ellipsis">
     
   
-    Tag Configuration
+    Tag configuration
   
 
     
@@ -1572,7 +1705,7 @@
   <span class="md-ellipsis">
     
   
-    Planner Configuration
+    Planner configuration
   
 
     
@@ -1600,7 +1733,7 @@
   <span class="md-ellipsis">
     
   
-    Data Formats
+    Data formats
   
 
     
@@ -1677,34 +1810,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../../dev/node_move_detach/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Moving a Shared Node
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../../dev/todo/" class="md-nav__link">
         
   
@@ -1712,7 +1817,7 @@
   <span class="md-ellipsis">
     
   
-    Known Issues & Backlog
+    Known issues and backlog
   
 
     
@@ -1815,15 +1920,26 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#file-management" class="md-nav__link">
+  <a href="#conventions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        File Management
+        Conventions
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="File Management">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Files
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Files">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1860,10 +1976,32 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#get-apifetch_areatask_id" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/fetch_area/&lt;task_id&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#post-apiupload_gpx" class="md-nav__link">
     <span class="md-ellipsis">
       
         POST /api/upload_gpx
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apiupload_mapdata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/upload_mapdata
       
     </span>
   </a>
@@ -1910,10 +2048,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#get-apiannotationsfilename" class="md-nav__link">
+  <a href="#get-apiannotations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        GET /api/annotations?file=&lt;name&gt;
+        GET /api/annotations
       
     </span>
   </a>
@@ -1921,10 +2059,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#post-apiannotationsfilename" class="md-nav__link">
+  <a href="#post-apiannotations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        POST /api/annotations?file=&lt;name&gt;
+        POST /api/annotations
       
     </span>
   </a>
@@ -1932,10 +2070,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#put-apiannotationsann_idfilename" class="md-nav__link">
+  <a href="#put-apiannotationsann_id" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PUT /api/annotations/&lt;ann_id&gt;?file=&lt;name&gt;
+        PUT /api/annotations/&lt;ann_id&gt;
       
     </span>
   </a>
@@ -1943,10 +2081,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#delete-apiannotationsann_idfilename" class="md-nav__link">
+  <a href="#delete-apiannotationsann_id" class="md-nav__link">
     <span class="md-ellipsis">
       
-        DELETE /api/annotations/&lt;ann_id&gt;?file=&lt;name&gt;
+        DELETE /api/annotations/&lt;ann_id&gt;
       
     </span>
   </a>
@@ -1971,10 +2109,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#get-apiwaysway_idfilename" class="md-nav__link">
+  <a href="#get-apiwaysway_id" class="md-nav__link">
     <span class="md-ellipsis">
       
-        GET /api/ways/&lt;way_id&gt;?file=&lt;name&gt;
+        GET /api/ways/&lt;way_id&gt;
       
     </span>
   </a>
@@ -1982,10 +2120,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#delete-apiwaysway_idfilename" class="md-nav__link">
+  <a href="#delete-apiwaysway_id" class="md-nav__link">
     <span class="md-ellipsis">
       
-        DELETE /api/ways/&lt;way_id&gt;?file=&lt;name&gt;
+        DELETE /api/ways/&lt;way_id&gt;
       
     </span>
   </a>
@@ -1993,10 +2131,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#put-apiwaysway_idtagsfilename" class="md-nav__link">
+  <a href="#put-apiwaysway_idrestore" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PUT /api/ways/&lt;way_id&gt;/tags?file=&lt;name&gt;
+        PUT /api/ways/&lt;way_id&gt;/restore
       
     </span>
   </a>
@@ -2004,10 +2142,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#delete-apiwaysway_idtagsfilename" class="md-nav__link">
+  <a href="#put-apiwaysway_idtags" class="md-nav__link">
     <span class="md-ellipsis">
       
-        DELETE /api/ways/&lt;way_id&gt;/tags?file=&lt;name&gt;
+        PUT /api/ways/&lt;way_id&gt;/tags
       
     </span>
   </a>
@@ -2015,10 +2153,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#put-apiwaysway_idhidefilename" class="md-nav__link">
+  <a href="#delete-apiwaysway_idtags" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PUT /api/ways/&lt;way_id&gt;/hide?file=&lt;name&gt;
+        DELETE /api/ways/&lt;way_id&gt;/tags
       
     </span>
   </a>
@@ -2026,10 +2164,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#put-apiwaysway_idshowfilename" class="md-nav__link">
+  <a href="#put-apiwaysway_idhide-put-apiwaysway_idshow" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PUT /api/ways/&lt;way_id&gt;/show?file=&lt;name&gt;
+        PUT /api/ways/&lt;way_id&gt;/hide, PUT /api/ways/&lt;way_id&gt;/show
       
     </span>
   </a>
@@ -2037,10 +2175,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#put-apiwaysway_idrestorefilename" class="md-nav__link">
+  <a href="#get-apiwaysway_idsegments" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PUT /api/ways/&lt;way_id&gt;/restore?file=&lt;name&gt;
+        GET /api/ways/&lt;way_id&gt;/segments
       
     </span>
   </a>
@@ -2048,10 +2186,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#get-apiwaysway_idsegmentsfilename" class="md-nav__link">
+  <a href="#post-apiwayssplit" class="md-nav__link">
     <span class="md-ellipsis">
       
-        GET /api/ways/&lt;way_id&gt;/segments?file=&lt;name&gt;
+        POST /api/ways/split
       
     </span>
   </a>
@@ -2059,21 +2197,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#post-apiwayssplitfilename" class="md-nav__link">
+  <a href="#delete-apiwayssplitway_ididnode_idid" class="md-nav__link">
     <span class="md-ellipsis">
       
-        POST /api/ways/split?file=&lt;name&gt;
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#delete-apiwayssplitfilenameway_ididnode_idid" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        DELETE /api/ways/split?file=&lt;name&gt;&amp;way_id=&lt;id&gt;&amp;node_id=&lt;id&gt;
+        DELETE /api/ways/split?way_id=&lt;id&gt;&amp;node_id=&lt;id&gt;
       
     </span>
   </a>
@@ -2098,10 +2225,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#get-apiway_nodesfilenameway_idid" class="md-nav__link">
+  <a href="#get-apiway_nodes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        GET /api/way_nodes?file=&lt;name&gt;&amp;way_id=&lt;id&gt;
+        GET /api/way_nodes
       
     </span>
   </a>
@@ -2109,10 +2236,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#delete-apiway_nodefilename" class="md-nav__link">
+  <a href="#post-apiway_node" class="md-nav__link">
     <span class="md-ellipsis">
       
-        DELETE /api/way_node?file=&lt;name&gt;
+        POST /api/way_node
       
     </span>
   </a>
@@ -2120,10 +2247,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#put-apiway_noderestorefilename" class="md-nav__link">
+  <a href="#delete-apiway_nodenode_idid" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PUT /api/way_node/restore?file=&lt;name&gt;
+        DELETE /api/way_node?node_id=&lt;id&gt;
       
     </span>
   </a>
@@ -2131,10 +2258,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#put-apiway_nodesmovefilename" class="md-nav__link">
+  <a href="#put-apiway_noderestorenode_idid" class="md-nav__link">
     <span class="md-ellipsis">
       
-        PUT /api/way_nodes/move?file=&lt;name&gt;
+        PUT /api/way_node/restore?node_id=&lt;id&gt;
       
     </span>
   </a>
@@ -2142,10 +2269,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#delete-apiway_nodesmovefilenameway_idid" class="md-nav__link">
+  <a href="#put-apiway_nodesmove" class="md-nav__link">
     <span class="md-ellipsis">
       
-        DELETE /api/way_nodes/move?file=&lt;name&gt;&amp;way_id=&lt;id&gt;
+        PUT /api/way_nodes/move
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-apiway_nodesmove" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /api/way_nodes/move
       
     </span>
   </a>
@@ -2158,15 +2296,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#path-planning" class="md-nav__link">
+  <a href="#planning" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Path Planning
+        Planning
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Path Planning">
+    <nav class="md-nav" aria-label="Planning">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -2174,17 +2312,6 @@
     <span class="md-ellipsis">
       
         GET /api/planner_defaults
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#get-apicost_gridfilenamemin_latmin_lonmax_latmax_lon" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        GET /api/cost_grid?file=&lt;name&gt;&amp;min_lat=&amp;min_lon=&amp;max_lat=&amp;max_lon=
       
     </span>
   </a>
@@ -2207,6 +2334,100 @@
     <span class="md-ellipsis">
       
         POST /api/cancel_replan
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-apicost_grid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/cost_grid
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-apitraversability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/traversability
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#put-apitraversability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PUT /api/traversability
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apitraversabilityblocked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/traversability/blocked
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sharing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sharing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sharing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-apiqr-get-apiqrsvg" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /api/qr, GET /api/qr.svg
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apicreate_wormhole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/create_wormhole
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-apicancel_wormhole" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /api/cancel_wormhole
       
     </span>
   </a>
@@ -2268,45 +2489,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#wormhole-robot-file-transfer" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Wormhole (Robot File Transfer)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Wormhole (Robot File Transfer)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#post-apicreate_wormhole" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        POST /api/create_wormhole
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#post-apicancel_wormhole" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        POST /api/cancel_wormhole
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -2330,48 +2512,26 @@
 <h1 id="viewer-rest-api">Viewer REST API</h1>
 <div class="admonition note">
 <p class="admonition-title">Internal API</p>
-<p>This API is consumed by the viewer's JavaScript frontend. It is documented here for
-developers who want to build custom tooling or integrate with the viewer programmatically.</p>
+<p>The viewer's JavaScript is the client of this API. It is documented for tooling that talks to a running viewer.</p>
 </div>
-<p>All endpoints are served by the Flask app started with <code>map_data_viewer</code>. Data endpoints live
-under <code>/api/</code>. Errors return standard HTTP status codes with a plain-text description.</p>
-<p>The handlers live in the <code>map_data.viewer.routes</code> package, one module per section below:
-<code>files</code> (file management and export), <code>annotations</code>, <code>ways</code> (ways and nodes), <code>planning</code>
-(path planning and traversability), and <code>sharing</code> (goal QR codes and wormhole). Shared helpers
-are in <code>common</code>; the tracker endpoints are in <code>map_data.viewer.tracker_routes</code>.</p>
+<p>All endpoints are served by <code>map_data_viewer</code>. Handlers live in <code>map_data.viewer.routes</code>, one module per section: <code>files</code>, <code>annotations</code>, <code>ways</code> (ways and nodes), <code>planning</code>, <code>sharing</code> (goal QR codes and wormhole); shared helpers in <code>common</code>. The tracker endpoints are in <code>map_data.viewer.tracker_routes</code>.</p>
+<h2 id="conventions">Conventions</h2>
+<ul>
+<li><strong>Errors</strong> are JSON <code>{"error": "&lt;message&gt;"}</code> with the HTTP status, for every endpoint.</li>
+<li><strong>413</strong>: a JSON body over 10 MB, or any request over 100 MB (the multipart uploads).</li>
+<li>Every response carries <code>X-Frame-Options: DENY</code>, <code>X-Content-Type-Options: nosniff</code>, <code>Referrer-Policy: no-referrer</code> and <code>Content-Security-Policy: frame-ancestors 'none'</code>.</li>
+<li><strong>409</strong>: the file's annotation store exists but is not a readable JSON object. It is moved aside to <code>&lt;store&gt;.corrupt-&lt;timestamp&gt;</code> and never overwritten; reload to continue with an empty store.</li>
+<li><strong><code>file</code></strong> is a <code>.mapdata</code> name in the data directory. A name that resolves outside it is 400, a missing file 404.</li>
+<li><strong><code>way_id</code></strong> is an OSM way ID or a split segment <code>"&lt;id&gt;:&lt;index&gt;"</code>.</li>
+<li>Edits are written to <code>&lt;stem&gt;.annotations.json</code> under a per-file lock; the <code>.mapdata</code> file is never modified. See <a href="../../dev/data_formats/#annotationsjson-sidecar-format">Data formats</a>.</li>
+</ul>
 <hr />
-<h2 id="file-management">File Management</h2>
+<h2 id="files">Files</h2>
 <h3 id="get-apifiles"><code>GET /api/files</code></h3>
-<p>List available <code>.mapdata</code> and <code>.gpx</code> files in the data directory.</p>
-<p><strong>Response</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">"mapdata"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"stromovka.mapdata"</span><span class="p">,</span><span class="w"> </span><span class="s2">"coords.mapdata"</span><span class="p">],</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">"gpx"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"coords.gpx"</span><span class="p">,</span><span class="w"> </span><span class="s2">"route.gpx"</span><span class="p">]</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">}</span>
-</span></code></pre></div>
-<hr />
+<p><code>{"mapdata": [name, ...], "gpx": [name, ...]}</code>, sorted. Empty lists when the data directory does not exist.</p>
 <h3 id="get-apimapdatafilename"><code>GET /api/mapdata?file=&lt;name&gt;</code></h3>
-<p>Load all parsed features for a <code>.mapdata</code> file as a GeoJSON FeatureCollection. Stored
-annotations (tag overrides, deletions, splits, node moves) are applied before the response
-is returned.</p>
-<p><strong>Query parameters</strong></p>
-<table>
-<thead>
-<tr>
-<th>Parameter</th>
-<th>Required</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>file</code></td>
-<td>yes</td>
-<td>Filename in the data directory (e.g. <code>coords.mapdata</code>)</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Response</strong> — GeoJSON FeatureCollection. Each feature has:</p>
+<p>The map with its way edits and tag overrides applied, as a GeoJSON <code>FeatureCollection</code>. Drawn annotations are not included (the client draws them from <code>/api/annotations</code>). The response has an <code>ETag</code>; a matching <code>If-None-Match</code> gets 304.</p>
+<p>Way feature properties:</p>
 <table>
 <thead>
 <tr>
@@ -2383,59 +2543,74 @@ is returned.</p>
 <tbody>
 <tr>
 <td><code>id</code></td>
-<td><code>int</code> or <code>"int:int"</code></td>
-<td>OSM way ID, or virtual ID <code>"123:0"</code> for split segments</td>
+<td>int or str</td>
+<td>Way ID, <code>"&lt;id&gt;:&lt;index&gt;"</code> for split segments</td>
 </tr>
 <tr>
 <td><code>category</code></td>
-<td><code>string</code></td>
-<td><code>"road"</code>, <code>"footway"</code>, or <code>"barrier"</code></td>
+<td>str</td>
+<td><code>road</code>, <code>footway</code>, <code>barrier</code> or <code>crossroad</code></td>
 </tr>
 <tr>
 <td><code>tags</code></td>
-<td><code>object</code></td>
-<td>OSM tags, with any stored overrides merged in</td>
+<td>object</td>
+<td>OSM tags with overrides applied</td>
 </tr>
 <tr>
 <td><code>in_out</code></td>
-<td><code>string \| null</code></td>
-<td>Direction hint (<code>"in"</code>, <code>"out"</code>, or <code>null</code>)</td>
+<td>str</td>
+<td><code>"outer"</code> / <code>"inner"</code> for multipolygon members, else <code>""</code></td>
 </tr>
 <tr>
 <td><code>is_node</code></td>
-<td><code>bool</code></td>
-<td><code>true</code> if the barrier is a point feature (node) rather than a polygon</td>
+<td>bool</td>
+<td><code>true</code> for a barrier made from a single obstacle node</td>
 </tr>
 </tbody>
 </table>
-<hr />
+<p>Geometry is <code>Polygon</code>, <code>MultiPolygon</code> or <code>LineString</code>; roads and footways are buffered polygons. Waypoints are <code>Point</code> features with <code>category: "waypoint"</code> and <code>index</code>.</p>
 <h3 id="post-apifetch_area"><code>POST /api/fetch_area</code></h3>
-<p>Download and parse a new OSM area and save the result as a <code>.mapdata</code> file. Queries the
-Overpass API — may take several seconds for large areas.</p>
-<p><strong>Request body</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">{</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">"min_lat"</span><span class="p">:</span><span class="w"> </span><span class="mf">50.07</span><span class="p">,</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">"max_lat"</span><span class="p">:</span><span class="w"> </span><span class="mf">50.09</span><span class="p">,</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="nt">"min_lon"</span><span class="p">:</span><span class="w"> </span><span class="mf">14.40</span><span class="p">,</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nt">"max_lon"</span><span class="p">:</span><span class="w"> </span><span class="mf">14.43</span><span class="p">,</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"my_area"</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="p">}</span>
+<p>Starts a background download and parse of an OSM area; returns <code>{"task_id": "&lt;uuid4&gt;"}</code> at once.</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">&quot;min_lat&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">50.07</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;min_lon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">14.40</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;max_lat&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">50.09</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;max_lon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">14.43</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;my_area&quot;</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">&quot;grid_margin&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">150</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;obstacle_radius&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">2.0</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="nt">&quot;buffer_widths&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;road&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">7</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;footway&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;barrier&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">}</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">}</span>
 </span></code></pre></div>
-<p><strong>Response 200</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">{</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">"filename"</span><span class="p">:</span><span class="w"> </span><span class="s2">"my_area.mapdata"</span><span class="p">,</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">"roads"</span><span class="p">:</span><span class="w"> </span><span class="mi">14</span><span class="p">,</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">"footways"</span><span class="p">:</span><span class="w"> </span><span class="mi">52</span><span class="p">,</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="nt">"barriers"</span><span class="p">:</span><span class="w"> </span><span class="mi">91</span><span class="p">,</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span><span class="nt">"crossroads"</span><span class="p">:</span><span class="w"> </span><span class="mi">23</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="p">}</span>
-</span></code></pre></div>
-<p><strong>Error 503</strong> — Overpass API unavailable; try again later.</p>
-<hr />
+<ul>
+<li>The box plus its <code>grid_margin</code> must be at most 25 km² (<code>MAX_FETCH_AREA_KM2</code>).</li>
+<li><code>name</code> is sanitized to <code>[A-Za-z0-9_-]</code>. An existing map, or a leftover <code>&lt;name&gt;.annotations.json</code>, is never overwritten: the map is saved as <code>&lt;name&gt;_1.mapdata</code>, <code>&lt;name&gt;_2.mapdata</code>, ...</li>
+<li><code>grid_margin</code>, <code>obstacle_radius</code>, <code>buffer_widths</code> are optional; defaults from <code>config/planner_defaults.yaml</code>.</li>
+</ul>
+<p><strong>400</strong>: missing or invalid field, box too large, empty name. <strong>429</strong>: two Overpass fetches (<code>fetch_area</code> or <code>upload_gpx</code>) already running.</p>
+<h3 id="get-apifetch_areatask_id"><code>GET /api/fetch_area/&lt;task_id&gt;</code></h3>
+<p>The task record, polled by the client:</p>
+<table>
+<thead>
+<tr>
+<th><code>status</code></th>
+<th>Other fields</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pending</code>, <code>querying</code>, <code>parsing</code></td>
+<td><code>detail</code> (progress text)</td>
+</tr>
+<tr>
+<td><code>done</code></td>
+<td><code>result</code>: <code>{"filename", "roads", "footways", "barriers", "crossroads"}</code></td>
+</tr>
+<tr>
+<td><code>failed</code></td>
+<td><code>error</code></td>
+</tr>
+</tbody>
+</table>
+<p>A finished task is kept for 60 s after it is first polled. <strong>404</strong>: unknown or evicted task.</p>
 <h3 id="post-apiupload_gpx"><code>POST /api/upload_gpx</code></h3>
-<p>Upload a <code>.gpx</code> file, parse it (fetching OSM data for its bounds), and save the result as a
-<code>.mapdata</code> file.</p>
-<p><strong>Request</strong> — <code>multipart/form-data</code></p>
+<p>Builds a map around an uploaded GPX track, synchronously. <code>multipart/form-data</code>:</p>
 <table>
 <thead>
 <tr>
@@ -2448,216 +2623,119 @@ Overpass API — may take several seconds for large areas.</p>
 <tr>
 <td><code>file</code></td>
 <td>yes</td>
-<td>The <code>.gpx</code> file</td>
+<td>The GPX file</td>
 </tr>
 <tr>
 <td><code>name</code></td>
 <td>no</td>
-<td>Base name for the output file (defaults to the uploaded filename)</td>
+<td>Output stem (default: the upload's stem), sanitized as for <code>fetch_area</code></td>
+</tr>
+<tr>
+<td><code>options</code></td>
+<td>no</td>
+<td>JSON object with <code>grid_margin</code>, <code>obstacle_radius</code>, <code>buffer_widths</code></td>
 </tr>
 </tbody>
 </table>
-<p><strong>Response 200</strong> — same shape as <code>/api/fetch_area</code>.</p>
-<hr />
+<p>Saved under the next free name, as for <code>fetch_area</code>; the Overpass cache is written next to it. Returns <code>{"filename", "roads", "footways", "barriers", "crossroads"}</code>.</p>
+<p><strong>400</strong>: bad file, name or options, or the area (with margin) exceeds 25 km². <strong>429</strong>: two Overpass fetches already running. <strong>503</strong>: Overpass unreachable. <strong>500</strong>: parsing failed.</p>
+<h3 id="post-apiupload_mapdata"><code>POST /api/upload_mapdata</code></h3>
+<p>Saves an uploaded <code>.mapdata</code> file (<code>multipart/form-data</code>, field <code>file</code>) under the next free name. It is checked with <code>MapData.load</code> under a temporary name first, so an unreadable file never appears. Returns <code>{"filename": "&lt;saved name&gt;"}</code>.</p>
+<p><strong>400</strong>: missing file, wrong extension or unreadable map.</p>
 <h3 id="get-apiexportfilename"><code>GET /api/export?file=&lt;name&gt;</code></h3>
-<p>Export a <code>.mapdata</code> file as a human-readable JSON file, with all stored annotations applied.</p>
-<p><strong>Response</strong> — file download, <code>Content-Type: application/json</code>, filename <code>&lt;name&gt;.exported.mapdata</code>.</p>
-<hr />
+<p>Downloads <code>&lt;stem&gt;.exported.mapdata</code>: the map with every annotation applied, as <code>.mapdata</code> JSON. Nothing is written to the data directory.</p>
 <h3 id="get-apiexportgeojsonfilename"><code>GET /api/export/geojson?file=&lt;name&gt;</code></h3>
-<p>Export a <code>.mapdata</code> file as a GeoJSON <code>FeatureCollection</code>, with all stored annotations applied —
-the same merged data as <code>/api/export</code>, but in GeoJSON form for use in QGIS, geojson.io, or other
-GIS tools.</p>
-<p><strong>Response</strong> — file download, <code>Content-Type: application/geo+json</code>, filename <code>&lt;name&gt;.geojson</code>.</p>
+<p>Downloads the same merged map as <code>&lt;stem&gt;.geojson</code> (<code>application/geo+json</code>).</p>
 <hr />
 <h2 id="annotations">Annotations</h2>
-<p>All annotation endpoints require <code>?file=&lt;name&gt;</code>.</p>
-<h3 id="get-apiannotationsfilename"><code>GET /api/annotations?file=&lt;name&gt;</code></h3>
-<p>Return the raw annotation store for a file (the full contents of the <code>.annotations.json</code> sidecar).</p>
-<hr />
-<h3 id="post-apiannotationsfilename"><code>POST /api/annotations?file=&lt;name&gt;</code></h3>
-<p>Add a new drawn annotation (obstacle polygon or custom path).</p>
-<p><strong>Request body</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"obstacle"</span><span class="p">,</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="nt">"geometry"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Polygon"</span><span class="p">,</span><span class="w"> </span><span class="nt">"coordinates"</span><span class="p">:</span><span class="w"> </span><span class="p">[[[</span><span class="mf">14.4</span><span class="p">,</span><span class="w"> </span><span class="mf">50.07</span><span class="p">],</span><span class="w"> </span><span class="err">...</span><span class="p">]]</span><span class="w"> </span><span class="p">},</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nt">"properties"</span><span class="p">:</span><span class="w"> </span><span class="p">{}</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="p">}</span>
+<p>All take <code>?file=&lt;name&gt;</code>.</p>
+<h3 id="get-apiannotations"><code>GET /api/annotations</code></h3>
+<p>The whole annotation store (every edit, not only drawn annotations).</p>
+<h3 id="post-apiannotations"><code>POST /api/annotations</code></h3>
+<p>Adds a drawn annotation.</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;obstacle&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;geometry&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Polygon&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;coordinates&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[[[</span><span class="mf">14.4</span><span class="p">,</span><span class="w"> </span><span class="mf">50.07</span><span class="p">],</span><span class="w"> </span><span class="err">...</span><span class="p">]]},</span><span class="w"> </span><span class="nt">&quot;properties&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{}}</span>
 </span></code></pre></div>
-<p><code>type</code> is <code>"obstacle"</code> or <code>"path"</code>.</p>
-<p><strong>Response 201</strong> — the created annotation with a generated <code>id</code> field.</p>
-<hr />
-<h3 id="put-apiannotationsann_idfilename"><code>PUT /api/annotations/&lt;ann_id&gt;?file=&lt;name&gt;</code></h3>
-<p>Update an annotation's geometry, type, or properties.</p>
-<p><strong>Request body</strong> — same fields as POST.</p>
-<p><strong>Response 200</strong> — updated annotation object.</p>
-<hr />
-<h3 id="delete-apiannotationsann_idfilename"><code>DELETE /api/annotations/&lt;ann_id&gt;?file=&lt;name&gt;</code></h3>
-<p>Delete an annotation.</p>
-<p><strong>Response 204.</strong></p>
+<p><code>geometry</code> is required: a <code>LineString</code>, <code>Polygon</code> or <code>MultiPolygon</code>. <code>type</code> is <code>"path"</code> (a drawn way) or anything else, default <code>"obstacle"</code>. Returns <strong>201</strong> with the annotation and its uuid4 <code>id</code>. <strong>400</strong>: invalid or unsupported geometry, or invalid type.</p>
+<h3 id="put-apiannotationsann_id"><code>PUT /api/annotations/&lt;ann_id&gt;</code></h3>
+<p>Replaces the geometry, and <code>type</code>/<code>properties</code> when given; the body is validated as for <code>POST</code>. Returns the annotation. <strong>400</strong>: invalid body. <strong>404</strong>: unknown ID.</p>
+<h3 id="delete-apiannotationsann_id"><code>DELETE /api/annotations/&lt;ann_id&gt;</code></h3>
+<p><strong>204</strong>. <strong>404</strong>: unknown ID.</p>
 <hr />
 <h2 id="ways">Ways</h2>
-<h3 id="get-apiwaysway_idfilename"><code>GET /api/ways/&lt;way_id&gt;?file=&lt;name&gt;</code></h3>
-<p>Get a single way as a GeoJSON Feature with all stored edits applied. Supports virtual IDs
-(<code>123:0</code>, <code>123:1</code>) for individual segments of a split way.</p>
-<p><strong>Response</strong> — GeoJSON Feature (same properties as <code>/api/mapdata</code> features).</p>
-<hr />
-<h3 id="delete-apiwaysway_idfilename"><code>DELETE /api/ways/&lt;way_id&gt;?file=&lt;name&gt;</code></h3>
-<p>Mark a way as deleted. The deletion is stored in the annotations sidecar and does not modify
-the <code>.mapdata</code> file. Deleted ways are excluded from map display and planning.</p>
-<p><strong>Request body</strong> (optional)</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"footway"</span><span class="p">,</span><span class="w"> </span><span class="nt">"label"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Fence segment"</span><span class="w"> </span><span class="p">}</span>
+<p>All take <code>?file=&lt;name&gt;</code>.</p>
+<h3 id="get-apiwaysway_id"><code>GET /api/ways/&lt;way_id&gt;</code></h3>
+<p>The edited way or segment as a GeoJSON Feature (properties as in <code>/api/mapdata</code>). <strong>404</strong>: unknown way, way reduced to nothing by node deletions, or segment index out of range.</p>
+<h3 id="delete-apiwaysway_id"><code>DELETE /api/ways/&lt;way_id&gt;</code></h3>
+<p>Marks a way, or one segment, as deleted (idempotent). Optional body <code>{"category", "label"}</code> for the change list. <strong>204</strong>.</p>
+<h3 id="put-apiwaysway_idrestore"><code>PUT /api/ways/&lt;way_id&gt;/restore</code></h3>
+<p>Undoes the deletion of the same way or segment ID. <strong>204</strong>.</p>
+<h3 id="put-apiwaysway_idtags"><code>PUT /api/ways/&lt;way_id&gt;/tags</code></h3>
+<p>Replaces the way's tag override; applies to every segment.</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">{</span><span class="nt">&quot;tags&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;highway&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;footway&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;surface&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;gravel&quot;</span><span class="p">},</span><span class="w"> </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;footway&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;label&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">}</span>
 </span></code></pre></div>
-<p><strong>Response 204.</strong></p>
-<hr />
-<h3 id="put-apiwaysway_idtagsfilename"><code>PUT /api/ways/&lt;way_id&gt;/tags?file=&lt;name&gt;</code></h3>
-<p>Override OSM tags for a way. The provided tags are merged on top of the original OSM tags on
-every subsequent load.</p>
-<p><strong>Request body</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"tags"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"highway"</span><span class="p">:</span><span class="w"> </span><span class="s2">"footway"</span><span class="p">,</span><span class="w"> </span><span class="nt">"surface"</span><span class="p">:</span><span class="w"> </span><span class="s2">"gravel"</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"footway"</span><span class="p">,</span><span class="w"> </span><span class="nt">"label"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="w"> </span><span class="p">}</span>
-</span></code></pre></div>
-<p><strong>Response 204.</strong></p>
-<hr />
-<h3 id="delete-apiwaysway_idtagsfilename"><code>DELETE /api/ways/&lt;way_id&gt;/tags?file=&lt;name&gt;</code></h3>
-<p>Remove stored tag overrides for a way, reverting to the original OSM tags.</p>
-<p><strong>Response 204.</strong></p>
-<hr />
-<h3 id="put-apiwaysway_idhidefilename"><code>PUT /api/ways/&lt;way_id&gt;/hide?file=&lt;name&gt;</code></h3>
-<p>Temporarily hide a way from the map. Hidden ways are still included in exports and planning.</p>
-<p><strong>Response 204.</strong></p>
-<hr />
-<h3 id="put-apiwaysway_idshowfilename"><code>PUT /api/ways/&lt;way_id&gt;/show?file=&lt;name&gt;</code></h3>
-<p>Un-hide a previously hidden way.</p>
-<p><strong>Response 204.</strong></p>
-<hr />
-<h3 id="put-apiwaysway_idrestorefilename"><code>PUT /api/ways/&lt;way_id&gt;/restore?file=&lt;name&gt;</code></h3>
-<p>Restore a deleted way (undo a prior DELETE).</p>
-<p><strong>Response 204.</strong></p>
-<hr />
-<h3 id="get-apiwaysway_idsegmentsfilename"><code>GET /api/ways/&lt;way_id&gt;/segments?file=&lt;name&gt;</code></h3>
-<p>Get the individual segments of a split way as GeoJSON Features.</p>
-<p><strong>Response</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"segments"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Feature"</span><span class="p">,</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
-</span></code></pre></div>
-<hr />
-<h3 id="post-apiwayssplitfilename"><code>POST /api/ways/split?file=&lt;name&gt;</code></h3>
-<p>Split a way at a node, creating two independently editable segments.</p>
-<p><strong>Request body</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"way_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">123456</span><span class="p">,</span><span class="w"> </span><span class="nt">"node_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">789012</span><span class="w"> </span><span class="p">}</span>
-</span></code></pre></div>
-<p><strong>Response 200</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"segments"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
-</span></code></pre></div>
-<hr />
-<h3 id="delete-apiwayssplitfilenameway_ididnode_idid"><code>DELETE /api/ways/split?file=&lt;name&gt;&amp;way_id=&lt;id&gt;&amp;node_id=&lt;id&gt;</code></h3>
-<p>Undo a way split.</p>
-<p><strong>Response 200</strong> — <code>{"segments": [...]}</code></p>
+<p><strong>204</strong>. <strong>400</strong>: <code>tags</code> is not an object of strings.</p>
+<h3 id="delete-apiwaysway_idtags"><code>DELETE /api/ways/&lt;way_id&gt;/tags</code></h3>
+<p>Removes the tag override. <strong>204</strong>.</p>
+<h3 id="put-apiwaysway_idhide-put-apiwaysway_idshow"><code>PUT /api/ways/&lt;way_id&gt;/hide</code>, <code>PUT /api/ways/&lt;way_id&gt;/show</code></h3>
+<p>Hides or shows a whole way in the viewer. Export and planning still use hidden ways. Optional body <code>{"category", "label"}</code>. <strong>204</strong>.</p>
+<h3 id="get-apiwaysway_idsegments"><code>GET /api/ways/&lt;way_id&gt;/segments</code></h3>
+<p><code>{"segments": [Feature, ...]}</code>, empty for a missing or fully deleted way.</p>
+<h3 id="post-apiwayssplit"><code>POST /api/ways/split</code></h3>
+<p>Body <code>{"way_id": 123456, "node_id": 789012}</code> (an interior node). The segment after the split starts at a new synthetic copy of the node, so the ends move independently and the planner does not route across the split. Returns <code>{"success": true, "segments": [...]}</code>. <strong>400</strong>: <code>node_id</code> is not an interior node of the edited way. <strong>404</strong>: unknown way.</p>
+<h3 id="delete-apiwayssplitway_ididnode_idid"><code>DELETE /api/ways/split?way_id=&lt;id&gt;&amp;node_id=&lt;id&gt;</code></h3>
+<p>Removes one split point; the detached copy and the moves of both ends are dropped. Returns <code>{"segments": [...]}</code>.</p>
 <hr />
 <h2 id="nodes">Nodes</h2>
-<h3 id="get-apiway_nodesfilenameway_idid"><code>GET /api/way_nodes?file=&lt;name&gt;&amp;way_id=&lt;id&gt;</code></h3>
-<p>Get the ordered node list for a way, including WGS84 coordinates.</p>
-<p><strong>Response</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p">{</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span><span class="nt">"way_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">123456</span><span class="p">,</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="nt">"nodes"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">111</span><span class="p">,</span><span class="w"> </span><span class="nt">"lat"</span><span class="p">:</span><span class="w"> </span><span class="mf">50.071</span><span class="p">,</span><span class="w"> </span><span class="nt">"lon"</span><span class="p">:</span><span class="w"> </span><span class="mf">14.401</span><span class="p">,</span><span class="w"> </span><span class="nt">"tags"</span><span class="p">:</span><span class="w"> </span><span class="p">{}</span><span class="w"> </span><span class="p">},</span>
-</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">112</span><span class="p">,</span><span class="w"> </span><span class="nt">"lat"</span><span class="p">:</span><span class="w"> </span><span class="mf">50.072</span><span class="p">,</span><span class="w"> </span><span class="nt">"lon"</span><span class="p">:</span><span class="w"> </span><span class="mf">14.402</span><span class="p">,</span><span class="w"> </span><span class="nt">"tags"</span><span class="p">:</span><span class="w"> </span><span class="p">{}</span><span class="w"> </span><span class="p">}</span>
-</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">  </span><span class="p">]</span>
-</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="p">}</span>
+<p>All take <code>?file=&lt;name&gt;&amp;way_id=&lt;id&gt;</code>.</p>
+<h3 id="get-apiway_nodes"><code>GET /api/way_nodes</code></h3>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span><span class="nt">&quot;way_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;123456&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;nodes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">111</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;lat&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">50.071</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;lon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">14.401</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;tags&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{}}]}</span>
 </span></code></pre></div>
-<hr />
-<h3 id="delete-apiway_nodefilename"><code>DELETE /api/way_node?file=&lt;name&gt;</code></h3>
-<p>Delete a single node from a way.</p>
-<p><strong>Request body</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"way_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">123456</span><span class="p">,</span><span class="w"> </span><span class="nt">"node_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">111</span><span class="p">,</span><span class="w"> </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"footway"</span><span class="p">,</span><span class="w"> </span><span class="nt">"label"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="w"> </span><span class="p">}</span>
+<p><code>nodes</code> is <code>[]</code> when deletions removed the whole way or segment.</p>
+<h3 id="post-apiway_node"><code>POST /api/way_node</code></h3>
+<p>Inserts a synthetic node after an existing one. Body <code>{"after_node_id": 111, "lat": 50.0712, "lon": 14.4013}</code>. Returns <code>{"id": &lt;negative id&gt;, "lat", "lon"}</code>. <strong>400</strong>: <code>after_node_id</code> is not on the edited way. <strong>404</strong>: unknown way.</p>
+<h3 id="delete-apiway_nodenode_idid"><code>DELETE /api/way_node?node_id=&lt;id&gt;</code></h3>
+<p>Deletes a node from the way, or from one segment when <code>way_id</code> is a segment ID. A node added with <code>POST /api/way_node</code> is removed outright. <strong>204</strong>.</p>
+<h3 id="put-apiway_noderestorenode_idid"><code>PUT /api/way_node/restore?node_id=&lt;id&gt;</code></h3>
+<p>Undoes a node deletion (same <code>way_id</code>). Removed added nodes cannot be restored. <strong>204</strong>.</p>
+<h3 id="put-apiway_nodesmove"><code>PUT /api/way_nodes/move</code></h3>
+<p>Records node positions for the way; every segment shares them.</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span><span class="nt">&quot;nodes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">111</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;lat&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">50.0715</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;lon&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">14.4015</span><span class="p">}],</span><span class="w"> </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;footway&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;label&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">}</span>
 </span></code></pre></div>
-<p><strong>Response 204.</strong></p>
+<p>All nodes are validated before anything is written; each must be on the edited way (a split end counts, a way without nodes takes its own ID). <strong>204</strong>. <strong>400</strong>: invalid position or a node not on the way. <strong>404</strong>: unknown way.</p>
+<h3 id="delete-apiway_nodesmove"><code>DELETE /api/way_nodes/move</code></h3>
+<p>Discards every node move of the way. <strong>204</strong>.</p>
 <hr />
-<h3 id="put-apiway_noderestorefilename"><code>PUT /api/way_node/restore?file=&lt;name&gt;</code></h3>
-<p>Restore a deleted node.</p>
-<p><strong>Request body</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"way_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">123456</span><span class="p">,</span><span class="w"> </span><span class="nt">"node_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">111</span><span class="w"> </span><span class="p">}</span>
-</span></code></pre></div>
-<p><strong>Response 204.</strong></p>
-<hr />
-<h3 id="put-apiway_nodesmovefilename"><code>PUT /api/way_nodes/move?file=&lt;name&gt;</code></h3>
-<p>Move one or more nodes to new WGS84 positions (used by drag-and-drop editing).</p>
-<p><strong>Request body</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="p">{</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span><span class="nt">"way_id"</span><span class="p">:</span><span class="w"> </span><span class="mi">123456</span><span class="p">,</span>
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span><span class="nt">"nodes"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">    </span><span class="p">{</span><span class="w"> </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">111</span><span class="p">,</span><span class="w"> </span><span class="nt">"lat"</span><span class="p">:</span><span class="w"> </span><span class="mf">50.0715</span><span class="p">,</span><span class="w"> </span><span class="nt">"lon"</span><span class="p">:</span><span class="w"> </span><span class="mf">14.4015</span><span class="w"> </span><span class="p">}</span>
-</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span><span class="p">]</span>
-</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="p">}</span>
-</span></code></pre></div>
-<p><strong>Response 200</strong> — the updated way as a GeoJSON Feature.</p>
-<hr />
-<h3 id="delete-apiway_nodesmovefilenameway_idid"><code>DELETE /api/way_nodes/move?file=&lt;name&gt;&amp;way_id=&lt;id&gt;</code></h3>
-<p>Reset all node position overrides for a way, restoring original OSM positions.</p>
-<p><strong>Response 204.</strong></p>
-<hr />
-<h2 id="path-planning">Path Planning</h2>
+<h2 id="planning">Planning</h2>
 <h3 id="get-apiplanner_defaults"><code>GET /api/planner_defaults</code></h3>
-<p>Return the planner default configuration from <code>config/planner_defaults.yaml</code>.</p>
-<p><strong>Response</strong> — the YAML file contents as a JSON object (see <a href="../../dev/planner_config/">Planner Configuration</a>).</p>
-<hr />
-<h3 id="get-apicost_gridfilenamemin_latmin_lonmax_latmax_lon"><code>GET /api/cost_grid?file=&lt;name&gt;&amp;min_lat=&amp;min_lon=&amp;max_lat=&amp;max_lon=</code></h3>
-<p>Compute the traversal cost grid for a bounding box. Used by the <strong>Show Cost Grid</strong> overlay
-in the Planner. Cells have cost 0.0 (free path) up to 1.0 (hard obstacle).</p>
-<p><strong>Query parameters</strong></p>
+<p><code>config/planner_defaults.yaml</code> as JSON (see <a href="../../dev/planner_config/">Planner configuration</a>), plus:</p>
 <table>
 <thead>
 <tr>
-<th>Parameter</th>
-<th>Required</th>
+<th>Field</th>
 <th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>file</code></td>
-<td>yes</td>
-<td>Map filename</td>
+<td><code>source</code></td>
+<td><code>"route_planner"</code> when the viewer runs with ROS 2 and the tracker's <code>planner_node</code> answers, else <code>"yaml"</code></td>
 </tr>
 <tr>
-<td><code>min_lat</code>, <code>min_lon</code>, <code>max_lat</code>, <code>max_lon</code></td>
-<td>yes</td>
-<td>Bounding box in WGS84 degrees</td>
-</tr>
-<tr>
-<td><code>highway_costs</code></td>
-<td>no</td>
-<td>JSON-encoded cost override dict (e.g. <code>{"footway":0.0,"residential":0.5}</code>)</td>
-</tr>
-<tr>
-<td><code>surface_costs</code></td>
-<td>no</td>
-<td>JSON-encoded surface cost override dict</td>
+<td><code>node</code></td>
+<td>The node name, only with <code>source: "route_planner"</code></td>
 </tr>
 </tbody>
 </table>
-<p><strong>Response</strong> — <code>{"image": "data:image/png;base64,...", "bounds": [[south, west], [north, east]]}</code>,
-ready for <code>L.imageOverlay(image, bounds)</code>. The UTM grid is resampled onto a lat/lon-aligned
-raster (~1 px per cell); pixels outside the grid are transparent. Colours: black = obstacle
-(cost ≥ 1), translucent grey = off-path (cost ≥ <code>default_off_path_cost</code>), green → red = path
-cost / <code>path_cost_cap</code>. Both fields are <code>null</code> for an empty grid.</p>
-<hr />
+<p>With <code>route_planner</code>, that node's <code>cell_size</code>, <code>inflate_obstacles</code>, <code>simplify_path</code> and <code>smooth_path</code> replace the file's values.</p>
 <h3 id="post-apicreate_replan"><code>POST /api/create_replan</code></h3>
-<p>Run path planning on a set of waypoints. The main planning endpoint.</p>
-<p><strong>Request body</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="p">{</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span><span class="nt">"file"</span><span class="p">:</span><span class="w"> </span><span class="s2">"coords.mapdata"</span><span class="p">,</span>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">  </span><span class="nt">"points"</span><span class="p">:</span><span class="w"> </span><span class="p">[[</span><span class="mf">50.071</span><span class="p">,</span><span class="w"> </span><span class="mf">14.401</span><span class="p">],</span><span class="w"> </span><span class="p">[</span><span class="mf">50.075</span><span class="p">,</span><span class="w"> </span><span class="mf">14.408</span><span class="p">]],</span>
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">  </span><span class="nt">"algorithm"</span><span class="p">:</span><span class="w"> </span><span class="s2">"astar"</span><span class="p">,</span>
-</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">  </span><span class="nt">"sub_algorithm"</span><span class="p">:</span><span class="w"> </span><span class="s2">"astar"</span><span class="p">,</span>
-</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">  </span><span class="nt">"allowed_ways"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"footway"</span><span class="p">],</span>
-</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="w">  </span><span class="nt">"cell_size"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.25</span><span class="p">,</span>
-</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="w">  </span><span class="nt">"inflate_obstacles"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.25</span><span class="p">,</span>
-</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="w">  </span><span class="nt">"simplify_path"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="w">  </span><span class="nt">"smooth_path"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
-</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="w">  </span><span class="nt">"transfer_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"550e8400-e29b-41d4-a716"</span><span class="p">,</span>
-</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a><span class="w">  </span><span class="nt">"highway_costs"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"footway"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"residential"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.5</span><span class="w"> </span><span class="p">},</span>
-</span><span id="__span-13-13"><a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a><span class="w">  </span><span class="nt">"surface_costs"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"asphalt"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.0</span><span class="p">,</span><span class="w"> </span><span class="nt">"grass"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.5</span><span class="w"> </span><span class="p">}</span>
-</span><span id="__span-13-14"><a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a><span class="p">}</span>
+<p>Plans a route on the edited map with <code>plan_route</code>.</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">&quot;file&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;coords.mapdata&quot;</span><span class="p">,</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span><span class="nt">&quot;points&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[[</span><span class="mf">50.071</span><span class="p">,</span><span class="w"> </span><span class="mf">14.401</span><span class="p">],</span><span class="w"> </span><span class="p">[</span><span class="mf">50.075</span><span class="p">,</span><span class="w"> </span><span class="mf">14.408</span><span class="p">]],</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span><span class="nt">&quot;algorithm&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;graph&quot;</span><span class="p">,</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span><span class="nt">&quot;allowed_ways&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;footway&quot;</span><span class="p">],</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span><span class="nt">&quot;transfer_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;0b8f4c1e-...&quot;</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="p">}</span>
 </span></code></pre></div>
 <table>
 <thead>
@@ -2669,24 +2747,59 @@ cost / <code>path_cost_cap</code>. Both fields are <code>null</code> for an empt
 </thead>
 <tbody>
 <tr>
+<td><code>file</code>, <code>points</code></td>
+<td>required</td>
+<td>Map and <code>[[lat, lon], ...]</code>, at least two</td>
+</tr>
+<tr>
 <td><code>algorithm</code></td>
 <td><code>"rrt"</code></td>
-<td><code>"astar"</code> = Grid A*, <code>"rrt"</code> = RRT*, <code>"graph"</code> = on-way graph planning</td>
+<td><code>"graph"</code> follows the ways; <code>"astar"</code> / <code>"rrt"</code> use the grid planner</td>
 </tr>
 <tr>
 <td><code>sub_algorithm</code></td>
 <td><code>"astar"</code></td>
-<td>Used when <code>algorithm</code> is <code>"astar"</code> or <code>"rrt"</code> — selects the segment-level solver (<code>"rrt"</code> falls back to <code>"astar"</code> when it finds no path)</td>
+<td>The grid search actually run (<code>"astar"</code> or <code>"rrt"</code>); RRT<em> falls back to A</em></td>
 </tr>
 <tr>
 <td><code>allowed_ways</code></td>
 <td><code>["footway"]</code></td>
-<td>Way categories to treat as low-cost: <code>"footway"</code>, <code>"road"</code>, or both</td>
+<td><code>"footway"</code> and/or <code>"road"</code></td>
+</tr>
+<tr>
+<td><code>cell_size</code></td>
+<td><code>planner_defaults.yaml</code></td>
+<td>0.05–10 m</td>
+</tr>
+<tr>
+<td><code>inflate_obstacles</code></td>
+<td><code>planner_defaults.yaml</code></td>
+<td>0–10 m</td>
+</tr>
+<tr>
+<td><code>simplify_path</code>, <code>smooth_path</code></td>
+<td><code>planner_defaults.yaml</code></td>
+<td>Booleans</td>
+</tr>
+<tr>
+<td><code>grid_cost_weight</code></td>
+<td><code>planner_defaults.yaml</code></td>
+<td>0–1000</td>
+</tr>
+<tr>
+<td><code>highway_costs</code>, <code>surface_costs</code></td>
+<td><code>planner_defaults.yaml</code></td>
+<td><code>{tag value: cost}</code>, for both planners</td>
+</tr>
+<tr>
+<td><code>traversability</code></td>
+<td>the rule file</td>
+<td>Rule YAML text</td>
 </tr>
 <tr>
 <td><code>transfer_id</code></td>
-<td><code>null</code></td>
-<td>Client-generated UUID; pass to <code>/api/cancel_replan</code> to abort</td>
+<td>none</td>
+<td>Makes a grid plan cancellable with <code>/api/cancel_replan</code>; unique per request</td>
 </tr>
 </tbody>
 </table>
@@ -2694,103 +2807,84 @@ cost / <code>path_cost_cap</code>. Both fields are <code>null</code> for an empt
 <table>
 <thead>
 <tr>
-<th><code>retrieveNum</code></th>
-<th><code>newPath</code></th>
+<th>Body</th>
 <th>Meaning</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>0</code></td>
-<td><code>[[lat,lon],...]</code></td>
-<td>Path changed from input</td>
+<td><code>{"retrieveNum": 0, "newPath": [[lat, lon], ...]}</code></td>
+<td>Route differs from the input polyline</td>
 </tr>
 <tr>
-<td><code>-1</code></td>
-<td><code>[[lat,lon],...]</code></td>
-<td>Path unchanged (already obstacle-free)</td>
+<td><code>{"retrieveNum": -1, "newPath": [[lat, lon], ...]}</code></td>
+<td>Route equals the input polyline</td>
 </tr>
 <tr>
-<td><code>1</code></td>
-<td><code>null</code></td>
-<td>Cancelled or failed (check <code>status</code> field)</td>
+<td><code>{"retrieveNum": 1, "newPath": null, "status": "cancelled", "reason": "cancelled"}</code></td>
+<td>Cancelled with <code>/api/cancel_replan</code></td>
+</tr>
+<tr>
+<td><code>{"retrieveNum": 1, "newPath": null, "status": "failed", "reason": "&lt;reason&gt;"}</code></td>
+<td>No route</td>
 </tr>
 </tbody>
 </table>
-<hr />
+<p>Failure <code>reason</code>s: <code>snap_too_far</code>, <code>unreachable</code>, <code>start_outside_map</code>, <code>goal_outside_map</code> (graph); <code>no_path</code>, <code>start_blocked</code>, <code>goal_blocked</code>, <code>start_outside_map</code>, <code>goal_outside_map</code> (grid). See <a href="../../planning/#action-failure-reasons">Action failure reasons</a>.</p>
+<p><strong>400</strong>: missing or invalid parameter, unknown algorithm, fewer than two points, or a grid needing more than 4 million cells (<code>grid_too_large</code>). <strong>404</strong>: unknown file.</p>
 <h3 id="post-apicancel_replan"><code>POST /api/cancel_replan</code></h3>
-<p>Cancel an in-progress planning request.</p>
-<p><strong>Request body</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"transfer_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"550e8400-e29b-41d4-a716"</span><span class="w"> </span><span class="p">}</span>
-</span></code></pre></div>
-<p><strong>Response</strong> — <code>{"success": true}</code></p>
+<p>Body <code>{"transfer_id": "..."}</code>. Returns <code>{"success": true}</code>, also for an unknown or finished ID. A cancel that arrives before its plan starts still aborts it. <strong>400</strong>: no <code>transfer_id</code>, or not a string.</p>
+<h3 id="get-apicost_grid"><code>GET /api/cost_grid</code></h3>
+<p>Query: <code>file</code>, <code>min_lat</code>, <code>min_lon</code>, <code>max_lat</code>, <code>max_lon</code>, optional JSON-encoded <code>highway_costs</code> / <code>surface_costs</code>, optional <code>allowed_ways</code> (comma-separated <code>footway</code>/<code>road</code>, default <code>footway</code>).</p>
+<p>Renders the edited map's 1 m cost grid over the box: <code>{"image": "data:image/png;base64,...", "bounds": [[south, west], [north, east]]}</code> for <code>L.imageOverlay</code>, both <code>null</code> for an empty grid. Black = obstacle, translucent grey = off-path (≥ <code>default_off_path_cost</code>), green → red = way cost / <code>path_cost_cap</code>. <strong>400</strong>: the box needs more than 4 million cells, or <code>allowed_ways</code> names another category.</p>
+<h3 id="get-apitraversability"><code>GET /api/traversability</code></h3>
+<p><code>{"yaml": "&lt;rule file text&gt;", "path": "&lt;path&gt;"}</code>; empty text if the file is missing.</p>
+<h3 id="put-apitraversability"><code>PUT /api/traversability</code></h3>
+<p>Body <code>{"traversability": "&lt;yaml text&gt;"}</code>. Validates the rules and writes the text verbatim (comments kept). Returns <code>{"path": "&lt;path&gt;"}</code>. <code>route_planner</code> uses the new rules on its next goal; <code>osm_cloud</code> needs a restart. <strong>400</strong>: invalid rules.</p>
+<h3 id="post-apitraversabilityblocked"><code>POST /api/traversability/blocked</code></h3>
+<p>Body <code>{"file", "traversability"?, "allowed_ways"?}</code>. Lists the ways the graph planner will not route over: <code>{"blocked": [[way_id, reason], ...]}</code>.</p>
+<hr />
+<h2 id="sharing">Sharing</h2>
+<h3 id="get-apiqr-get-apiqrsvg"><code>GET /api/qr</code>, <code>GET /api/qr.svg</code></h3>
+<p><code>?lat=50.11&amp;lon=14.41[&amp;scale=12][&amp;download=1][&amp;caption=...]</code></p>
+<p>A QR code of the goal as PNG or SVG; the payload is <code>geo:&lt;lat&gt;,&lt;lon&gt;</code>, also sent in the <code>X-Geo-URI</code> header. <code>scale</code> is pixels per module. <code>caption</code> is the text under the code: absent = the payload, empty = none. <code>download=1</code> adds a <code>Content-Disposition</code> file name. <strong>400</strong>: missing or invalid coordinates.</p>
+<h3 id="post-apicreate_wormhole"><code>POST /api/create_wormhole</code></h3>
+<p>Body <code>{"gpx": "&lt;GPX text&gt;"}</code>. Starts <code>wormhole send</code> (the <a href="https://magic-wormhole.readthedocs.io/">magic-wormhole</a> CLI must be on <code>PATH</code>) and waits up to 15 s for the code. Returns <code>{"success": true, "code": "7-guitar-academy", "transfer_id": "&lt;uuid4&gt;"}</code>; the receiver runs <code>wormhole receive &lt;code&gt;</code>.</p>
+<p><strong>400</strong>: no <code>gpx</code>, or not a string. <strong>429</strong>: 4 transfers already running. <strong>500</strong>: the CLI failed to start or no code within 15 s.</p>
+<h3 id="post-apicancel_wormhole"><code>POST /api/cancel_wormhole</code></h3>
+<p>Body <code>{"transfer_id": "..."}</code>. Returns <code>{"success": true, "message": "Transfer cancelled"}</code>. <strong>400</strong>: no <code>transfer_id</code>, or not a string. <strong>404</strong>: unknown transfer.</p>
 <hr />
 <h2 id="tracker">Tracker</h2>
-<p>Every tracker endpoint answers <strong>503</strong> when the tracker is not running (no ROS 2 context).</p>
+<p>Every tracker endpoint answers <strong>503</strong> without a ROS 2 context.</p>
 <h3 id="get-apitrackersettings"><code>GET /api/tracker/settings</code></h3>
-<p>The tracker's topic settings, what its config file holds, and the topics on the ROS graph.</p>
-<p><strong>Response</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="p">{</span>
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span><span class="nt">"path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/.../config/tracker.yaml"</span><span class="p">,</span>
-</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">  </span><span class="nt">"exists"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">  </span><span class="nt">"file_error"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">  </span><span class="nt">"heading_types"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"imu"</span><span class="p">:</span><span class="w"> </span><span class="s2">"sensor_msgs/msg/Imu"</span><span class="p">,</span><span class="w"> </span><span class="nt">"..."</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="w"> </span><span class="p">},</span>
-</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">  </span><span class="nt">"topics"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"/gps/fix"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"sensor_msgs/msg/NavSatFix"</span><span class="p">]</span><span class="w"> </span><span class="p">},</span>
-</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">  </span><span class="nt">"settings"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">    </span><span class="p">{</span>
-</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"gps_fix_topic"</span><span class="p">,</span>
-</span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="w">      </span><span class="nt">"section"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Position / heading"</span><span class="p">,</span>
-</span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="w">      </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Raw GPS fix"</span><span class="p">,</span>
-</span><span id="__span-15-12"><a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a><span class="w">      </span><span class="nt">"msg_type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"sensor_msgs/msg/NavSatFix"</span><span class="p">,</span>
-</span><span id="__span-15-13"><a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="w">      </span><span class="nt">"choices"</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
-</span><span id="__span-15-14"><a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a><span class="w">      </span><span class="nt">"default"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/gps/fix"</span><span class="p">,</span>
-</span><span id="__span-15-15"><a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a><span class="w">      </span><span class="nt">"value"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/gps/fix"</span><span class="p">,</span>
-</span><span id="__span-15-16"><a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a><span class="w">      </span><span class="nt">"saved"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/fixposition/odometry_llh"</span>
-</span><span id="__span-15-17"><a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a><span class="w">    </span><span class="p">}</span>
-</span><span id="__span-15-18"><a id="__codelineno-15-18" name="__codelineno-15-18" href="#__codelineno-15-18"></a><span class="w">  </span><span class="p">]</span>
-</span><span id="__span-15-19"><a id="__codelineno-15-19" name="__codelineno-15-19" href="#__codelineno-15-19"></a><span class="p">}</span>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p">{</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">&quot;path&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/.../config/tracker.yaml&quot;</span><span class="p">,</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="nt">&quot;exists&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span><span class="nt">&quot;file_error&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span><span class="nt">&quot;heading_types&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;imu&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sensor_msgs/msg/Imu&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;...&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">},</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span><span class="nt">&quot;topics&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;/gps/fix&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;sensor_msgs/msg/NavSatFix&quot;</span><span class="p">]},</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">  </span><span class="nt">&quot;settings&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">    </span><span class="p">{</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;gps_fix_topic&quot;</span><span class="p">,</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">      </span><span class="nt">&quot;section&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Position / heading&quot;</span><span class="p">,</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">      </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Raw GPS fix&quot;</span><span class="p">,</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">      </span><span class="nt">&quot;msg_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sensor_msgs/msg/NavSatFix&quot;</span><span class="p">,</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">      </span><span class="nt">&quot;choices&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[],</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="w">      </span><span class="nt">&quot;default&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/gps/fix&quot;</span><span class="p">,</span>
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="w">      </span><span class="nt">&quot;value&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/gps/fix&quot;</span><span class="p">,</span>
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="w">      </span><span class="nt">&quot;saved&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/fixposition/odometry_llh&quot;</span>
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="w">  </span><span class="p">]</span>
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="p">}</span>
 </span></code></pre></div>
-<p><code>value</code> is the live setting and <code>saved</code> is the config file's value (the default when the file
-does not set it). <code>file_error</code> is set, and <code>saved</code> falls back to the defaults, when the file
-cannot be read.</p>
-<hr />
+<p><code>value</code> is live, <code>saved</code> the config file's value (the default when unset). When the file cannot be read, <code>file_error</code> is set and <code>saved</code> falls back to the defaults.</p>
 <h3 id="put-apitrackersettings"><code>PUT /api/tracker/settings</code></h3>
-<p>Apply settings to the running tracker, which resubscribes and restarts its telemetry, and
-optionally save them to the config file with its comments kept.</p>
-<p><strong>Request body</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"settings"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"gps_fix_topic"</span><span class="p">:</span><span class="w"> </span><span class="s2">"/fixposition/odometry_llh"</span><span class="p">,</span><span class="w"> </span><span class="nt">"heading_type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"yaw_vector3"</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="nt">"save"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span><span class="nt">&quot;settings&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;gps_fix_topic&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/fixposition/odometry_llh&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;heading_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;yaw_vector3&quot;</span><span class="p">},</span><span class="w"> </span><span class="nt">&quot;save&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">}</span>
 </span></code></pre></div>
-<p><code>settings</code> may be a subset. With <code>save</code>, all of the tracker's current settings are written.</p>
-<p><strong>Response 200</strong> — <code>{"changed": true, "path": "/.../config/tracker.yaml"}</code> (<code>path</code> is <code>null</code> without <code>save</code>).</p>
-<p><strong>Error 400</strong> — unknown setting, non-string value, whitespace, invalid topic name or <code>heading_type</code>.
-Nothing is applied.</p>
-<p><strong>Error 500</strong> — applied, but the config file could not be written.</p>
+<p>Applies a subset of settings to the running tracker, which resubscribes. With <code>save</code>, all current settings are written to the config file, comments kept. Returns <code>{"changed": bool, "path": str | null}</code>.</p>
+<p><strong>400</strong>: unknown setting or invalid value; nothing is applied. <strong>500</strong>: applied but not saved.</p>
 <h3 id="delete-apitrackertrail"><code>DELETE /api/tracker/trail</code></h3>
-<p>Forget the robot trail recorded so far. The trail lives on the tracker node, so clearing it
-only in the browser would bring it back with the next telemetry frame.</p>
-<p><strong>Response 200</strong> — <code>{"dropped": 137}</code>, the number of fixes discarded.</p>
-<hr />
-<h2 id="wormhole-robot-file-transfer">Wormhole (Robot File Transfer)</h2>
-<p>Wormhole endpoints use <a href="https://magic-wormhole.readthedocs.io/">magic-wormhole</a> to transfer
-files peer-to-peer. Requires <code>pip install magic-wormhole</code> on the server.</p>
-<h3 id="post-apicreate_wormhole"><code>POST /api/create_wormhole</code></h3>
-<p>Send a GPX file to a robot over the network. The server starts a wormhole send process and
-waits up to 15 seconds for the one-time transfer code to be generated.</p>
-<p><strong>Request body</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"gpx"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;?xml version=\"1.0\"?&gt;..."</span><span class="w"> </span><span class="p">}</span>
-</span></code></pre></div>
-<p><strong>Response 200</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"success"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"code"</span><span class="p">:</span><span class="w"> </span><span class="s2">"7-guitar-academy"</span><span class="p">,</span><span class="w"> </span><span class="nt">"transfer_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uuid"</span><span class="w"> </span><span class="p">}</span>
-</span></code></pre></div>
-<p>Give the code to the robot operator, who runs <code>wormhole receive &lt;code&gt;</code> to receive the file.</p>
-<p><strong>Response 500</strong> if <code>wormhole</code> is not installed or the code was not captured in time.</p>
-<hr />
-<h3 id="post-apicancel_wormhole"><code>POST /api/cancel_wormhole</code></h3>
-<p>Cancel an active wormhole transfer.</p>
-<p><strong>Request body</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"transfer_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"uuid"</span><span class="w"> </span><span class="p">}</span>
-</span></code></pre></div>
-<p><strong>Response</strong> — <code>{"success": bool, "message": "..."}</code></p>
+<p>Clears the robot trail kept on the tracker node. Returns <code>{"dropped": &lt;number of fixes&gt;}</code>.</p>
 
 
 
@@ -2850,10 +2944,10 @@ waits up to 15 seconds for the one-time transfer code to be generated.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
   </body>

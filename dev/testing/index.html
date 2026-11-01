@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="ROS2 tools to work with OSM data and perform path planning.">
+        <meta name="description" content="ROS 2 tools to work with OSM data and perform path planning.">
       
       
         <meta name="author" content="Jan Vlk">
@@ -16,14 +16,14 @@
         <link rel="prev" href="../contributing/">
       
       
-        <link rel="next" href="../node_move_detach/">
+        <link rel="next" href="../todo/">
       
       
         
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -31,10 +31,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -274,7 +274,7 @@
           
   
   
-  API Reference
+  API reference
 
         </a>
       </li>
@@ -315,7 +315,7 @@
           
   
   
-  Developer Guide
+  Developer guide
 
         </a>
       </li>
@@ -528,7 +528,7 @@
   <span class="md-ellipsis">
     
   
-    Interactive Viewer
+    Interactive viewer
   
 
     
@@ -544,7 +544,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Interactive Viewer
+    Interactive viewer
   
 
           </label>
@@ -684,7 +684,7 @@
   <span class="md-ellipsis">
     
   
-    Path Planning
+    Path planning
   
 
     
@@ -737,7 +737,7 @@
   <span class="md-ellipsis">
     
   
-    API Reference
+    API reference
   
 
     
@@ -753,7 +753,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    API Reference
+    API reference
   
 
           </label>
@@ -830,6 +830,62 @@
     
   
     Pathsolvers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/annotations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Annotations and edits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/traversability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Traversability
   
 
     
@@ -940,7 +996,7 @@
   <span class="md-ellipsis">
     
   
-    Developer Guide
+    Developer guide
   
 
     
@@ -956,7 +1012,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Developer Guide
+    Developer guide
   
 
           </label>
@@ -1004,7 +1060,7 @@
   <span class="md-ellipsis">
     
   
-    Tag Configuration
+    Tag configuration
   
 
     
@@ -1032,7 +1088,7 @@
   <span class="md-ellipsis">
     
   
-    Planner Configuration
+    Planner configuration
   
 
     
@@ -1060,7 +1116,7 @@
   <span class="md-ellipsis">
     
   
-    Data Formats
+    Data formats
   
 
     
@@ -1169,10 +1225,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#running-the-suite" class="md-nav__link">
+  <a href="#running-the-tests" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Running the suite
+        Running the tests
       
     </span>
   </a>
@@ -1180,10 +1236,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#test-files" class="md-nav__link">
+  <a href="#ci" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Test files
+        CI
       
     </span>
   </a>
@@ -1191,10 +1247,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#test-design-principles" class="md-nav__link">
+  <a href="#principles" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Test design principles
+        Principles
       
     </span>
   </a>
@@ -1202,115 +1258,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#module-by-module-notes" class="md-nav__link">
+  <a href="#real-map-fixture" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Module-by-module notes
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Module-by-module notes">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#test_rrtpy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_rrt.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#test_parsingpy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_parsing.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#test_fill_gridpy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_fill_grid.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#test_overpasspy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_overpass.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#test_viewer_helperspy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_viewer_helpers.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#test_viewer_routespy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_viewer_routes.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#test_integrationpy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_integration.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#test_errorspy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_errors.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#adding-new-tests" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Adding new tests
+        Real-map fixture
       
     </span>
   </a>
@@ -1333,34 +1284,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../node_move_detach/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Moving a Shared Node
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../todo/" class="md-nav__link">
         
   
@@ -1368,7 +1291,7 @@
   <span class="md-ellipsis">
     
   
-    Known Issues & Backlog
+    Known issues and backlog
   
 
     
@@ -1471,10 +1394,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#running-the-suite" class="md-nav__link">
+  <a href="#running-the-tests" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Running the suite
+        Running the tests
       
     </span>
   </a>
@@ -1482,10 +1405,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#test-files" class="md-nav__link">
+  <a href="#ci" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Test files
+        CI
       
     </span>
   </a>
@@ -1493,10 +1416,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#test-design-principles" class="md-nav__link">
+  <a href="#principles" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Test design principles
+        Principles
       
     </span>
   </a>
@@ -1504,115 +1427,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#module-by-module-notes" class="md-nav__link">
+  <a href="#real-map-fixture" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Module-by-module notes
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Module-by-module notes">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#test_rrtpy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_rrt.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#test_parsingpy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_parsing.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#test_fill_gridpy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_fill_grid.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#test_overpasspy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_overpass.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#test_viewer_helperspy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_viewer_helpers.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#test_viewer_routespy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_viewer_routes.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#test_integrationpy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_integration.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#test_errorspy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        test_errors.py
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#adding-new-tests" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Adding new tests
+        Real-map fixture
       
     </span>
   </a>
@@ -1640,164 +1458,59 @@
 
 
 <h1 id="testing">Testing</h1>
-<h2 id="running-the-suite">Running the suite</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pytest<span class="w"> </span>tests/<span class="w"> </span>-v
+<h2 id="running-the-tests">Running the tests</h2>
+<p>On the host, after <code>uv sync</code> (see <a href="../contributing/">Contributing</a>):</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w">                      </span><span class="c1"># whole suite</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>tests/test_route.py<span class="w">  </span><span class="c1"># one file</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>-k<span class="w"> </span>overpass<span class="w">          </span><span class="c1"># by keyword</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>--cov<span class="o">=</span>map_data<span class="w"> </span>--cov-report<span class="o">=</span>term-missing<span class="w">   </span><span class="c1"># with coverage</span>
 </span></code></pre></div>
-<p>No ROS2 context, no network access, and no external services are required — all external dependencies are mocked.</p>
-<p>Run a single file:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pytest<span class="w"> </span>tests/test_viewer_routes.py<span class="w"> </span>-v
+<p>In a ROS 2 workspace (built and sourced, see <a href="../../#with-ros-2-colcon">Installation</a>), the same suite also runs the ROS-only tests:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>python3<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w">          </span><span class="c1"># from src/map_data</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>bash<span class="w"> </span>scripts/ros_smoke.sh<span class="w">     </span><span class="c1"># route_planner, osm_cloud and the viewer on the demo map</span>
 </span></code></pre></div>
-<p>Run tests matching a keyword:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pytest<span class="w"> </span>tests/<span class="w"> </span>-k<span class="w"> </span><span class="s2">"overpass"</span><span class="w"> </span>-v
-</span></code></pre></div>
-<h2 id="test-files">Test files</h2>
+<p><code>ros_smoke.sh</code> starts the three executables in a private ROS domain and checks the node list, the <code>/grid</code> cloud, one PlanRoute goal, the viewer's HTTP endpoints and a clean SIGINT exit.</p>
+<h2 id="ci">CI</h2>
+<p><code>.github/workflows/ci.yml</code> runs on pushes and pull requests to <code>master</code>:</p>
 <table>
 <thead>
 <tr>
-<th>File</th>
-<th>Scope</th>
-<th>Key dependencies mocked</th>
+<th>Job</th>
+<th>What</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>test_core.py</code></td>
-<td><code>Way</code> classification, serialization, <code>combine_ways</code></td>
-<td>—</td>
+<td><code>lint</code></td>
+<td><code>ruff check</code> and <code>ruff format --check</code></td>
 </tr>
 <tr>
-<td><code>test_astar.py</code></td>
-<td>Grid A* planner</td>
-<td>—</td>
+<td><code>typecheck</code></td>
+<td><code>mypy map_data/</code></td>
 </tr>
 <tr>
-<td><code>test_rrt.py</code></td>
-<td>RRT* planner — path found, collision avoidance, edge cases</td>
-<td>—</td>
+<td><code>test</code></td>
+<td>The suite on Python 3.12 and 3.13 with <code>--cov-fail-under=72</code></td>
 </tr>
 <tr>
-<td><code>test_graph_planner.py</code></td>
-<td>Graph-based planner</td>
-<td>—</td>
-</tr>
-<tr>
-<td><code>test_overpass.py</code></td>
-<td><code>OverpassClient</code> — retry logic, rate limiting, status polling</td>
-<td><code>OverpassClient._http</code>, <code>time.sleep</code></td>
-</tr>
-<tr>
-<td><code>test_parsing.py</code></td>
-<td><code>parse_osm_ways</code>, <code>separate_ways</code>, <code>parse_osm_nodes</code> — OSM element classification and buffering</td>
-<td><code>overpy.Overpass</code> (fixture JSON)</td>
-</tr>
-<tr>
-<td><code>test_fill_grid.py</code></td>
-<td><code>ReplanPath.fill_grid</code> — footway cost assignment, barrier cell marking</td>
-<td>—</td>
-</tr>
-<tr>
-<td><code>test_viewer_helpers.py</code></td>
-<td><code>helpers.py</code> — GeoJSON conversion, way splitting, node overrides, annotation I/O, change log migration</td>
-<td>—</td>
-</tr>
-<tr>
-<td><code>test_viewer_routes.py</code></td>
-<td>Flask REST API — annotation CRUD, file listing, mapdata fetch, way operations, path-traversal security</td>
-<td>Filesystem (temp dir)</td>
-</tr>
-<tr>
-<td><code>test_integration.py</code></td>
-<td>Full pipeline — GPX parse, save/reload roundtrip, OSM cache, mocked Overpass query, <code>parse_intersections</code></td>
-<td><code>OverpassClient</code></td>
-</tr>
-<tr>
-<td><code>test_errors.py</code></td>
-<td>Error paths — malformed GPX, corrupt files, Overpass timeouts, planning failures</td>
-<td><code>OverpassClient._http</code>, <code>time.sleep</code></td>
+<td><code>ros</code></td>
+<td><code>colcon build</code> in a <code>ros:jazzy</code> container, the suite, <code>ros_smoke.sh</code></td>
 </tr>
 </tbody>
 </table>
-<h2 id="test-design-principles">Test design principles</h2>
-<p><strong>No network.</strong> Every test that would otherwise reach the Overpass API patches <code>OverpassClient._http</code> (and <code>_wait_for_slot</code>) via <code>unittest.mock.patch</code>. <code>time.sleep</code> is patched alongside so retries complete instantly.</p>
-<p><strong>No ROS2.</strong> The Flask app is created via <code>create_app(data_dir=...)</code> which bypasses the ROS2 node initialisation (guarded by <code>ROS_AVAILABLE</code>).</p>
-<p><strong>Real filesystem, isolated.</strong> Route tests use pytest's <code>tmp_path</code> fixture, giving each test function its own directory. The <code>load_mapdata_cached</code> cache keys on <code>(path, mtime)</code> so cross-test contamination cannot occur.</p>
-<p><strong>Minimal fixtures.</strong> Shared helper functions (e.g. <code>_make_mapdata</code>) are plain functions defined in the test module, not conftest fixtures, to keep test files self-contained.</p>
-<h2 id="module-by-module-notes">Module-by-module notes</h2>
-<h3 id="test_rrtpy"><code>test_rrt.py</code></h3>
-<p><code>test_rrt_star_with_obstacle</code> checks obstacle avoidance at two levels:</p>
-<ol>
-<li><strong>Node check</strong> — each waypoint in the returned path must have grid cost <code>&lt; 0.95</code>.</li>
-<li><strong>Segment check</strong> — 20 linearly-interpolated samples along each segment between consecutive waypoints must also have grid cost <code>&lt; 0.95</code>.</li>
-</ol>
-<p>The segment check is critical: without it a two-point path <code>[start, goal]</code> passes the node check even when the straight line between them cuts directly through the obstacle region.</p>
-<p>The test sets <code>traversability_threshold=0.5</code> so that cells with the obstacle value <code>1.0</code> are treated as hard collisions by the planner.</p>
-<p>The segment check excludes the single outer ring of boundary cells (rows/columns 40 and 59) to account for a known Bresenham corner artefact where a diagonal segment can graze a single boundary cell that the rasteriser does not visit.</p>
-<h3 id="test_parsingpy"><code>test_parsing.py</code></h3>
-<p>Tests the three OSM parsing functions directly using <code>overpy.Overpass().parse_json(fixture_json)</code> as input — no real network call:</p>
+<p><code>docs.yml</code> builds the documentation with <code>mkdocs build --strict</code>.</p>
+<p>The coverage gate lives in CI only, not in the pytest config, so single-file runs and <code>colcon test</code> work without <code>pytest-cov</code>.</p>
+<h2 id="principles">Principles</h2>
 <ul>
-<li><code>parse_osm_ways</code> — footway produces a <code>LineString</code>, road is classified via <code>is_road()</code>, closed way produces a <code>Polygon</code>.</li>
-<li><code>separate_ways</code> — footway goes to the footways list (buffered to Polygon); road goes to roads; barrier way (with <code>barrier: *</code> tag dict) goes to barriers. <code>BUFFER_WIDTHS</code> for road &gt; footway.</li>
-<li><code>parse_osm_nodes</code> — node with <code>barrier: block</code> produces a buffered-Point <code>Way</code>; nodes in <code>way_node_ids</code> are skipped; non-obstacle nodes are excluded.</li>
+<li><strong>No network.</strong> Tests that would reach Overpass patch <code>OverpassClient</code> (the <code>mock_overpass_client</code> fixture in <code>conftest.py</code>) or <code>OverpassClient._http</code>, with <code>time.sleep</code> patched so retries are instant.</li>
+<li><strong>No ROS required.</strong> Tests of ROS code skip when ROS 2 is missing (<code>importorskip</code> of <code>map_data.route_planner</code> and <code>launch</code>, <code>ROS_AVAILABLE</code> for the tracker node); the QR tests skip without OpenCV's <code>QRCodeEncoder</code>. The viewer under test is <code>create_app(data_dir=...)</code>.</li>
+<li><strong>Isolated filesystem.</strong> Every test that writes uses <code>tmp_path</code>; nothing touches <code>data/</code>.</li>
+<li><strong>ROS isolation in <code>conftest.py</code>.</strong> A session fixture stops the viewer's tracker node at exit (its executor thread would otherwise block shutdown). The logger class is reset, since ROS's <code>launch_testing</code> pytest plugin makes <code>map_data</code> loggers stop propagating to <code>caplog</code>.</li>
+<li><strong>Small shared fixtures.</strong> <code>conftest.py</code> holds the canned Overpass responses, <code>footway_network_mapdata</code> (a three-way footway network) and <code>STROMOVKA_FIXTURE</code>.</li>
 </ul>
-<h3 id="test_fill_gridpy"><code>test_fill_grid.py</code></h3>
-<p>Tests <code>ReplanPath.fill_grid</code> with a hand-built <code>MapData</code> containing a 16 m footway in a 20 × 20 m grid (UTM zone 33U). Key assertions:</p>
-<ul>
-<li>Cells exactly on the footway centreline have cost <code>&lt; DEFAULT_OFF_PATH_COST</code> (0.9).</li>
-<li>Cells at the far corner (&gt; <code>max_path_dist</code> from any path) have cost ≥ 0.85.</li>
-<li>Cells inside a 2 × 2 m barrier polygon passed as an obstacle are <code>np.inf</code> in the 2-D grid cache.</li>
-<li>Cells clearly outside the barrier are finite.</li>
-</ul>
-<h3 id="test_overpasspy"><code>test_overpass.py</code></h3>
-<p><code>OverpassClient</code> is instantiated directly and its <code>session</code> attribute is patched in place, which avoids replacing the class globally and keeps each test independent. The nine tests cover:</p>
-<ul>
-<li>Successful query returning an <code>overpy.Result</code></li>
-<li>429/406 response rotating the active endpoint</li>
-<li>500 response triggering a retry on the same endpoint</li>
-<li>All retries exhausted → <code>None</code></li>
-<li><code>TimeoutError</code> → <code>None</code></li>
-<li><code>_wait_for_slot</code> short-circuiting for non-<code>overpass-api.de</code> endpoints</li>
-<li><code>_wait_for_slot</code> returning immediately when slots are available</li>
-<li><code>_wait_for_slot</code> sleeping the correct number of seconds when no slots are available</li>
-</ul>
-<h3 id="test_viewer_helperspy"><code>test_viewer_helpers.py</code></h3>
-<p>Pure functions in <code>helpers.py</code> are tested in isolation using hand-constructed <code>Way</code> objects and fixed UTM coordinates in zone 33U (Prague area, easting ≈ 458 000, northing ≈ 5 550 500). Notable cases:</p>
-<ul>
-<li><strong>GeoJSON roundtrip</strong> — <code>geom_to_geojson</code> followed by <code>geojson_geom_to_utm</code> must recover the original geometry within 2 m (<code>equals_exact(tolerance=2.0)</code>).</li>
-<li><strong>Way splitting</strong> — a five-node <code>LineString</code> way split at its middle node must yield two segments with virtual IDs <code>"{id}:0"</code> and <code>"{id}:1"</code> and the correct node subsets.</li>
-<li><strong>Node deletion</strong> — removing a node from a four-node way must return a three-node way; removing a node from a two-node way must return <code>None</code>.</li>
-</ul>
-<h3 id="test_viewer_routespy"><code>test_viewer_routes.py</code></h3>
-<p>A <code>_make_mapdata</code> helper creates a minimal <code>.mapdata</code> file (one footway <code>Way</code>, two entries in <code>nodes_cache</code>) and writes it to a <code>tmp_path</code>. Two fixtures build on this:</p>
-<ul>
-<li><code>app_client</code> — empty data directory, used for 400/404 edge cases.</li>
-<li><code>app_client_with_file</code> — data directory pre-populated with <code>test.mapdata</code>.</li>
-</ul>
-<p>The annotation lifecycle (create → update → delete) is tested end-to-end: each step checks both the HTTP status code and the persisted state. Additional coverage includes:</p>
-<ul>
-<li><strong>Path-traversal security</strong> — <code>GET /api/mapdata?file=../../../etc/passwd</code> must return 400.</li>
-<li><strong>Way tag overrides</strong> — <code>PUT /api/ways/{id}/tags</code> stores tag overrides; <code>DELETE</code> removes them.</li>
-<li><strong>Hide / show / restore</strong> — the hide, show, and restore endpoints return 204 and update the annotations file correctly.</li>
-<li><strong>Node operations</strong> — node deletion and position-override move operations.</li>
-<li><strong>Way splitting</strong> — a 3-node footway can be split at its middle node, returning two segments; undoing the split restores one segment.</li>
-</ul>
-<h3 id="test_integrationpy"><code>test_integration.py</code></h3>
-<p><code>test_run_parse_with_mocked_overpass</code> patches <code>map_data.map_data.OverpassClient</code> at the class level, replacing <code>query_raw</code> with a return value of a minimal Overpass JSON string containing one footway way. <code>client.api</code> is set to a real <code>overpy.Overpass()</code> instance so that <code>parse_json</code> works correctly. After <code>run_queries(use_cache=False)</code> and <code>run_parse()</code>, the test asserts that at least one footway was classified.</p>
-<p>Additional coverage:</p>
-<ul>
-<li><strong>OSM cache roundtrip</strong> — <code>_save_osm_cache</code> then <code>_load_osm_cache</code> returns the same raw JSON strings.</li>
-<li><strong>OSM cache bbox mismatch</strong> — shifting <code>min_lat</code> by 1° makes <code>_load_osm_cache</code> return <code>None</code>.</li>
-<li><strong><code>parse_intersections</code></strong> — two footways sharing a middle node produce exactly one crossroad <code>Way</code> at that node; no shared nodes → no crossroads; three footways sharing one endpoint → crossroad.</li>
-</ul>
-<h3 id="test_errorspy"><code>test_errors.py</code></h3>
-<p><code>test_rrt_star_goal_in_isolated_obstacle</code> creates a grid that is entirely blocked except for a small free patch around the start. Since the goal lies within the blocked region and no path can reach it, <code>find_path</code> must return <code>None</code>.</p>
-<h2 id="adding-new-tests">Adding new tests</h2>
-<ol>
-<li>Place the test file in <code>tests/</code>.</li>
-<li>Import only from <code>map_data.*</code> — do not import from neighbouring test modules.</li>
-<li>Mock any external I/O at the lowest sensible level (<code>OverpassClient._http</code>, not the whole <code>urllib</code> module).</li>
-<li>Use <code>tmp_path</code> for any test that reads or writes files.</li>
-<li>Run <code>pytest tests/ -v</code> before opening a pull request.</li>
-</ol>
+<h2 id="real-map-fixture">Real-map fixture</h2>
+<p><code>tests/data/stromovka.mapdata</code> is a small crop (&lt; 300 KB) of the Stromovka park map in Prague, with a hand-written <code>stromovka.annotations.json</code>. It covers footways, roads, stairs, boardwalks and a doubly mapped corridor; <code>tests/data/README.md</code> describes how it was cut.</p>
+<p>Map data © OpenStreetMap contributors, under the <a href="https://opendatacommons.org/licenses/odbl/1-0/">Open Database License (ODbL)</a>. Keep the attribution in <code>tests/data/README.md</code> when changing the fixture.</p>
 
 
 
@@ -1857,10 +1570,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
   </body>

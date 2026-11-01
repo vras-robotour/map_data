@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="ROS2 tools to work with OSM data and perform path planning.">
+        <meta name="description" content="ROS 2 tools to work with OSM data and perform path planning.">
       
       
         <meta name="author" content="Jan Vlk">
@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -31,10 +31,10 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -276,7 +276,7 @@
           
   
   
-  API Reference
+  API reference
 
         </a>
       </li>
@@ -315,7 +315,7 @@
           
   
   
-  Developer Guide
+  Developer guide
 
         </a>
       </li>
@@ -550,10 +550,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#bounding-box-and-margins" class="md-nav__link">
+  <a href="#bounding-box-calculation" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Bounding box and margins
+        Bounding box calculation
       
     </span>
   </a>
@@ -585,25 +585,75 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Parsing and creating files">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#command-line-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Command-line options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#osm-caching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OSM caching
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-file-location" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output file location
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
   <a href="#publishing-a-point-cloud-of-footways-roads-and-intersections" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Publishing a point cloud of footways, roads and intersections
+        Publishing a point cloud of footways, roads, and intersections
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Publishing a point cloud of footways, roads and intersections">
+    <nav class="md-nav" aria-label="Publishing a point cloud of footways, roads, and intersections">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#ros2-parameters" class="md-nav__link">
+  <a href="#ros-2-parameters" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ROS2 parameters
+        ROS 2 parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#static-transform-placement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Static transform placement
       
     </span>
   </a>
@@ -670,7 +720,7 @@
   <span class="md-ellipsis">
     
   
-    Interactive Viewer
+    Interactive viewer
   
 
     
@@ -686,7 +736,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Interactive Viewer
+    Interactive viewer
   
 
           </label>
@@ -826,7 +876,7 @@
   <span class="md-ellipsis">
     
   
-    Path Planning
+    Path planning
   
 
     
@@ -879,7 +929,7 @@
   <span class="md-ellipsis">
     
   
-    API Reference
+    API reference
   
 
     
@@ -895,7 +945,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    API Reference
+    API reference
   
 
           </label>
@@ -972,6 +1022,62 @@
     
   
     Pathsolvers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/annotations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Annotations and edits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/traversability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Traversability
   
 
     
@@ -1079,7 +1185,7 @@
   <span class="md-ellipsis">
     
   
-    Developer Guide
+    Developer guide
   
 
     
@@ -1095,7 +1201,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Developer Guide
+    Developer guide
   
 
           </label>
@@ -1143,7 +1249,7 @@
   <span class="md-ellipsis">
     
   
-    Tag Configuration
+    Tag configuration
   
 
     
@@ -1171,7 +1277,7 @@
   <span class="md-ellipsis">
     
   
-    Planner Configuration
+    Planner configuration
   
 
     
@@ -1199,7 +1305,7 @@
   <span class="md-ellipsis">
     
   
-    Data Formats
+    Data formats
   
 
     
@@ -1276,34 +1382,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../dev/node_move_detach/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Moving a Shared Node
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../dev/todo/" class="md-nav__link">
         
   
@@ -1311,7 +1389,7 @@
   <span class="md-ellipsis">
     
   
-    Known Issues & Backlog
+    Known issues and backlog
   
 
     
@@ -1426,10 +1504,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#bounding-box-and-margins" class="md-nav__link">
+  <a href="#bounding-box-calculation" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Bounding box and margins
+        Bounding box calculation
       
     </span>
   </a>
@@ -1461,25 +1539,75 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Parsing and creating files">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#command-line-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Command-line options
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#osm-caching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OSM caching
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output-file-location" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output file location
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
   <a href="#publishing-a-point-cloud-of-footways-roads-and-intersections" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Publishing a point cloud of footways, roads and intersections
+        Publishing a point cloud of footways, roads, and intersections
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Publishing a point cloud of footways, roads and intersections">
+    <nav class="md-nav" aria-label="Publishing a point cloud of footways, roads, and intersections">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#ros2-parameters" class="md-nav__link">
+  <a href="#ros-2-parameters" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ROS2 parameters
+        ROS 2 parameters
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#static-transform-placement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Static transform placement
       
     </span>
   </a>
@@ -1522,148 +1650,126 @@
   
 
 
-<h1 id="general-usage">General Usage</h1>
-<p>This page covers the core CLI tools and ROS2 nodes for parsing, visualizing, and publishing map data.</p>
+<h1 id="general-usage">General usage</h1>
+<p>This page covers the core CLI tools and ROS 2 nodes for parsing, inspecting, and publishing map data.</p>
 <div class="admonition note">
-<p class="admonition-title">ROS2 requirement</p>
-<p>Only <code>osm_cloud</code> requires a sourced ROS2 workspace. The <code>create_mapdata</code> CLI,
-the <code>MapData</code> class, path planning modules, and the interactive viewer work <strong>standalone</strong>.</p>
+<p class="admonition-title">ROS 2 requirement</p>
+<p>ROS 2 is required for <code>osm_cloud</code> and <code>route_planner</code>. The <code>create_mapdata</code> CLI,
+<code>map_data_info</code>, the <code>MapData</code> class, path planning modules, and the interactive viewer
+(except the Tracker mode) work <strong>standalone</strong>.</p>
 </div>
 <h2 id="what-gets-downloaded">What gets downloaded</h2>
-<p>When <code>create_mapdata</code> (or <code>MapData.run_all()</code>) is called, three concurrent
-<a href="https://overpass-api.de/">Overpass API</a> queries are sent, covering the bounding box of the
-GPX waypoints:</p>
-<table>
-<thead>
-<tr>
-<th>Query</th>
-<th>What it fetches</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Ways</strong></td>
-<td>Every OSM way inside the bounding box, plus every constituent node</td>
-</tr>
-<tr>
-<td><strong>Relations</strong></td>
-<td>Every relation that references at least one of those ways</td>
-</tr>
-<tr>
-<td><strong>Nodes</strong></td>
-<td>Every standalone OSM node inside the bounding box</td>
-</tr>
-</tbody>
-</table>
-<p>The downloaded data is then filtered and classified into <code>roads_list</code>, <code>footways_list</code>, and
+<p>When <code>create_mapdata</code> (or <code>MapData.run_all()</code>) is called, a single Overpass API union query
+is sent covering the bounding box of the GPX waypoints:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>[out:json][timeout:170];way(bbox)-&gt;.w;(.w; .w &gt;; .w &lt;; node(bbox););out;
+</span></code></pre></div>
+<p>This retrieves:</p>
+<ul>
+<li>Every OSM way intersecting the bounding box.</li>
+<li>All constituent nodes of those ways.</li>
+<li>Relations that reference those ways.</li>
+<li>Standalone nodes inside the bounding box.</li>
+</ul>
+<p>The downloaded data is filtered and classified into <code>roads_list</code>, <code>footways_list</code>, and
 <code>barriers_list</code> according to the tag values in the CSV files in <code>parameters/</code>. Ways and nodes
-whose tags do not match any configured category are discarded during parsing, not during
-download.</p>
-<h3 id="bounding-box-and-margins">Bounding box and margins</h3>
-<p>The query bounding box is the convex hull of the GPX waypoints, expanded outward by
-<code>osm_margin + reserve_margin</code> on all sides. With the defaults (<code>osm_margin = 100 m</code>,
-<code>reserve_margin = 50 m</code>) that is <strong>150 m beyond the outermost waypoint</strong>.</p>
-<table>
-<thead>
-<tr>
-<th>Margin</th>
-<th>Default</th>
-<th>Purpose</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>osm_margin</code></td>
-<td>100 m</td>
-<td>Ensures that features near the route boundary — particularly barriers and building footprints — are fully captured, even when their geometry extends a few metres past the last waypoint.</td>
-</tr>
-<tr>
-<td><code>reserve_margin</code></td>
-<td>50 m</td>
-<td>Clips the internal UTM bounding box (<code>min_x/max_x/min_y/max_y</code>) used by the path planners. The extra buffer prevents the planning grid from touching the download boundary, where data may be incomplete.</td>
-</tr>
-</tbody>
-</table>
-<p>Both values are configurable in <code>config/planner_defaults.yaml</code>. Increase <code>osm_margin</code> for routes
-near dense urban areas with large building footprints, or decrease it to reduce query time and
-file size for simple open-terrain routes.</p>
+whose tags do not match any configured category are discarded during parsing.</p>
+<h3 id="bounding-box-calculation">Bounding box calculation</h3>
+<p>The query bounding box is derived from the minimum and maximum UTM coordinates of the GPX
+waypoints, expanded outward in all directions by <code>grid_margin</code> (default <code>150 m</code> in
+<code>config/planner_defaults.yaml</code>). The four corner coordinates are converted to WGS-84
+latitude/longitude to form the Overpass query bounding box <code>[min_lat, min_long, max_lat, max_long]</code>.</p>
 <h2 id="inspecting-a-mapdata-file">Inspecting a .mapdata file</h2>
 <p><code>map_data_info</code> prints statistics about a <code>.mapdata</code> file — feature counts, total footway
 distance, covered area, UTM zone, and any stored annotations.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>map_data_info<span class="w"> </span>coords.mapdata
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>map_data_info<span class="w"> </span>coords.mapdata
 </span></code></pre></div>
 <p>Example output:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>========================================
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>MAP DATA STATISTICS: coords.mapdata
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>========================================
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>Source:      File: coords.gpx
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>UTM Zone:    33U
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>Bounds X:    [458200.0, 458900.0]
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>Bounds Y:    [5550100.0, 5550700.0]
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>Total Area:  420,000 m²
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>----------------------------------------
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>Roads:       12
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>Footways:    47
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>Barriers:    83
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>Total Footway Distance: 4823.6 m
-</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>Annotations: 3 (manual edits)
-</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>========================================
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>========================================
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>MAP DATA STATISTICS: coords.mapdata
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>========================================
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>Source:      File: coords.gpx
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>UTM Zone:    33U
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>Bounds X:    [458200.0, 458900.0]
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>Bounds Y:    [5550100.0, 5550700.0]
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>Total Area:  420,000 m²
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>----------------------------------------
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>Roads:       12
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>Footways:    47
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>Barriers:    83
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>Total Footway Distance: 4823.6 m
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>Annotations: 3 (manual edits)
+</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>========================================
 </span></code></pre></div>
-<p><code>map_data_info</code> is available after installing the package (standalone <code>pip install -e .</code> or <code>colcon build</code>).</p>
+<p><code>map_data_info</code> is available after installing the package (standalone <code>pip install -e .</code>,
+<code>uv sync</code>, or <code>colcon build</code>).</p>
 <p>With <code>--validate</code>, the tool checks the file for structural issues instead of printing
 statistics: missing metadata fields, ways without geometry, duplicate way IDs, nodes
 missing from the node cache, and disconnected footway networks. It exits non-zero when
 issues are found, so it can be used as a pre-flight check in scripts:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>map_data_info<span class="w"> </span>coords.mapdata<span class="w"> </span>--validate
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>map_data_info<span class="w"> </span>coords.mapdata<span class="w"> </span>--validate
 </span></code></pre></div>
 <h2 id="parsing-and-creating-files">Parsing and creating files</h2>
-<p><code>create_mapdata</code> creates a <code>.mapdata</code> file from a <code>.gpx</code> or <code>.yaml</code> waypoint file, or
-re-parses an existing <code>.mapdata</code> with the current tag configuration.</p>
+<p><code>create_mapdata -d</code> builds a <code>.mapdata</code> file from a <code>.gpx</code> file. Without <code>-d</code> it loads the
+<code>.mapdata</code> file of the same name and saves it again (current file format); it does not
+reclassify the ways, so tag CSV edits need a new download.</p>
+<h3 id="command-line-options">Command-line options</h3>
 <table>
 <thead>
 <tr>
 <th>Flag</th>
+<th>Default</th>
 <th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>-d</code></td>
-<td>Download fresh OSM data from the input file's bounds and parse it</td>
+<td><code>-h, --help</code></td>
+<td></td>
+<td>Show help message and exit</td>
 </tr>
 <tr>
-<td><code>-f &lt;filename&gt;</code></td>
-<td><code>.gpx</code> or <code>.yaml</code> waypoint file to parse (with <code>-d</code>), or <code>.mapdata</code> file to re-parse (without <code>-d</code>)</td>
+<td><code>-f FILE, --file FILE</code></td>
+<td><code>buchlovice.gpx</code></td>
+<td>GPX file (a path, or a name in the package's <code>data/</code> directory or the bundled <code>demo/</code>). Without <code>-d</code>, its <code>.mapdata</code> sibling is re-saved</td>
+</tr>
+<tr>
+<td><code>-d, --download</code></td>
+<td><code>false</code></td>
+<td>Download fresh data from OSM within the waypoint bounds and parse it</td>
+</tr>
+<tr>
+<td><code>--cache</code></td>
+<td><code>false</code></td>
+<td>Use the local OSM response cache (30-day expiry)</td>
 </tr>
 </tbody>
 </table>
-<div class="admonition tip">
-<p class="admonition-title">YAML waypoint format</p>
-<p>Besides <code>.gpx</code> files, <code>create_mapdata</code> and <code>MapData</code> also accept a simple YAML format:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">waypoints</span><span class="p">:</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">latitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50.1234</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">longitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.5678</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span><span class="nt">elevation</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200.0</span><span class="w">   </span><span class="c1"># optional, defaults to 0</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">latitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50.1240</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="nt">longitude</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.5690</span>
-</span></code></pre></div>
-<p>Save the file with a <code>.yaml</code> extension and use it wherever a <code>.gpx</code> file is accepted.</p>
-</div>
+<h3 id="osm-caching">OSM caching</h3>
+<p>Downloaded OSM responses are cached locally keyed by query hash (which embeds the bounding box).
+If <code>--cache</code> is active and a cache entry exists matching the query within 30 days
+(<code>OSM_CACHE_MAX_AGE = 30 days</code>), <code>create_mapdata</code> reuses the cached response without
+querying Overpass again.</p>
+<h3 id="output-file-location">Output file location</h3>
+<p>When saving, <code>create_mapdata</code> writes the <code>.mapdata</code> file next to the input GPX file, replacing
+the <code>.gpx</code> extension with <code>.mapdata</code>.</p>
 <p>Download and parse OSM data for a GPX file:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>create_mapdata<span class="w"> </span>-d<span class="w"> </span>-f<span class="w"> </span>coords.gpx
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1"># or, in a sourced ROS2 workspace:</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1"># or, in a sourced ROS 2 workspace:</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>ros2<span class="w"> </span>run<span class="w"> </span>map_data<span class="w"> </span>create_mapdata<span class="w"> </span>-d<span class="w"> </span>-f<span class="w"> </span>coords.gpx
 </span></code></pre></div>
-<p>This creates <code>coords.mapdata</code> in the package data directory.</p>
-<p>Re-parse an existing <code>.mapdata</code> file (e.g. after editing tag CSVs):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>create_mapdata<span class="w"> </span>-f<span class="w"> </span>coords.mapdata
+<p>Rebuild after editing the tag CSVs (<code>--cache</code> skips the download when the cached response is still valid):</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>create_mapdata<span class="w"> </span>-d<span class="w"> </span>-f<span class="w"> </span>coords.gpx<span class="w"> </span>--cache
 </span></code></pre></div>
-<h2 id="publishing-a-point-cloud-of-footways-roads-and-intersections">Publishing a point cloud of footways, roads and intersections</h2>
-<p><code>osm_cloud</code> is a ROS2 node that publishes a <code>sensor_msgs/PointCloud2</code> on the <code>grid</code>
-topic (cost-aware grid around the footways and/or roads in <code>highway_types</code>) and
-optionally publishes intersections as a
-<code>geometry_msgs/PoseArray</code> and <code>visualization_msgs/MarkerArray</code>.</p>
-<h3 id="ros2-parameters">ROS2 parameters</h3>
+<h2 id="publishing-a-point-cloud-of-footways-roads-and-intersections">Publishing a point cloud of footways, roads, and intersections</h2>
+<p><code>osm_cloud</code> is a ROS 2 node that publishes a <code>sensor_msgs/PointCloud2</code> on the configured
+grid topic (<code>osm_grid</code> via launch, or <code>grid</code> on the node) with a cost-aware grid around
+traversable ways, and optionally publishes intersections as a <code>geometry_msgs/PoseArray</code>
+and <code>visualization_msgs/MarkerArray</code>.</p>
+<p>When started without an input file (<code>mapdata_file</code> or <code>gpx_file</code>), <code>osm_cloud</code> logs an error
+and idles rather than crashing, preventing a tight restart loop under launch respawn. Runtime
+parameter changes via ROS 2 parameters are validated before applying; invalid changes are
+rejected (<code>SetParametersResult(successful=False)</code>).</p>
+<h3 id="ros-2-parameters">ROS 2 parameters</h3>
 <table>
 <thead>
 <tr>
@@ -1674,54 +1780,69 @@ optionally publishes intersections as a
 </thead>
 <tbody>
 <tr>
-<td><code>utm_frame</code></td>
-<td><code>"utm"</code></td>
-<td>TF frame name for UTM coordinates (<code>transform_mode</code> <code>tf</code>/<code>auto</code>)</td>
+<td><code>mapdata_file</code></td>
+<td><code>""</code></td>
+<td>Absolute path to a <code>.mapdata</code> file</td>
+</tr>
+<tr>
+<td><code>gpx_file</code></td>
+<td><code>""</code></td>
+<td>Absolute path to a <code>.gpx</code> file (used when <code>mapdata_file</code> is empty)</td>
+</tr>
+<tr>
+<td><code>grid_topic</code></td>
+<td><code>grid</code></td>
+<td>Topic name for the published point cloud (<code>osm_grid</code> in <code>osm_cloud.launch.py</code>)</td>
+</tr>
+<tr>
+<td><code>intersections_topic</code></td>
+<td><code>intersections</code></td>
+<td>Topic name for intersection poses (<code>PoseArray</code>)</td>
+</tr>
+<tr>
+<td><code>intersection_markers_topic</code></td>
+<td><code>intersection_markers</code></td>
+<td>Topic name for intersection markers (<code>MarkerArray</code>)</td>
 </tr>
 <tr>
 <td><code>local_frame</code></td>
-<td><code>"local_utm"</code></td>
+<td><code>map</code></td>
 <td>TF frame the grid and intersections are published in (<code>FP_ENU0</code> in <code>osm_grid.yaml</code>)</td>
 </tr>
 <tr>
+<td><code>utm_frame</code></td>
+<td><code>utm</code></td>
+<td>TF frame name for UTM coordinates (<code>transform_mode</code> <code>tf</code> or <code>auto</code>)</td>
+</tr>
+<tr>
 <td><code>earth_frame</code></td>
-<td><code>"FP_ECEF"</code></td>
+<td><code>FP_ECEF</code></td>
 <td>ECEF TF frame used by <code>transform_mode: geodetic</code></td>
 </tr>
 <tr>
 <td><code>transform_mode</code></td>
-<td><code>"tf"</code></td>
-<td><code>tf</code>: look up <code>utm_frame → local_frame</code> in TF; <code>auto</code>: local frame at the map centre; <code>geodetic</code>: UTM → lat/lon → ECEF, then the <code>earth_frame → local_frame</code> TF (exact for GNSS/INS stacks; <code>osm_grid.yaml</code> sets this)</td>
-</tr>
-<tr>
-<td><code>mapdata_file</code></td>
-<td><code>None</code></td>
-<td>Absolute path to a <code>.mapdata</code> file</td>
+<td><code>tf</code></td>
+<td>Placement mode: <code>tf</code> looks up <code>utm_frame -&gt; local_frame</code> on <code>/tf_static</code>; <code>auto</code> calculates the local frame at the map center and broadcasts the static transform; <code>geodetic</code> converts UTM -&gt; lat/lon -&gt; ECEF and applies <code>earth_frame -&gt; local_frame</code> from <code>/tf_static</code> (exact for GNSS/INS stacks; default in <code>osm_grid.yaml</code>)</td>
 </tr>
 <tr>
 <td><code>annotations</code></td>
-<td><code>"auto"</code></td>
-<td>Annotation store merged into <code>mapdata_file</code>, as in <code>route_planner</code>: <code>auto</code> = <code>&lt;map&gt;.annotations.json</code> next to it, <code>none</code> = the unedited map, or a path</td>
+<td><code>auto</code></td>
+<td>Annotation store merged into <code>mapdata_file</code>: <code>auto</code> = <code>&lt;map&gt;.annotations.json</code> next to it, <code>none</code> = unedited map, or a file path</td>
 </tr>
 <tr>
 <td><code>exclude_highway</code></td>
 <td><code>["steps"]</code></td>
-<td><code>highway=</code> values dropped from the map (stairs are not routable, so they get no rings)</td>
+<td><code>highway=</code> tag values dropped from the map (non-routable, so they receive no intersection rings)</td>
 </tr>
 <tr>
 <td><code>traversability_file</code></td>
 <td><code>""</code></td>
-<td>Tag rule file deciding which ways the robot may drive on (<code>""</code> = the package's <code>config/traversability.yaml</code>; see <a href="../planning/#traversability-rules">Traversability rules</a>). Must be the same file <code>route_planner</code> uses. Launch argument: <code>traversability:=&lt;file&gt;</code></td>
+<td>Tag rule file deciding which ways are traversable (<code>""</code> = package default <code>config/traversability.yaml</code>). <a href="../planning/#traversability-rules">Traversability rules warning</a>. Must match <code>route_planner</code>'s file</td>
 </tr>
 <tr>
 <td><code>highway_types</code></td>
 <td><code>["footway"]</code></td>
-<td>Way types the grid is drawn from: <code>footway</code>, <code>road</code> or both. Keep it equal to <code>route_planner</code>'s <code>highway_types</code>. Launch argument: <code>highway_types:=footway,road</code></td>
-</tr>
-<tr>
-<td><code>gpx_file</code></td>
-<td><code>None</code></td>
-<td>Absolute path to a <code>.gpx</code> file (used if no <code>.mapdata</code>)</td>
+<td>Way types the grid is drawn from: <code>footway</code>, <code>road</code>, or both. Must match <code>route_planner</code>'s <code>highway_types</code></td>
 </tr>
 <tr>
 <td><code>save_mapdata</code></td>
@@ -1731,47 +1852,51 @@ optionally publishes intersections as a
 <tr>
 <td><code>max_path_dist</code></td>
 <td><code>1.0</code></td>
-<td>Max distance (m) at which a grid point receives a cost</td>
+<td>Maximum distance (m) from way centerlines at which grid cells receive a cost</td>
 </tr>
 <tr>
 <td><code>neighbor_cost</code></td>
-<td><code>"linear"</code></td>
-<td>Cost falloff for cells near ways: <code>"linear"</code> = proportional to distance, <code>"quadratic"</code> = distance squared, <code>"zero"</code> = constant regardless of distance</td>
+<td><code>linear</code></td>
+<td>Cost falloff for cells near ways: <code>linear</code>, <code>quadratic</code>, or <code>zero</code></td>
 </tr>
 <tr>
 <td><code>grid_res</code></td>
 <td><code>0.25</code></td>
-<td>Grid point spacing (m)</td>
+<td>Grid resolution / point spacing (m)</td>
 </tr>
 <tr>
 <td><code>grid_max</code></td>
 <td><code>[0.0, 0.0]</code></td>
-<td>Upper bounds of the local-frame grid (m). <code>[0, 0]</code> triggers auto-calc.</td>
+<td>Upper bounds of the local-frame grid (m); <code>[0, 0]</code> enables auto-calculation</td>
 </tr>
 <tr>
 <td><code>grid_min</code></td>
 <td><code>[0.0, 0.0]</code></td>
-<td>Lower bounds of the local-frame grid (m). <code>[0, 0]</code> triggers auto-calc.</td>
+<td>Lower bounds of the local-frame grid (m); <code>[0, 0]</code> enables auto-calculation</td>
 </tr>
 <tr>
 <td><code>publish_intersections</code></td>
-<td><code>true</code></td>
-<td>Whether to publish footway intersections</td>
+<td><code>false</code></td>
+<td>Whether to publish footway intersections (<code>true</code> in <code>osm_grid.yaml</code>)</td>
 </tr>
 <tr>
 <td><code>republish_period</code></td>
 <td><code>0.0</code></td>
-<td>Publishers are latched and publish once at start-up (and after parameter changes, or when the placement transform changes); set &gt; 0 s to additionally re-publish periodically</td>
+<td>Periodic re-publish interval (s); <code>0.0</code> publishes once (latched) and on changes</td>
 </tr>
 </tbody>
 </table>
-<p>The <code>earth_frame → local_frame</code> (or <code>utm_frame → local_frame</code>) transform is followed for the node's whole life: when it appears late, or moves because the GNSS/INS driver restarted with a new ENU0 origin, the grid and the intersections are rebuilt and re-published. In <code>geodetic</code> mode an all-zero transform (a Fixposition unit publishes <code>FP_ECEF → FP_ENU0</code> as zeros until it has a fusion fix) is rejected and waited out, and a grid that comes out empty over a map that has ways is logged as an error instead of being published.</p>
+<h3 id="static-transform-placement">Static transform placement</h3>
+<p><code>osm_cloud</code> listens to <code>/tf_static</code> for its placement transform rather than subscribing to
+the high-rate <code>/tf</code> stream. When the placement transform changes (for example when a GNSS/INS
+driver restarts with a new ENU0 origin), the grid and intersections are rebuilt and re-published
+automatically. In <code>geodetic</code> mode, all-zero transforms (such as an uninitialized fusion fix)
+are rejected and waited out.</p>
 <h3 id="launching">Launching</h3>
-<p>The recommended way to run the node is via the provided launch file, which also sets
-up the required static transforms and enables intersection publishing by default:</p>
+<p>Run the node via its launch file:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>ros2<span class="w"> </span>launch<span class="w"> </span>map_data<span class="w"> </span>osm_cloud.launch.py<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">    </span>mapdata_file:<span class="o">=</span>/path/to/coords.mapdata<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span>grid_topic:<span class="o">=</span>osm_cloud
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span>grid_topic:<span class="o">=</span>osm_grid
 </span></code></pre></div>
 <table>
 <thead>
@@ -1783,19 +1908,24 @@ up the required static transforms and enables intersection publishing by default
 </thead>
 <tbody>
 <tr>
+<td><code>osm_grid_params</code></td>
+<td><code>osm_grid.yaml</code></td>
+<td>Parameter file in <code>config/</code> (or path) with OSM grid parameters</td>
+</tr>
+<tr>
 <td><code>mapdata_path</code></td>
-<td>package share/data</td>
-<td>Directory containing the map file</td>
+<td>package share <code>data</code></td>
+<td>Directory where bare map filenames are resolved</td>
 </tr>
 <tr>
 <td><code>mapdata_file</code></td>
-<td><code>stromovka.mapdata</code></td>
-<td>Map data filename</td>
+<td><code>""</code></td>
+<td>Map data filename (resolved in <code>mapdata_path</code> or absolute)</td>
 </tr>
 <tr>
 <td><code>gpx_file</code></td>
-<td><code>stromovka.gpx</code></td>
-<td>GPX fallback filename</td>
+<td><code>""</code></td>
+<td>GPX fallback filename (resolved in <code>mapdata_path</code> or absolute)</td>
 </tr>
 <tr>
 <td><code>grid_topic</code></td>
@@ -1804,28 +1934,38 @@ up the required static transforms and enables intersection publishing by default
 </tr>
 <tr>
 <td><code>local_frame</code></td>
-<td>from yaml</td>
-<td>Override the frame the grid/intersections are published in</td>
+<td><code>""</code></td>
+<td>Override frame for the grid/intersections (empty = value from <code>osm_grid_params</code>)</td>
 </tr>
 <tr>
 <td><code>utm_frame</code></td>
-<td>from yaml</td>
-<td>Override the UTM frame name</td>
+<td><code>""</code></td>
+<td>Override UTM frame name (empty = from yaml)</td>
 </tr>
 <tr>
 <td><code>earth_frame</code></td>
-<td>from yaml</td>
-<td>Override the ECEF frame name (<code>geodetic</code> mode)</td>
+<td><code>""</code></td>
+<td>Override ECEF frame name in <code>geodetic</code> mode (empty = from yaml)</td>
 </tr>
 <tr>
 <td><code>transform_mode</code></td>
-<td>from yaml</td>
-<td>Override the placement mode (<code>tf</code> / <code>auto</code> / <code>geodetic</code>)</td>
+<td><code>""</code></td>
+<td>Override placement mode: <code>tf</code>, <code>auto</code>, or <code>geodetic</code> (empty = from yaml)</td>
 </tr>
 <tr>
 <td><code>annotations</code></td>
 <td><code>auto</code></td>
-<td>Annotation store merged into the map (<code>auto</code> / <code>none</code> / path); always forwarded, so it wins over the yaml files</td>
+<td>Annotation store merged into the map: <code>auto</code>, <code>none</code>, or file path</td>
+</tr>
+<tr>
+<td><code>traversability</code></td>
+<td><code>""</code></td>
+<td>Tag rule file deciding traversable ways (empty = from yaml)</td>
+</tr>
+<tr>
+<td><code>highway_types</code></td>
+<td><code>""</code></td>
+<td>Way types drawn into the grid: <code>footway</code>, <code>road</code>, or <code>footway,road</code> (empty = from yaml)</td>
 </tr>
 </tbody>
 </table>
@@ -1888,10 +2028,10 @@ up the required static transforms and enables intersection publishing by default
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "search.suggest", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.follow", "search.suggest", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
   </body>
