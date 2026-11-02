@@ -2519,7 +2519,7 @@
 <ul>
 <li><strong>Errors</strong> are JSON <code>{"error": "&lt;message&gt;"}</code> with the HTTP status, for every endpoint.</li>
 <li><strong>413</strong>: a JSON body over 10 MB, or any request over 100 MB (the multipart uploads).</li>
-<li>Every response carries <code>X-Frame-Options: DENY</code>, <code>X-Content-Type-Options: nosniff</code>, <code>Referrer-Policy: no-referrer</code> and <code>Content-Security-Policy: frame-ancestors 'none'</code>.</li>
+<li>Every response carries <code>X-Frame-Options: DENY</code>, <code>X-Content-Type-Options: nosniff</code>, <code>Referrer-Policy: strict-origin-when-cross-origin</code> (origin only cross-site; OSM tiles require a Referer) and <code>Content-Security-Policy: frame-ancestors 'none'</code>.</li>
 <li><strong>409</strong>: the file's annotation store exists but is not a readable JSON object. It is moved aside to <code>&lt;store&gt;.corrupt-&lt;timestamp&gt;</code> and never overwritten; reload to continue with an empty store.</li>
 <li><strong><code>file</code></strong> is a <code>.mapdata</code> name in the data directory. A name that resolves outside it is 400, a missing file 404.</li>
 <li><strong><code>way_id</code></strong> is an OSM way ID or a split segment <code>"&lt;id&gt;:&lt;index&gt;"</code>.</li>
