@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Viewer: OpenStreetMap tiles were blocked (403) because responses sent `Referrer-Policy: no-referrer`; now `strict-origin-when-cross-origin`, which still keeps paths and `access_token` out of cross-site requests; tiles load from `tile.openstreetmap.org` without the deprecated subdomains
+
 ## [4.0.0] — 2026-11-01
 
 Regenerate `.mapdata` files built by an earlier version: relation and fence parsing changed (see *Fixed*). Python 3.12 or newer is required.

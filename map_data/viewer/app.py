@@ -75,7 +75,7 @@ _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "no-referrer",
+    "Referrer-Policy": "strict-origin-when-cross-origin",  # OSM tiles 403 without a Referer
     "Content-Security-Policy": "frame-ancestors 'none'",
 }
 

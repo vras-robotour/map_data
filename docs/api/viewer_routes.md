@@ -9,7 +9,7 @@ All endpoints are served by `map_data_viewer`. Handlers live in `map_data.viewer
 
 - **Errors** are JSON `{"error": "<message>"}` with the HTTP status, for every endpoint.
 - **413**: a JSON body over 10 MB, or any request over 100 MB (the multipart uploads).
-- Every response carries `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Content-Security-Policy: frame-ancestors 'none'`.
+- Every response carries `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` (origin only cross-site; OSM tiles require a Referer) and `Content-Security-Policy: frame-ancestors 'none'`.
 - **409**: the file's annotation store exists but is not a readable JSON object. It is moved aside to `<store>.corrupt-<timestamp>` and never overwritten; reload to continue with an empty store.
 - **`file`** is a `.mapdata` name in the data directory. A name that resolves outside it is 400, a missing file 404.
 - **`way_id`** is an OSM way ID or a split segment `"<id>:<index>"`.
