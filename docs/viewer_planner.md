@@ -5,7 +5,8 @@ browser, using the same algorithms as the `map_data_plan` [CLI tool](planning.md
 
 ## Workflow
 
-1. Switch to **PLANNER** using the tab in the top-right corner.
+1. Load a `.mapdata` file, then switch to **PLANNER** using the tab in the top-right corner (the
+   tab stays grayed out until a map is loaded).
 2. Click on the map to place waypoints. Drag any waypoint to adjust it. With **Start at
    robot** ticked the first waypoint is the robot itself, so you only click the goals.
 3. Select a planning mode and configure parameters in the sidebar.

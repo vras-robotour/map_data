@@ -409,6 +409,7 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
         currentFile = filename;
         document.getElementById('export-btn').disabled = false;
         document.getElementById('export-geojson-btn').disabled = false;
+        if (!STATIC_BASE) setPlannerAvailable(true);
         setStatus(`Loaded: ${filename}`, 'text-success');
         if (plannerMode) plannerMode.refreshBlocked();
     } catch (err) {
@@ -417,9 +418,19 @@ async function loadMapData(filename, { preserveView = false, silent = false } = 
     }
 }
 
+function setPlannerAvailable(available) {
+    const btn = document.querySelector('.app-mode-btn[data-app-mode="planner"]');
+    btn.disabled = !available;
+    btn.title = available
+        ? 'Path planner and mission tool'
+        : 'Planning is available only for a loaded, valid .mapdata file';
+}
+
 function clearMapData() {
     deselectCurrent();
     if (plannerMode) plannerMode.clearAll();
+    if (currentAppMode === 'planner') setAppMode('viewer');
+    setPlannerAvailable(false);
 
     if (geoLayers.costGrid) {
         map.removeLayer(geoLayers.costGrid);

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Viewer: the PLANNER tab is disabled, with a tooltip saying why, until a `.mapdata` file is loaded; clearing the map leaves planner mode
+
 ### Fixed
 
 - Viewer: OpenStreetMap tiles were blocked (403) because responses sent `Referrer-Policy: no-referrer`; now `strict-origin-when-cross-origin`, which still keeps paths and `access_token` out of cross-site requests; tiles load from `tile.openstreetmap.org` without the deprecated subdomains
