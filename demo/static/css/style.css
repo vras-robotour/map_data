@@ -110,6 +110,8 @@ summary::-webkit-details-marker { display: none; }
 
 /* Static demo (GitHub Pages): dimmed server-only controls + badge */
 #topbar .btn:disabled, #topbar .form-select:disabled { opacity: 0.4; cursor: not-allowed; }
+/* Bootstrap drops pointer events on disabled buttons, which hides the title tooltip */
+.app-mode-btn:disabled { pointer-events: auto; }
 .demo-pill {
   background: var(--bg-1); color: var(--highlight); border: 1px solid var(--highlight);
   border-radius: 5px; font-size: 0.78rem; padding: 3px 8px;
