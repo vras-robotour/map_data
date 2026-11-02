@@ -22,6 +22,8 @@ build/
 
 # Tools
 .claude/
+CLAUDE.md
+AGENTS.md
 
 # Local working datasets (keep the directory, not its contents)
 data/*
